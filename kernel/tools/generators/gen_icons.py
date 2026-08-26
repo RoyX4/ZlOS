@@ -18,8 +18,55 @@
 # Coverage quantisation: a 4x4 supersample averages 16 binary samples, so edge
 # pixels land on multiples of 255/16 (~16). That is 17 distinct levels, which
 # is plenty to kill the staircase at this size.
+#
+# ============================ PRESSWORK ==================================
+#
+# PRESSWORK's icons are a TECHNICAL DRAWING, not a picture. The rule is stated
+# in the prototype's own icon block (docs/design/presswork-prototype.html:1147):
+#
+#   "MACHINED FROM THE SAME PLATE ... 45/90 armature only: every straight
+#    segment is horizontal, vertical or exactly 45 degrees. Two stroke weights
+#    - 2.0 silhouette, 1.5 interior. EXACTLY ONE SOLID MASS PER ICON and it is
+#    the icon's subject. Curves appear only where the object is physically
+#    round."
+#
+# That rule is the reason this file changed shape. Before PRESSWORK the icons
+# were sixty hand-tuned Python functions in a 96-unit master, each free to pick
+# its own stroke weight (there were three) and its own angles. A rule that
+# every icon has to obey is worth more as a CHECKED rule than as a paragraph,
+# so the geometry now lives in one declarative table, `PW`, written in the
+# prototype's own 24-unit viewBox, and three checks run over it every time the
+# generator runs:
+#
+#   1. ARMATURE   every authored straight segment is H, V or exactly 45.
+#                 Exceptions must be declared per-icon in OFF_AXIS_OK, with a
+#                 reason. Undeclared ones abort the build.
+#   2. WEIGHTS    only two stroke widths reach PIL: W_MAIN and W_THIN.
+#   3. MASS       every pictorial icon has exactly one solid mass; the pure
+#                 control marks (close, check, chevron, the window buttons)
+#                 have none. That split is the prototype's, not ours: its own
+#                 window-control glyphs (presswork-prototype.html:2282-2284)
+#                 are stroke-only with no fill at all, while all 18 of its app
+#                 icons carry exactly one `.sol` element.
+#
+# Eighteen of the icons below are the prototype's ICO table transcribed
+# verbatim; the rest are drawn here in the same idiom. Which is which is
+# marked in the table.
+#
+# Light mode is deliberately out of scope - the atlas is coverage only, one
+# byte per pixel, and carries no colour at all, so there is nothing here that
+# could differ between the two ladders even if light mode were being shipped
+# (it is not; see the brief).
+#
+# What PRESSWORK did NOT change, and what is preserved intact: the 4x
+# supersample and box filter (so every edge is still anti-aliased the same way
+# the font atlases are), the per-size rasterisation (48x48 is real geometry,
+# not a scaled 24x24), the atlas ORDER and every icon NAME, the coverage-only
+# output format, and integer-only output bytes. No floats and no heap reach the
+# kernel: this is a build-time generator, and what it emits is a byte array.
 
 import os
+import re
 from PIL import Image, ImageDraw
 
 KERNEL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -29,39 +76,38 @@ SS    = 4                # supersample factor
 SIZES = (24, 48)         # every output size emitted, smallest first
 N     = SIZES[0]         # the size the geometry below is written in terms of
 S     = N * SS           # master size, 96 - the LOGICAL drawing space
-PAD  = 2 * SS            # ~2px of breathing room inside the 24x24 box
-# PIL's rectangle/ellipse bounds are INCLUSIVE, so the far edge has to be
-# S-PAD-1, not S-PAD - otherwise the shape bleeds a quarter-covered column
-# into pixel 22 and the icon is a half pixel off centre.
-LO, HI = PAD, S - PAD - 1                # usable master box: 8..87
 
 INK   = 255
 ERASE = 0
 
-# stroke weights, in MASTER pixels (divide by SS for the 24x24 weight)
-W_MAIN = 8               # 2.0px  - frames, outlines
-W_BOLD = 10              # 2.5px  - the one stroke that carries the icon
-W_THIN = 7               # 1.75px - interior detail (text rules, fold lines)
+# ---- the stroke ladder ----------------------------------------------------
+#
+# PRESSWORK has exactly TWO weights, and the prototype states both: 2.0 for the
+# silhouette and 1.5 for interior detail (presswork-prototype.html:1150, and
+# the SVG itself - stroke-width="2" on the <svg>, overridden to 1.5 by the
+# `w1` class at line 1179). At the 24px design size the master is 4x, so:
+#
+#   2.0 design px * SS(4) = 8 master units   W_MAIN
+#   1.5 design px * SS(4) = 6 master units   W_THIN
+#
+# The predecessor had a third weight, W_BOLD at 10 (2.5px), used to make "the
+# one stroke that carries the icon" heavier. PRESSWORK carries emphasis with
+# the solid mass instead, so W_BOLD is gone. `_weights_seen` proves no third
+# weight sneaks back in - every wide-line call in this file goes through the
+# two helpers below.
+W_MAIN = 8               # 2.0px - silhouette, container, subject strokes
+W_THIN = 6               # 1.5px - interior detail: rules, grids, ticks
+
+_weights_seen = set()
+
+# Terminals: the prototype asks for stroke-linecap="round" and
+# stroke-linejoin="round" (presswork-prototype.html:1178). At a 2.0 stroke the
+# cap radius is 1.0 design px, which is the "minimally-radiused terminal" the
+# design calls for; it is also the only wide-line join PIL can produce, so the
+# generator and the prototype agree here for free rather than by compromise.
 
 
 # ---- little geometry helpers ---------------------------------------------
-
-def poly(d, pts, width=W_MAIN, fill=INK):
-    """closed outline with round joints - PIL's polygon(width=) mitres badly"""
-    d.line(list(pts) + [pts[0]], fill=fill, width=width, joint="curve")
-    r = width / 2.0
-    for (x, y) in pts:                     # round off every corner
-        d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
-
-
-def path(d, pts, width=W_MAIN, fill=INK, caps=True):
-    """open polyline with round joints and optional round caps"""
-    d.line(list(pts), fill=fill, width=width, joint="curve")
-    r = width / 2.0
-    ends = pts if caps else pts[1:-1]
-    for (x, y) in ends:
-        d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
-
 
 def dot(d, x, y, r, fill=INK):
     d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
@@ -69,407 +115,465 @@ def dot(d, x, y, r, fill=INK):
 
 def ring(d, cx, cy, r, width=W_MAIN, fill=INK):
     """circle outline with the stroke CENTRED on radius r (PIL draws inward)"""
+    _weights_seen.add(width)
     o = r + width / 2.0
     d.ellipse([cx - o, cy - o, cx + o, cy + o], outline=fill, width=width)
 
 
-def polar(cx, cy, r, deg):
-    from math import cos, sin, radians
-    a = radians(deg)
-    return (cx + r * cos(a), cy + r * sin(a))
-
-
-# ---- the icons ------------------------------------------------------------
-# Each returns nothing; it draws into the 96x96 master `d`.
-
-def icon_terminal(d):
-    """a > prompt inside a rounded rect"""
-    d.rounded_rectangle([LO, 14, HI, 82], radius=14,
-                        outline=INK, width=W_MAIN)
-    path(d, [(28, 38), (46, 50), (28, 62)], width=W_BOLD)      # the chevron
-    path(d, [(54, 64), (72, 64)], width=W_BOLD)                # the cursor rule
-
-
-def icon_snake(d):
-    """a tapered body coiled into a spiral, notched into segments, head outside.
-
-    The coil pitch is the whole design: one turn must advance far enough that
-    the ring does not touch the one inside it, or the icon collapses into a
-    disc at 24px. pitch = 2*pi*K, so K is chosen from (body + gap), not taste."""
-    from math import cos, sin, pi
-    cx, cy = S / 2, S / 2 + 4              # +4: the coil's mass sits high
-    # pitch = 2*pi*K must clear (body diameter + a visible gap), and the body
-    # has to stay thick enough to read at 24px - so 1.5 turns, not 3. PHASE
-    # just spins the whole coil so the head finishes at the top right.
-    R0, K, TURNS, PHASE, STEPS = 5.0, 2.86, 1.5, 2.356, 400
-    RAD = lambda f: 3.2 + 2.3 * f          # body radius, tail -> head
-    pts, arc = [], [0.0]
-    for i in range(STEPS + 1):
-        t = TURNS * 2 * pi * i / STEPS
-        r = R0 + K * t
-        pts.append((cx + r * cos(t + PHASE), cy + r * sin(t + PHASE)))
-        if i:
-            (x0, y0), (x1, y1) = pts[-2], pts[-1]
-            arc.append(arc[-1] + ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5)
-
-    # taper the body from a thin tail at the centre to a full stroke at the
-    # head, by stamping overlapping discs - PIL's line() cannot vary width.
-    for i, (x, y) in enumerate(pts):
-        dot(d, x, y, RAD(i / STEPS))
-
-    # Notch it into segments. The notch must be cut by ARC LENGTH, not by
-    # sample index (the spiral's step length grows with radius), and its half
-    # height must track the LOCAL body radius - a fixed height slices into the
-    # neighbouring coil and shreds the icon.
-    SPACING, next_cut = 24.0, 24.0
-    for i in range(2, len(pts) - 30):
-        if arc[i] < next_cut:
-            continue
-        next_cut += SPACING
-        (x0, y0), (x1, y1) = pts[i - 1], pts[i + 1]
-        dx, dy = x1 - x0, y1 - y0
-        L = (dx * dx + dy * dy) ** 0.5 or 1.0
-        nx, ny = -dy / L, dx / L
-        h = RAD(i / STEPS) + 0.8
-        px, py = pts[i]
-        d.line([(px - nx * h, py - ny * h), (px + nx * h, py + ny * h)],
-               fill=ERASE, width=3)
-
-    hx, hy = pts[-1]                       # head, a touch fatter than the body
-    dot(d, hx, hy, 8.0)
-    ux, uy = hx - cx, hy - cy              # outward normal, for the eye
-    L = (ux * ux + uy * uy) ** 0.5 or 1.0
-    dot(d, hx + ux / L * 3.0, hy + uy / L * 3.0, 3.0, fill=ERASE)
-
-
-def icon_paint(d):
-    """a brush held at 45 degrees: handle, ferrule, loaded tip"""
-    from math import sqrt
-    ax, ay = 16.0, 82.0                    # tip end (bottom-left)
-    bx, by = 76.0, 18.0                    # handle end (top-right)
-    L = sqrt((bx - ax) ** 2 + (by - ay) ** 2)
-    ux, uy = (bx - ax) / L, (by - ay) / L  # along the brush
-    nx, ny = -uy, ux                       # across it
-
-    def P(t, off):
-        return (ax + ux * t + nx * off, ay + uy * t + ny * off)
-
-    # The head reads by SILHOUETTE, not by internal detail: bristles wider than
-    # the ferrule, ferrule wider than the handle. A drawn groove between them
-    # is under a pixel at this size and only chews holes in the shape.
-    path(d, [P(32, 0), P(L, 0)], width=W_BOLD)                           # handle
-    d.polygon([P(20, -8), P(33, -8), P(33, 8), P(20, 8)], fill=INK)      # ferrule
-    d.polygon([P(21, -14), P(21, 14), P(5, 9), P(5, -9)], fill=INK)      # bristles
-    dot(d, *P(5, -8), r=3.0)
-    dot(d, *P(5, 8), r=3.0)                # round the two tip corners only
-    # A V-notch to suggest separate bristles was tried and cut: at 24px it is
-    # one pixel wide and reads as damage, not detail. The shoulder where the
-    # bristles step out past the ferrule is what carries the shape.
-
-
-def icon_editor(d):
-    """a document with a folded corner and ruled text lines"""
-    poly(d, [(19, 13), (57, 13), (77, 33), (77, 83), (19, 83)], width=W_MAIN)
-    path(d, [(57, 13), (57, 33), (77, 33)], width=W_MAIN, caps=False)   # the fold
-    for y, x1 in ((48, 65), (61, 65), (74, 55)):
-        path(d, [(31, y), (x1, y)], width=W_THIN)
-
-
-def icon_monitor(d):
-    """a rising bar chart on a baseline"""
-    base = 78
-    path(d, [(13, base + 4), (83, base + 4)], width=W_MAIN)             # axis
-    for x, top in ((24, 56), (48, 38), (72, 16)):
-        path(d, [(x, base), (x, top)], width=12)
-
-
-def icon_about(d):
-    """a lowercase i inside a circle"""
-    ring(d, S / 2, S / 2, 34, width=W_MAIN)
-    dot(d, S / 2, 30, 5.0)
-    path(d, [(S / 2, 44), (S / 2, 70)], width=W_BOLD)
-
-
-def icon_cube3d(d):
-    """an isometric cube: hexagon silhouette plus the three edges to centre"""
-    cx, cy, R = S / 2, S / 2, 35
-    hexa = [polar(cx, cy, R, 90 + 60 * k) for k in range(6)]
-    poly(d, hexa, width=W_MAIN)
-    for k in (0, 2, 4):                    # top, lower-left, lower-right
-        path(d, [(cx, cy), hexa[k]], width=W_MAIN, caps=False)
-    dot(d, cx, cy, W_MAIN / 2)
-
-
-def icon_files(d):
-    """a folder with a tab"""
-    poly(d, [(13, 75), (13, 21), (37, 21), (45, 32), (83, 32), (83, 75)],
-         width=W_MAIN)
-
-
-def icon_settings(d):
-    """a gear: rim, eight radial teeth, hub.
-
-    A true toothed-silhouette outline does not survive 24px - the valleys come
-    out ~1.5px wide and the two sides of the stroke merge into a blob. Drawing
-    the rim as a ring with separate teeth keeps every gap at least 1.7px."""
-    cx = cy = S / 2
-    ring(d, cx, cy, 25, width=9)                       # rim
-    for i in range(8):
-        a = 45.0 * i
-        path(d, [polar(cx, cy, 26, a), polar(cx, cy, 35, a)],
-             width=10, caps=False)                     # teeth
-    ring(d, cx, cy, 9.5, width=8)                      # hub
-
-
-def icon_power(d):
-    """the IEC power mark: broken ring plus a stem through the gap"""
-    cx, cy, R = S / 2, 50, 33
-    o = R + W_MAIN / 2.0
-    d.arc([cx - o, cy - o, cx + o, cy + o], start=302, end=238,
-          fill=INK, width=W_MAIN)
-    path(d, [(cx, 13), (cx, 48)], width=W_BOLD)
-
-
-
-# ---- the second set, v10 SS6.9 ---------------------------------------------
-# Taken from the vocabulary the prototype's own markup uses - Places, Devices,
-# Properties, Rename, Close, Cancel, OK, Unlock, End Process, Update interval,
-# Accent colour, plus the header's network state and its search field ("No
-# matches"). These are the controls that UI actually needs; the first ten were
-# app launchers, which is a different job.
-
-def icon_search(d):
-    """a magnifier: ring plus a handle on the lower right diagonal"""
-    cx, cy, r = 40, 40, 24
-    ring(d, cx, cy, r, width=W_MAIN)
-    a = polar(cx, cy, r + W_MAIN / 2, 45)
-    path(d, [a, (80, 80)], width=W_BOLD)
-
-
-def icon_lock(d):
-    """a padlock: shackle arc over a body. The shackle is drawn as an arc
-    rather than a rounded rect so the two uprights stay parallel at 24px."""
-    d.arc([30, 16, 66, 56], start=180, end=360, fill=INK, width=W_MAIN)
-    path(d, [(30, 40), (30, 50)], width=W_MAIN, caps=False)
-    path(d, [(66, 40), (66, 50)], width=W_MAIN, caps=False)
-    d.rounded_rectangle([22, 48, 74, 84], radius=8, outline=INK, width=W_MAIN)
-    dot(d, 48, 66, 6)
-
-
-def icon_drive(d):
-    """a disk: a wide rounded body with a status lamp - the Devices row"""
-    d.rounded_rectangle([LO, 30, HI, 68], radius=10, outline=INK, width=W_MAIN)
-    path(d, [(20, 49), (56, 49)], width=W_THIN)
-    dot(d, 74, 49, 6)
-
-
-def icon_close(d):
-    """an X. Two strokes, and they must CROSS at the centre - drawing them as
-    two independent diagonals with different lengths reads as a wonky X."""
-    path(d, [(26, 26), (70, 70)], width=W_BOLD)
-    path(d, [(70, 26), (26, 70)], width=W_BOLD)
-
-
-def icon_check(d):
-    """a tick - OK, and the on state of anything"""
-    path(d, [(22, 50), (40, 68), (76, 28)], width=W_BOLD)
-
-
-def icon_chevron(d):
-    """a right chevron: submenus, disclosure, the next page"""
-    path(d, [(38, 24), (64, 48), (38, 72)], width=W_BOLD)
-
-
-def icon_clock(d):
-    """a clock face with two hands - Update interval, and the tray"""
-    ring(d, S / 2, S / 2, 32, width=W_MAIN)
-    path(d, [(S / 2, S / 2), (S / 2, 26)], width=W_MAIN)        # minute
-    path(d, [(S / 2, S / 2), (66, 56)], width=W_MAIN)           # hour
-
-
-def icon_network(d):
-    """three rising bars under an arc - the header's "net up" """
-    for x, top in ((26, 66), (44, 54), (62, 42)):
-        path(d, [(x, 78), (x, top)], width=10)
-    d.arc([18, 18, 78, 78], start=225, end=315, fill=INK, width=W_THIN)
-
-
-def icon_volume(d):
-    """a speaker cone plus one wave. Two waves do not survive 24px - the outer
-    arc lands within a pixel of the inner one and they merge."""
-    poly(d, [(20, 40), (34, 40), (50, 24), (50, 72), (34, 56), (20, 56)],
-         width=W_THIN)
-    d.arc([44, 28, 76, 68], start=300, end=60, fill=INK, width=W_MAIN)
-
-
-def icon_grid(d):
-    """four rounded squares - Activities, the app grid"""
-    for cx in (32, 64):
-        for cy in (32, 64):
-            d.rounded_rectangle([cx - 15, cy - 15, cx + 15, cy + 15],
-                                radius=5, outline=INK, width=W_MAIN)
-
-
-# ---- navigation, window and application controls -------------------------
-
-def icon_browser(d):
-    ring(d, 48, 48, 34, width=W_MAIN)
-    path(d, [(14, 48), (82, 48)], width=W_THIN)
-    d.ellipse([31, 12, 65, 84], outline=INK, width=W_THIN)
-
-
-def icon_home(d):
-    path(d, [(16, 45), (48, 17), (80, 45)], width=W_MAIN)
-    poly(d, [(23, 42), (23, 80), (73, 80), (73, 42)], width=W_MAIN)
-    path(d, [(42, 80), (42, 59), (55, 59), (55, 80)], width=W_THIN, caps=False)
-
-
-def icon_minimize(d):
-    path(d, [(28, 64), (68, 64)], width=W_BOLD)
-
-
-def icon_maximize(d):
-    d.rounded_rectangle([23, 23, 73, 73], radius=5, outline=INK, width=W_MAIN)
-
-
-def icon_restore(d):
-    d.rounded_rectangle([31, 20, 75, 64], radius=4, outline=INK, width=W_MAIN)
-    d.rounded_rectangle([20, 31, 64, 75], radius=4, outline=INK, width=W_MAIN)
-
-
-def icon_menu(d):
-    for y in (28, 48, 68): path(d, [(23, y), (73, y)], width=W_BOLD)
-
-
-def icon_refresh(d):
-    d.arc([17, 17, 79, 79], start=35, end=330, fill=INK, width=W_MAIN)
-    d.polygon([(71, 15), (84, 31), (63, 32)], fill=INK)
-
-
-def icon_plus(d):
-    path(d, [(48, 22), (48, 74)], width=W_BOLD)
-    path(d, [(22, 48), (74, 48)], width=W_BOLD)
-
-
-def icon_folder_add(d):
-    icon_files(d)
-    path(d, [(60, 45), (60, 66)], width=W_MAIN)
-    path(d, [(49, 55), (71, 55)], width=W_MAIN)
-
-
-def icon_trash(d):
-    d.rounded_rectangle([27, 31, 69, 80], radius=5, outline=INK, width=W_MAIN)
-    path(d, [(20, 27), (76, 27)], width=W_MAIN)
-    path(d, [(38, 18), (58, 18)], width=W_MAIN)
-    for x in (40, 56): path(d, [(x, 42), (x, 68)], width=W_THIN)
-
-
-def icon_download(d):
-    path(d, [(48, 17), (48, 62)], width=W_BOLD)
-    path(d, [(30, 46), (48, 64), (66, 46)], width=W_BOLD)
-    path(d, [(22, 78), (74, 78)], width=W_MAIN)
-
-
-def icon_upload(d):
-    path(d, [(48, 65), (48, 20)], width=W_BOLD)
-    path(d, [(30, 36), (48, 18), (66, 36)], width=W_BOLD)
-    path(d, [(22, 78), (74, 78)], width=W_MAIN)
-
-
-def icon_copy(d):
-    d.rounded_rectangle([31, 20, 76, 68], radius=4, outline=INK, width=W_MAIN)
-    d.rounded_rectangle([20, 31, 65, 79], radius=4, outline=INK, width=W_MAIN)
-
-
-def icon_paste(d):
-    d.rounded_rectangle([24, 24, 72, 80], radius=5, outline=INK, width=W_MAIN)
-    d.rounded_rectangle([35, 15, 61, 32], radius=5, fill=ERASE, outline=INK, width=W_MAIN)
-    for y in (48, 62): path(d, [(36, y), (61, y)], width=W_THIN)
-
-
-def icon_warning(d):
-    poly(d, [(48, 14), (84, 78), (12, 78)], width=W_MAIN)
-    path(d, [(48, 36), (48, 57)], width=W_BOLD)
-    dot(d, 48, 68, 4)
-
-
-def icon_bell(d):
-    d.arc([25, 19, 71, 66], start=180, end=360, fill=INK, width=W_MAIN)
-    path(d, [(25, 43), (25, 65), (18, 73), (78, 73), (71, 65), (71, 43)], width=W_MAIN)
-    d.arc([39, 68, 57, 84], start=0, end=180, fill=INK, width=W_MAIN)
-
-
-def icon_back(d):
-    path(d, [(61, 20), (32, 48), (61, 76)], width=W_BOLD)
-
-
-def icon_forward(d):
-    path(d, [(35, 20), (64, 48), (35, 76)], width=W_BOLD)
-
-
-def icon_external(d):
-    d.rounded_rectangle([18, 30, 66, 79], radius=5, outline=INK, width=W_MAIN)
-    path(d, [(46, 18), (78, 18), (78, 50)], width=W_MAIN)
-    path(d, [(77, 19), (46, 50)], width=W_BOLD)
-
-
-def icon_user(d):
-    ring(d, 48, 34, 14, width=W_MAIN)
-    d.arc([19, 43, 77, 88], start=180, end=360, fill=INK, width=W_MAIN)
-
-
-def icon_calendar(d):
-    d.rounded_rectangle([18, 22, 78, 80], radius=6, outline=INK, width=W_MAIN)
-    path(d, [(18, 39), (78, 39)], width=W_MAIN)
-    for x in (34, 62): path(d, [(x, 15), (x, 30)], width=W_BOLD)
-
-
-def icon_camera(d):
-    d.rounded_rectangle([14, 30, 82, 76], radius=8, outline=INK, width=W_MAIN)
-    poly(d, [(31, 30), (37, 20), (59, 20), (65, 30)], width=W_MAIN)
-    ring(d, 48, 53, 13, width=W_MAIN)
-
-
-def icon_play(d):
-    d.polygon([(31, 20), (76, 48), (31, 76)], fill=INK)
-
-
-def icon_pause(d):
-    d.rounded_rectangle([27, 20, 42, 76], radius=4, fill=INK)
-    d.rounded_rectangle([54, 20, 69, 76], radius=4, fill=INK)
-
-
-# ---- the reference's own 45 app glyphs ------------------------------------
+def _stroke(d, pts, width, fill=INK):
+    """wide polyline, round joins (PIL has no miter) and round caps"""
+    _weights_seen.add(width)
+    d.line(pts, fill=fill, width=width, joint="curve")
+    r = width / 2.0
+    for (x, y) in pts:                      # round every joint AND both ends
+        d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+
+
+# ---- the 45/90 armature check ---------------------------------------------
 #
-# Everything above is geometry written by hand in the 96-unit master. The apps
-# below are different: docs/design/ds-reference.html assigns each of its 53
-# apps an icon id and DRAWS that icon, as inline SVG, in its ICONS table
-# (ds-reference.html:1121-1211). Redrawing those by eye would be inventing a
-# glyph the reference already shows, so the path data is transcribed verbatim
-# and rendered here.
-#
-# The transform is linear and there is only one number in it. The reference
-# renders `viewBox="0 0 20 20"` into a size x size box; our master IS the icon
-# box at 96 units. So SC = 96/20 = 4.8, applied to every coordinate. The
-# reference's own stroke weight, 1.7 user units, lands at 1.7*4.8 = 8.16 - i.e.
-# W_MAIN, 2.0px at 24px - which is the check that the mapping is the right one
-# rather than a guess.
-#
-# TWO DELIBERATE DEPARTURES, both forced by PIL:
-#   - the reference asks for strokeLinejoin:'miter'; PIL's only wide-line join
-#     is round (joint="curve"). At W_MAIN the corner radius is 4 master units,
-#     one pixel at 24px, so a stroked rectangle's corners come out very
-#     slightly rounded. Every hand-drawn icon above already does this.
-#   - strokeLinecap:'square' becomes a round cap for the same reason.
-# The GLYPH - which strokes exist, where they run, what is filled - is exact.
-#
-# Fills use PIL's polygon, which is nonzero-winding with no hole support. No
-# fill path in the table below has a hole; check that before adding one.
+# A segment is legal if it is horizontal, vertical, or exactly 45 degrees.
+# EPS is generous in absolute terms (0.02 of a 24-unit box = one twentieth of
+# an output pixel) but tight enough that a real slope cannot slip past: the
+# shallowest genuine violation in the prototype's own table, `clock`'s hour
+# hand, is off by 1.5 units.
+ARM_EPS = 0.02
 
-import re
 
-SVG_VB = 20.0                  # the reference's viewBox extent
-SC     = S / SVG_VB            # 4.8 master units per reference unit
+def _armature_bad(p0, p1):
+    dx, dy = abs(p1[0] - p0[0]), abs(p1[1] - p0[1])
+    if dx < ARM_EPS and dy < ARM_EPS:
+        return False                        # a zero-length hop, not a segment
+    if dx < ARM_EPS or dy < ARM_EPS:
+        return False                        # vertical / horizontal
+    return abs(dx - dy) > ARM_EPS           # 45 degrees or it is a violation
+
+
+# Every off-axis segment in the shipped table, with the reason it is allowed.
+# These are ALL inherited from the prototype's own ICO entries - not one of the
+# icons drawn here needed an exemption, which is the check earning its keep.
+# The count is asserted below, so silently adding a slope somewhere else fails
+# the build rather than quietly widening the rule.
+OFF_AXIS_OK = {
+    "terminal": (2, "prototype ICO.shell: the > prompt's chevron is 3:2.5, not 45 - "
+                    "a 45 chevron at this size collides with the cursor rule below it"),
+    "clock":    (1, "prototype ICO.clock: the hour hand points at ~4 o'clock. A clock "
+                    "hand is a direction, and snapping it to 45 reads as 4:30 sharp"),
+    "font":     (2, "prototype ICO.type: the two strokes of the letter A. The glyph is "
+                    "the subject; an A with 45 legs is a different letter"),
+    "volume":   (2, "prototype ICO.vol: the speaker cone flares 4.5:4. Snapping it to "
+                    "45 makes the cone taller than the icon box"),
+}
+
+
+# ---- the PRESSWORK icon table ---------------------------------------------
+#
+# Written in the prototype's own coordinate system: a 24x24 viewBox, which is
+# also the design size, so every number here is a design pixel and can be read
+# straight off the prototype. The master is 96 units, hence:
+PW_VB = 24.0
+PWSC  = S / PW_VB                           # 4.0 master units per design px
+
+# Each entry is a dict of lists:
+#   "s"  strokes at W_MAIN  - the silhouette
+#   "t"  strokes at W_THIN  - interior detail
+#   "f"  THE solid mass     - at most one item, and it is the subject
+#   "k"  knockouts          - punched back out of the mass (fill=0). A knockout
+#                             is not a mass; it is a hole in one.
+# An item is either an SVG path string in 24-unit space, or one of four
+# shorthands that mirror the <rect>/<circle> elements the prototype writes:
+#   ("R",  x, y, w, h, r)   rounded-rect outline
+#   ("C",  cx, cy, r)       circle outline
+#   ("FR", x, y, w, h)      solid rect
+#   ("FC", cx, cy, r)       solid circle
+#
+# `PROTO` names the eighteen entries transcribed verbatim from the prototype's
+# ICO table (presswork-prototype.html:1155-1173). Do not retune those by hand:
+# the point is that they are the prototype's, not ours. If the prototype
+# changes, re-transcribe.
+PROTO = {"terminal", "editor", "monitor", "files", "settings", "power", "lock",
+         "clock", "network", "volume", "grid", "log", "hex", "calcApp", "font",
+         "disk", "binary", "chip"}
+
+PW = {
+    # ---- app launchers ----------------------------------------------------
+    # ICO.shell
+    "terminal": {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M6.5 9.5 L9.5 12 L6.5 14.5"],
+                 "f": [("FR", 12, 14, 6, 1.6)]},
+
+    # The zl mascot used to be a coiled, tapered, filled spiral. Under
+    # PRESSWORK that is the one thing an icon may not be: an organic blob with
+    # no armature and no constant weight. It is redrawn as the snake every
+    # other part of this system already knows - a body on the grid, turning
+    # only at right angles, with the head as the solid mass.
+    "snake":    {"s": ["M5 7 H12 V17 H18.5"],
+                 "f": [("FR", 16.8, 15.2, 3.8, 3.8)]},
+
+    # A brush laid on the 45 diagonal, so the whole tool is one armature line.
+    # Bristles wider than the ferrule, ferrule wider than the handle: the shape
+    # reads by silhouette, exactly as it did before. What changed is that the
+    # bristle block is now the single solid mass and the ferrule is an outline,
+    # rather than both being filled.
+    "paint":    {"s": ["M13.5 10.5 L20 4",
+                       "M8.662 11.662 L12.338 15.338 L15.338 12.338 L11.662 8.662 Z"],
+                 "f": ["M8.545 20.545 L13.045 16.045 L7.955 10.955 L3.455 15.455 Z"]},
+
+    # ICO.edit
+    "editor":   {"s": ["M5 3 L5 21 L19 21 L19 8 L14 3 Z"],
+                 "t": ["M8 12 H16 M8 15 H16 M8 18 H13"],
+                 "f": [("FR", 8, 6, 4, 3)]},
+
+    # ICO.mon
+    "monitor":  {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M6 16 L6 13 M10 16 L10 10", "M18 16 L18 12"],
+                 "f": [("FR", 13, 7, 2.6, 9)]},
+
+    # A lowercase i in a ring. The ring is a circle because the object is
+    # round; the dot is the mass because the dot is what makes it an i.
+    "about":    {"s": [("C", 12, 12, 8.5), "M12 11.5 V17"],
+                 "f": [("FR", 11.1, 7, 1.8, 1.8)]},
+
+    # A cabinet-projection box: the depth edges run at exactly 45, which an
+    # isometric cube's 30 degrees cannot. The top face is the solid mass, which
+    # also happens to be the face PRESSWORK's raking light strikes.
+    "cube3d":   {"s": [("R", 5, 9, 11, 11, 0),
+                       "M16 9 L20 5", "M20 5 V16", "M16 20 L20 16"],
+                 "f": ["M9 5 H20 L16 9 H5 Z"]},
+
+    # ICO.files
+    "files":    {"s": ["M3 7 L3 19 L21 19 L21 9 L11.5 9 L9.5 7 Z"],
+                 "f": [("FR", 5, 9.5, 7, 4)]},
+
+    # ICO.set
+    "settings": {"s": [("C", 12, 12, 7.5)],
+                 "t": ["M12 2.5 V5 M12 19 V21.5 M2.5 12 H5 M19 12 H21.5 "
+                       "M5.2 5.2 L7 7 M17 17 L18.8 18.8 M18.8 5.2 L17 7 M7 17 L5.2 18.8"],
+                 "f": [("FC", 12, 12, 3)]},
+
+    # ICO.power
+    "power":    {"s": ["M6.5 6.5 A8 8 0 1 0 17.5 6.5"],
+                 "f": [("FR", 11.2, 2.5, 1.6, 8)]},
+
+    # ---- the control set --------------------------------------------------
+    # These are marks, not pictures, so they carry NO solid mass - the same
+    # choice the prototype makes for its own window buttons.
+    "search":   {"s": [("C", 10, 10, 5.5), "M14.5 14.5 L20 20"]},
+
+    # ICO.lock
+    "lock":     {"s": [("R", 5, 10, 14, 10, 2)],
+                 "t": ["M8 10 V7.5 A4 4 0 0 1 16 7.5 V10"],
+                 "f": [("FR", 11, 13, 2, 4)]},
+
+    "drive":    {"s": [("R", 3, 7, 18, 10, 2)],
+                 "t": ["M6 12 H13"],
+                 "f": [("FR", 16, 11, 2, 2)]},
+
+    "close":    {"s": ["M5 5 L19 19", "M19 5 L5 19"]},
+    "check":    {"s": ["M5 12.5 L10 17.5 L19 8.5"]},
+    "chevron":  {"s": ["M9.5 5.5 L16 12 L9.5 18.5"]},
+
+    # ICO.clock
+    "clock":    {"s": [("C", 12, 12, 8.5)],
+                 "t": ["M12 7 L12 12 L15.5 14"],
+                 "f": [("FR", 11.2, 2.6, 1.6, 2.2)]},
+
+    # ICO.net
+    "network":  {"t": ["M4 10 A11 11 0 0 1 20 10", "M7 13.5 A7 7 0 0 1 17 13.5"],
+                 "f": [("FR", 10.4, 16.4, 3.2, 3.2)]},
+
+    # ICO.vol
+    "volume":   {"t": ["M16 9 A5 5 0 0 1 16 15", "M18.5 6.5 A9 9 0 0 1 18.5 17.5"],
+                 "f": ["M4 9.5 L8 9.5 L12.5 5.5 L12.5 18.5 L8 14.5 L4 14.5 Z"]},
+
+    # ICO.grid
+    "grid":     {"s": [("R", 3, 3, 18, 18, 2)],
+                 "t": ["M3 9 H21 M3 15 H21 M9 3 V21 M15 3 V21"],
+                 "f": [("FR", 3.8, 3.8, 4.4, 4.4)]},
+
+    # A browser is a window with an address field, which is a truer picture of
+    # the thing than a globe and does not need a mass invented for it.
+    "browser":  {"s": [("R", 3, 4, 18, 16, 2), "M3 8.5 H21"],
+                 "t": ["M5.5 6.25 H7.5"],
+                 "f": [("FR", 10, 5.25, 8, 2.5)]},
+
+    "home":     {"s": ["M2.5 12.5 L12 3 L21.5 12.5", "M5 10 V20.5 H19 V10"],
+                 "f": [("FR", 10.2, 14.5, 3.6, 6)]},
+
+    "minimize": {"s": ["M6 17 H18"]},
+    "maximize": {"s": [("R", 5, 5, 14, 14, 0)]},
+    "restore":  {"s": [("R", 8, 4, 12, 12, 0), ("R", 4, 8, 12, 12, 0)]},
+    "menu":     {"s": ["M5 7 H19", "M5 12 H19", "M5 17 H19"]},
+
+    # 300 degrees of arc with the gap at the top right, and a 45 arrowhead on
+    # the leading end. The circle is a curve because rotation is round.
+    "refresh":  {"s": ["M18.062 9 A7 7 0 1 1 12 5.5", "M9 2.5 L12 5.5 L9 8.5"]},
+
+    "plus":     {"s": ["M12 5 V19", "M5 12 H19"]},
+
+    "folder_add": {"s": ["M3 7 L3 19 L21 19 L21 9 L11.5 9 L9.5 7 Z"],
+                   "t": ["M15.5 11.5 V17.5", "M12.5 14.5 H18.5"]},
+
+    "trash":    {"s": [("R", 6, 6.2, 12, 13.8, 2)],
+                 "t": ["M9.5 3 H14.5", "M10 10 V16.5", "M14 10 V16.5"],
+                 "f": [("FR", 4, 4, 16, 2.2)]},
+
+    "download": {"s": ["M12 3 V15", "M7 10 L12 15 L17 10", "M4.5 20 H19.5"]},
+    "upload":   {"s": ["M12 16 V4", "M7 9 L12 4 L17 9", "M4.5 20 H19.5"]},
+    # Only the front sheet is a closed rect; the sheet behind it is the two
+    # edges you would actually see. Two full rects made this indistinguishable
+    # from `restore` at 24px - the sole difference was the corner radius.
+    "copy":     {"s": [("R", 3, 7, 13, 14, 2), "M8 7 V3 H21 V17 H16"]},
+
+    "paste":    {"s": [("R", 4, 5, 16, 16, 2)],
+                 "t": ["M7.5 11 H16.5", "M7.5 14.5 H14"],
+                 "f": [("FR", 8.5, 2.6, 7, 3.4)]},
+
+    # The ISO caution diamond rather than a triangle: a triangle whose sides
+    # run at 45 is either squat or wider than the box, and the diamond is the
+    # shape a technical document would actually print.
+    "warning":  {"s": ["M12 3 L21 12 L12 21 L3 12 Z", "M12 8 V13.5"],
+                 "f": [("FR", 11.1, 15.4, 1.8, 1.8)]},
+
+    "bell":     {"s": ["M6.5 17 V11 A5.5 5.5 0 0 1 17.5 11 V17", "M4.5 17 H19.5"],
+                 "f": [("FR", 10.8, 18.5, 2.4, 2.4)]},
+
+    "back":     {"s": ["M15.5 5 L8.5 12 L15.5 19"]},
+    "forward":  {"s": ["M8.5 5 L15.5 12 L8.5 19"]},
+    "external": {"s": [("R", 3, 7, 12, 14, 2), "M12 3 H21 V12", "M21 3 L13 11"]},
+
+    "user":     {"s": ["M4.5 20.5 A7.5 7.5 0 0 1 19.5 20.5"],
+                 "f": [("FC", 12, 8, 4)]},
+
+    "calendar": {"s": [("R", 3, 5, 18, 15, 2), "M3 10 H21"],
+                 "t": ["M8 3 V7", "M16 3 V7"],
+                 "f": [("FR", 6.5, 12.5, 4, 4)]},
+
+    "camera":   {"s": [("R", 3, 7, 18, 13, 2), "M8.5 7 L11.5 4 H12.5 L15.5 7"],
+                 "f": [("FC", 12, 13.5, 3.4)]},
+
+    # A 45-sided triangle is necessarily half as wide as it is tall. That is
+    # the armature's price and it is paid rather than dodged.
+    "play":     {"s": ["M8.5 4.5 L16 12 L8.5 19.5 Z"]},
+    "pause":    {"s": ["M9 5 V19", "M15 5 V19"]},
+
+    # ---- system apps ------------------------------------------------------
+    # ICO.log
+    "log":      {"s": [("R", 3, 5, 18, 14, 2)],
+                 "t": ["M6 9 H12 M6 12 H15 M6 15 H10"],
+                 "f": [("FR", 16, 8, 2.6, 2.6)]},
+
+    # Rendered vs not-yet-rendered, split on the diagonal.
+    "render":   {"s": [("R", 4, 4, 16, 16, 1)],
+                 "t": ["M4 20 L20 4"],
+                 "f": ["M4 4 H12 L4 12 Z"]},
+
+    # ICO.hex
+    "hex":      {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M3 9 H21 M9 4 V20 M15 4 V20"],
+                 "f": [("FR", 9.6, 9.6, 4.8, 4.8)]},
+
+    "snap":     {"s": [("R", 3, 5, 18, 14, 1), "M12 5 V19"],
+                 "f": [("FR", 4, 6, 7, 12)]},
+
+    "tty":      {"s": [("R", 3, 4, 18, 16, 2), "M3 8 H21"],
+                 "t": ["M6 12 H10", "M6 15.5 H14"],
+                 "f": [("FR", 5.5, 5.2, 3, 1.6)]},
+
+    # ICO.calc
+    "calcApp":  {"s": [("R", 4, 3, 16, 18, 2)],
+                 "t": ["M8 13 H10 M14 13 H16 M8 17 H10 M14 17 H16"],
+                 "f": [("FR", 7, 6, 10, 3.4)]},
+
+    # ICO.type
+    "font":     {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M7 16 L10.5 8 L14 16 M8.4 13.4 H12.6"],
+                 "f": [("FR", 16, 8, 2.4, 8)]},
+
+    # ICO.disk
+    "disk":     {"s": [("C", 12, 12, 8.5)],
+                 "t": ["M12 3.5 L12 6 M16.5 16.5 L18.4 18.4"],
+                 "f": [("FC", 12, 12, 2.4)]},
+
+    "svc":      {"s": [("R", 3, 5, 18, 5, 1), ("R", 3, 14, 18, 5, 1)],
+                 "t": ["M13 7.5 H18", "M13 16.5 H18"],
+                 "f": [("FR", 5.5, 6.7, 1.6, 1.6)]},
+
+    # ICO.regs, reused for the binary view: the prototype's register table is
+    # already the picture this needs - a ruled grid with one cell struck out.
+    "binary":   {"s": [("R", 3, 5, 18, 14, 2)],
+                 "t": ["M3 12 H21 M8 5 V19 M13 5 V19"],
+                 "f": [("FR", 13.8, 5.8, 6.4, 5.4)]},
+
+    "imgv":     {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M4 16 L8.5 11.5 L13 16", "M11 14 L14.5 10.5 L20 16"],
+                 "f": [("FC", 7.5, 8.5, 1.7)]},
+
+    # ICO.chip
+    "chip":     {"s": [("R", 6, 6, 12, 12, 1)],
+                 "t": ["M9 3 V6 M12 3 V6 M15 3 V6 M9 18 V21 M12 18 V21 M15 18 V21 "
+                       "M3 9 H6 M3 12 H6 M3 15 H6 M18 9 H21 M18 12 H21 M18 15 H21"],
+                 "f": [("FR", 9.2, 9.2, 5.6, 5.6)]},
+
+    # ---- utilities --------------------------------------------------------
+    "uClip":    {"s": [("R", 4.5, 5, 15, 16, 2), ("R", 8.5, 2.5, 7, 4, 1)],
+                 "t": ["M8 11 H16", "M8 14.5 H13"],
+                 "f": [("FR", 8, 17.2, 5.5, 1.8)]},
+
+    "uColor":   {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M3 15 H21", "M9 4 V15", "M15 4 V15"],
+                 "f": [("FR", 5, 16.5, 14, 2.5)]},
+
+    # A plus and an X sharing a centre: the only asterisk the armature allows,
+    # and the two weights do the work a third weight used to.
+    "uRegex":   {"s": ["M12 5 V15", "M7 10 H17"],
+                 "t": ["M8.5 6.5 L15.5 13.5", "M15.5 6.5 L8.5 13.5"],
+                 "f": [("FR", 10.6, 17.4, 2.8, 2.8)]},
+
+    "uBase":    {"s": [("R", 3, 4, 18, 16, 2)],
+                 "t": ["M3 9.33 H21", "M3 14.67 H21"],
+                 "f": [("FR", 15.5, 5.4, 4.2, 2.8)]},
+
+    "uDiff":    {"s": [("R", 3, 4, 8, 16, 1), ("R", 13, 4, 8, 16, 1)],
+                 "t": ["M5 8 H9", "M15 8 H19", "M15 12 H19"],
+                 "f": [("FR", 5, 11, 4, 2)]},
+
+    # A hash is an input and a fixed-width digest, so the mass is the digest
+    # bar under the mark. Putting the mass in the centre cell instead made this
+    # the same picture as gLife.
+    "uHash":    {"s": ["M8.5 3.5 V16", "M14.5 3.5 V16", "M3.5 8 H19.5", "M3.5 13 H19.5"],
+                 "f": [("FR", 5.5, 18.4, 13, 2.6)]},
+
+    "uUnit":    {"s": ["M3 19.5 H21", ("R", 13, 7, 6, 12.5, 0)],
+                 "f": [("FR", 5, 11, 5, 8.5)]},
+
+    "uNote":    {"s": [("R", 4, 5, 16, 15, 1), "M8 2.5 V7"],
+                 "t": ["M7.5 11 H16.5", "M7.5 14.5 H13"],
+                 "f": [("FR", 7.5, 16.8, 6, 1.8)]},
+
+    "uKeys":    {"s": [("R", 3, 7, 18, 10, 2)],
+                 "t": ["M6 10.5 H8", "M9.7 10.5 H11.7", "M13.4 10.5 H15.4",
+                       "M17.1 10.5 H18.6"],
+                 "f": [("FR", 8, 13, 8, 1.8)]},
+
+    "uBench":   {"s": ["M4.5 17.5 A7.5 7.5 0 0 1 19.5 17.5", "M4.5 17.5 H19.5",
+                       "M12 17.5 L17 12.5"],
+                 "f": [("FR", 11, 16.5, 2, 2)]},
+
+    # ---- games ------------------------------------------------------------
+    "gTetris":  {"s": [("R", 4, 4, 7, 7, 0), ("R", 11, 11, 7, 7, 0)],
+                 "f": [("FR", 11, 4, 7, 7)]},
+
+    "gPong":    {"s": ["M5 7 V17", "M19 7 V17"],
+                 "f": [("FR", 10.8, 10.8, 2.4, 2.4)]},
+
+    "gBrick":   {"s": [("R", 3.5, 5, 7, 3.5, 0), ("R", 13.5, 5, 7, 3.5, 0),
+                       ("R", 3.5, 10, 7, 3.5, 0), ("R", 13.5, 10, 7, 3.5, 0)],
+                 "f": [("FR", 8.5, 17.5, 7, 2)]},
+
+    # A mine is physically round, so it may be a circle; its spikes are the
+    # four axes and the four 45s, which is the armature exactly.
+    "gMine":    {"s": ["M12 3.5 V6", "M12 18 V20.5", "M3.5 12 H6", "M18 12 H20.5"],
+                 "t": ["M6.5 6.5 L8.6 8.6", "M15.4 15.4 L17.5 17.5",
+                       "M17.5 6.5 L15.4 8.6", "M8.6 15.4 L6.5 17.5"],
+                 "f": [("FC", 12, 12, 4.2)]},
+
+    "gNum":     {"s": [("R", 4, 4, 16, 16, 0)],
+                 "t": ["M4 12 H20", "M12 4 V20"],
+                 "f": [("FR", 12.5, 12.5, 7, 7)]},
+
+    # Life has no board edge - the grid runs off the plate.
+    "gLife":    {"t": ["M4 9.5 H20", "M4 14.5 H20", "M9.5 4 V20", "M14.5 4 V20"],
+                 "f": [("FR", 9.5, 9.5, 5, 5)]},
+
+    # A cut-corner plate: eight edges, four H/V and four at 45.
+    "gRock":    {"s": ["M8 4 H16 L20 8 V16 L16 20 H8 L4 16 V8 Z"],
+                 "f": [("FR", 10, 10, 4, 4)]},
+
+    # The eyes are KNOCKED OUT of the body rather than drawn on top of it -
+    # which is the same move the focused window header makes with its title.
+    "gAlien":   {"s": ["M6 7 L3.5 4.5", "M18 7 L20.5 4.5"],
+                 "t": ["M8.5 13 V16.5", "M15.5 13 V16.5"],
+                 "f": [("FR", 6, 7, 12, 6)],
+                 "k": [("FR", 8.2, 8.8, 2, 2), ("FR", 13.8, 8.8, 2, 2)]},
+
+    # A crossword's blocked square, inset inside a middle cell. Two earlier
+    # placements both failed to read: flush to the top-left corner it fused
+    # with the frame stroke, and at 4x4 the cells were too small for the mass
+    # to separate from the ruling. Square frame, not ICO.grid's rounded one.
+    "gCross":   {"s": [("R", 3.5, 3.5, 17, 17, 0)],
+                 "t": ["M3.5 9.17 H20.5", "M3.5 14.83 H20.5",
+                       "M9.17 3.5 V20.5", "M14.83 3.5 V20.5"],
+                 "f": [("FR", 15.6, 9.94, 4.2, 4.2)]},
+
+    # Four separate tiles with real gutters, not a ruled grid: as a ruled grid
+    # this was gCross with the solid cell moved, which is not an icon.
+    "gTiles":   {"s": [("R", 3.5, 3.5, 7.5, 7.5, 1), ("R", 13, 3.5, 7.5, 7.5, 1),
+                       ("R", 3.5, 13, 7.5, 7.5, 1)],
+                 "f": [("FR", 13, 13, 7.5, 7.5)]},
+
+    "gDrop":    {"s": [("R", 3.5, 4, 17, 16, 1)],
+                 "t": ["M16 7 L18.5 9.5 L16 12 L13.5 9.5 Z"],
+                 "f": ["M8 12 L10.5 14.5 L8 17 L5.5 14.5 Z"]},
+
+    "gDisc":    {"s": [("R", 3.5, 3.5, 17, 17, 1)],
+                 "t": [("C", 15.5, 14, 2.8)],
+                 "f": [("FC", 8.5, 9, 2.8)]},
+
+    "gBulb":    {"s": [("C", 12, 9.5, 5.5), "M9.5 17.5 H14.5", "M10.5 20 H13.5"],
+                 "t": ["M10 15 H14"],
+                 "f": [("FC", 12, 9.5, 2.2)]},
+
+    "gWave":    {"s": ["M4 14 L8 10 L12 14 L16 10 L20 14"],
+                 "f": [("FR", 10.75, 17.5, 2.5, 2.5)]},
+
+    "gMaze":    {"s": [("R", 3.5, 3.5, 17, 17, 0)],
+                 "t": ["M3.5 8.5 H12", "M16 8.5 H20.5", "M8 13 H20.5", "M3.5 17 H12"],
+                 "f": [("FR", 16.2, 17.4, 2.6, 2.6)]},
+
+    "gCrate":   {"s": [("R", 4.5, 4.5, 15, 15, 0),
+                       "M4.5 4.5 L19.5 19.5", "M19.5 4.5 L4.5 19.5"],
+                 "f": [("FR", 10.6, 10.6, 2.8, 2.8)]},
+
+    "gBird":    {"s": ["M13.6 10.4 L17.6 6.4"],
+                 "t": ["M7 13.5 H10.5"],
+                 "f": [("FC", 10, 12, 4.2)],
+                 "k": [("FR", 10.4, 10.2, 1.8, 1.8)]},
+
+    # The ticks are thin and stop short of the ring - at W_MAIN reaching y=6
+    # they ran into a circle whose top edge is at 5.6 and the crosshair fused
+    # to the sight. Same tick geometry the prototype uses on ICO.set.
+    "gTarget":  {"s": [("C", 12, 12, 6.4)],
+                 "t": ["M12 2.5 V5", "M12 19 V21.5", "M2.5 12 H5", "M19 12 H21.5"],
+                 "f": [("FC", 12, 12, 2.4)]},
+
+    "gTower":   {"s": ["M12 4 V19.5", "M4 19.5 H20"],
+                 "t": [("R", 6.5, 10.2, 11, 3, 0), ("R", 4.5, 14.2, 15, 3, 0)],
+                 "f": [("FR", 8.5, 6.4, 7, 2.8)]},
+
+    "gSticks":  {"s": ["M7 5 V19", "M17 5 V19"],
+                 "f": [("FR", 10.8, 5, 2.4, 14)]},
+
+    "gCard":    {"s": [("R", 5, 3.5, 14, 17, 1)],
+                 "f": ["M12 8 L15.5 11.5 L12 15 L8.5 11.5 Z"]},
+
+    "gFrog":    {"s": ["M4.5 19 H19.5"],
+                 "f": ["M6.5 17.5 V13 A5.5 5.5 0 0 1 17.5 13 V17.5 Z"],
+                 "k": [("FC", 9.6, 11.5, 1.5), ("FC", 14.4, 11.5, 1.5)]},
+
+    "gWord":    {"s": [("R", 3.5, 5.5, 17, 13, 0)],
+                 "t": ["M9.17 5.5 V18.5", "M14.83 5.5 V18.5"],
+                 "f": [("FR", 4.6, 6.6, 3.4, 10.8)]},
+}
+
+# The marks that legitimately carry NO solid mass. They are not pictures of
+# anything - they are the same class of glyph as the prototype's own window
+# buttons, which are stroke-only.
+CONTROLS = {"search", "close", "check", "chevron", "minimize", "maximize",
+            "restore", "menu", "refresh", "plus", "folder_add", "download",
+            "upload", "copy", "external", "back", "forward", "play", "pause"}
+
+
+# ---- SVG path handling ----------------------------------------------------
 
 _NUM = re.compile(r'[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?')
 
@@ -477,12 +581,12 @@ _NUM = re.compile(r'[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?')
 class _PathReader:
     """SVG path-data scanner.
 
-    Not a general one - it covers exactly the commands the reference uses
+    Not a general one - it covers exactly the commands the table uses
     (M L H V C S A Z and their relative forms) and raises on anything else,
     which is the point: a silently-ignored command would draw a wrong glyph.
 
     The one trap worth naming: an arc's large-arc and sweep parameters are
-    FLAGS, single characters, and the minifier packs them against the next
+    FLAGS, single characters, and a minifier packs them against the next
     number - `a11 11 0 0113.8 0` is (0, 1, 13.8, 0), not (0, 113.8, ...).
     They must be read one character at a time, never as numbers.
     """
@@ -585,7 +689,14 @@ def _svg_arc(x1, y1, rx, ry, phi_deg, large, sweep, x2, y2):
 
 
 def _flatten(dstr):
-    """path data -> [(points, closed), ...] in REFERENCE units"""
+    """path data -> [(points, closed), ...] in DESIGN units (the 24-unit box)
+
+    Each point is (x, y, curved). `curved` marks a point emitted by a curve
+    command (C/S/A), and therefore a segment the 45/90 armature check must
+    skip: PRESSWORK permits a curve where the object is physically round, and
+    a flattened arc is thousands of tiny off-axis chords. Points from
+    M/L/H/V/Z are AUTHORED straight segments and are checked.
+    """
     r = _PathReader(dstr)
     subs, pts = [], None
     cx = cy = sx = sy = 0.0
@@ -607,23 +718,23 @@ def _flatten(dstr):
             if rel:
                 x, y = x + cx, y + cy
             cx, cy = sx, sy = x, y
-            pts, prev_c2 = [(x, y)], None
+            pts, prev_c2 = [(x, y, False)], None
         elif k == "L":
             x, y = r.num(), r.num()
             if rel:
                 x, y = x + cx, y + cy
             cx, cy = x, y
-            pts.append((x, y))
+            pts.append((x, y, False))
             prev_c2 = None
         elif k == "H":
             x = r.num()
             cx = x + cx if rel else x
-            pts.append((cx, cy))
+            pts.append((cx, cy, False))
             prev_c2 = None
         elif k == "V":
             y = r.num()
             cy = y + cy if rel else y
-            pts.append((cx, cy))
+            pts.append((cx, cy, False))
             prev_c2 = None
         elif k in ("C", "S"):
             if k == "C":
@@ -636,7 +747,8 @@ def _flatten(dstr):
             x2, y2, x, y = r.num(), r.num(), r.num(), r.num()
             if rel:
                 x2, y2, x, y = x2 + cx, y2 + cy, x + cx, y + cy
-            pts.extend(_bezier(cx, cy, x1, y1, x2, y2, x, y))
+            pts.extend((px, py, True)
+                       for px, py in _bezier(cx, cy, x1, y1, x2, y2, x, y))
             prev_c2, cx, cy = (x2, y2), x, y
         elif k == "A":
             rx, ry, rot = r.num(), r.num(), r.num()
@@ -644,13 +756,14 @@ def _flatten(dstr):
             x, y = r.num(), r.num()
             if rel:
                 x, y = x + cx, y + cy
-            pts.extend(_svg_arc(cx, cy, rx, ry, rot, large, sweep, x, y))
+            pts.extend((px, py, True)
+                       for px, py in _svg_arc(cx, cy, rx, ry, rot, large, sweep, x, y))
             cx, cy, prev_c2 = x, y, None
         elif k == "Z":
             if pts and len(pts) > 1:
                 subs.append((pts, True))
-            cx, cy = sx, sy                    # a relative command after z is
-            pts, prev_c2 = [(sx, sy)], None    # relative to the SUBPATH start
+            cx, cy = sx, sy                        # a relative command after z is
+            pts, prev_c2 = [(sx, sy, False)], None  # relative to the SUBPATH start
         else:
             raise ValueError("unsupported SVG path command %r in %r" % (cmd, dstr))
     if pts and len(pts) > 1:
@@ -658,154 +771,180 @@ def _flatten(dstr):
     return subs
 
 
-def _stroke(d, pts, width):
-    """wide polyline, round joins (PIL has no miter) and round caps"""
-    d.line(pts, fill=INK, width=width, joint="curve")
-    r = width / 2.0
-    for (x, y) in (pts[0], pts[-1]):
-        d.ellipse([x - r, y - r, x + r, y + r], fill=INK)
+def _armature_violations(item):
+    """count authored straight segments in one table item that break 45/90"""
+    if not isinstance(item, str):
+        return 0                               # R/C/FR/FC are axis-aligned or round
+    bad = 0
+    for pts, closed in _flatten(item):
+        ring_pts = pts + [pts[0]] if closed else pts
+        for a, b in zip(ring_pts, ring_pts[1:]):
+            if a[2] or b[2]:                   # a curve's chord, exempt by rule
+                continue
+            if _armature_bad(a, b):
+                bad += 1
+    return bad
 
 
-def ref_icon(name):
-    """build a draw function for one ds-reference.html ICONS entry"""
-    spec = REF[name]
-    strokes = [_flatten(p) for p in spec.get("s", ())]
-    fills   = [_flatten(p) for p in spec.get("f", ())]
+# ---- turning one table entry into geometry --------------------------------
+
+def _rect_box(x, y, w, h, grow=0.0):
+    """design-space rect -> master bbox, expanded by `grow` master units
+
+    PIL draws a rectangle outline INWARD from its bbox; SVG centres the stroke
+    on the path. Growing the bbox by half the stroke width puts the two in
+    agreement, which is what makes a 24-unit coordinate copied off the
+    prototype land where the prototype puts it. `ring()` already did this for
+    circles; this is the same correction for rectangles.
+    """
+    return [x * PWSC - grow, y * PWSC - grow,
+            (x + w) * PWSC + grow, (y + h) * PWSC + grow]
+
+
+def _draw_item(d, item, width):
+    """stroke one table item at `width` master units"""
+    if isinstance(item, str):
+        for pts, closed in _flatten(item):
+            p = [(px * PWSC, py * PWSC) for px, py, _c in pts]
+            if closed:
+                p.append(p[0])
+            _stroke(d, p, width)
+        return
+    kind = item[0]
+    if kind == "R":
+        _, x, y, w, h, r = item
+        _weights_seen.add(width)
+        box = _rect_box(x, y, w, h, grow=width / 2.0)
+        if r > 0:
+            d.rounded_rectangle(box, radius=r * PWSC + width / 2.0,
+                                outline=INK, width=width)
+        else:
+            d.rectangle(box, outline=INK, width=width)
+        return
+    if kind == "C":
+        _, cx, cy, r = item
+        ring(d, cx * PWSC, cy * PWSC, r * PWSC, width=width)
+        return
+    raise ValueError("%r is a fill, not a stroke" % (item,))
+
+
+def _fill_item(d, item, colour):
+    """fill one table item - the solid mass, or a knockout out of it"""
+    if isinstance(item, str):
+        for pts, _closed in _flatten(item):
+            if len(pts) >= 3:
+                d.polygon([(px * PWSC, py * PWSC) for px, py, _c in pts], fill=colour)
+        return
+    kind = item[0]
+    if kind == "FR":
+        _, x, y, w, h = item
+        # PIL's rectangle bounds are INCLUSIVE, so the far edge is one master
+        # unit short of the mathematical edge - otherwise the mass bleeds a
+        # quarter-covered column past where the prototype puts it.
+        box = _rect_box(x, y, w, h)
+        d.rectangle([box[0], box[1], box[2] - 1, box[3] - 1], fill=colour)
+        return
+    if kind == "FC":
+        _, cx, cy, r = item
+        dot(d, cx * PWSC, cy * PWSC, r * PWSC, fill=colour)
+        return
+    raise ValueError("%r is a stroke, not a fill" % (item,))
+
+
+def pw_icon(name):
+    """build a draw function for one PW entry"""
+    spec = PW[name]
 
     def draw(d):
-        for subs in strokes:
-            for pts, closed in subs:
-                p = [(x * SC, y * SC) for x, y in pts]
-                if closed:
-                    p.append(p[0])
-                _stroke(d, p, W_MAIN)
-        for subs in fills:
-            for pts, _closed in subs:
-                if len(pts) >= 3:
-                    d.polygon([(x * SC, y * SC) for x, y in pts], fill=INK)
-    draw.__name__ = "ref_" + name
+        for it in spec.get("s", ()):
+            _draw_item(d, it, W_MAIN)
+        for it in spec.get("t", ()):
+            _draw_item(d, it, W_THIN)
+        for it in spec.get("f", ()):
+            _fill_item(d, it, INK)
+        for it in spec.get("k", ()):
+            _fill_item(d, it, ERASE)
+    draw.__name__ = "pw_" + name
     return draw
 
 
-# Verbatim from ds-reference.html:1121-1211. Do not retune these by hand: the
-# whole point is that they are the reference's, not ours. If the reference
-# changes, re-extract.
-REF = {
-    "log": {"s": ["M7.5 6h9.3", "M7.5 10h6.9", "M7.5 14h8.1"], "f": ["M3.3 5.3h2.2v1.5H3.3z", "M3.3 9.3h2.2v1.5H3.3z", "M3.3 13.3h2.2v1.5H3.3z"]},
-    "render": {"s": ["M10 3.1l6.2 3.6v6.6L10 16.9l-6.2-3.6V6.7z", "M3.8 6.7L10 10.3l6.2-3.6", "M10 10.3v6.6"]},
-    "hex": {"s": ["M10 3l6 3.5v7L10 17l-6-3.5v-7z"], "f": ["M7.6 8.4h1.7v1.7H7.6z", "M10.7 8.4h1.7v1.7h-1.7z", "M7.6 11.3h1.7v1.7H7.6z", "M10.7 11.3h1.7v1.7h-1.7z"]},
-    "snap": {"s": ["M3.4 4.7h13.2v10.6H3.4z", "M10 4.7v10.6"]},
-    "tty": {"s": ["M2.8 4.4h14.4v11.2H2.8z", "M2.8 7.2h14.4", "M5.4 10h3.2", "M5.4 12.4h6.4"], "f": ["M4.6 5.4h1.1v1.1H4.6z", "M6.6 5.4h1.1v1.1H6.6z"]},
-    "calcApp": {"s": ["M4.8 3.6h10.4v12.8H4.8z", "M6.8 6h6.4v2.2H6.8z"], "f": ["M7 10h1.6v1.6H7z", "M9.4 10H11v1.6H9.4z", "M11.8 10h1.6v1.6h-1.6z", "M7 12.8h1.6v1.6H7z", "M9.4 12.8H11v1.6H9.4z", "M11.8 12.8h1.6v1.6h-1.6z"]},
-    "font": {"s": ["M4.4 15.2L9 4.8h2l4.6 10.4", "M6.6 11.8h6.8"]},
-    "disk": {"s": ["M10 4.2c3.4 0 6.2 1 6.2 2.2s-2.8 2.2-6.2 2.2S3.8 7.6 3.8 6.4 6.6 4.2 10 4.2z", "M3.8 6.4v7.2c0 1.2 2.8 2.2 6.2 2.2s6.2-1 6.2-2.2V6.4", "M3.8 10c0 1.2 2.8 2.2 6.2 2.2s6.2-1 6.2-2.2"]},
-    "svc": {"s": ["M3.6 5h12.8v3.4H3.6z", "M3.6 11.6h12.8V15H3.6z"], "f": ["M5.6 6.2h1.4v1.2H5.6z", "M5.6 12.8h1.4v1.2H5.6z"]},
-    "binary": {"s": ["M4.4 4.4h11.2v11.2H4.4z"], "f": ["M6.5 6.5h2.1v2.1H6.5z", "M11.4 6.5h2.1v2.1h-2.1z", "M6.5 11.4h2.1v2.1H6.5z", "M11.4 11.4h2.1v2.1h-2.1z"]},
-    "imgv": {"s": ["M3.4 4.6h13.2v10.8H3.4z", "M3.4 12.2l3.6-3.4 2.8 2.6 3-2.8 4.2 3.8"], "f": ["M6.6 6.8a1.3 1.3 0 110 2.6 1.3 1.3 0 010-2.6z"]},
-    "chip": {"s": ["M6.4 6.4h7.2v7.2H6.4z", "M4.3 8.2h2.1", "M4.3 11.8h2.1", "M13.6 8.2h2.1", "M13.6 11.8h2.1", "M8.2 4.3v2.1", "M11.8 4.3v2.1", "M8.2 13.6v2.1", "M11.8 13.6v2.1"]},
-    "uClip": {"s": ["M6.4 4.6h7.2v2.4H6.4z", "M5 6.2h10v9.6H5z", "M7.6 10h4.8", "M7.6 12.6h3.2"]},
-    "uColor": {"s": ["M10 3.6c3.5 0 6.4 2.6 6.4 5.9 0 2.2-1.9 3.2-3.4 3.2h-1.2c-1 0-1.7.7-1.7 1.6 0 1.2-.9 2.1-2.1 2.1-3.3 0-5.4-2.9-5.4-6.4 0-3.6 3.9-6.4 7.4-6.4z"], "f": ["M6.8 9a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z", "M9.4 6.4a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z", "M13 7.6a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z"]},
-    "uRegex": {"s": ["M10 4.4v6.4", "M7.2 6.2l5.6 3.2", "M12.8 6.2L7.2 9.4", "M6.6 14.6h3.2"], "f": ["M12.6 13a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"]},
-    "uBase": {"s": ["M4.4 5.2h4v4h-4z", "M11.6 5.2h4v4h-4z", "M4.4 11.6h4v3.2h-4z", "M11.6 11.6h4v3.2h-4z", "M8.4 7.2h3.2", "M8.4 13.2h3.2"]},
-    "uDiff": {"s": ["M4 4.6h5.6v10.8H4z", "M10.4 4.6H16v10.8h-5.6", "M5.4 8h2.8", "M12.2 8h2.4", "M12.2 11.4h2.4"]},
-    "uHash": {"s": ["M6.8 4.2L5.6 15.8", "M13.2 4.2L12 15.8", "M4.2 7.6h11.6", "M4.2 12.4h11.6"]},
-    "uUnit": {"s": ["M3.4 12.8h13.2", "M4.8 12.8V8.2h4.4v4.6", "M11 12.8V5.6h4.2v7.2", "M6 10.4h2", "M12.2 8h2"]},
-    "uNote": {"s": ["M4.6 3.8h10.8v8.4l-3.6 3.6H4.6z", "M15.4 12.2h-3.6v3.6", "M7 7h6", "M7 9.8h4"]},
-    "uKeys": {"s": ["M3.2 6.2h13.6v8.2H3.2z"], "f": ["M5.2 8h1.8v1.6H5.2z", "M8 8h1.8v1.6H8z", "M10.8 8h1.8v1.6h-1.8z", "M13.6 8h1.4v1.6h-1.4z", "M6.6 11h7.4v1.6H6.6z"]},
-    "uBench": {"s": ["M10 14.4V9", "M4.6 14.4a5.4 5.4 0 1110.8 0z", "M13.4 8.2l-3 3.2"]},
-    "gTetris": {"s": ["M3.8 3.8h5.2v5.2H3.8z", "M9 9h5.2v5.2H9z"], "f": ["M9 3.8h3.4v3.4H9z"]},
-    "gPong": {"s": ["M4.4 6.4v7.2", "M15.6 6.4v7.2"], "f": ["M9.2 9.2h2.2v2.2H9.2z"]},
-    "gBrick": {"s": ["M3.6 4.4h5.6v3H3.6z", "M10.8 4.4h5.6v3h-5.6z", "M3.6 8.6h5.6v3H3.6z", "M10.8 8.6h5.6v3h-5.6z", "M6.4 14.6h7.2"]},
-    "gMine": {"s": ["M10 4.4v2.2", "M10 13.4v2.2", "M4.4 10h2.2", "M13.4 10h2.2"], "f": ["M10 6.8a3.2 3.2 0 110 6.4 3.2 3.2 0 010-6.4z"]},
-    "gNum": {"s": ["M4 4h12v12H4z", "M4 10h12", "M10 4v12"]},
-    "gLife": {"f": ["M4.2 4.2h3.4v3.4H4.2z", "M12.4 4.2h3.4v3.4h-3.4z", "M8.3 8.3h3.4v3.4H8.3z", "M4.2 12.4h3.4v3.4H4.2z", "M12.4 12.4h3.4v3.4h-3.4z"]},
-    "gRock": {"s": ["M10 3.6l5.4 3.4-1.8 6.4H6.4L4.6 7z"]},
-    "gAlien": {"s": ["M6 6.6h8v4.4H6z", "M4.2 8.8h1.8", "M14 8.8h1.8", "M7 13.4h2", "M11 13.4h2"], "f": ["M7.6 8h1.2v1.2H7.6z", "M11.2 8h1.2v1.2h-1.2z"]},
-    "gCross": {"s": ["M4 8h12", "M4 12h12", "M8 4v12", "M12 4v12"]},
-    "gTiles": {"s": ["M3.8 3.8h12.4v12.4H3.8z", "M3.8 10h12.4", "M10 3.8v12.4"], "f": ["M4.8 4.8h4.2v4.2H4.8z"]},
-    "gDrop": {"s": ["M4 4.6h12v10.8H4z"], "f": ["M6.4 11.4a1.7 1.7 0 110 3.4 1.7 1.7 0 010-3.4z", "M10 11.4a1.7 1.7 0 110 3.4 1.7 1.7 0 010-3.4z"]},
-    "gDisc": {"s": ["M3.8 3.8h12.4v12.4H3.8z"], "f": ["M7 6.4a2.4 2.4 0 110 4.8 2.4 2.4 0 010-4.8z", "M13 8.8a2.4 2.4 0 110 4.8 2.4 2.4 0 010-4.8z"]},
-    "gBulb": {"s": ["M3.8 3.8h12.4v12.4H3.8z", "M3.8 10h12.4", "M10 3.8v12.4"], "f": ["M10.8 10.8h4.4v4.4h-4.4z"]},
-    "gWave": {"s": ["M3.6 12.6l3.2-5 3.2 5 3.2-5 3.2 5"]},
-    "gMaze": {"s": ["M3.8 3.8h12.4v12.4H3.8z", "M3.8 7.4h6.4", "M13.2 7.4h3", "M6.8 11h9.4", "M3.8 14h6.4"]},
-    "gCrate": {"s": ["M4.6 4.6h10.8v10.8H4.6z", "M4.6 4.6l10.8 10.8", "M15.4 4.6L4.6 15.4"]},
-    "gBird": {"s": ["M4.4 10.6a4 4 0 018 0", "M12.4 8.6l3.2-2.2"], "f": ["M10.6 8.2a.9.9 0 110 1.8.9.9 0 010-1.8z"]},
-    "gTarget": {"s": ["M10 3.8v3", "M10 13.2v3", "M3.8 10h3", "M13.2 10h3", "M10 6.6a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8z"]},
-    "gTower": {"s": ["M10 4v11", "M4.4 15.4h11.2"], "f": ["M7.4 6.6h5.2v2H7.4z", "M6 9.6h8v2H6z", "M4.8 12.6h10.4v2H4.8z"]},
-    "gSticks": {"s": ["M6 5v10", "M10 5v10", "M14 5v10"]},
-    "gCard": {"s": ["M5 3.8h10v12.4H5z"], "f": ["M9.2 7.2l2.4 3-2.4 3-2.4-3z"]},
-    "gFrog": {"s": ["M4.6 12.8h10.8", "M6.4 12.8V9.4a3.6 3.6 0 017.2 0v3.4"], "f": ["M7.6 6.4a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z", "M12.4 6.4a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z"]},
-    "gWord": {"s": ["M3.8 5.4h12.4v9.2H3.8z", "M7.2 5.4v9.2", "M10.6 5.4v9.2", "M13.4 5.4v9.2"]},
-}
-
-# The order here is the ATLAS ORDER, and an atlas index is a number burned into
-# apps_registry.zl. Append only - never insert, never reorder.
-REF_ORDER = [
-    # system apps (ds-reference.html APPS)
+# ---- the atlas order ------------------------------------------------------
+#
+# THIS ORDER IS AN ABI. An atlas index is an integer burned into kernel.zl,
+# apps_registry.zl and wmshot.c (wmshot.c:193 walks 0..n, kernel.zl's
+# dock_icon() returns bare numbers), and fb_icon24 takes it as an int with only
+# a bounds check. Reordering silently swaps every icon on screen. Append only -
+# never insert, never reorder, never rename.
+ORDER = [
+    # app launchers
+    "terminal", "snake", "paint", "editor", "monitor", "about", "cube3d",
+    "files", "settings", "power",
+    # the control set
+    "search", "lock", "drive", "close", "check", "chevron", "clock",
+    "network", "volume", "grid", "browser", "home", "minimize", "maximize",
+    "restore", "menu", "refresh", "plus", "folder_add", "trash", "download",
+    "upload", "copy", "paste", "warning", "bell", "back", "forward",
+    "external", "user", "calendar", "camera", "play", "pause",
+    # system apps
     "log", "render", "hex", "snap", "tty", "calcApp", "font",
     "disk", "svc", "binary", "imgv", "chip",
-    # utilities (UTILS)
+    # utilities
     "uClip", "uColor", "uRegex", "uBase", "uDiff",
     "uHash", "uUnit", "uNote", "uKeys", "uBench",
-    # games (GAME_APPS)
+    # games
     "gTetris", "gPong", "gBrick", "gMine", "gNum", "gLife", "gRock", "gAlien",
     "gCross", "gTiles", "gDrop", "gDisc", "gBulb", "gWave", "gMaze", "gCrate",
     "gBird", "gTarget", "gTower", "gSticks", "gCard", "gFrog", "gWord",
 ]
 
-# term/files/mon/edit/set/clock/wifi are NOT here: the atlas already carries a
-# glyph of the same design for each (terminal, files, monitor, editor,
-# settings, clock, network), and those indices are already wired up. gSnake is
-# not here either - the atlas's `snake` serves the one app that needs it, and
-# nothing else in the tree can reach a gSnake index today.
+ICONS = [(nm, pw_icon(nm)) for nm in ORDER]
 
-ICONS = [
-    ("terminal", icon_terminal),
-    ("snake",    icon_snake),
-    ("paint",    icon_paint),
-    ("editor",   icon_editor),
-    ("monitor",  icon_monitor),
-    ("about",    icon_about),
-    ("cube3d",   icon_cube3d),
-    ("files",    icon_files),
-    ("settings", icon_settings),
-    ("power",    icon_power),
-    # v10 SS6.9 - the control set, from the prototype's own vocabulary
-    ("search",   icon_search),
-    ("lock",     icon_lock),
-    ("drive",    icon_drive),
-    ("close",    icon_close),
-    ("check",    icon_check),
-    ("chevron",  icon_chevron),
-    ("clock",    icon_clock),
-    ("network",  icon_network),
-    ("volume",   icon_volume),
-    ("grid",     icon_grid),
-    ("browser",  icon_browser),
-    ("home",     icon_home),
-    ("minimize", icon_minimize),
-    ("maximize", icon_maximize),
-    ("restore",  icon_restore),
-    ("menu",     icon_menu),
-    ("refresh",  icon_refresh),
-    ("plus",     icon_plus),
-    ("folder_add", icon_folder_add),
-    ("trash",    icon_trash),
-    ("download", icon_download),
-    ("upload",   icon_upload),
-    ("copy",     icon_copy),
-    ("paste",    icon_paste),
-    ("warning",  icon_warning),
-    ("bell",     icon_bell),
-    ("back",     icon_back),
-    ("forward",  icon_forward),
-    ("external", icon_external),
-    ("user",     icon_user),
-    ("calendar", icon_calendar),
-    ("camera",   icon_camera),
-    ("play",     icon_play),
-    ("pause",    icon_pause),
-] + [(nm, ref_icon(nm)) for nm in REF_ORDER]
+
+# ---- the three checks -----------------------------------------------------
+
+def check_table():
+    """armature, mass and coverage checks over PW. Raises rather than warns.
+
+    Run before anything is rasterised, so a rule violation costs a second
+    rather than a full render. Returns the per-icon off-axis tally so main()
+    can print the measured number instead of asserting one.
+    """
+    missing = [nm for nm in ORDER if nm not in PW]
+    extra   = [nm for nm in PW if nm not in ORDER]
+    if missing or extra:
+        raise SystemExit("PW/ORDER disagree: missing %r, unused %r" % (missing, extra))
+
+    off = {}
+    for nm in ORDER:
+        spec = PW[nm]
+        bad = sum(_armature_violations(it)
+                  for key in ("s", "t", "f", "k")
+                  for it in spec.get(key, ()))
+        allowed = OFF_AXIS_OK.get(nm, (0, ""))[0]
+        if bad != allowed:
+            raise SystemExit(
+                "%s: %d off-axis segment(s), %d declared in OFF_AXIS_OK.\n"
+                "PRESSWORK's armature is 45/90 only. Either straighten the "
+                "segment or declare the exception WITH ITS REASON." % (nm, bad, allowed))
+        if bad:
+            off[nm] = bad
+
+        masses = len(spec.get("f", ()))
+        want = 0 if nm in CONTROLS else 1
+        if masses != want:
+            raise SystemExit(
+                "%s: %d solid mass(es), expected %d. PRESSWORK allows exactly one "
+                "per pictorial icon and none on a control mark; %s is listed as %s."
+                % (nm, masses, want, nm,
+                   "a control" if nm in CONTROLS else "pictorial"))
+        if not spec.get("s") and not spec.get("t") and not spec.get("f"):
+            raise SystemExit("%s: empty icon" % nm)
+
+    stale = [nm for nm in OFF_AXIS_OK if nm not in off]
+    if stale:
+        raise SystemExit("OFF_AXIS_OK names icons that no longer break the "
+                         "armature: %r. Delete the stale exemption." % stale)
+    return off
 
 
 # ---- render + emit --------------------------------------------------------
@@ -813,16 +952,16 @@ ICONS = [
 class ScaledDraw:
     """An ImageDraw that multiplies every length by `k` before it hits PIL.
 
-    The icons above are written in ONE coordinate space - the 96-unit master -
-    and every literal in them was tuned by eye at that size. To get a 48x48
-    atlas we cannot simply box-filter the 96x96 master by 2x2: a 4x4
-    supersample gives 17 coverage levels, a 2x2 gives FIVE, and five levels is
-    a staircase again. The master has to grow with the output.
+    The icons above are written in ONE coordinate space - the 24-unit design
+    box, scaled to the 96-unit master by PWSC. To get a 48x48 atlas we cannot
+    simply box-filter the 96x96 master by 2x2: a 4x4 supersample gives 17
+    coverage levels, a 2x2 gives FIVE, and five levels is a staircase again.
+    The master has to grow with the output.
 
-    So rather than rewrite sixty hand-tuned literals, the geometry stays in
-    96-unit space and this proxy scales it on the way through. Everything the
-    icons call goes via a point list plus `width`/`radius`, all of which are
-    lengths; `start`/`end` are ANGLES and must not be touched.
+    So rather than parameterise every drawing call by size, the geometry stays
+    in 96-unit space and this proxy scales it on the way through. Everything
+    the icons call goes via a point list plus `width`/`radius`, all of which
+    are lengths; `start`/`end` are ANGLES and must not be touched.
     """
 
     _SHAPES = ("line", "ellipse", "polygon", "rounded_rectangle", "arc",
@@ -872,8 +1011,7 @@ def render(fn, n=N):
     real detail rather than a 24x24 icon with its pixels copied - which is
     exactly the bug this replaces (fb.c fb_icon24, docs/desktop/desktop-look.md bug 1)."""
     master = n * SS
-    # an exact integer ratio keeps every scaled literal an exact integer too,
-    # which is what makes the 24x24 output provably unchanged (k == 1)
+    # an exact integer ratio keeps every scaled literal an exact integer too
     k = master // S if master % S == 0 else master / float(S)
     img = Image.new("L", (master, master), 0)
     fn(ScaledDraw(img, k))
@@ -893,6 +1031,7 @@ def emit(f, name, icons, n=N):
 
 RAMP = " .:-=+*#%@"
 
+
 def preview(name, rows):
     print(f"\n  {name}")
     print("  +" + "-" * N + "+")
@@ -903,8 +1042,22 @@ def preview(name, rows):
 
 
 def main():
+    off = check_table()
+
     # one atlas per output size, each rasterized from the geometry at that size
     atlases = [(n, [(nm, render(fn, n)) for nm, fn in ICONS]) for n in SIZES]
+
+    # The weight rule, checked against what ACTUALLY reached PIL rather than
+    # against what the table says. Every wide-line call goes through _stroke or
+    # ring, both of which record their width, so a third weight cannot hide in
+    # a helper. Note the 48x48 pass scales widths through ScaledDraw AFTER this
+    # record is taken - the ladder is defined in master units, one ladder for
+    # both sizes, which is the point.
+    if _weights_seen != {W_MAIN, W_THIN}:
+        raise SystemExit(
+            "PRESSWORK allows exactly two stroke weights, %d and %d master units "
+            "(2.0 and 1.5 design px). These reached PIL: %s"
+            % (W_MAIN, W_THIN, sorted(_weights_seen)))
 
     with open(OUT, "w") as f:
         f.write("/* icons.c - GENERATED by gen_icons.py. Do not edit by hand.\n")
@@ -915,6 +1068,13 @@ def main():
         f.write(" * font, no bitmap file, no colour. fb.c's fb_icon24 blends a\n")
         f.write(" * caller-chosen colour over the framebuffer by these values, so one\n")
         f.write(" * atlas works on any background.\n")
+        f.write(" *\n")
+        f.write(" * PRESSWORK icon language, checked by the generator every run:\n")
+        f.write(" *   - 45/90 armature: every authored straight segment is horizontal,\n")
+        f.write(" *     vertical or exactly 45 degrees. Curves only where the object is\n")
+        f.write(" *     physically round.\n")
+        f.write(" *   - two stroke weights only: 2.0 design px silhouette, 1.5 interior.\n")
+        f.write(" *   - exactly one solid mass per pictorial icon, none on a control mark.\n")
         f.write(" *\n")
         f.write(" * EACH SIZE IS RASTERIZED SEPARATELY at 4x supersampling. The 48x48 set\n")
         f.write(" * is NOT the 24x24 set scaled up: doing that in fb_icon24 was the single\n")
@@ -947,6 +1107,22 @@ def main():
               f"{len(levels)} levels ({len(mids)} intermediate), "
               f"{len(built) * n * n} bytes")
     print(f"wrote {OUT}: {total} bytes of atlas")
+
+    # The PRESSWORK compliance report. Every number here is counted, not
+    # claimed: the weights are what actually reached PIL, the off-axis tally is
+    # what the armature check actually found.
+    print("\n  PRESSWORK:")
+    print("    stroke weights that reached PIL: %s (design px: %s)"
+          % (sorted(_weights_seen),
+             ", ".join("%.2f" % (w / float(SS)) for w in sorted(_weights_seen))))
+    print("    transcribed verbatim from the prototype: %d of %d"
+          % (len(PROTO), len(ORDER)))
+    print("    control marks (no solid mass): %d; pictorial (one each): %d"
+          % (len(CONTROLS), len(ORDER) - len(CONTROLS)))
+    print("    off-axis segments, all declared: %d across %d icon(s) %s"
+          % (sum(off.values()), len(off), sorted(off)))
+    for nm in sorted(off):
+        print("      %-10s %d  %s" % (nm, off[nm], OFF_AXIS_OK[nm][1]))
 
     for nm in ("terminal", "cube3d", "power", "chip", "uBench", "gTarget"):
         preview(nm, dict(atlases[0][1])[nm])

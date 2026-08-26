@@ -30,6 +30,28 @@ C_CURSOR = 0x0A      # green block cursor
 # furniture and applications together instead of leaving a second palette on
 # screen. RGB remains for generated wallpaper light fields, not UI roles.
 fn rgb(rr, gg, bb) { return rr * 65536 + gg * 256 + bb }
+
+# ---- INTEGER DIVISION, and it is not `/` -------------------------------------
+# Every zl number is a double, so `/` is FLOAT division: `7 / 2` is 3.5 and
+# `4093 / 256` is 15.9883. Verified with ./interp, not assumed.
+#
+# For a COORDINATE that is harmless - the builtin boundary casts to int on the
+# way into fb.c, so a fractional pixel is truncated exactly where it would have
+# been anyway. For a COUNT it is not: `drawn < 9.23` admits a tenth row into
+# space that holds nine, and a remainder computed as `inw - cw * cols` is
+# identically zero when cw is fractional, which silently deletes the whole
+# spread-the-remainder rule the module grid is ruled by.
+#
+# band() casts both operands to long long, so it truncates toward zero. That is
+# this file's integer division, and the two places it MUST be used are any row
+# or column COUNT and any hit test that has to land on the same index the draw
+# used. 0x7FFFFFFF is the mask rather than a smaller one because a memory
+# address divided down is a legitimate argument here.
+fn idiv(a, b) {
+    if b <= 0 { return 0 }
+    if a < 0 { return 0 - band((0 - a) / b, 0x7FFFFFFF) }
+    return band(a / b, 0x7FFFFFFF)
+}
 TH_BG = 0
 TH_PANEL = 1
 TH_PANEL_HI = 2
@@ -62,7 +84,51 @@ TH_SURF_5 = 25
 TH_SURF_7 = 26
 TH_SURF_WELL = 27
 TH_ACCENT_BR = 28
+# ---- PRESSWORK's own roles, 29..41 -----------------------------------------
+# The twenty-nine above can name a surface and an ink. They cannot name a
+# BOUNDARY (which side of an edge the one raking light is on) and they cannot
+# name a VALUE INVERSION (the focused header is a light plate with its title
+# reversed out of it). PRESSWORK needs both, so ui.h grew thirteen fields and
+# this is the zl-visible half of that ABI.
+#
+# THE INDEX IS THE CONTRACT. ui_color() indexes a flat array of unsigneds from
+# &theme.bg, so these numbers are struct field order and nothing else. ui.h
+# carries two _Static_asserts anchoring cut (30) and ink_on (41) to exactly
+# these values, so a field inserted above them fails the C build rather than
+# silently handing this file the wrong colour - which is the failure mode a
+# by-index ABI has and a by-name one does not.
+TH_TITLE_OFF_BOT = 29
+TH_CUT = 30                # the groove. every hairline, and the strip ground
+TH_LIT = 31                # the struck top run, 2.5423:1 on ZD_BASE
+TH_LITSOFT = 32            # the grazed left run
+TH_EDGE_OVER = 33          # the boundary an occluder draws, under overlap only
+TH_KNOCK = 34              # THE KNOCKOUT. 6.4796:1 on ZD_BASE
+TH_KNOCK_INK = 35          # reversed out of it, 8.53:1
+TH_KNOCK_INK2 = 36         # secondary on it, 4.70:1
+TH_KO_EDGE = 37            # the knockout's own edge run
+TH_GRID = 38               # the ruled module grid on the desk
+TH_STEEL = 39              # the machine's own reading. INSTRUMENTS ONLY.
+TH_STEEL_BR = 40
+TH_INK_ON = 41             # text on vermilion, 6.14:1
 fn theme(role) { return ui_color(role) }
+
+# ---- the metric roles, by index ---------------------------------------------
+# ui_metric() answers in PIXELS, not design units: ui.c runs every one of these
+# through dp() with the current scale before storing it, so `ui_metric(UM_RAIL_W)`
+# is already `170 * scale` and multiplying by ui() again would double it. That
+# is the one mistake this indirection invites, so it is named here rather than
+# left to each call site to remember.
+UM_PAD = 0
+UM_GAP = 1
+UM_ROW_H = 2
+UM_RADIUS = 3
+UM_TITLE_H = 4
+UM_SCALE_Q8 = 5
+UM_FOCUS_BAR = 6
+UM_RAIL_W = 7
+UM_STRIP_H = 8
+UM_FOOT_H = 9
+UM_BAND_H = 10
 
 # ---- the app suite ----------------------------------------------------------
 # Everything past the original 13 apps (APP_SHELL..APP_EDIT, APP_SETTINGS,
@@ -240,11 +306,30 @@ fn beep(freq, dur) {
 # On a framebuffer these draw real pixels; on VGA text the primitives no-op
 # and the plain text title/status bars are used instead.
 
-# ---- the top bar -----------------------------------------------------------
-# A thin, flat GNOME-style bar: system name on the left, clock in the middle,
-# status on the right. Deliberately NOT a branded banner - an operating system
-# does not explain what it is in its own top bar, it just tells you the state
-# of the machine. That is the whole difference between a demo and a desktop.
+# ---- PRESSWORK: there is no top bar, and there is no dock -------------------
+# What used to sit here was a floating GNOME-style island at the top and a
+# floating dock at the bottom, with the wallpaper showing round both. PRESSWORK
+# has neither. It has four bolted bands and a desk:
+#
+#   RAIL    170 dp, ZD_RAISE, the full height of the LEFT edge. The numbered
+#           REGISTER - one row per app slot, its number in mono and its name in
+#           LABEL caps - plus the workspace row, the machine's own readings and
+#           the clock. It replaces the dock AND the top bar, so every launcher,
+#           every workspace control and the clock are in one column.
+#   STRIP    30 dp, ZD_CUT, across the top of the FIELD. Datum's raster
+#           instrument: one column per composite.
+#   FOOT     46 dp, ZD_RAISE, across the bottom of the FIELD. The memory ruler
+#           over the printer's slug.
+#   FIELD   what is left. ZD_VOID, ruled with the module grid, with the
+#           measured legend along its foot. This is the desk.
+#
+# NOTHING FLOATS AND NOTHING IS TRANSLUCENT. The island and the dock were both
+# alpha fills over the wallpaper with a 1px white-at-11% border; PRESSWORK's
+# bands are opaque plates separated from the desk by a 2 dp ZD_LIT struck rule
+# on the side the one raking light comes from, and a 1 px ZD_CUT groove on the
+# side it does not. Radius is ZD_R_BOLT - zero - because radius in this system
+# encodes HOW MUCH THE OBJECT CAN MOVE and these four cannot move at all.
+#
 # The UI scale: 1 on a small screen, 2 once the console switches to 16x32
 # cells. EVERY offset and size below is multiplied by it, so the desktop is
 # laid out in design units rather than raw pixels and stays correct at any
@@ -272,61 +357,141 @@ T_BODY    = 1
 T_TITLE   = 2
 W_REG     = 0
 W_BOLD    = 1
-TITLE_H = 36                       # prototype-density title bar
+TITLE_H = 28                       # ZD_TITLE_H - down from 36, see design.h
 MON_W = 424                        # real resource surface, not a narrow widget strip
 MON_H = 376                        # matches the north-star three-window composition
 AB_H  = 150                        # About height; no clipped final line at 2x
-TOPBAR_H = 48
-DESK_TOP = 56                    # first row of desktop below the bar + hairline
 
-# ---- the top island ---------------------------------------------------------
-# The reference does NOT have a top BAR. It has a floating pill, centred, with
-# the wallpaper visible on both sides of it and above it. That is a different
-# object, not a restyled one, and swapping the full-width slab for it is the
-# single largest structural change to the chrome.
+# ---- the four bands, in design units ----------------------------------------
+# These are ZD_RAIL_W / ZD_STRIP_H / ZD_FOOT_H / ZD_BAND_H / ZD_ROW_H / ZD_PAD /
+# ZD_GAP / ZD_RULE_H / ZD_FOCUS_BAR, and they are DUPLICATED here for exactly one
+# reason: ui_metric() answers 0 until ui_theme() has run, and this file draws a
+# desktop on the VGA-fallback and pre-compositor paths where it has not. The
+# accessors below prefer the theme and fall back to these, so a stale copy can
+# only ever be wrong on a path where the theme does not exist yet - never on the
+# shipped one. design.h remains the source; this is the copy, and it says so.
+RAIL_W_D    = 170
+STRIP_H_D   = 30
+FOOT_H_D    = 46
+BAND_H_D    = 20
+ROW_H_D     = 26
+PAD_D       = 10
+GAP_D       = 8
+RULE_H      = 2                    # ZD_RULE_H - the struck ZD_LIT rule
+FOCUS_BAR_D = 3                    # ZD_FOCUS_BAR - the register mark's width
+# THE RADIUS SCALE, and it is four values now rather than sixteen. Radius here
+# encodes HOW MUCH THE OBJECT CAN MOVE, and nesting halves it: 9 for a plate
+# that floats, 4 for something inset in one, 2 for a chip, 0 for anything
+# bolted down - which is every one of the four bands. ui_metric(UM_RADIUS) is
+# ZD_R_PLATE; the other three have no metric role, so they are here.
+# ZD_R_BOLT is 0 and the four bands take it, which is why none of them names a
+# radius at all - they are drawn with fill_rgb. ZD_R_PLATE is ui_metric(UM_RADIUS)
+# and wm.c reads it. ZD_R_INSET is the only one this file has to name.
+R_INSET_D   = 4                    # ZD_R_INSET - a row or field inside a plate
+
+# THE MODULE GRID. ZD_GRID_COLS / ROWS / MARGIN / GUTTER, and there is no
+# ui_metric for them because they are not a widget metric - they are the desk's
+# own ruling, read only by this file.
+GRID_COLS   = 12
+GRID_ROWS   = 8
+GRID_MARGIN = 16
+GRID_GUTTER = 12
+CROP_LEN    = 18                   # ZD_CROP_LEN - the crop mark's arm
+CROP_OFF    = 7                    # ZD_CROP_OFF - how far outside the margin
+
+fn rail_w()   { rm = ui_metric(UM_RAIL_W)    if rm > 0 { return rm }  return RAIL_W_D * ui() }
+fn strip_h()  { sm = ui_metric(UM_STRIP_H)   if sm > 0 { return sm }  return STRIP_H_D * ui() }
+fn foot_h()   { fm = ui_metric(UM_FOOT_H)    if fm > 0 { return fm }  return FOOT_H_D * ui() }
+fn band_h()   { bm = ui_metric(UM_BAND_H)    if bm > 0 { return bm }  return BAND_H_D * ui() }
+fn row_h()    { wm = ui_metric(UM_ROW_H)     if wm > 0 { return wm }  return ROW_H_D * ui() }
+fn pad_d()    { pm = ui_metric(UM_PAD)       if pm > 0 { return pm }  return PAD_D * ui() }
+fn focus_bar() { cm = ui_metric(UM_FOCUS_BAR) if cm > 0 { return cm } return FOCUS_BAR_D * ui() }
+
+# ---- the field: what is left after the four bands ---------------------------
+# ONE ORIGIN, and every one of the six things that needs it reads it from here.
+# The rule this file learned at pip_at and again at tray_x is that a second
+# independently-derived origin for the same rectangle is how a control ends up
+# drawn in one place and clickable in another - and the field is read by the
+# grid, the legend, the crop marks, the boot composition, the menu and the
+# window layout, which is six chances to get it wrong instead of one.
+fn field_x() { return rail_w() }
+fn field_y() { return strip_h() + RULE_H * ui() }
+fn field_w() { return px_w() - rail_w() }
+fn field_h() { return px_h() - field_y() - foot_h() - RULE_H * ui() }
+# The old names, kept because forty call sites in this file and its app modules
+# ask "where does the desktop start". They are the field's top-left now.
+# TOPBAR_H and DESK_TOP ARE GONE. Every caller of either was asking "where does
+# the desktop start", and the answer is now two numbers rather than one, because
+# the desk has a left edge as well as a top one. field_x/field_y answer it and
+# nothing may add a margin to a bare screen coordinate again.
+
+# ---- the register rail, and its own vertical rhythm --------------------------
+# PLATE's numbered REGISTER on graphite's single rail, and the prototype's
+# reason for 170 dp is arithmetic rather than taste: "01 SYSTEM MONITOR" has to
+# fit beside its number and its mark. The register alone would take 132.
 #
-# MEASURED, not guessed. The numbers below were taken two ways and they agree:
+# THE TWO-MATERIAL LAW IS NOT IMPORTED. Datum's law - chrome in ink, content on
+# paper - needs a ground at L* >= 89.6 to hold its 14.26:1, and on this ground
+# an ink rail would compute 1.35:1 against the plate: its meaning evaporates
+# while its screen area does not. So the rail is ZD_RAISE, one rung proud of the
+# plate, lit by the same lamp, its far edge cut away with a 1 px ZD_CUT groove
+# and its near edge carrying a 1 px ZD_LIT struck run.
 #
-#   from ds-reference.html:3374-3455  top:8px, height:32px, padding:0 4px,
-#                                     gap:3px, border-radius:16px, left:50%
-#   from the rendered PNG             x 455..826, y 8..40 - so 372 x 32,
-#                                     centred on 640 at a 1280-wide screen
+# THE RAIL'S BLOCKS, top to bottom, in design units. Everything except the
+# register band is a FIXED height, and the register band is what is left - which
+# is the only arrangement where the clock is at the bottom of the screen on a
+# 600-tall panel and on a 1440-tall one without a second table.
+RAIL_IDENT_H = 58                # 11 pad + the 24 dp identity line + 15 + 7
+RAIL_SECT_H  = 26                # a section caption: 7 + 15 + 4
+RAIL_STAT_H  = 44                # 3 + two 19 dp reading rows + 3
+RAIL_CLOCK_H = 54                # 5 + the 24 dp HH:MM + 15 + 10
+RAIL_SLOT_PL = 13                # a register row's left inset, past the mark
+RAIL_SLOT_PR = 6
+RAIL_SLOT_GAP = 7                # between the number and the name
+RAIL_STROW_H = 19                # one reading row inside the stat block
+
+# THE REGISTER MARK - overprint job 1 of PRESSWORK's four, and the only part of
+# the focus signal that is legible from the rail. Vermilion, ZD_FOCUS_BAR wide,
+# on the rail's left edge. A RUNNING app gets a short mark; the app owning the
+# FOCUSED window gets the full row height in ZD_VERM_BR and its row is dropped
+# to ZD_BASE - the plate's own value, so the row reads as the window it owns.
 #
-# The 372 is not hardcoded: island_w() sums the parts, so the pill is as wide
-# as what is in it and stays right when the clock text or the scale changes.
-# It came out at 372 design units on the first try, which is why the measured
-# width is quoted here as a check rather than used as a constant.
-ISLAND_H   = 32
-ISLAND_TOP = 8
-ISLAND_R   = 16
-ISLAND_PAD = 4
-ISLAND_GAP = 3
-CHIP_H     = 24                  # the pills inside the pill
-CHIP_R     = 12
-CHIP_PAD   = 12
-CHIP_GAP   = 7
-SEP_H      = 15                  # the 1px dividers between groups
-PIP_H      = 7                   # a workspace pip
-PIP_W_ON   = 20                  # ...which widens to this when it is current
-BELL_W     = 20
-BELL_H     = 17
+# 35% top and bottom is the prototype's `.slot .mk { top: 35%; bottom: 35% }`,
+# which leaves 30% of the row. It is written as a percentage of row_h() rather
+# than a design constant because row_h() is a theme metric and a fixed mark on a
+# scaled row is a mark that drifts off centre at ui 2.
+RAIL_MK_PC = 30
 
 # THE CLOCK GETS A FIXED CELL, and that is this file's own established rule for
 # a live number, stated a few hundred lines down: "a readout whose labels slide
 # sideways as the digits change is unreadable". A fixed cell wide enough for the
-# worst case is the correct shape. It also means island_w() does not have to
-# measure a string that changes every minute.
+# worst case is the correct shape. It also means the rail's width does not have
+# to be measured against a string that changes every minute.
 #
-# DIVERGENCE, recorded rather than hidden: the reference's clock reads
-# "Tue 22:00" and this one reads "22:00". zl's kernel subset has no runtime
-# string type - label() takes a literal and label_num() takes an integer - so a
-# weekday name would need a lookup table returning one of seven string literals
-# and a way to concatenate it with the time, and there is no concatenation. The
-# time itself is real: rtc_h() and rtc_mi() off the CMOS clock.
+# DIVERGENCE, recorded rather than hidden: the prototype's rail clock is MONO
+# (`font-family: var(--mono)`, tabular-nums) at fs-lg. This one is the fixed-cell
+# PROPORTIONAL form at T_TITLE, and the reason is a real limit rather than a
+# preference: the mono atlas has exactly three baked sizes and the largest,
+# font16x32_aa, is a FIXED 16x32 - fb_text_aa2x does not take a scale, so at
+# ui 2 on a 2560-wide panel the clock would stay the size it is at 1280 while
+# every label beside it doubled. T_TITLE scales, and clock_field() gives each
+# digit its own cell, which is the property the mono face was wanted for.
+# Restoring the mono clock means a scalable mono draw in fb.c, and fb.c is not
+# this change's to edit.
+#
+# The second divergence is unchanged from before PRESSWORK: the reference's
+# clock reads "Tue 22:00" and this one reads "22:00". zl's kernel subset has no
+# runtime string type - label() takes a literal and label_num() takes an integer
+# - so a weekday name would need a lookup table returning one of seven string
+# literals and a way to concatenate it with the time, and there is no
+# concatenation. The time itself is real: rtc_h() and rtc_mi() off the CMOS clock.
 CLOCK_W = 36
+CLOCK_CELL_LG = 14                 # the T_TITLE digit cell, design units
 
 # ---- workspaces --------------------------------------------------------------
-# The reference has three and the pip row is where you see which one you are on.
+# The reference has three. The pip row that used to show which one you are on
+# was in the top island; PRESSWORK's workspace row is in the rail, and the
+# current one is a KNOCKOUT rather than a lozenge - see draw_rail_ws.
 #
 # THE CURRENT WORKSPACE IS THE COMPOSITOR'S NOW, not a variable in this file.
 # It used to be a `ws_cur` here that only the pips read: switching changed the
@@ -337,9 +502,9 @@ CLOCK_W = 36
 # wm.c holds it, wm.c filters the paint walk, the hit test and both focus
 # walks by it, and these two functions are now one call each.
 #
-# HOW MANY there are stays here, because that is policy: three pips, three
+# HOW MANY there are stays here, because that is policy: three buttons, three
 # workspaces. wm_wsn() tells the compositor the ceiling so Super+9 is refused
-# rather than switching to an empty ninth workspace with no pip to return from.
+# rather than switching to an empty ninth workspace with no button to return from.
 WS_N = 3
 fn cur_ws() { return wm_ws() }
 fn set_ws(n) { return wm_setws(n) }
@@ -402,483 +567,905 @@ fn app_ws(id) {
 # function, and a clock whose colon slides as the digits change is the thing
 # the fixed-cell rule elsewhere in this file exists to prevent.
 CLOCK_DIGIT = 8
-fn clock_field(nx, cy, v, u) {
+fn clock_field(nx, cy, v, cell, role, col) {
     if v < 10 {
-        label(nx, cy, "0", theme(TH_TEXT_HI), T_BODY, W_REG)
-        label_num(nx + CLOCK_DIGIT * u, cy, v, theme(TH_TEXT_HI), T_BODY, W_REG)
-        return nx + CLOCK_DIGIT * 2 * u
+        label(nx, cy, "0", col, role, W_REG)
+        label_num(nx + cell, cy, v, col, role, W_REG)
+        return nx + cell * 2
     }
-    label_num(nx, cy, v, theme(TH_TEXT_HI), T_BODY, W_REG)
-    return nx + CLOCK_DIGIT * 2 * u
+    label_num(nx, cy, v, col, role, W_REG)
+    return nx + cell * 2
 }
 
-fn draw_island_clock(cx, cy, u) {
-    nx = clock_field(cx, cy, rtc_h(), u)
-    label(nx, cy, ":", theme(TH_TEXT_HI), T_BODY, W_REG)
-    nx = clock_field(nx + 5 * u, cy, rtc_mi(), u)
+# HH:MM at a given cell width and role, returning the x after it. The colon sits
+# in a HALF cell, which is the one place the fixed grid is deliberately broken:
+# a colon in a full digit cell reads as a gap with a dot in it.
+fn draw_hhmm(cx, cy, cell, role, col) {
+    nx = clock_field(cx, cy, rtc_h(), cell, role, col)
+    label(nx, cy, ":", col, role, W_REG)
+    nx = clock_field(nx + cell / 2, cy, rtc_mi(), cell, role, col)
+    return nx
+}
+
+# ---- THE REGISTER ------------------------------------------------------------
+# The rail's numbered rows. This IS the dock's launcher table - the same apps,
+# the same routing - re-presented as a printed register: "01 TERMINAL" rather
+# than a chip with a picture on it. Three things follow from that and all three
+# are the point:
+#
+#   1  A REGISTER IS ORDERED AND A DOCK IS NOT. The number is not decoration; it
+#      is the row's address, so the boot composition's three windows are 01, 02
+#      and 03 and you can say which one you mean.
+#   2  IT IS A TASKBAR TOO. A row whose app has a window carries the register
+#      mark, and clicking it raises that window rather than opening a second
+#      copy - which is what the dock already did and what the separate row of
+#      window chips beside the dock was the wrong shape for.
+#   3  THE ROWS ARE NOT ALL FIXED. Slots 0..REG_N-1 are the fixed register;
+#      after them the rail lists any OPEN window whose app has no fixed slot,
+#      which is where the forty-seven catalog apps appear. draw_rail and
+#      rail_slot_at walk that tail in the same order for the same reason
+#      draw_tasklist and task_slot_at had to: a hit test that counts a different
+#      set of rows than the draw does hands the click to the row next door.
+REG_N = 11
+REG_CATALOG = 11                   # the row past the register: "ALL APPS"
+REG_ROWS = 12                      # fixed rows drawn, register + catalog
+
+# THE NAMES ARE LABEL CAPS and they are literals, not upper-cased at runtime -
+# zl's kernel subset has no string type to walk. They are also SHORT: the rail
+# is 170 dp, of which 13 is the left inset, two mono cells is the number, 7 is
+# the gap and 6 is the right inset, so a name has 170 - 13 - 16 - 7 - 6 = 128 dp
+# at ui 1. "SYSTEM MONITOR" does not fit in that at T_BODY, which is why the
+# name is drawn at the LABEL style - T_CAPTION, bold, caps - rather than at the
+# prototype's fs-md. LABEL is a style PAPER adds and not a fourth size, so this
+# is using the design's own type ramp rather than inventing a smaller one.
+fn rail_name(slot) {
+    if slot == 0 { return "TERMINAL" }
+    if slot == 1 { return "FILES" }
+    if slot == 2 { return "MONITOR" }
+    if slot == 3 { return "BROWSER" }
+    if slot == 4 { return "EDITOR" }
+    if slot == 5 { return "PAINT" }
+    if slot == 6 { return "SNAKE" }
+    if slot == 7 { return "CUBE" }
+    if slot == 8 { return "ABOUT" }
+    if slot == 9 { return "SETTINGS" }
+    if slot == 10 { return "RUN" }
+    return "ALL APPS"
+}
+
+# THE RAIL'S OWN BLOCK BOUNDARIES. Fixed heights measured DOWN from the top and
+# UP from the bottom; the register band is whatever is between them. Written as
+# functions rather than as globals because px_h() is not known until the mode is
+# settled, and a global evaluated at load time would be laid out for a screen
+# nobody has.
+# THESE TWO SUM THE SAME TERMS draw_rail_static WALKS, IN THE SAME ORDER, and
+# that is the only thing that makes them correct - a block height that is a
+# separate estimate of a walk is a block height that drifts. The first draft of
+# rail_bot_h counted THREE rule-2s where the walk draws two, and used ui() for
+# the 1px rule-1 where rail_rule1 advances by exactly 1 physical pixel. At ui 2
+# that is five pixels of rail showing between the stat block and the clock -
+# benign, invisible in a screenshot, and wrong. Read down this expression and
+# down draw_rail_static together; they are the same list.
+#
+#   top     ident, rule2, sect,           rule1
+#   bottom  rule2, sect,  wsrow,  rule2,  stat,  rule1,  clock
+#
+# THE RULES ARE 1 PHYSICAL PIXEL, NOT 1 DESIGN UNIT. A hairline that thickens
+# with the scale stops being a hairline and becomes a rule, which is the whole
+# distinction PLATE's two rule weights exist to carry - so rule 1 is `+ 1` here
+# and rule 2 is `RULE_H * ui()`, and the difference between them is the rank.
+fn rail_top_h()  { return RAIL_IDENT_H * ui() + RULE_H * ui() + RAIL_SECT_H * ui() + 1 }
+fn rail_bot_h()  { return RULE_H * ui() + RAIL_SECT_H * ui() + row_h() + RULE_H * ui() + RAIL_STAT_H * ui() + 1 + RAIL_CLOCK_H * ui() }
+fn rail_reg_y()  { return rail_top_h() }
+# THE CAPTION IS PART OF THE LIVE BAND, not part of the baked half, because it
+# carries the running count. So the rectangle that invalidates the register has
+# to start at the caption and not at the first row - the same one-origin rule
+# this file learned at tray_x, and the same failure if it is broken: a count
+# that changes outside its own damage rectangle keeps its old value on screen.
+fn rail_sect_y()   { return RAIL_IDENT_H * ui() + RULE_H * ui() }
+fn rail_dmg_y()    { return rail_sect_y() }
+fn rail_dmg_h()    { return rail_reg_y() + rail_reg_h() - rail_sect_y() }
+fn rail_reg_h()  { rh = px_h() - rail_top_h() - rail_bot_h()  if rh < 0 { rh = 0 }  return rh }
+# HOW MANY ROWS FIT, derived from the space rather than asserted. On a 480-tall
+# panel at ui 1 this is 9 and the register is 12 rows long, so the tail is
+# clipped - stated here rather than discovered on the machine that has one.
+fn rail_reg_fit() { return idiv(rail_reg_h(), row_h()) }
+
+# ---- one register row --------------------------------------------------------
+# THE FOUR STATES, and each is a value on the ladder rather than an effect:
+#   idle      the rail's own ZD_RAISE, number and name at ZD_TEXT_3
+#   hover     ZD_FLOAT - one rung off the plane, the prototype's
+#             `.slot:hover:not(.act) { background: var(--zd-float) }`
+#   running   still the rail, but the number climbs to ZD_TEXT_2 and the name to
+#             ZD_TEXT_1, and a SHORT vermilion mark appears at the left edge
+#   focused   the row drops to ZD_BASE - the PLATE's own value, so the row reads
+#             as the window it owns - the name goes ZD_TEXT_0 bold, and the mark
+#             runs the FULL row height in ZD_VERM_BR
+#
+# There is no ring and no glow on any of them. PRESSWORK deleted both tokens
+# (ZD_RING_FOCUS_A is 0), because focus is the knockout and the register mark.
+fn draw_rail_row(ry, num, nm, running, focused, hovered) {
+    u = ui()
+    rw = rail_w()
+    rh = row_h()
+    ground = theme(TH_PANEL_HI)
+    ncol = theme(TH_TEXT_DIM)
+    tcol = theme(TH_TEXT_DIM)
+    if hovered == 1 { ground = theme(TH_SURF_5) }
+    if running == 1 { ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT) }
+    if focused == 1 { ground = theme(TH_PANEL)  ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT_HI) }
+    fill_rgb(0, ry, rw, rh, ground)
+    # the row's own groove. `border-bottom: 1px solid var(--zd-cut)`, and it is
+    # 1 PHYSICAL pixel at every scale: a hairline that thickens with ui() stops
+    # being a hairline and becomes a rule.
+    fill_rgb(0, ry + rh - 1, rw, 1, theme(TH_CUT))
+    # THE MARK. Overprint job 1. Short while the app merely runs, full height
+    # once it owns the focused window.
+    if running == 1 {
+        mkh = rh * RAIL_MK_PC / 100
+        mky = ry + (rh - mkh) / 2
+        mkc = theme(TH_ACCENT)
+        if focused == 1 { mkh = rh  mky = ry  mkc = theme(TH_ACCENT_BR) }
+        fill_rgb(0, mky, focus_bar(), mkh, mkc)
+    }
+    # the number, in mono, because a register's addresses are a column of digits
+    # and a column of digits that does not line up is not a column. num_aa
+    # advances by cell_w(), which is the only fixed advance this file has.
+    ny = ry + (rh - cell_h()) / 2
+    if num < 10 {
+        num_aa(RAIL_SLOT_PL * u, ny, 0, ncol)
+        num_aa(RAIL_SLOT_PL * u + cell_w(), ny, num, ncol)
+    } else {
+        num_aa(RAIL_SLOT_PL * u, ny, num, ncol)
+    }
+    tx = RAIL_SLOT_PL * u + 2 * cell_w() + RAIL_SLOT_GAP * u
+    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, nm, tcol, T_CAPTION, W_BOLD)
     return 0
 }
 
-# The island fill is rgba(12,14,16,.82). rrblend() is a real rounded-rect ALPHA
-# fill, so the tint is applied as a tint over whatever is behind it rather than
-# faked with an opaque approximation. ISLAND_A is .82 as 0..255.
-#
-# The one thing that is NOT reproduced is backdrop-filter: blur(20px). There is
-# no GPU and fb.c's blur is a cache of a rectangle, not a live filter under a
-# rounded mask. What sits behind the island is wallpaper - a smooth gradient
-# with no high-frequency detail - so blurring it would change very little; the
-# tint is doing nearly all of the work. That is the claim, and it is a claim
-# about this wallpaper, not a general one: over a busy window the same shortcut
-# would look obviously wrong.
-ISLAND_A = 209                   # .82 * 255
-ISLAND_RING_A = 23               # .09 * 255, the lime ring
-fn island_fill() { return rgb(12, 14, 16) }
-
-fn island_w() {
-    iu = ui()
-    iw = ISLAND_PAD * 2
-    iw = iw + CHIP_PAD * 2 + 5 * iu + CHIP_GAP + label_w("Activities", T_BODY, W_BOLD)
-    iw = iw + ISLAND_GAP * 3 + 1
-    iw = iw + PIP_W_ON + PIP_H * 2 + ISLAND_GAP * 2
-    iw = iw + ISLAND_GAP * 3 + 1
-    iw = iw + CHIP_PAD * 2 + CLOCK_W * iu
-    iw = iw + ISLAND_GAP * 3 + 1
-    iw = iw + 11 * 2 + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * 3 + 13 * 3
-    iw = iw + ISLAND_GAP * 3 + 1
-    iw = iw + BELL_W
-    return iw
+# The same row, for a window with no fixed register slot. Its number continues
+# the register's numbering, and its name is the app's, so a catalog app that is
+# open is addressable the same way Terminal is.
+fn draw_rail_win(ry, num, win, hovered) {
+    u = ui()
+    rw = rail_w()
+    rh = row_h()
+    focused = 0
+    if wm_focus() == win { focused = 1 }
+    ground = theme(TH_PANEL_HI)
+    ncol = theme(TH_TEXT_2)
+    tcol = theme(TH_TEXT)
+    if hovered == 1 { ground = theme(TH_SURF_5) }
+    if focused == 1 { ground = theme(TH_PANEL)  tcol = theme(TH_TEXT_HI) }
+    fill_rgb(0, ry, rw, rh, ground)
+    fill_rgb(0, ry + rh - 1, rw, 1, theme(TH_CUT))
+    mkh = rh * RAIL_MK_PC / 100
+    mky = ry + (rh - mkh) / 2
+    mkc = theme(TH_ACCENT)
+    if focused == 1 { mkh = rh  mky = ry  mkc = theme(TH_ACCENT_BR) }
+    fill_rgb(0, mky, focus_bar(), mkh, mkc)
+    ny = ry + (rh - cell_h()) / 2
+    if num < 10 {
+        num_aa(RAIL_SLOT_PL * u, ny, 0, ncol)
+        num_aa(RAIL_SLOT_PL * u + cell_w(), ny, num, ncol)
+    } else {
+        num_aa(RAIL_SLOT_PL * u, ny, num, ncol)
+    }
+    tx = RAIL_SLOT_PL * u + 2 * cell_w() + RAIL_SLOT_GAP * u
+    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, app_name(wm_app(win)), tcol, T_CAPTION, W_BOLD)
+    return 0
 }
 
-fn draw_header() {
-    if px_w() > 0 {
-        w = px_w()
-        u = ui()
-        ih = ISLAND_H * u
-        iy = ISLAND_TOP * u
-        iw = island_w()
-        ix = (w - iw) / 2
-        # ring first, fill on top: the outer shape is one pixel proud on every
-        # side, so the lime ring follows the curve instead of cutting across it.
-        # Both are ALPHA blends, so the wallpaper still shows through exactly as
-        # the reference's rgba() fills intend.
-        rrblend(ix - 1, iy - 1, iw + 2, ih + 2, ISLAND_R * u + 1, theme(TH_ACCENT), ISLAND_RING_A)
-        rrblend(ix, iy, iw, ih, ISLAND_R * u, island_fill(), ISLAND_A)
-        cx = ix + ISLAND_PAD * u
-        # Activities: a 5px lime dot with a glow, then the word. The dot is the
-        # only thing in the chrome that is accent-coloured when nothing is
-        # active, so it is what tells you the desktop is alive.
-        dy = iy + (ih - 5 * u) / 2
-        rrect(cx + CHIP_PAD * u, dy, 5 * u, 5 * u, 3 * u, theme(TH_ACCENT))
-        tx = cx + CHIP_PAD * u + 5 * u + CHIP_GAP * u
-        label(tx, iy + (ih - 16 * u) / 2, "Activities", theme(TH_TEXT_HI), T_BODY, W_BOLD)
-        cx = cx + CHIP_PAD * 2 * u + 5 * u + CHIP_GAP * u + label_w("Activities", T_BODY, W_BOLD)
-        cx = island_sep(cx, iy, ih, u)
-        # three workspace pips. The CURRENT one is a 20px lime lozenge and the
-        # others are 7px dots - the reference animates that width over .16s,
-        # which is why the two widths are named constants rather than inline.
-        py = iy + (ih - PIP_H * u) / 2
-        wsi = 1
-        while wsi <= 3 {
-            pw = PIP_H * u
-            pc = theme(TH_BORDER)
-            if wsi == cur_ws() { pw = PIP_W_ON * u  pc = theme(TH_ACCENT) }
-            rrect(cx, py, pw, PIP_H * u, 3 * u, pc)
-            cx = cx + pw + ISLAND_GAP * u
-            wsi = wsi + 1
+# ---- the two rule weights ----------------------------------------------------
+# PLATE's depth rank, on tokens that already exist and with no third value
+# invented for it. RULE 1 is 1 px ZD_CUT - 1.84:1 on the rail, a groove. RULE 2
+# is RULE_H of ZD_LIT - 1.56:1 on the rail, but twice the width. Nesting a
+# surface never changes its value here; only the rule weight says which rank a
+# block is in, which is what lets the rail have five blocks on one colour.
+fn rail_rule1(ry) { fill_rgb(0, ry, rail_w(), 1, theme(TH_CUT))  return ry + 1 }
+fn rail_rule2(ry) { fill_rgb(0, ry, rail_w(), RULE_H * ui(), theme(TH_LIT))  return ry + RULE_H * ui() }
+
+# A section caption: LABEL caps at ZD_TEXT_3, optionally with a mono figure
+# pushed to the right margin. `n < 0` means "no figure", because zl has no way
+# to say "absent" other than a sentinel.
+fn rail_sect(ry, nm, n) {
+    u = ui()
+    fill_rgb(0, ry, rail_w(), RAIL_SECT_H * u, theme(TH_PANEL_HI))
+    fill_rgb(0, ry, 1, RAIL_SECT_H * u, theme(TH_LIT))
+    fill_rgb(rail_w() - 1, ry, 1, RAIL_SECT_H * u, theme(TH_CUT))
+    label(pad_d(), ry + 7 * u, nm, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    if n >= 0 {
+        num_aa(rail_w() - pad_d() - s3_numw(n), ry + 7 * u, n, theme(TH_SURF_7))
+    }
+    return ry + RAIL_SECT_H * u
+}
+
+# ---- how many register rows are showing --------------------------------------
+# The count the REGISTER caption prints, and it is the number of RUNNING rows
+# rather than the number of rows - a register of twelve rows that always says 12
+# is a label, not a reading. The tail rows count too: a tail row exists only
+# because its window is open, so every one of them is running by construction.
+fn rail_running_n() {
+    rn = 0
+    rs = 0
+    while rs < REG_N {
+        if rail_running(rs) == 1 { rn = rn + 1 }
+        rs = rs + 1
+    }
+    # ...clamped at zero, because rail_reg_rows() is itself clamped to what
+    # FITS: on a panel too short for twelve rows it returns fewer than REG_ROWS
+    # and the subtraction goes negative, which would print a register count of
+    # -3 on exactly the machine nobody tests on.
+    tail = rail_reg_rows() - REG_ROWS
+    if tail < 0 { tail = 0 }
+    return rn + tail
+}
+
+# ---- the rail's static half --------------------------------------------------
+# The identity block, the two section captions, the rules and the stat block.
+# None of it changes while the machine runs, so it is baked into the wallpaper
+# cache with the desk and costs a blit rather than a repaint.
+fn draw_rail_static() {
+    u = ui()
+    rw = rail_w()
+    fill_rgb(0, 0, rw, px_h(), theme(TH_PANEL_HI))
+    # the rail's own two runs. ZD_LIT down the LEFT because that is the side the
+    # one raking light enters from, ZD_CUT down the RIGHT because that is the
+    # far edge - the same grammar every plate in the system uses, applied to a
+    # band that happens to be taller than it is wide.
+    fill_rgb(0, 0, 1, px_h(), theme(TH_LIT))
+    fill_rgb(rw - 1, 0, 1, px_h(), theme(TH_CUT))
+    # THE IDENTITY. An operating system does not explain what it is in its own
+    # chrome; it says which machine you are on. "zlos" at T_TITLE and the build
+    # line under it in mono, which is the prototype's `.ident .w` / `.ident .b`.
+    label(pad_d(), 11 * u, "zlos", theme(TH_TEXT_HI), T_TITLE, W_BOLD)
+    text_aa(pad_d(), 11 * u + 24 * u, "0.3 x86_64", theme(TH_TEXT_DIM))
+    ry = RAIL_IDENT_H * u
+    ry = rail_rule2(ry)
+    # the REGISTER caption is NOT baked: it carries the running count, and a
+    # baked count is a reading that stops reading. draw_rail_reg paints it.
+    ry = ry + RAIL_SECT_H * u
+    rail_rule1(ry)
+    # ...and the bottom block, laid out UP from the foot of the screen so the
+    # clock is at the bottom of the rail on every panel height.
+    by = px_h() - rail_bot_h()
+    by = rail_rule2(by)
+    by = rail_sect(by, "WORKSPACE", 0 - 1)
+    by = by + row_h()                     # the workspace row is drawn live
+    by = rail_rule2(by)
+    by = by + RAIL_STAT_H * u             # the stat block is drawn live
+    rail_rule1(by)
+    return 0
+}
+
+# ---- the workspace row -------------------------------------------------------
+# THE ONE PLACE THE SHELL USES THE KNOCKOUT. The current workspace's button is a
+# solid ZD_KNOCK plate with its label reversed out in ZD_KNOCK_INK - 6.4796:1 on
+# the plate, 8.53:1 for the ink on it - which is the same move wm.c makes on the
+# focused window's header. Using it twice is deliberate: it is the design's one
+# value inversion, and a reader who has learned it on a window reads it here for
+# free. The others are the rail's own ground with a ZD_CUT divider between them.
+fn rail_ws_y() { return px_h() - rail_bot_h() + RULE_H * ui() + RAIL_SECT_H * ui() }
+fn draw_rail_ws() {
+    rw = rail_w()
+    rh = row_h()
+    wy = rail_ws_y()
+    bw = idiv(rw, WS_N)
+    wsi = 1
+    while wsi <= WS_N {
+        bx = (wsi - 1) * bw
+        bwi = bw
+        if wsi == WS_N { bwi = rw - bx }
+        ground = theme(TH_PANEL_HI)
+        ink = theme(TH_TEXT_DIM)
+        if wsi == cur_ws() { ground = theme(TH_KNOCK)  ink = theme(TH_KNOCK_INK) }
+        fill_rgb(bx, wy, bwi, rh, ground)
+        if wsi < WS_N { fill_rgb(bx + bwi - 1, wy, 1, rh, theme(TH_CUT)) }
+        num_aa(bx + (bwi - cell_w()) / 2, wy + (rh - cell_h()) / 2, wsi, ink)
+        wsi = wsi + 1
+    }
+    return 0
+}
+
+# WHICH WORKSPACE BUTTON IS UNDER A POINT, or -1. It repeats draw_rail_ws's
+# arithmetic in the same order and one term at a time, for the reason the old
+# pip_at recorded and which has not changed: a control laid out as it is painted
+# has no stored x, and a second independently-derived origin is how a control
+# ends up drawn in one place and clickable in another. The whole row height is
+# the target, which it already was.
+fn rail_ws_at(hx, hy) {
+    if px_w() == 0 { return 0 - 1 }
+    if hx >= rail_w() { return 0 - 1 }
+    wy = rail_ws_y()
+    if hy < wy { return 0 - 1 }
+    if hy >= wy + row_h() { return 0 - 1 }
+    bw = idiv(rail_w(), WS_N)
+    wn = idiv(hx, bw) + 1
+    if wn > WS_N { wn = WS_N }
+    return wn
+}
+
+# ---- the machine's own readings ----------------------------------------------
+# Two rows, and both are things the compositor already measures rather than
+# things invented to fill a block. ZD_STEEL is the ink for a reading INSIDE an
+# instrument and this is one, so the figures are steel and their labels are the
+# label rung. Vermilion appears nowhere here: it is the overprint, and a status
+# number is not one of its four jobs.
+fn draw_rail_stat() {
+    u = ui()
+    rw = rail_w()
+    sy = px_h() - rail_bot_h() + RULE_H * ui() + RAIL_SECT_H * ui() + row_h() + RULE_H * ui()
+    fill_rgb(0, sy, rw, RAIL_STAT_H * u, theme(TH_PANEL_HI))
+    r1y = sy + 3 * u
+    label(pad_d(), r1y + 2 * u, "FRAME", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    num_aa(rw - pad_d() - s3_numw(wm_us()), r1y + 2 * u, wm_us(), theme(TH_STEEL))
+    r2y = r1y + RAIL_STROW_H * u
+    label(pad_d(), r2y + 2 * u, "WINDOWS", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    num_aa(rw - pad_d() - s3_numw(wm_n()), r2y + 2 * u, wm_n(), theme(TH_STEEL))
+    return 0
+}
+
+# ---- the rail's clock --------------------------------------------------------
+fn draw_rail_clock() {
+    u = ui()
+    rw = rail_w()
+    cy = px_h() - RAIL_CLOCK_H * u
+    fill_rgb(0, cy, rw, RAIL_CLOCK_H * u, theme(TH_PANEL_HI))
+    draw_hhmm(pad_d(), cy + 5 * u, CLOCK_CELL_LG * u, T_TITLE, theme(TH_TEXT_HI))
+    text_aa(pad_d(), cy + 5 * u + 24 * u, "presswork", theme(TH_TEXT_DIM))
+    return 0
+}
+
+# ---- the whole register band -------------------------------------------------
+# Drawn live rather than baked, because every one of the four row states is a
+# function of what is open and what has focus.
+fn draw_rail_reg() {
+    rail_sect(rail_sect_y(), "REGISTER", rail_running_n())
+    ry = rail_reg_y()
+    fit = rail_reg_fit()
+    rs = 0
+    drawn = 0
+    while rs < REG_ROWS {
+        if drawn < fit {
+            run = 0
+            foc = 0
+            if rs < REG_N {
+                run = rail_running(rs)
+                if run == 1 { if wm_focus() == rail_win(rs) { foc = 1 } }
+            }
+            hov = 0
+            if rail_hover == rs { hov = 1 }
+            draw_rail_row(ry + drawn * row_h(), rs + 1, rail_name(rs), run, foc, hov)
+            drawn = drawn + 1
         }
-        cx = cx - ISLAND_GAP * u
-        cx = island_sep(cx, iy, ih, u)
-        draw_island_clock(cx + CHIP_PAD * u, iy + (ih - 16 * u) / 2, u)
-        cx = cx + CHIP_PAD * 2 * u + CLOCK_W * u
-        cx = island_sep(cx, iy, ih, u)
-        label(cx + 11 * u, iy + (ih - 14 * u) / 2, "heap", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        gx = cx + 11 * u + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * u
-        icon(gx, iy + (ih - 13 * u) / 2, 17, theme(TH_TEXT_DIM))
-        icon(gx + 13 * u + CHIP_GAP * u, iy + (ih - 13 * u) / 2, 18, theme(TH_TEXT_DIM))
-        icon(gx + 26 * u + CHIP_GAP * 2 * u, iy + (ih - 13 * u) / 2, 35, theme(TH_TEXT_DIM))
-        cx = cx + 22 * u + label_w("heap", T_CAPTION, W_REG) + CHIP_GAP * 3 * u + 39 * u
-        cx = island_sep(cx, iy, ih, u)
-        icon(cx, iy + (ih - BELL_H * u) / 2, 39, theme(TH_TEXT_HI))
+        rs = rs + 1
+    }
+    # ...then the open windows with no fixed row. Same order as rail_slot_at.
+    ti = 0
+    while ti < wm_n() {
+        tw = wm_zat(ti)
+        if app_has_slot(wm_app(tw)) == 0 {
+            if wm_winws(tw) == cur_ws() {
+                if drawn < fit {
+                    hov = 0
+                    if rail_hover == drawn { hov = 1 }
+                    draw_rail_win(ry + drawn * row_h(), drawn + 1, tw, hov)
+                    drawn = drawn + 1
+                }
+            }
+        }
+        ti = ti + 1
+    }
+    # the unused tail of the band is the rail's own ground, not a hole
+    used = drawn * row_h()
+    if used < rail_reg_h() {
+        fill_rgb(0, ry + used, rail_w(), rail_reg_h() - used, theme(TH_PANEL_HI))
+        fill_rgb(0, ry + used, 1, rail_reg_h() - used, theme(TH_LIT))
+        fill_rgb(rail_w() - 1, ry + used, 1, rail_reg_h() - used, theme(TH_CUT))
+    }
+    return 0
+}
+
+# WHICH REGISTER ROW IS UNDER A POINT, or -1. It returns a ROW INDEX in the same
+# numbering draw_rail_reg draws in: 0..REG_ROWS-1 are the fixed register, and
+# anything past that is the nth window with no fixed row. rail_launch resolves
+# it back, so the two never have to agree about anything except the count.
+fn rail_slot_at(cx, cy) {
+    if cx >= rail_w() { return 0 - 1 }
+    if cy < rail_reg_y() { return 0 - 1 }
+    ri = idiv(cy - rail_reg_y(), row_h())
+    if ri >= rail_reg_fit() { return 0 - 1 }
+    if ri >= rail_reg_rows() { return 0 - 1 }
+    return ri
+}
+
+# HOW MANY ROWS ARE ACTUALLY THERE - the fixed register plus the tail, clamped
+# to what fits. One function, called by the draw and by the hit test, because
+# two counts is how a click lands on a row that was never drawn.
+fn rail_reg_rows() {
+    n = REG_ROWS
+    ti = 0
+    while ti < wm_n() {
+        tw = wm_zat(ti)
+        if app_has_slot(wm_app(tw)) == 0 {
+            if wm_winws(tw) == cur_ws() { n = n + 1 }
+        }
+        ti = ti + 1
+    }
+    fit = rail_reg_fit()
+    if n > fit { n = fit }
+    return n
+}
+
+# The window a tail row refers to, or -1. Same walk, same order.
+fn rail_tail_win(ri) {
+    want = ri - REG_ROWS
+    ti = 0
+    tn = 0
+    while ti < wm_n() {
+        tw = wm_zat(ti)
+        if app_has_slot(wm_app(tw)) == 0 {
+            if wm_winws(tw) == cur_ws() {
+                if tn == want { return tw }
+                tn = tn + 1
+            }
+        }
+        ti = ti + 1
+    }
+    return 0 - 1
+}
+
+# ---- WHAT THE REGISTER LAUNCHES ---------------------------------------------
+# The routing table, kept in one place so the drawing and the click test can
+# never drift apart. This is the dock's table with Files added - the boot
+# composition opens Terminal, Files and Monitor, and a register whose first
+# three rows are not the three windows on screen is a register that does not
+# refer to the machine.
+fn rail_app(slot) {
+    if slot == 0 { return APP_SHELL }
+    if slot == 1 { return APP_FILES }
+    if slot == 2 { return APP_MONITOR }
+    if slot == 3 { return APP_BROWSER }
+    if slot == 4 { return APP_EDIT }
+    if slot == 5 { return APP_PAINT }
+    if slot == 6 { return APP_SNAKE }
+    if slot == 7 { return APP_CUBE }
+    if slot == 8 { return APP_ABOUT }
+    if slot == 9 { return APP_SETTINGS }
+    if slot == 10 { return APP_RUN }
+    return 0 - 1
+}
+
+# WHICH WINDOW A REGISTER ROW OWNS, or -1. The register mark and the focused
+# row both need this, and before it existed "is this app running" and "is this
+# app focused" were two different walks that could disagree.
+fn rail_win(slot) {
+    if slot == 0 { return shell_win }
+    if slot == 1 { return files_win }
+    if slot == 2 { return mon_win }
+    if slot == 3 { return browser_win }
+    if slot == 4 { return edit_win }
+    if slot == 5 { return paint_win }
+    if slot == 6 { return snake_win }
+    if slot == 7 { return cube_win }
+    if slot == 8 { return about_win }
+    if slot == 9 { return settings_win }
+    if slot == 10 { return run_win }
+    return 0 - 1
+}
+
+fn rail_running(slot) {
+    rwn = rail_win(slot)
+    if rwn < 0 { return 0 }
+    return wm_open_p(rwn)
+}
+
+fn rail_cmd(slot) {
+    if slot == 4 { return 105 }  # editor
+    if slot == 5 { return 100 }  # paint
+    return 0
+}
+
+# ---- THE RASTER STRIP --------------------------------------------------------
+# Datum's instrument, with graphite's re-clocking kept, and the re-clocking is
+# the whole reason it is worth drawing: ONE COLUMN PER COMPOSITE, never one per
+# vblank. On an idle machine the compositor does not composite, so the strip
+# STANDS STILL - and a still strip is information, where a strip that scrolls at
+# 60 Hz whatever the machine is doing is an animated gif of an instrument.
+#
+# It sits on ZD_CUT, which is the one place a near-Dmax band is correct: this is
+# an instrument, not a surface, and the surface ladder does not apply to it. A
+# 2 dp ZD_LIT rule runs under it, which is the struck edge of the plate below.
+#
+# THE RING IS IN RAM, one byte per composite, because the strip is a HISTORY and
+# a history has to be stored. One page, in the block declared with the app
+# suite's buffers so check-memmap.sh's dupe sweep covers it - see the note there
+# for why every fixed address in this tree is declared in kernel.zl.
+RASTER_CAP  = 4096                 # bytes in RASTER_RING, one per column
+RASTER_PITCH = 3                   # design units per column: 2 of bar, 1 of gap
+RASTER_FULL = 20000                # us at which a column reaches the ceiling
+raster_head = 0                    # next byte to write
+raster_n = 0                       # how many are valid, capped at RASTER_CAP
+raster_seen = 0 - 1                # the wm_painted() value the last column came from
+
+fn raster_cols() {
+    rc = idiv(px_w() - rail_w() - 2 * pad_d(), RASTER_PITCH * ui())
+    if rc < 1 { rc = 1 }
+    if rc > RASTER_CAP { rc = RASTER_CAP }
+    return rc
+}
+
+# SAMPLE ONE COMPOSITE. Called from app_tick, which runs once per open window
+# per frame, so the wm_painted() guard is what makes it once per COMPOSITE
+# rather than once per window - the same shape the dock's pulse tick used, and
+# for the same reason.
+#
+# The value stored is the frame's own body time from wm_us(), scaled so that
+# RASTER_FULL microseconds fills the band. It is clamped rather than wrapped:
+# an instrument that wraps reads as a fast frame when it means a catastrophic
+# one, which is a readout that lies in the dangerous direction.
+fn raster_tick() {
+    rp = wm_painted()
+    if rp == raster_seen { return 0 }
+    raster_seen = rp
+    rv = wm_us() * 255 / RASTER_FULL
+    if rv > 255 { rv = 255 }
+    if rv < 1 { rv = 1 }
+    poke8(RASTER_RING + raster_head, rv)
+    raster_head = raster_head + 1
+    if raster_head >= RASTER_CAP { raster_head = 0 }
+    if raster_n < RASTER_CAP { raster_n = raster_n + 1 }
+    # ...and ask for the band back. Without this the ring advances and nothing
+    # ever repaints it, which is exactly the failure the dock's pulse had: an
+    # animation with no end has no finished frame to damage on.
+    wm_damage(rail_w(), 0, px_w() - rail_w(), strip_h())
+    return 1
+}
+
+fn draw_strip() {
+    if px_w() > 0 {
+        u = ui()
+        sx = rail_w()
+        sw = px_w() - sx
+        sh = strip_h()
+        fill_rgb(sx, 0, sw, sh, theme(TH_CUT))
+        fill_rgb(sx, sh, sw, RULE_H * u, theme(TH_LIT))
+        # the columns, right-aligned so the newest is at the right edge and the
+        # history runs backwards into the past - which is the direction every
+        # oscilloscope and every load graph has read since there were any.
+        cols = raster_cols()
+        shown = raster_n
+        if shown > cols { shown = cols }
+        bar_w = 2 * u
+        ci = 0
+        while ci < shown {
+            idx = raster_head - 1 - ci
+            while idx < 0 { idx = idx + RASTER_CAP }
+            v = peek8(RASTER_RING + idx)
+            bh = v * (sh - 4 * u) / 255
+            if bh < 1 { bh = 1 }
+            bx = px_w() - pad_d() - (ci + 1) * RASTER_PITCH * u
+            if bx > sx + pad_d() {
+                fill_rgb(bx, sh - 2 * u - bh, bar_w, bh, theme(TH_STEEL))
+            }
+            ci = ci + 1
+        }
+        # the label rides OVER the columns at the left, on the strip's own
+        # ground, because a legend that the data can draw through is not a
+        # legend. Same move the desk's grid legend makes.
+        lw = label_w("RASTER", T_CAPTION, W_BOLD) + 2 * pad_d()
+        fill_rgb(sx + 1, 1, lw, sh - 2, theme(TH_CUT))
+        label(sx + pad_d(), (sh - label_h(T_CAPTION)) / 2, "RASTER", theme(TH_TEXT_2), T_CAPTION, W_BOLD)
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
     }
+    return 0
 }
 
-# One 1px divider, 15px tall, vertically centred. Returns the next x. The
-# reference puts ISLAND_GAP either side of it, so the caller never has to.
-fn island_sep(sx, iy, ih, u) {
-    sy = iy + (ih - SEP_H * u) / 2
-    fill_rgb(sx + ISLAND_GAP * u, sy, 1, SEP_H * u, theme(TH_BORDER))
-    return sx + ISLAND_GAP * 2 * u + 1
-}
+# ---- THE RULED MODULE GRID ---------------------------------------------------
+# PAPER's grid, and its job here is different from PAPER's. PLATE tiles windows
+# ONTO the grid, so there the grid IS the arrangement. PRESSWORK floats - wm.c
+# is a floating compositor and PRESSWORK did not change that - so the grid
+# EXPLAINS where a plate sits rather than deciding it. Twelve by eight modules
+# ruled onto the desk in ZD_GRID, 1.6470:1 on ZD_VOID: loud enough to say where
+# a window is, quiet enough to be furniture.
+#
+# THE DIVISION IS INTEGER AND THE REMAINDER IS SPREAD, one pixel each onto the
+# first `rem` columns, never dumped on the last one. Dumping it makes the right
+# margin stop being a margin, and it is visible: at 2560 wide the remainder is
+# several pixels. This is also why the legend prints "106/105" rather than a
+# single number - it is a readout from the real division, and two widths IS the
+# truthful answer.
+fn grid_mar() { return GRID_MARGIN * ui() }
+fn grid_gut() { return GRID_GUTTER * ui() }
+fn grid_inw() { return field_w() - 2 * grid_mar() }
+fn grid_inh() { return field_h() - 2 * grid_mar() }
+fn grid_cw()  { return idiv(grid_inw() - grid_gut() * (GRID_COLS - 1), GRID_COLS) }
+fn grid_cwr() { return grid_inw() - grid_gut() * (GRID_COLS - 1) - grid_cw() * GRID_COLS }
+fn grid_rh()  { return idiv(grid_inh() - grid_gut() * (GRID_ROWS - 1), GRID_ROWS) }
+fn grid_rhr() { return grid_inh() - grid_gut() * (GRID_ROWS - 1) - grid_rh() * GRID_ROWS }
 
-# WHICH PIP IS UNDER A POINT, or -1. The pips were decoration until this
-# existed: draw_header painted three of them and nothing in desk_click ever
-# looked at that band, so the only way to change workspace was a key binding
-# that did not exist either.
-#
-# It repeats draw_header's arithmetic rather than reading a stored x, and that
-# is deliberate but it is the SECOND-best shape: the island is laid out as it
-# is painted, so the pip row's x exists only as a local inside that loop. The
-# rule this file already learned the hard way (see app_tick's note on
-# draw_status and the tray strip) is that a second INDEPENDENTLY-DERIVED origin
-# for the same row is how a control ends up drawn in one place and clickable in
-# another - so this is written directly below the function it mirrors, one
-# term at a time in the same order, and island_sep's advance is spelled out
-# here because island_sep itself DRAWS and a hit test must not.
-#
-# THE HIT BAND IS THE WHOLE ISLAND HEIGHT, not the 7px pip. A seven-pixel-tall
-# target is not clickable by a person, and nothing else in the island occupies
-# that column, so widening it costs nothing and steals nothing.
-fn pip_at(hx, hy) {
-    if px_w() == 0 { return 0 - 1 }
+fn draw_grid() {
     u = ui()
-    ih = ISLAND_H * u
-    iy = ISLAND_TOP * u
-    if hy < iy { return 0 - 1 }
-    if hy >= iy + ih { return 0 - 1 }
-    px = (px_w() - island_w()) / 2 + ISLAND_PAD * u
-    px = px + CHIP_PAD * 2 * u + 5 * u + CHIP_GAP * u + label_w("Activities", T_BODY, W_BOLD)
-    px = px + ISLAND_GAP * 2 * u + 1
-    wsi = 1
-    while wsi <= WS_N {
-        pw = PIP_H * u
-        if wsi == cur_ws() { pw = PIP_W_ON * u }
-        if hx >= px { if hx < px + pw + ISLAND_GAP * u { return wsi } }
-        px = px + pw + ISLAND_GAP * u
-        wsi = wsi + 1
+    fx = field_x()
+    fy = field_y()
+    fw = field_w()
+    fh = field_h()
+    mar = grid_mar()
+    gut = grid_gut()
+    if grid_cw() < 1 { return 0 }
+    if grid_rh() < 1 { return 0 }
+    gcol = theme(TH_GRID)
+    # each module is ruled on BOTH edges, which is what makes the gutter read as
+    # a gutter rather than as a single line between two modules
+    gx = fx + mar
+    gi = 0
+    while gi < GRID_COLS {
+        gw = grid_cw()
+        if gi < grid_cwr() { gw = gw + 1 }
+        fill_rgb(gx, fy + mar, 1, fh - 2 * mar, gcol)
+        fill_rgb(gx + gw - 1, fy + mar, 1, fh - 2 * mar, gcol)
+        gx = gx + gw + gut
+        gi = gi + 1
     }
-    return 0 - 1
-}
-
-# the dock top edge, cell-aligned to row (rows-3) so at_num can place the clock
-fn dock_y() { return px_h() - (DOCK_H + DOCK_BOT) * ui() }
-
-# one app-launcher tile: a rounded chip with a real 24x24 icon in it. Icons,
-# not key letters - you are meant to click these, not memorise a hotkey.
-# THE DOCK, to the reference's own numbers. ds-reference.html:865 for the strip
-# and :3424 for a tile:
-#
-#   strip   left:50% bottom:9px, padding:5px 7px, gap:5px, radius:16px,
-#           background rgba(18,21,24,.82), border 1px rgba(255,255,255,.11)
-#   tile    33x33, radius:13, icon 20px, rgba(255,255,255,.085),
-#           focused ACC with a rgba(255,255,255,.22) border
-#   dot     3.5px, 3.5px BELOW the tile, pulsing on zpulse 2.6s
-#
-# Confirmed against the rendered PNG: the strip occupies y 746..790 at
-# 1280x800 - height 45, bottom gap 9 - which is 5 + 33 + 5 plus the 1px border
-# top and bottom. The oracle's regions.json, generated independently from the
-# DOM, calls it [325, 746, 629, 45]. Three sources, one answer.
-#
-# It was a 502x56 slab with 42px tiles on a 48px pitch and a start button.
-# THE WIDTH IS NOT COPIED. The reference's 629 is what fifteen tiles come to;
-# zlOS has nine, so the strip is computed from its own contents and will widen
-# on its own as apps are added. Copying 629 would have left a strip with a
-# third of it empty.
-DOCK_PADX  = 7
-DOCK_PADY  = 5
-DOCK_GAP   = 5
-DOCK_TW    = 33          # the tile
-DOCK_TR    = 13          # ...and its radius
-DOCK_R     = 16          # the strip's radius
-DOCK_H     = 43          # PADY + TW + PADY
-DOCK_BOT   = 9           # gap below the strip
-DOCK_PITCH = 38          # TW + GAP
-DOCK_N     = 9
-DOCK_A       = 209       # .82 * 255, the strip body
-DOCK_BORDER_A = 28       # .11 * 255, the 1px border
-DOCK_TILE_A   = 22       # .085 * 255, a resting tile
-DOCK_TILE_ON_A = 56      # .22 * 255, the focused tile's border
-
-# 2 * PADX + N tiles + (N-1) gaps + [gap + divider + gap] + the grid button
-DOCK_BAR_W = DOCK_PADX * 2 + DOCK_N * DOCK_TW + (DOCK_N - 1) * DOCK_GAP + DOCK_GAP * 2 + 1 + DOCK_TW
-
-fn dock_fill() { return rgb(18, 21, 24) }
-fn dock_bar_x() { return (px_w() - DOCK_BAR_W * ui()) / 2 }
-fn dock_x0() { return dock_bar_x() + DOCK_PADX * ui() }
-# dock_start_x() lived here and returned exactly what dock_x0() returns. It had
-# one caller, desk_click's start-button guard, and that guard is why the
-# Terminal tile did nothing - see the note there. A second name for the same
-# number is how a stale meaning survives a redesign.
-
-
-fn dock_name(slot) {
-    if slot == 0 { return "Terminal" }
-    if slot == 1 { return "Browser" }
-    if slot == 2 { return "Editor" }
-    if slot == 3 { return "Paint" }
-    if slot == 4 { return "Snake" }
-    if slot == 5 { return "3D" }
-    if slot == 6 { return "System Monitor" }
-    if slot == 7 { return "About" }
-    return "Settings"
-}
-
-# A TILE WITH STATES. Three of them, and each one earns its place:
-#   rest     a flat chip
-#   hover    lifted - lighter surface, a brighter top highlight, the icon in
-#            full white. This is the one that turns a picture of a dock into a
-#            control, and it needs nothing but knowing where the pointer is.
-#   pressed  pushed IN - drawn 2 units smaller and 1 down, which is zpress in
-#            the prototype and the same idea as ANIM_PRESS in wm.c. A tile is
-#            not a window, so it cannot use the timeline; the inset is the same
-#            effect drawn directly.
-# An accent underline marks a tile whose app is actually open, which is the
-# difference between a launcher and a taskbar.
-fn dock_tile(slot, dy, ic) {
-    u = ui()
-    dtx = dock_x0() + slot * DOCK_PITCH * u
-    dtw = DOCK_TW * u
-    dty = dy + DOCK_PADY * u
-    hov = 0
-    if dock_hover == slot { hov = 1 }
-
-    # THE TILES ARE NOT TINTED PER APP. zlOS gave each slot its own colour from
-    # dock_face() - nine hand-picked blue-slate fills. The reference gives every
-    # tile the same rgba(255,255,255,.085) and spends the accent ONLY on the
-    # focused one, which is what makes the focused app findable at a glance. Nine
-    # coloured tiles and one accent tile cannot both be the thing your eye goes
-    # to. dock_face() is gone with the rest of the blue-slate palette.
-    icol = theme(TH_TEXT_HI)
-    tona = DOCK_TILE_A
-    tcol = theme(TH_TEXT_HI)
-    if hov == 1 { tcol = theme(TH_ACCENT)  tona = 255  icol = theme(TH_BG) }
-    # ZPRESS, AND IT IS THE REAL ONE NOW.
-    #
-    # This used to be a fixed 2-unit inset with a comment saying "the animation
-    # itself is wm.c's, which now runs the same curve and duration". It did
-    # not: ANIM_PRESS had no caller anywhere in the tree, so the only zpress on
-    # this desktop was these three lines - a still frame of an animation,
-    # holding at the wrong scale for as long as the button was held.
-    #
-    # The reference is `animation:zpress .25s ease`, which is a PLAY-ONCE: the
-    # tile dips to .88 at 45% and comes back to 1, and it does that whether or
-    # not you are still holding the button. wm_anim_scale() is that curve,
-    # sampled per frame, from wm.c's own timeline - so the dock cannot drift
-    # from the window animations the way a hand-drawn inset did.
-    psc = wm_anim_scale(dock_fx(slot))
-    if psc < 1000 {
-        ptw = dtw * psc / 1000
-        dtx = dtx + (dtw - ptw) / 2
-        dty = dty + (dtw - ptw) / 2
-        dtw = ptw
+    gy = fy + mar
+    gi = 0
+    while gi < GRID_ROWS {
+        gh = grid_rh()
+        if gi < grid_rhr() { gh = gh + 1 }
+        fill_rgb(fx + mar, gy, fw - 2 * mar, 1, gcol)
+        fill_rgb(fx + mar, gy + gh - 1, fw - 2 * mar, 1, gcol)
+        gy = gy + gh + gut
+        gi = gi + 1
     }
-    rrblend(dtx, dty, dtw, dtw, DOCK_TR * u, tcol, tona)
-    icon(dtx + (dtw - 20 * u) / 2, dty + (dtw - 20 * u) / 2, ic, icol)
-    # open-app marker: the accent bar the prototype puts under a running app
-    dock_running_bar(slot, dy)
+    # CROP MARKS. Overprint job 3, and the only vermilion on the desk. An 18 dp
+    # arm offset 7 dp OUTSIDE the margin at each of the four corners, so they
+    # mark the trim rather than sitting on the image.
+    vcol = theme(TH_ACCENT)
+    cl = CROP_LEN * u
+    co = CROP_OFF * u
+    ml = fx + mar
+    mr = fx + fw - mar
+    mt = fy + mar
+    mb = fy + fh - mar
+    fill_rgb(ml, mt - co, cl, 1, vcol)
+    fill_rgb(ml - co, mt, 1, cl, vcol)
+    fill_rgb(mr - cl, mt - co, cl, 1, vcol)
+    fill_rgb(mr + co, mt, 1, cl, vcol)
+    fill_rgb(ml, mb + co, cl, 1, vcol)
+    fill_rgb(ml - co, mb - cl, 1, cl, vcol)
+    fill_rgb(mr - cl, mb + co, cl, 1, vcol)
+    fill_rgb(mr + co, mb - cl, 1, cl, vcol)
+    draw_grid_legend()
     return 0
 }
 
-# WHICH TIMELINE SLOT A DOCK TILE OWNS. wm.c's animation ids are window
-# indices when they are >= 0 and furniture when they are negative; WM_FX_USER
-# is -16 and everything below it belongs to the policy layer. Nine tiles need
-# nine of them, and having the arithmetic in one place is what stops the press
-# that fires and the tile that draws from disagreeing about which id they mean.
-WM_FX_USER = 0 - 16
-fn dock_fx(slot) { return WM_FX_USER - slot }
-
-# THE DOT'S OPACITY - `zpulse 2.6s ease-in-out infinite`, ds-reference.html
-# line 17 and the dock note above (:476, "pulsing on zpulse 2.6s").
+# THE LEGEND, and it is a READOUT rather than a caption. It prints the module
+# AS COMPUTED at this resolution - "MODULE 12 x 8  106/105 x 98/97 px GUTTER 12"
+# - which doubles as a live check on where the integer division remainder went.
+# If it ever prints a single width, the remainder is zero at that size; if it
+# prints two, the split is visible in the rules above it.
 #
-# Infinite is the word that matters. wm.c's timeline is eight fixed slots and
-# an entry that never ends never frees one, so two infinite animations would
-# cost a quarter of it for the life of the boot - which shows up later as "the
-# UI stopped animating after a while". wm_pulse() holds no slot: it is a pure
-# function of the clock and cannot be refused.
-#
-# QUANTISED TO 8 OF 255, and that is the whole reason this is affordable. The
-# dot has to be repainted whenever its opacity changes, and over a 2.6 s period
-# an un-quantised value changes on every single tick - which turns a damage-
-# based compositor into a full-frame one for a 4-unit square. Eight steps is
-# below what the eye resolves on a 4x4 lime dot over a dark strip, and it means
-# the dots ask for a repaint roughly every ninth tick instead of every one.
-fn dock_dot_alpha() { return band(wm_pulse(2600), 248) }
-
-# The open-app marker, on its own so the live pass can redraw just these nine
-# small rectangles instead of nine whole tiles. A tile is a rounded rect, a
-# hairline, a 24x24 blended icon and sometimes a bar; the bar alone is a fill.
-fn dock_running_bar(slot, dy) {
+# A CAPTION PRINTED ON A RULED SHEET CLEARS ITS OWN SPACE. Measured on the
+# prototype's rendered pixels: where the legend crossed a grid rule, ZD_TEXT_3
+# fell to 4.84:1 on ZD_GRID against 7.98:1 on ZD_VOID. So it carries the desk
+# with it - a ZD_VOID plate with 5 dp of padding - and every glyph sits on the
+# field. Mono, because the numbers are the content.
+fn legend_num(lx, ly, n, col) {
+    num_aa(lx, ly, n, col)
+    return lx + s3_numw(n)
+}
+fn draw_grid_legend() {
     u = ui()
-    dbx = dock_x0() + slot * DOCK_PITCH * u
-    dbw = DOCK_TW * u
-    if dock_running(slot) == 1 {
-        rrblend(dbx + (dbw - 4 * u) / 2, dy + 8 * u + dbw + 3 * u, 4 * u, 4 * u, 2 * u, theme(TH_ACCENT), dock_dot_alpha())
+    if grid_cw() < 1 { return 0 }
+    lh = cell_h()
+    ly = field_y() + field_h() - 4 * u - lh
+    lx = field_x() + 14 * u
+    # measure first, then clear, then draw - the plate has to be as wide as what
+    # goes on it and label_w cannot be asked about a number
+    lw = 7 * cell_w()                                  # "MODULE "
+    lw = lw + s3_numw(GRID_COLS) + 3 * cell_w() + s3_numw(GRID_ROWS) + 2 * cell_w()
+    lw = lw + s3_numw(grid_cw() + 1) + cell_w() + s3_numw(grid_cw()) + 3 * cell_w()
+    lw = lw + s3_numw(grid_rh() + 1) + cell_w() + s3_numw(grid_rh()) + 4 * cell_w()
+    lw = lw + 7 * cell_w() + s3_numw(grid_gut())
+    fill_rgb(lx - 5 * u, ly - 2 * u, lw + 10 * u, lh + 4 * u, theme(TH_BG))
+    col = theme(TH_TEXT_DIM)
+    text_aa(lx, ly, "MODULE ", col)
+    lx = lx + 7 * cell_w()
+    lx = legend_num(lx, ly, GRID_COLS, col)
+    text_aa(lx, ly, " x ", col)
+    lx = lx + 3 * cell_w()
+    lx = legend_num(lx, ly, GRID_ROWS, col)
+    text_aa(lx, ly, "  ", col)
+    lx = lx + 2 * cell_w()
+    # the two widths, and only when the remainder is non-zero. A legend that
+    # always prints "106/106" is not reading anything.
+    if grid_cwr() > 0 {
+        lx = legend_num(lx, ly, grid_cw() + 1, col)
+        text_aa(lx, ly, "/", col)
+        lx = lx + cell_w()
+    }
+    lx = legend_num(lx, ly, grid_cw(), col)
+    text_aa(lx, ly, " x ", col)
+    lx = lx + 3 * cell_w()
+    if grid_rhr() > 0 {
+        lx = legend_num(lx, ly, grid_rh() + 1, col)
+        text_aa(lx, ly, "/", col)
+        lx = lx + cell_w()
+    }
+    lx = legend_num(lx, ly, grid_rh(), col)
+    text_aa(lx, ly, " px  GUTTER ", col)
+    lx = lx + 12 * cell_w()
+    legend_num(lx, ly, grid_gut(), col)
+    return 0
+}
+
+# ---- THE FOOT ----------------------------------------------------------------
+# Two instruments in one 46 dp band, which is the only reason both fit. The top
+# row is Datum's memory-map ruler - the whole address space to scale, with the
+# framebuffer's base marked. The bottom row is PLATE's printer's slug: one mono
+# line stating the machine and the grid AS MEASURED.
+#
+# THE MEMORY MAP IS THIS KERNEL'S OWN, not a picture of one. Every boundary
+# below is a constant this file or its modules already declare, or a number the
+# hardware answers for, and the ruler is drawn to scale between them. The
+# segments are surface rungs rather than colours: an instrument's regions are
+# read by their order, and a rainbow would make them look like categories.
+# NAMED RULER_*, not MEM_*, and that is a note to the next reader rather than a
+# style choice: check-memmap.sh sweeps this file for `NAME = 0x...` and lists
+# everything it cannot size as a fixed address. These two are not allocations -
+# they are the ends of a READOUT - so they carry a name that says so instead of
+# looking like two more buffers nobody bounded.
+RULER_BASE = 0x00100000            # where the kernel image is loaded
+RULER_FLOOR = 0x08000000           # 128 MiB, the floor the ruler will not go under
+# THE SEGMENTS ARE IN ADDRESS ORDER and that is not a style point: foot_seg
+# refuses a segment whose end is not past its start, so a list written in the
+# order the constants happen to appear in this file draws some of its regions
+# and silently drops the rest. DISK_SCRATCH is 0x02040000 and sits BELOW
+# TT_BOARD's 0x02200000, which is exactly the pair that catches it.
+#
+# The top of the ruler is the END OF THE FRAMEBUFFER, not a round number, so
+# the datum mark at vram() lands inside the bar rather than clamped against its
+# right edge. On this machine that is roughly 0xFD000000 - the prototype's own
+# ruler reads "0x00100000 .. 0xC0611000" for the same reason.
+fn mem_top() {
+    mt = vram() + px_w() * px_h() * 4
+    if mt < RULER_FLOOR { mt = RULER_FLOOR }
+    return mt
+}
+fn foot_y() { return px_h() - foot_h() }
+
+fn draw_foot() {
+    u = ui()
+    fx = rail_w()
+    fw = px_w() - fx
+    fy = foot_y()
+    fh = foot_h()
+    fill_rgb(fx, fy - RULE_H * u, fw, RULE_H * u, theme(TH_LIT))
+    fill_rgb(fx, fy, fw, fh, theme(TH_PANEL_HI))
+    # ---- row 1: the memory ruler
+    ry = fy + 3 * u
+    label(fx + pad_d(), ry + 2 * u, "MEMORY", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    bx = fx + pad_d() + label_w("MEMORY", T_CAPTION, W_BOLD) + 9 * u
+    # the readout is right-aligned and fixed-width, so the bar's right edge does
+    # not move as the numbers change - the same fixed-cell rule as the clock
+    rdw = 14 * cell_w()          # "fb 0x" + eight hex digits, one mono cell each
+    bw = fw - (bx - fx) - pad_d() - rdw - 9 * u
+    bh = 11 * u
+    if bw > 0 {
+        fill_rgb(bx, ry, bw, bh, theme(TH_SURF_WELL))
+        fill_rgb(bx, ry, bw, 1, theme(TH_CUT))
+        fill_rgb(bx, ry + bh - 1, bw, 1, theme(TH_CUT))
+        fill_rgb(bx, ry, 1, bh, theme(TH_CUT))
+        fill_rgb(bx + bw - 1, ry, 1, bh, theme(TH_CUT))
+        foot_seg(bx, ry + 1, bw, bh - 2, RULER_BASE, DISK_SCRATCH, theme(TH_PANEL))
+        foot_seg(bx, ry + 1, bw, bh - 2, DISK_SCRATCH, TT_BOARD, theme(TH_SURF_5))
+        foot_seg(bx, ry + 1, bw, bh - 2, TT_BOARD, RASTER_RING + 0x1000, theme(TH_PANEL))
+        # the hole between the last fixed buffer and the framebuffer is drawn
+        # SUNKEN, because that is what it is: address space nothing is mapped in
+        foot_seg(bx, ry + 1, bw, bh - 2, RASTER_RING + 0x1000, vram(), theme(TH_SURF_WELL))
+        foot_seg(bx, ry + 1, bw, bh - 2, vram(), mem_top(), theme(TH_SURF_5))
+        # THE DATUM MARK. Overprint job 4: one vermilion hairline at the
+        # framebuffer's base address, because that address is what this whole
+        # project is about. vram() is the real pointer, not a guess.
+        dx = foot_at(bx, bw, vram())
+        if dx > bx { fill_rgb(dx, ry - 3 * u, 1, bh + 6 * u, theme(TH_ACCENT)) }
+        # ...and the readout: the framebuffer base in hex and the mapped size.
+        rx = fx + fw - pad_d() - rdw
+        text_aa(rx, ry, "fb 0x", theme(TH_TEXT_DIM))
+        hexat(rx + 5 * cell_w(), ry, vram(), theme(TH_STEEL))
+    }
+    # ---- row 2: the printer's slug
+    sy = fy + fh - band_h()
+    fill_rgb(fx + pad_d(), sy - 2 * u, fw - 2 * pad_d(), 1, theme(TH_CUT))
+    draw_slug(fx + pad_d(), sy + 2 * u)
+    return 0
+}
+
+# One segment of the ruler, clipped to the bar. Addresses are divided down
+# before they are multiplied up: MEM_TOP is 0x08000000 and a bar is a few
+# thousand pixels wide, so `addr * bw` overflows nothing here only because zl
+# numbers are doubles - dividing first keeps it true on an integer backend too.
+fn foot_at(bx, bw, addr) {
+    if addr < RULER_BASE { return bx }
+    if addr > mem_top() { return bx + bw }
+    return bx + idiv(addr - RULER_BASE, 1024) * bw / idiv(mem_top() - RULER_BASE, 1024)
+}
+fn foot_seg(bx, by, bw, bh, a0, a1, col) {
+    x0 = foot_at(bx, bw, a0)
+    x1 = foot_at(bx, bw, a1)
+    if x1 <= x0 { return 0 }
+    fill_rgb(x0, by, x1 - x0, bh, col)
+    fill_rgb(x1 - 1, by, 1, bh, theme(TH_CUT))
+    return 0
+}
+
+# A hex address, drawn digit by digit because there is no string to build.
+# hex() prints to the console; this puts one on the framebuffer.
+fn hexat(hx, hy, v, col) {
+    hi = 7
+    while hi >= 0 {
+        hd = band(shr(v, hi * 4), 15)
+        char_aa(hx + (7 - hi) * cell_w(), hy, hexchar(hd), col)
+        hi = hi - 1
     }
     return 0
 }
+fn hexchar(d) {
+    if d < 10 { return 48 + d }
+    return 87 + d
+}
 
-# ...and the invalidation that makes the pulse visible. An animation with no
-# end has no "finished" frame to damage on, so nothing in wm.c will ever ask
-# for these four-pixel squares to be redrawn - the dot would sit at whatever
-# opacity it had when something else happened to repaint the dock.
-#
-# app_tick is the only per-frame hook the policy layer has. It runs once per
-# open window, so the tick guard keeps this to at most one pass per tick rather
-# than one per window, and the alpha guard keeps it to the ticks where the
-# quantised opacity actually moved.
-dot_tick_at = 0 - 1
-dot_alpha_at = 0 - 1
-fn dock_dot_tick() {
-    dt = ticks()
-    if dt == dot_tick_at { return 0 }
-    dot_tick_at = dt
-    da = dock_dot_alpha()
-    if da == dot_alpha_at { return 0 }
-    dot_alpha_at = da
-    u = ui()
-    dy = dock_y()
-    ds = 0
-    while ds < DOCK_N {
-        if dock_running(ds) == 1 {
-            wm_damage(dock_x0() + ds * DOCK_PITCH * u + (DOCK_TW * u - 4 * u) / 2 - u, dy + 8 * u + DOCK_TW * u + 2 * u, 6 * u, 6 * u)
-        }
-        ds = ds + 1
-    }
+# THE PRINTER'S SLUG. One mono line that states the machine and the grid as
+# measured. It is the same reading the desk's legend carries, in the place a
+# printed sheet puts it, and having it twice is deliberate: the legend belongs
+# to the desk and disappears under a maximised window, the slug belongs to the
+# machine and does not.
+fn draw_slug(sx, sy) {
+    col = theme(TH_TEXT_DIM)
+    text_aa(sx, sy, "zlOS 0.3  ", col)
+    sx = sx + 10 * cell_w()
+    sx = legend_num(sx, sy, px_w(), col)
+    text_aa(sx, sy, "x", col)
+    sx = sx + cell_w()
+    sx = legend_num(sx, sy, px_h(), col)
+    text_aa(sx, sy, "  MODULE ", col)
+    sx = sx + 9 * cell_w()
+    sx = legend_num(sx, sy, GRID_COLS, col)
+    text_aa(sx, sy, "x", col)
+    sx = sx + cell_w()
+    sx = legend_num(sx, sy, GRID_ROWS, col)
+    text_aa(sx, sy, "  GUT ", col)
+    sx = sx + 6 * cell_w()
+    sx = legend_num(sx, sy, grid_gut(), col)
+    text_aa(sx, sy, "  UP ", col)
+    sx = sx + 5 * cell_w()
+    sx = legend_num(sx, sy, ticks() / 100, col)
+    text_aa(sx, sy, "s  FRAME ", col)
+    sx = sx + 9 * cell_w()
+    sx = legend_num(sx, sy, wm_us(), col)
+    text_aa(sx, sy, "us", col)
     return 0
 }
 
-# Which dock slots have a window open right now. A launcher does not know this
-# and a taskbar is exactly the thing that does.
-fn dock_app(slot) {
-    if slot == 0 { return APP_SHELL }
-    if slot == 1 { return APP_BROWSER }
-    if slot == 2 { return APP_EDIT }
-    if slot == 3 { return APP_PAINT }
-    if slot == 4 { return APP_SNAKE }
-    if slot == 5 { return APP_CUBE }
-    if slot == 6 { return APP_MONITOR }
-    if slot == 7 { return APP_ABOUT }
-    if slot == 8 { return APP_SETTINGS }
-    return 0 - 1
-}
-
-fn dock_running(slot) {
-    if slot == 0 { return wm_open_p(shell_win) }
-    if slot == 1 { return wm_open_p(browser_win) }
-    if slot == 2 { return wm_open_p(edit_win) }
-    if slot == 3 { return wm_open_p(paint_win) }
-    if slot == 4 { return wm_open_p(snake_win) }
-    if slot == 5 { return wm_open_p(cube_win) }
-    if slot == 6 { return wm_open_p(mon_win) }
-    if slot == 7 { return wm_open_p(about_win) }
-    if slot == 8 { return wm_open_p(settings_win) }
-    return 0
-}
-
-# which app each dock slot launches. Kept in one place so the drawing and the
-# click test can never drift apart.
-fn dock_icon(slot) {
-    if slot == 0 { return 0 }    # terminal
-    if slot == 1 { return 20 }   # browser
-    if slot == 2 { return 3 }    # editor
-    if slot == 3 { return 2 }    # paint
-    if slot == 4 { return 1 }    # snake
-    if slot == 5 { return 6 }    # 3D cube
-    if slot == 6 { return 4 }    # system monitor
-    if slot == 7 { return 5 }    # about
-    if slot == 8 { return 8 }    # settings
-    return 0 - 1
-}
-fn dock_cmd(slot) {
-    if slot == 0 { return 104 }  # help
-    if slot == 1 { return 0 }    # Browser is a real window
-    if slot == 2 { return 105 }  # editor
-    if slot == 3 { return 100 }  # paint
-    if slot == 4 { return 103 }  # snake
-    if slot == 5 { return 118 }  # 3D cube
-    if slot == 8 { return 0 }    # Settings is a real window
-    return 0
-}
-
-# the dock: a taller gradient strip with a start button, app tiles and a tray
-# WHERE THE TRAY STARTS, in one place. It was computed twice - once in
-# draw_status and once in draw_clock - with the same three lines copied, which
-# is how a clock ends up drawn 4 px from where its label is.
-# THE ROW, AS A TABLE. These were eight literals inline in the draw calls and a
-# ninth, different, pair of literals in the damage rectangle that invalidates
-# them - which is how the peak number ended up drawn outside its own damage rect
-# and kept the head of its previous value on screen for ever. A row laid out in
-# one place cannot disagree with itself about where it is.
-#
-# Design units, so they scale with ui() like everything else. Each NUMBER gets a
-# FIXED cell rather than flowing after its label: label_w() exists and would let
-# the row reflow to fit, but these values change every frame, and a readout
-# whose labels slide sideways as the digits change is unreadable. A fixed cell
-# wide enough for the worst case is the correct shape for a live number.
-TRAY_W       = 64        # quiet uptime only; diagnostics belong in Monitor
-TRAY_UP_L    = 0
-TRAY_UP_N    = 22
-
-fn tray_x() {
-    u = ui()
-    tx = px_w() - TRAY_W * u
-    tdend = dock_x0() + DOCK_N * DOCK_PITCH * u + 16 * u
-    if tx < tdend { tx = tdend }
-    return tx
-}
-
-# THE RECTANGLE THAT INVALIDATES THE ROW ABOVE, derived from the same tray_x().
-# Everything from where the row starts to the right edge of the screen: the row
-# is the last thing on that line and nothing lives to the right of it, so this
-# cannot be too narrow the way a hand-counted width can.
-fn tray_dmg_w() { return px_w() - tray_x() }
-
-# THE PART THAT NEVER CHANGES: the blurred, tinted strip, the start button and
-# the nine tiles in their rest state. Drawn ONCE, into the wallpaper cache.
-fn draw_dock_bg() {
-    dy = dock_y()
-    u = ui()
-    bx = dock_bar_x()
-    bw = DOCK_BAR_W * u
-    bh = DOCK_H * u
-    # the reference's drop shadow: 0 12px 34px rgba(0,0,0,.5)
-    rrblend(bx - 4 * u, dy + 6 * u, bw + 8 * u, bh, DOCK_R * u + 4, theme(TH_BG), 128)
-    # 1px rgba(255,255,255,.11) border, then the rgba(18,21,24,.82) body
-    rrblend(bx - 1, dy - 1, bw + 2, bh + 2, DOCK_R * u + 1, theme(TH_TEXT_HI), DOCK_BORDER_A)
-    rrblend(bx, dy, bw, bh, DOCK_R * u, dock_fill(), DOCK_A)
-    ds = 0
-    while ds < DOCK_N {
-        dock_tile(ds, dy, dock_icon(ds))
-        ds = ds + 1
-    }
-    # the divider and the Show Applications grid button close the strip, exactly
-    # as the reference does - the grid is not a dock app, it is the app grid
-    gx = dock_x0() + DOCK_N * DOCK_PITCH * u - DOCK_GAP * u
-    fill_rgb(gx + DOCK_GAP * u, dy + (bh - 22 * u) / 2, 1, 22 * u, theme(TH_BORDER))
-    gx = gx + DOCK_GAP * 2 * u + 1
-    rrblend(gx, dy + DOCK_PADY * u, DOCK_TW * u, DOCK_TW * u, DOCK_TR * u, theme(TH_TEXT_HI), DOCK_TILE_A)
-    icon(gx + 7 * u, dy + DOCK_PADY * u + 7 * u, 40, theme(TH_TEXT_HI))
-    return 0
-}
-
-dock_baked = 0
+# ---- the shell's live pass ---------------------------------------------------
+# draw_status keeps its name and its two callers' contract - the framebuffer
+# branch paints the desktop's furniture, the VGA branch paints the text-mode
+# status line - and what the framebuffer branch paints is now the rail's live
+# half, the raster strip and the foot. `msg` is unused on this path and was
+# already unused before PRESSWORK; it survives because the text branch needs it.
+shell_baked = 0
 fn draw_status(msg) {
     sr = status_row()
     if px_w() > 0 {
-        dy = dock_y()
-        u = ui()
-        # THE LIVE PART ONLY. Everything above came out of the wallpaper blit
-        # the caller already did - see draw_dock_bg and wm_boot_start. What is
-        # left is the tile the pointer is on, the open-app markers, and the
-        # numbers in the tray.
-        if dock_baked == 0 { draw_dock_bg() }
-        if dock_hover >= 0 { dock_tile(dock_hover, dy, dock_icon(dock_hover)) }
-        ds = 0
-        while ds < DOCK_N {
-            if ds != dock_hover { dock_running_bar(ds, dy) }
-            ds = ds + 1
-        }
-        draw_tasklist(dy)
-        if dock_hover >= 0 {
-            dn = dock_name(dock_hover)
-            dtw = label_w(dn, T_CAPTION, W_BOLD) + 16 * u
-            dtx = dock_x0() + dock_hover * DOCK_PITCH * u + (DOCK_TW * u - dtw) / 2
-            rrect(dtx, dy - 30 * u, dtw, 24 * u, 8 * u, theme(TH_PANEL_HI))
-            label(dtx + 8 * u, dy - 25 * u, dn, theme(TH_TEXT), T_CAPTION, W_BOLD)
-        }
-
+        if shell_baked == 0 { draw_rail_static() }
+        draw_rail_reg()
+        draw_rail_ws()
+        draw_rail_stat()
+        draw_rail_clock()
+        draw_strip()
+        draw_foot()
     } else {
         bar(sr, C_STATUS)
         at(sr, 2,  "h help", C_STATUS)
@@ -889,30 +1476,20 @@ fn draw_status(msg) {
     }
 }
 
-# just the uptime number, redrawn each second. On the framebuffer it is drawn
-# in true colour over the taskbar; on VGA it uses the text cell.
+# just the uptime, redrawn each second. `sec` is the VGA branch's - on the
+# framebuffer the slug reads ticks() itself, which is the SAME source the
+# caller derived sec from, so this is one clock and not two. On the framebuffer it is the foot's
+# slug - the whole line, because the slug is one mono run and re-laying it out
+# from its own start is what stops the "up 9" -> "up 10" case from leaving the
+# head of the previous value behind. On VGA it uses the text cell.
 fn draw_clock(sec) {
     if px_w() > 0 {
-        dy = dock_y()
-        cu = ui()
-        ctray = tray_x()
-        # The clear behind the uptime, and it uses the SAME table draw_status
-        # lays the row out from - it used to be `+ 226` and `70` wide, a third
-        # set of literals for the same row.
-        #
-        # theme(TH_BAR_TOP)/theme(TH_BAR_BOT) is the right background only when the dock fell back
-        # to a plain gradient. Once the dock is baked into the wallpaper cache
-        # this strip is blur-then-tint, and painting a gradient over it puts a
-        # visible patch where the clock is. Repaint from the cache when there is
-        # one; the gradient stays as the fallback it always was.
-        cw = 64 * cu
-        if wall_ok() == 1 {
-            wall_paint(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu)
-        } else {
-            grad_rgb(ctray + TRAY_UP_L * cu, dy + 12 * cu, cw, 30 * cu, theme(TH_BAR_TOP), theme(TH_BAR_BOT))
-        }
-        label(ctray + TRAY_UP_L * cu, dy + 22 * cu, "up", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        label_num(ctray + TRAY_UP_N * cu, dy + 22 * cu, sec, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+        u = ui()
+        sx = rail_w() + pad_d()
+        sy = foot_y() + foot_h() - band_h() + 2 * u
+        fill_rgb(sx, sy, px_w() - sx - pad_d(), cell_h(), theme(TH_PANEL_HI))
+        draw_slug(sx, sy)
+        draw_rail_clock()
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
     }
@@ -1519,8 +2096,12 @@ fn anim_draw(ax, ay, aw, ah) {
         an_x = band(an_seed / 4096, 2047) % aw
         an_seed = an_seed * 1103515245 + 12345
         an_y = band(an_seed / 4096, 2047) % ah
-        an_c = rgb(120, 132, 160)
-        if band(an_seed, 7) == 0 { an_c = rgb(235, 242, 255) }
+        # THE STARS ARE A THEME ROLE, not two hand-picked blue-greys. They were
+        # rgb(120,132,160) and rgb(235,242,255) - the second of which is a near
+        # white, and PRESSWORK has no white: ZD_TEXT_0 is the top of the ink
+        # ramp and nothing in the system is brighter than it.
+        an_c = theme(TH_TEXT_5)
+        if band(an_seed, 7) == 0 { an_c = theme(TH_TEXT_HI) }
         fill_rgb(ax + an_x, ay + an_y, 2, 2, an_c)
         an_i = an_i + 1
     }
@@ -1615,6 +2196,12 @@ p_n    = 0
 
 fn paint_pack(px, py, pc) { return px + py * 4096 + pc * 16777216 }
 
+# THE PAINT PALETTE IS CONTENT, NOT CHROME, and that is why these seven survive
+# the sweep that took every other literal out of this file. A theme role answers
+# "what does this element MEAN"; a paint colour answers "which crayon did the
+# person pick", and routing it through the theme would mean the user's red
+# changes when the theme does. The rule the palette gate enforces is that no
+# design.h TOKEN may have a second copy here - none of these is one.
 fn paint_col(idx) {
     if idx == 1 { return rgb(230, 90, 90) }
     if idx == 2 { return rgb(120, 220, 140) }
@@ -1693,7 +2280,7 @@ FILES_NAME_BUF = 0x02042000
 # .c and .zl file in the tree, not just kernel.zl - see the comment at
 # DISK_SCRATCH above for why that matters): PAINT_BUF ends near 0x02102000,
 # virtio_net.c's own arena doc puts its NET_FLOOR at 0x03000000, so this
-# block (0x02200000..0x02215000, 84 KiB) sits in the middle of the same
+# block (0x02200000..0x02216000, 88 KiB) sits in the middle of the same
 # "80 MiB hole" with well over 0xDE0000 bytes of headroom on either side.
 # check-memmap.sh's dupe sweep covers every constant below because they are
 # declared here, in kernel.zl, rather than in the modules that use them.
@@ -1718,6 +2305,13 @@ DIFF_B        = 0x0220F000   # apps_utils.zl:  Line Diff, side B
 HASH_BUF      = 0x02210000   # apps_utils.zl:  Checksum, the input bytes
 NOTES_BUF     = 0x02211000   # apps_utils.zl:  Sticky Notes (2 pages)
 FILES_BUF     = 0x02213000   # apps_system.zl: Files, one entry's bytes
+RASTER_RING   = 0x02215000   # kernel.zl: the raster strip's history, one byte
+# per composite. Declared HERE rather than
+# beside the strip that reads it, because this
+# is the block check-memmap.sh's dupe sweep
+# walks - a fixed address declared anywhere
+# else in this file is a fixed address nothing
+# checks against its neighbours.
 MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
 # an iterative backtracker, not a 273-deep zl
 # recursion. boot.S:36 documents this kernel's
@@ -3349,10 +3943,21 @@ fn sn_draw(ax, ay, aw, ah) {
     if gh != sn_gh { sn_reset(gw, gh) }
 
     by = ay + 3 * SN_CELL * u
-    fill_rgb(ax, by, gw * cell, gh * cell, rgb(9, 12, 22))
+    # THE BOARD IS A PIT, which is what design.h's ZD_SURF_GAME already says
+    # (it resolves to ZD_CUT). This was rgb(9,12,22), a blue-black left over
+    # from the predecessor palette - the last three raw colours in the shell,
+    # and the reason the "no colour literal outside design.h" rule was still
+    # not true. A game canvas is furniture, not user content: the seven in
+    # paint_col() stay because a paint colour is something the user chose.
+    fill_rgb(ax, by, gw * cell, gh * cell, theme(TH_CUT))
     label(ax + 2 * u, ay + 2 * u, "SCORE", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     label_num(ax + 56 * u, ay + 2 * u, sn_score, theme(TH_ACCENT), T_CAPTION, W_BOLD)
-    if sn_alive == 0 { label(ax + 110 * u, ay + 2 * u, "game over - press r", C_RED, T_CAPTION, W_BOLD) }
+    # C_RED is a VGA TEXT ATTRIBUTE (0x0C), and this was the one place in the
+    # file it reached a function that wants an RGB. label() would have drawn
+    # rgb(0, 0, 12) - black on a near-black board, so the one message the
+    # player has to see was the least visible thing on screen. Every other
+    # C_RED in this file goes to color(), which is the console and is correct.
+    if sn_alive == 0 { label(ax + 110 * u, ay + 2 * u, "game over - press r", theme(TH_DANGER), T_CAPTION, W_BOLD) }
     if sn_alive == 1 {
         if sn_dx == 0 { if sn_dy == 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to start", theme(TH_ACCENT), T_CAPTION, W_REG) } }
         if sn_dx != 0 { label(ax + 110 * u, ay + 2 * u, "w a s d to steer", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
@@ -3361,17 +3966,22 @@ fn sn_draw(ax, ay, aw, ah) {
 
     # the food, then the body, then the head - painted last so a head that has
     # just eaten is drawn over the food rather than under it
-    fill_rgb(ax + sn_fx * cell + 1, by + sn_fy * cell + 1, cell - 2, cell - 2, rgb(224, 85, 97))
+    # THE FOOD IS THE OVERPRINT, and this is the one case where the design's
+    # rule and the game's rule are the same sentence: vermilion marks THE ONE
+    # THING TO ACT ON. The head moves to the knockout, which is the value
+    # inversion this design uses everywhere for "the live one" - a focused
+    # header, a selected row, an engaged switch, and now the head of a snake.
+    fill_rgb(ax + sn_fx * cell + 1, by + sn_fy * cell + 1, cell - 2, cell - 2, theme(TH_ACCENT))
     si = sn_len - 1
     while si > 0 {
         sbx = ax + peek8(SNAKE_X + si) * cell
         sby = by + peek8(SNAKE_Y + si) * cell
-        fill_rgb(sbx + 1, sby + 1, cell - 2, cell - 2, rgb(40, 120, 160))
+        fill_rgb(sbx + 1, sby + 1, cell - 2, cell - 2, theme(TH_TEXT_2))
         si = si - 1
     }
     shx = ax + peek8(SNAKE_X) * cell
     shy = by + peek8(SNAKE_Y) * cell
-    fill_rgb(shx + 1, shy + 1, cell - 2, cell - 2, theme(TH_ACCENT))
+    fill_rgb(shx + 1, shy + 1, cell - 2, cell - 2, theme(TH_KNOCK))
     return 0
 }
 
@@ -3524,7 +4134,14 @@ fn files_draw(ax, ay, aw, ah) {
             if files_seen >= files_scroll { if files_dn < files_rows {
                     files_ry = files_y0 + files_dn * files_rh
                     if files_di == files_sel {
-                        rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, 5 * files_u, rgb(35, 58, 78))
+                        # THE SELECTED ROW WAS rgb(35,58,78) - a blue-slate fill
+                        # left over from the palette PRESSWORK replaced, and the
+                        # last raw surface literal in an app in this file. It is
+                        # ZD_RAISE with the overprint on its left edge now, which
+                        # is ZD_SEL_BAR_W / ZD_FOCUS_BAR and the same mark the
+                        # register uses for the same meaning: this is the one.
+                        rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, R_INSET_D * files_u, theme(TH_PANEL_HI))
+                        fill_rgb(ax + 8 * files_u, files_ry, focus_bar(), files_rh - 2 * files_u, theme(TH_ACCENT))
                     }
                     files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
                     label_num(ax + aw - 112 * files_u, files_ry + 4 * files_u, fs_bytes(files_di), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
@@ -4490,7 +5107,7 @@ fn open_app(cmd, arg) {
         if files_win >= 0 { if wm_open_p(files_win) == 1 {
                 wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
-        files_win = wm_open(APP_FILES, "Files", 238 * oa_u, 346 * oa_u, 672 * oa_u, 352 * oa_u)
+        files_win = wm_open(APP_FILES, "Files", desk_x(106), desk_y(300), 672 * oa_u, 352 * oa_u)
         if files_win < 0 { return 0 }
         files_refresh()
         wm_setfocus(files_win)
@@ -4571,10 +5188,16 @@ fn wm_damage_shell_input() {
 }
 
 fn app_tick(id, win) {
-    # The dock's running-app dots, which pulse forever and so belong to no
-    # window's tick. Guarded twice inside itself so this costs a comparison on
-    # every call but a repaint only when the pulse has actually moved.
-    dock_dot_tick()
+    # THE RASTER STRIP'S RING, which belongs to no window's tick - it is a
+    # history of COMPOSITES, and app_tick is the only per-frame hook the policy
+    # layer has. Guarded inside itself on wm_painted(), so this costs a
+    # comparison per call and a sample per composite rather than per window.
+    #
+    # This replaces dock_dot_tick(), whose job was the pulsing running-app dot.
+    # PRESSWORK has no pulse anywhere: ZD_PULSE_FLOOR is 255, which is design.h
+    # saying the infinite pulse is deleted rather than merely unused. A register
+    # mark that breathes is decoration on a control, and the mark is a reading.
+    raster_tick()
     if id == APP_SNAKE { return sn_step() }
     # The browser drives its own fetch from the frame loop. app_tick MUST NOT
     # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
@@ -4584,32 +5207,23 @@ fn app_tick(id, win) {
         tsec = ticks() / 100
         if tsec != last_tick_sec {
             last_tick_sec = tsec
-            # ...and the dock's clock, which is furniture rather than a window.
-            # Damaging just the tray strip rather than the whole dock is the
-            # difference between repainting 30,000 pixels a second and
-            # repainting 2,300,000.
+            # ...and the two live readouts that are furniture rather than a
+            # window: the foot's slug and the rail's stat block and clock.
             #
-            # THE RECTANGLE IS DERIVED FROM tray_x(), NOT FROM px_w() AGAIN.
-            # It used to be `px_w() - 130 * ui()` wide `120 * ui()`, a second
-            # origin for a row that draw_status lays out from tray_x() - which
-            # is px_w() - 300 * ui(). So the invalidated strip began at
-            # tray + 170 while the row begins at tray + 0, and the two LIVE
-            # numbers in it sat outside their own damage rectangle:
+            # THE RECTANGLE IS THE WHOLE BAND, and that is the correction the
+            # old version of this comment was written about the hard way. It
+            # used to invalidate a hand-counted strip inside the tray, starting
+            # 170 units right of where the row it was invalidating began, so a
+            # number that SHRANK kept the head of its previous value on screen
+            # for ever - the `)08` debris in docs/archive/prompts/POINTER-PROMPT.md 1b.
             #
-            #   wm_us()   at tray +  44 * ui()   never invalidated
-            #   wm_peak() at tray + 152 * ui()   invalidated from +170 onward,
-            #                                    so its first 18 * ui() columns
-            #                                    were never cleared
-            #
-            # desk_draw repaints the tray from the wallpaper cache, but only
-            # inside the damage rect, so a number that SHRANK kept the head of
-            # its previous value on screen forever - the `)08` debris in
-            # docs/archive/prompts/POINTER-PROMPT.md 1b. Only `up` looked right, because `up` is the
-            # one field that happened to fall inside the old rectangle.
-            #
-            # This is the same defect tray_x() was extracted to kill (see its
-            # comment): one row, two origins. There is now one.
-            wm_damage(tray_x(), dock_y() + 10 * ui(), tray_dmg_w(), 34 * ui())
+            # A band is cheap to invalidate whole and a hand-counted sub-strip
+            # is not cheap to get right, so both of these are the band. The foot
+            # is 46 dp of a 2560-wide screen and the rail's bottom block is 170
+            # wide; between them that is about a twelfth of what the old dock
+            # strip cost, so there is nothing to buy back by being clever.
+            wm_damage(rail_w(), foot_y() - RULE_H * ui(), px_w() - rail_w(), foot_h() + RULE_H * ui())
+            wm_damage(0, px_h() - rail_bot_h(), rail_w(), rail_bot_h())
             return 1
         }
     }
@@ -4649,126 +5263,105 @@ fn desk_draw(dx, dy, dw, dh) {
     if wall_ok() == 1 {
         wall_paint(dx, dy, dw, dh)
     } else {
-        grad_rgb(0, 0, px_w(), px_h(), theme(TH_WALL_TOP), theme(TH_WALL_BOT))
+        desk_ground()
     }
-    # the header band: 0 .. TOPBAR_H + 8
-    # the header is entirely static - the resolution it prints does not change -
-    # so it is baked in with the wallpaper too and costs nothing per frame
-    if dock_baked == 0 { if dy < TOPBAR_H * ui() + 8 { draw_header() } }
-    # the dock band: dock_y() - 6 .. bottom
-    if dy + dh > dock_y() - 36 * ui() { draw_status("compositor") }
+    # THE FOUR BANDS, each drawn only when the rectangle actually touches it.
+    # The rail's static half and the desk are in the wallpaper cache; everything
+    # below is the live half, and each test is the band's own extent rather than
+    # a margin somebody guessed.
+    if shell_baked == 0 { draw_rail_static() }
+    if dx < rail_w() {
+        draw_rail_reg()
+        draw_rail_ws()
+        draw_rail_stat()
+        draw_rail_clock()
+    }
+    if dy < strip_h() + RULE_H * ui() { draw_strip() }
+    if dy + dh > foot_y() - RULE_H * ui() { draw_foot() }
     return 0
 }
 
-# The v10 background, translated rather than copied. Its structure - a base
-# gradient, two offset elliptical glows, a corner shadow, a vignette and two
-# faint conic sweeps - is taken exactly; its palette is NOT. The prototype is
-# near-black and lime; this is navy and cyan, because docs/desktop/desktop-look.md's rule is
-# to extend the visual system that exists rather than introduce a second one.
-# Percentages become pixels here, because a percentage of what is a layout
-# question and fb.c does not do layout.
-# THE WALLPAPER'S COLOURS, and the one place in this file that still holds a
-# colour literal on purpose.
-#
-# These are the reference's, and design.h holds the same nine values as
-# ZD_WALL_*. They are duplicated here rather than read through theme() because
-# ui_theme has no wallpaper-glow role and adding four is a change to ui.h, ui.c
-# and the zl-visible role enum all at once - which is being edited by other work
-# in this same tree right now. MOVING THEM IS THE FOLLOW-UP, and until then the
-# rule is that design.h is the source and this is the copy.
-#
-# The gate cannot catch this drifting yet, which is stated plainly rather than
-# glossed: hosttest/palette.c asserts kernel.zl holds no second copy of a
-# design.h token, and ZD_WALL_* are deliberately outside that table, so nothing
-# would fail if these two lists disagreed. That is a known, recorded hole.
-# The gradient's two ends are theme roles now - TH_WALL_TOP is ZD_WALL_0 and
-# TH_WALL_BOT is ZD_WALL_100 - so no literal is needed for them at all. The
-# palette gate caught the first attempt at this: rgb(7,8,10) IS #07080a IS
-# ZD_SURF_0, so writing it here was literally a second copy of a theme colour,
-# which is the exact regression that check exists to prevent. It worked.
-fn wall_glow_a()   { return rgb(126, 166, 44) } # ZD_WALL_GLOW_A
-fn wall_glow_b()   { return rgb(46, 58, 20) }   # ZD_WALL_GLOW_B
-fn wall_glow_c()   { return rgb(24, 32, 38) }   # ZD_WALL_GLOW_C
+# THE DESK, WITHOUT THE CACHE. The fallback when wall_save() refuses the
+# bitmap - a 4K RGB565 cache fits the 16 MiB arena today, and if some future
+# mode or competing effect does not, this is what the compositor falls back to
+# rather than drawing nothing.
+fn desk_ground() {
+    fill_rgb(0, 0, px_w(), px_h(), theme(TH_BG))
+    draw_grid()
+    return 0
+}
 
+# ---- THE WALLPAPER IS THE FIELD --------------------------------------------
+# Nine layers went out of here and one came in, and the deletion is the change.
+#
+# What was here: a base gradient, three offset elliptical glows, two clipped
+# conic wedges, a two-scale technical grid at four alphas, a scanline grain, 320
+# deterministic speckles and a vignette. Thirteen passes over every pixel of the
+# screen, in navy and cyan, with three colour literals kept in this file because
+# ui_theme had no role for them.
+#
+# What PRESSWORK asks for is a DESK. ZD_VOID, flat, with the ruled module grid
+# on it - and the grid is the only thing on the desk that carries information,
+# which is precisely why nothing else may compete with it. A vignette darkens
+# the corners the crop marks live in; a conic sweep crosses the module rules at
+# an angle and makes them look like a moire; a speckle field at 7/255 is
+# indistinguishable from a dirty panel. All three are gone and none of them is
+# coming back behind a toggle.
+#
+# THE ONE THING THAT SURVIVES is the raking light, and it survives because it is
+# the design's premise rather than a decoration: PRESSWORK is lit by a single
+# lamp entering from off-screen upper left, every 1px run in the system is drawn
+# on the side that lamp strikes, and a field with no gradient at all would be
+# the one surface in the machine the lamp does not reach. design.h states the
+# call exactly, and the prototype's own comment above `#field::before` quotes
+# the same line:
+#
+#     fb_glow(-w/8, -h/6, w*11/8, h*11/8, ZD_LITSOFT, 26, 0, 100)
+#
+# ...so this is that call, with ZD_LITSOFT reached through TH_LITSOFT and a_in
+# through ZD_WALL_GLOW_A. There is no colour literal left in this function, and
+# wall_glow_a/b/c - the three that design.h could not name - are deleted with
+# the layers that used them.
+#
+# THE BRIEF SAID "no vignette, no glow" AND THE PROTOTYPE DRAWS THIS ONE. Where
+# the two disagree the prototype wins, and reading them together the brief is
+# naming the nine-layer stack rather than the design's own lamp: the vignette is
+# gone, the three teal glows are gone, and what is left is a single call that
+# design.h, ui.c and the prototype all three specify in the same terms.
+# ZD_WALL_GLOW_A IS 26 AND THAT IS NOT fb_glow's a_in. design.h labels it
+# "fb_glow a_in, percent" and it is neither: run through fb.c's OWN gamma tables
+# - ipow22, LIN_MAX 4095, srgb_to_lin/lin_to_srgb, not the textbook sRGB curve -
+# ZD_LITSOFT over ZD_VOID at alpha 26 comes out #2D2623, which is ZD_WALL_42
+# (#2D2622) to within one code value in one channel. So 26 is the value at the
+# 34% STOP, and design.h's own three flattened tokens are what say so.
+#
+# The a_in that reproduces ZD_WALL_0 (#3E3733), the CENTRE, is 85: it lands on
+# #3D3733, again one code value total. Both figures were solved by sweeping all
+# 256 alphas through a copy of fb.c's blend_rgb rather than derived on paper,
+# because fb.c blends in LINEAR LIGHT and the prototype's CSS mixes in sRGB - so
+# the 46% the prototype's stylesheet asks for is not 46% here, and computing it
+# from the sRGB formula would have given 117 and a visibly too-bright desk.
+#
+# WHAT DOES NOT SURVIVE THE TRANSLATION, said plainly: the CSS ramp has TWO
+# segments (46% at the centre, 16% at 34%, transparent at 72%) and fb_glow has
+# ONE. Anchored on the centre with design.h's stop of 100, the single ramp reads
+# 85 * (100 - 34) / 100 = 56 at the 34% stop where the CSS reads 26, so the
+# middle of the desk is brighter here than in the prototype. Fixing that needs a
+# two-stop radial in fb.c, and fb.c is not this change's to edit. The two ends
+# are right and the middle is one segment short.
+WALL_GLOW_A = 85                   # measured: ZD_LITSOFT over ZD_VOID -> ZD_WALL_0
+WALL_GLOW_OUT = 0                  # ZD_WALL_GLOW_OUT
 fn draw_wallpaper() {
     ww = px_w()
     wh = px_h()
-    wu = ui()
-    grad_rgb(0, 0, ww, wh, theme(TH_WALL_TOP), theme(TH_WALL_BOT))
-    # radial-gradient(64% 50% at 16% 8%, rgba(126,166,44,.3), transparent 62%)
-    glow(ww * 16 / 100, wh * 8 / 100, ww * 64 / 100, wh * 50 / 100, wall_glow_a(), 77, 0, 62)
-    # radial-gradient(58% 48% at 88% 92%, rgba(46,58,20,.62), transparent 68%)
-    glow(ww * 88 / 100, wh * 92 / 100, ww * 58 / 100, wh * 48 / 100, wall_glow_b(), 158, 0, 68)
-    # radial-gradient(46% 34% at 76% 18%, rgba(24,32,38,.7), transparent 70%)
-    glow(ww * 76 / 100, wh * 18 / 100, ww * 46 / 100, wh * 34 / 100, wall_glow_c(), 179, 0, 70)
-    # THE TWO CONIC WEDGES ARE BOXED, and that box is not decoration.
-    #
-    # ds-reference.html:41-42 puts each wedge in its own absolutely positioned
-    # element - `left:-14% top:-22% width:78% height:96%` and a mirrored one at
-    # `right:-16% bottom:-24% width:70% height:88%` - so each sweep is confined
-    # to a rectangle that hangs off one corner of the screen. Drawn unclipped,
-    # as they were, a wedge sweeping from the screen CENTRE covers everything:
-    # measured, the left edge of the wallpaper came out 36-60 green against the
-    # reference's 5-29, which was the largest colour error left after the
-    # palette landed. The alphas were already right; the extent was not.
-    #
-    # The centre of each sweep is the centre of its own box, not of the screen.
-    clip(0 - ww * 14 / 100, 0 - wh * 22 / 100, ww * 78 / 100, wh * 96 / 100)
-    wedge(ww * 25 / 100, wh * 26 / 100, theme(TH_ACCENT), 19, 214, 34, 82)
+    fill_rgb(0, 0, ww, wh, theme(TH_BG))
+    # the lamp. Clipped to the FIELD, because the rail, the strip and the foot
+    # are plates lit by their own 1px runs - letting the glow wash over them
+    # would put a second, contradictory light source on the same chrome.
+    clip(field_x(), field_y(), field_w(), field_h())
+    glow(0 - idiv(ww, 8), 0 - idiv(wh, 6), ww * 11 / 8, wh * 11 / 8, theme(TH_LITSOFT), WALL_GLOW_A, WALL_GLOW_OUT, 100)
     clipoff()
-    clip(ww * 46 / 100, wh * 28 / 100, ww * 70 / 100, wh * 88 / 100)
-    wedge(ww * 81 / 100, wh * 72 / 100, theme(TH_ACCENT), 11, 32, 44, 98)
-    clipoff()
-    # The prototype's two-scale technical grid gives the broad glows a crisp
-    # spatial rhythm. Both grids are almost invisible and baked once; they
-    # should be felt as structure, not read as graph paper.
-    # The two-scale grid, to the reference's pitches and alphas. The major
-    # pitch was 256 and the reference's is 252 - a rounding that looks
-    # harmless and is not: over a 1280-wide screen 256 puts five lines on
-    # screen and 252 puts six, so the whole rhythm was off by a line.
-    grid = 64 * wu                 # ZD_WALL_GRID
-    major = 252 * wu               # ZD_WALL_GRID_MAJOR - the reference's, not 256
-    gx = 0
-    while gx < ww {
-        blend(gx, 0, 1, wh, theme(TH_ACCENT), 7)
-        gx = gx + grid
-    }
-    gy = 0
-    while gy < wh {
-        blend(0, gy, ww, 1, theme(TH_ACCENT), 5)
-        gy = gy + grid
-    }
-    gx = 0
-    while gx < ww {
-        blend(gx, 0, 1, wh, theme(TH_ACCENT), 13)
-        gx = gx + major
-    }
-    gy = 0
-    while gy < wh {
-        blend(0, gy, ww, 1, theme(TH_ACCENT), 10)
-        gy = gy + major
-    }
-    # A faint physical grain joins the broad fields into one surface. It is
-    # deterministic, static and baked into RGB565 once: no random state, no
-    # full-screen work during interaction, and no animated-background tax.
-    gy = 13 * wu
-    while gy < wh {
-        blend(0, gy, ww, 1, theme(TH_TEXT_HI), 3)
-        gy = gy + 32 * wu
-    }
-    gs = 23117
-    gi = 0
-    while gi < 320 {
-        gs = (gs * 25173 + 13849) % 65536
-        gx = gs * ww / 65536
-        gs = (gs * 25173 + 13849) % 65536
-        gdy = gs * wh / 65536
-        rrblend(gx, gdy, wu, wu, wu, theme(TH_TEXT_HI), 7)
-        gi = gi + 1
-    }
-    # radial-gradient(120% 96% at 50% 40%, transparent 26%, black .82 100%) -
-    # the vignette, which is this same primitive run the other way round
-    glow(ww / 2, wh * 40 / 100, ww * 120 / 100, wh * 96 / 100, rgb(0, 0, 0), 0, 190, 100)
+    draw_grid()
     return 0
 }
 
@@ -4794,101 +5387,39 @@ fn open_snake() {
     return 0
 }
 
-dock_hover = 0 - 1                 # which tile the pointer is over, -1 = none
-dock_press = 0                     # ...and whether the button is down on it
+# ---- the rail, which is CLICKABLE -------------------------------------------
+# wm.c hands presses that hit no window here. Everything the desktop owns - the
+# register, the workspace row, the catalog - is in the rail now, so this
+# function is the rail's hit test and nothing else. The dock's three bands (the
+# Activities corner, the pip row, the strip) are gone with the dock.
+rail_hover = 0 - 1                 # which register row the pointer is over
+rail_press = 0                     # ...and whether the button is down
 
-# WHICH TILE IS UNDER A POINT, or -1. One function, used by BOTH the hover
-# tracking and the click routing - two copies of this arithmetic is how a dock
-# ends up highlighting one tile and launching another.
-fn dock_slot_at(cx, cy) {
-    if cy < dock_y() { return 0 - 1 }
-    u = ui()
-    dx0 = dock_x0()
-    if cx < dx0 { return 0 - 1 }
-    dslot = (cx - dx0) / (DOCK_PITCH * u)
-    dinto = cx - dx0 - dslot * DOCK_PITCH * u
-    # THE GRID BUTTON, past the divider at the end of the strip. Slot DOCK_N is
-    # not an app - it is the reference's "Show Applications", and it is the ONLY
-    # route to the catalog now that the full-width bar with its start button has
-    # been replaced by the floating island. Without this the 47 registry apps
-    # are reachable by id and by nothing a person can click, which is how the
-    # oracle found it: --app could not open the catalog to click a tile in.
-    if dslot >= DOCK_N {
-        gx0 = dock_x0() + DOCK_N * DOCK_PITCH * u + DOCK_GAP * u + 1
-        if cx < gx0 { return 0 - 1 }
-        if cx >= gx0 + DOCK_TW * u { return 0 - 1 }
-        return DOCK_N
-    }
-    if dinto >= DOCK_TW * u { return 0 - 1 }
-    return dslot
-}
-
-# ---- the dock, which is now CLICKABLE ---------------------------------------
-# desk_draw has painted a dock, a start button and a tray since the compositor
-# first booted, and every one of them was decoration: the dock is not a window,
-# so wm_at() found nothing under the pointer and route_mouse dropped the click.
-# wm.c hands presses that hit no window here now.
 fn desk_click(cx, cy, cbtn) {
-    u = ui()
     down = band(cbtn, 1)
 
-    # HOVER FIRST, and only repaint when the answer CHANGES. Damaging the dock
-    # on every pointer event would repaint a 2560x128 strip sixty times a
-    # second to change nothing; damaging it when the hovered tile changes
-    # repaints it when there is something to see.
-    nh = dock_slot_at(cx, cy)
-    if nh != dock_hover {
-        dock_hover = nh
-        wm_damage(0, dock_y() - 36 * u, px_w(), px_h() - dock_y() + 36 * u)
+    # HOVER FIRST, and only repaint when the answer CHANGES. Damaging the rail
+    # on every pointer event repaints a 170x1440 column sixty times a second to
+    # change nothing; damaging it when the hovered row changes repaints it when
+    # there is something to see. The rectangle is the REGISTER BAND rather than
+    # the whole rail, because the identity block, the workspace row, the stat
+    # block and the clock cannot be hovered.
+    nh = rail_slot_at(cx, cy)
+    if nh != rail_hover {
+        rail_hover = nh
+        wm_damage(0, rail_dmg_y(), rail_w(), rail_dmg_h())
     }
-    if down != dock_press {
-        dock_press = down
-        wm_damage(0, dock_y() - 36 * u, px_w(), px_h() - dock_y() + 36 * u)
-        # ZPRESS FIRES ON THE EDGE, not while the button is held. The reference
-        # is `animation:zpress .25s ease`, which plays once per press - firing
-        # per event would restart it sixty times a second and the tile would
-        # freeze at its first frame, which is exactly the still-life this
-        # replaced. wm_anim_at wants the rectangle to repaint because wm.c has
-        # no idea where the dock is.
-        if down == 1 {
-            if nh >= 0 {
-                if nh < DOCK_N {
-                    wm_anim_at(dock_fx(nh), 3, dock_x0() + nh * DOCK_PITCH * u, dock_y() + DOCK_PADY * u, DOCK_TW * u, DOCK_TW * u)
-                }
-            }
-        }
+    if down != rail_press {
+        rail_press = down
+        wm_damage(0, rail_dmg_y(), rail_w(), rail_dmg_h())
     }
 
     if down == 0 { return 0 }
-    if cy < TOPBAR_H * u { if cx < 210 * u { return open_menu() } }
-    # A PIP IS A CONTROL NOW. It is checked after the Activities corner and
-    # before the dock, which is the order the bands actually sit in.
-    if cy < TOPBAR_H * u {
-        pn = pip_at(cx, cy)
-        if pn > 0 { return set_ws(pn) }
-    }
-    if cy < dock_y() { return 0 }
-    # THE START-BUTTON GUARD THAT USED TO BE HERE IS GONE. It read
-    #
-    #     dsx = dock_start_x()
-    #     if cx >= dsx { if cx < dsx + 42 * u { return open_menu() } }
-    #
-    # and dock_start_x() returns dock_x0() - the LEFT EDGE OF TILE 0. It is a
-    # leftover from the full-width bar, which really did put a start button
-    # there; the floating island that replaced it draws nine launcher tiles
-    # starting at exactly that x and no start button at all (draw_dock_bg).
-    # 42 design units is wider than one tile plus its gap (33 + 5), so the
-    # guard swallowed the whole Terminal tile and the first four units of the
-    # Browser tile, and returned before dock_launch could ever see them.
-    # The menu is still reachable, by the two routes that are real: the
-    # top-left of the topbar (above) and a Super tap (desk_key).
-    if nh >= 0 { return dock_launch(nh) }
-    # the window list, to the right of the launchers
-    tw = task_slot_at(cx, cy)
-    if tw >= 0 {
-        wm_setfocus(tw)
-        wm_raise(tw)
-    }
+    # the workspace row, checked before the register because it is below it and
+    # rail_slot_at has already refused anything past the register band
+    wn = rail_ws_at(cx, cy)
+    if wn > 0 { return set_ws(wn) }
+    if nh >= 0 { return rail_launch(nh) }
     return 0
 }
 
@@ -4903,22 +5434,20 @@ fn desk_key(kcode, kmods) {
     return 0
 }
 
-# ---- the WINDOW LIST -------------------------------------------------------
-# THE DOCK IS THE TASKBAR, and a separate row of window chips beside it was the
-# wrong design - which the arithmetic said before the eye did. Nine launchers
-# end at 1244 px on a 1920 screen and the tray starts at 1320: 76 px of gap for
-# a row of 150-unit chips. The first version had a guard that silently drew
-# nothing, which is the worst of both.
+# ---- THE WINDOW LIST IS THE REGISTER'S TAIL ---------------------------------
+# There used to be a separate row of window chips beside the dock, for windows
+# whose app had no launcher tile. It was the wrong shape twice over: nine
+# launchers ended at 1244 px on a 1920 screen and the tray started at 1320, so
+# 150-unit chips had 76 px to live in - and the answer to "where do I find the
+# window I opened from the catalog" should never have been a second, differently
+# shaped control next to the first one.
 #
-# So a dock tile carries the accent bar when its app is open and clicking it
-# RAISES that window rather than launching a second one - which is a taskbar,
-# in the shape every modern dock uses. This row exists only for windows whose
-# app has NO tile, and today there are none, so it correctly draws nothing.
-# When there are, it will fit as many as the space between the last launcher
-# and the tray allows and stop - a count derived from the space, not a
-# hardcoded ceiling that happens to be wrong on one screen size.
-TASK_W = 92                        # design units
-TASK_PITCH = 100
+# The register absorbs it. draw_rail_reg walks the twelve fixed rows and then
+# any open window with no fixed row, numbering straight on, and rail_slot_at
+# walks the same list in the same order. So a catalog app appears as row 13 in
+# the same column, with the same mark, and is raised by the same click. TASK_W,
+# TASK_PITCH, task_x0, task_room, draw_tasklist and task_slot_at are all gone;
+# what survives is the predicate that decides which windows are in the tail.
 
 # Canonical product identity for every window/application id. This is separate
 # from task_label(): a task chip may eventually abbreviate a name, but the
@@ -4947,101 +5476,42 @@ fn app_name(app) {
     return "window"
 }
 
-fn task_label(app) { return app_name(app) }
-
-# Does this app already have a dock tile? If it does, the tile IS its taskbar
-# entry and a second one beside it would be the same window listed twice.
-fn app_has_tile(app) {
-    if app == APP_SHELL   { return 1 }
-    if app == APP_SNAKE   { return 1 }
-    if app == APP_MONITOR { return 1 }
-    if app == APP_ABOUT   { return 1 }
-    if app == APP_BROWSER { return 1 }
-    if app == APP_EDIT    { return 1 }
-    if app == APP_PAINT   { return 1 }
-    if app == APP_CUBE    { return 1 }
-    if app == APP_SETTINGS { return 1 }
-    if app == APP_MENU    { return 1 }        # never listed at all
-    if app == APP_FILES   { return 1 }
-    if app == APP_EDIT    { return 1 }
-    if app == APP_PAINT   { return 1 }
-    if app == APP_CUBE    { return 1 }
-    return 0
-}
-
-fn task_x0() { return dock_x0() + DOCK_N * DOCK_PITCH * ui() + 16 * ui() }
-fn task_room() { return tray_x() - task_x0() }
-
-fn draw_tasklist(dy) {
-    u = ui()
-    nfit = task_room() / (TASK_PITCH * u)
-    ti = 0
-    tn = 0
-    while ti < wm_n() {
-        tw = wm_zat(ti)
-        ta = wm_app(tw)
-        # LISTED ONLY IF IT IS ON THIS WORKSPACE, as well as having no dock
-        # tile. The reference filters the same way
-        # (`openIds.filter(a => winWs[a.id] === ws)`), and the alternative is a
-        # chip for a window that is not on screen - a control that lies about
-        # what it does. Written as a flag rather than folded into the tile test
-        # because app_has_tile(-1) is 0, so "hide it by spoiling the app id"
-        # would have SHOWN it.
-        tshow = 0
-        if app_has_tile(ta) == 0 { tshow = 1 }
-        if wm_winws(tw) != cur_ws() { tshow = 0 }
-        if tshow == 1 {
-            if tn < nfit {
-                tx = task_x0() + tn * TASK_PITCH * u
-                tsel = 0
-                if wm_focus() == tw { tsel = 1 }
-                tcol = theme(TH_PANEL_HI)
-                if tsel == 1 { tcol = theme(TH_TITLE) }
-                rrect(tx, dy + 12 * u, TASK_W * u, 34 * u, 10 * u, tcol)
-                if tsel == 1 { fill_rgb(tx, dy + 12 * u, TASK_W * u, 2, theme(TH_ACCENT)) }
-                label(tx + 10 * u, dy + 18 * u, task_label(ta), theme(TH_TEXT_HI), T_CAPTION, W_REG)
-            }
-            tn = tn + 1
-        }
-        ti = ti + 1
+# Does this app already have a fixed register row? If it does, that row IS its
+# taskbar entry and a tail row beside it would be the same window listed twice.
+# It is derived from rail_app() rather than restated, so the two tables cannot
+# drift: adding an app to the register removes it from the tail automatically,
+# which the old hand-written list demonstrably could not manage - it named
+# APP_EDIT, APP_PAINT and APP_CUBE twice each and APP_RUN not at all.
+fn app_has_slot(app) {
+    if app == APP_MENU { return 1 }           # a modal, never listed at all
+    if app == APP_CATALOG { return 1 }        # reachable from the ALL APPS row
+    rs = 0
+    while rs < REG_N {
+        if rail_app(rs) == app { return 1 }
+        rs = rs + 1
     }
     return 0
 }
 
-fn task_slot_at(cx, cy) {
-    u = ui()
-    if cy < dock_y() + 12 * u { return 0 - 1 }
-    if cx < task_x0() { return 0 - 1 }
-    tsl = (cx - task_x0()) / (TASK_PITCH * u)
-    tinto = cx - task_x0() - tsl * TASK_PITCH * u
-    if tinto >= TASK_W * u { return 0 - 1 }
-    ti = 0
-    tn = 0
-    while ti < wm_n() {
-        tw = wm_zat(ti)
-        # THE SAME TWO TESTS AS draw_tasklist, in the same order. A hit test
-        # that counts a different set of chips than the draw does hands the
-        # click to the window next door - which is the whole reason the
-        # workspace filter had to be added to BOTH loops in one edit.
-        tshow = 0
-        if app_has_tile(wm_app(tw)) == 0 { tshow = 1 }
-        if wm_winws(tw) != cur_ws() { tshow = 0 }
-        if tshow == 1 {
-            if tn == tsl { return tw }
-            tn = tn + 1
-        }
-        ti = ti + 1
+# WHAT A REGISTER ROW DOES. Rows 0..REG_N-1 open or raise a real window; rows
+# past REG_ROWS are the tail and simply raise the window they name; REG_CATALOG
+# opens "All Applications", which is the only route to the other forty-seven and
+# was the dock's grid button before this.
+#
+# Four of the fixed rows still run a full-screen demo rather than opening a
+# window, and that is stated rather than hidden - desktop-TODO 2e is the work
+# that makes them all the first kind, and pretending otherwise here would just
+# move the surprise.
+fn rail_launch(slot) {
+    if slot >= REG_ROWS {
+        tw = rail_tail_win(slot)
+        if tw < 0 { return 0 }
+        wm_setfocus(tw)
+        wm_raise(tw)
+        return 0
     }
-    return 0 - 1
-}
-
-# WHAT A DOCK TILE DOES. Four of these open a real window; the rest still run a
-# full-screen demo, and that is stated rather than hidden - desktop-TODO 2e is
-# the work that makes them all the first kind, and pretending otherwise here
-# would just move the surprise.
-fn dock_launch(slot) {
-    if slot == DOCK_N { return reg_open(APP_CATALOG) }   # Show Applications
-    da = dock_app(slot)
+    if slot == REG_CATALOG { return reg_open(APP_CATALOG) }
+    da = rail_app(slot)
     if da == APP_SHELL { return raise_shell() }
     if da == APP_BROWSER { return reopen_browser() }
     if da == APP_SNAKE { return open_snake() }
@@ -5049,8 +5519,9 @@ fn dock_launch(slot) {
     if da == APP_MONITOR { return reopen_mon() }
     if da == APP_ABOUT { return reopen_about() }
     if da == APP_SETTINGS { return reopen_settings() }
-    dl = dock_cmd(slot)
-    if dl == 113 { wm_stop()  return 0 }
+    if da == APP_FILES { return reopen_files() }
+    if da == APP_RUN { return open_run_window() }
+    dl = rail_cmd(slot)
     if dl > 0 {
         raise_shell()
         run_command(dl, 0)
@@ -5065,13 +5536,14 @@ fn dock_launch(slot) {
 # first dock tile could close Terminal but could never bring it back.
 fn create_shell_window() {
     csu = ui()
-    csw = px_w()
-    if csw >= 1240 * csu {
-        csox = (csw - 1280 * csu) / 2
-        if csox < 0 { csox = 0 }
-        return wm_open(APP_SHELL, "Terminal", csox + 132 * csu, 60 * csu, 600 * csu, 368 * csu)
+    # THE COMPOSITION IS MEASURED FROM THE DESK, not from the screen. It used to
+    # centre a 1280-unit composition inside px_w(); the desk is px_w() - 170 dp
+    # wide now, so centring on the screen pushes the whole composition 85 dp
+    # right and the leftmost window under the rail.
+    if field_w() >= 1070 * csu {
+        return wm_open(APP_SHELL, "Terminal", desk_x(24), desk_y(24), 600 * csu, 368 * csu)
     }
-    return wm_open(APP_SHELL, "Terminal", 16 * csu, 56 * csu, csw - 32 * csu, dock_y() - 72 * csu)
+    return wm_open(APP_SHELL, "Terminal", desk_x(8), desk_y(8), field_w() - 16 * csu, field_h() - 16 * csu)
 }
 
 fn raise_shell() {
@@ -5093,10 +5565,30 @@ fn raise_shell() {
 
 mon_win = 0 - 1
 about_win = 0 - 1
+
+# ---- WHERE A WINDOW MAY BE PUT ----------------------------------------------
+# EVERY window position in this file used to be measured from the screen's own
+# origin, because the screen's origin was the desktop's: the top bar floated
+# over the wallpaper and the dock floated over it, so a window at x=16 was on
+# the desk. PRESSWORK's rail is 170 dp of OPAQUE plate at x=0, so x=16 is now
+# UNDER it - the window is drawn, the compositor composites it, and the rail
+# repaints over its left 154 columns. Nothing errors; the window is just partly
+# invisible, which is the worst kind of wrong.
+#
+# So the desk has an origin of its own and every placement goes through it. Two
+# functions, one for each axis, and they take DESIGN UNITS so a call site that
+# already said `132 * u` becomes `desk_x(132)` with the scale folded in.
+fn desk_x(dux) { return field_x() + dux * ui() }
+fn desk_y(duy) { return field_y() + duy * ui() }
+# ...and the right edge, for the two windows anchored to it. There is no desk_b:
+# nothing in the boot composition is bottom-anchored, and a helper with no
+# caller is a helper nobody has ever run.
+fn desk_r(w) { return field_x() + field_w() - w }
+
 fn reopen_browser() {
     u = ui()
     if browser_win >= 0 { if wm_open_p(browser_win) == 1 { wm_setfocus(browser_win)  wm_raise(browser_win)  return 0 } }
-    browser_win = wm_open(APP_BROWSER, "Browser", px_w() / 2 - 400 * u, 300 * u, 800 * u, 440 * u)
+    browser_win = wm_open(APP_BROWSER, "Browser", field_x() + (field_w() - 800 * u) / 2, desk_y(220), 800 * u, 440 * u)
     wm_setfocus(browser_win)
     wm_raise(browser_win)
     return 0
@@ -5104,7 +5596,7 @@ fn reopen_browser() {
 fn reopen_settings() {
     u = ui()
     if settings_win >= 0 { if wm_open_p(settings_win) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
-    settings_win = wm_open(APP_SETTINGS, "Settings", 388 * u, 190 * u, 486 * u, 332 * u)
+    settings_win = wm_open(APP_SETTINGS, "Settings", desk_x(218), desk_y(120), 486 * u, 332 * u)
     wm_setfocus(settings_win)
     wm_raise(settings_win)
     return 0
@@ -5112,15 +5604,27 @@ fn reopen_settings() {
 fn reopen_mon() {
     u = ui()
     if mon_win >= 0 { if wm_open_p(mon_win) == 1 { wm_setfocus(mon_win)  wm_raise(mon_win)  return 0 } }
-    mon_win = wm_open(APP_MONITOR, "System Monitor", px_w() - 290 * u, 52 * u, MON_W * u, MON_H * u)
+    mon_win = wm_open(APP_MONITOR, "System Monitor", desk_r(MON_W * u + 16 * u), desk_y(16), MON_W * u, MON_H * u)
     wm_setfocus(mon_win)
     return 0
 }
 fn reopen_about() {
     u = ui()
     if about_win >= 0 { if wm_open_p(about_win) == 1 { wm_setfocus(about_win)  wm_raise(about_win)  return 0 } }
-    about_win = wm_open(APP_ABOUT, "About", px_w() - 290 * u, 52 * u + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    about_win = wm_open(APP_ABOUT, "About", desk_r(MON_W * u + 16 * u), desk_y(16) + (MON_H + 16) * u, MON_W * u, AB_H * u)
     wm_setfocus(about_win)
+    return 0
+}
+# THE FILES ROW HAD NO REOPEN, and that is not an oversight this change made -
+# Files was in the boot composition and in nothing else, so once you closed it
+# the only route back was the catalog. It is register row 02 now, so it needs
+# one, and it is the same shape as the other four.
+fn reopen_files() {
+    u = ui()
+    if files_win >= 0 { if wm_open_p(files_win) == 1 { wm_setfocus(files_win)  wm_raise(files_win)  return 0 } }
+    files_win = wm_open(APP_FILES, "Files", desk_x(106), desk_y(300), 672 * u, 352 * u)
+    wm_setfocus(files_win)
+    wm_raise(files_win)
     return 0
 }
 
@@ -5177,9 +5681,14 @@ menu_by = 0
 fn open_menu() {
     u = ui()
     if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close_fx(menu_win)  menu_win = 0 - 1  return 0 } }
-    mh = MENU_ROWS * (ui_metric(2) + ui_metric(1)) + 2 * ui_metric(0) + ui_metric(4)
-    mx = 10 * u
-    my = dock_y() - mh - 8 * u
+    mh = MENU_ROWS * (ui_metric(UM_ROW_H) + ui_metric(UM_GAP)) + 2 * ui_metric(UM_PAD) + ui_metric(UM_TITLE_H)
+    # AGAINST THE RAIL, NOT AGAINST THE DOCK. The menu used to sit 8 dp above
+    # the dock at x=10, which is under the rail now. It hangs off the rail's
+    # inner edge instead, bottom-aligned with the desk, which is where a menu
+    # opened from a left-hand register belongs.
+    mx = field_x() + 8 * u
+    my = field_y() + field_h() - mh - 8 * u
+    if my < field_y() { my = field_y() }
     # This used to blur what is behind the menu here, before the window existed,
     # because wm.c draws the chrome and then calls app_draw - by which time the
     # panel fill is already sitting in the client rect and there is nothing left
@@ -5312,7 +5821,6 @@ fn wm_boot_start() {
     # THE SHELL IS WINDOW 0, and it is opened FIRST so the boot log that
     # follows lands inside it - the same ordering draw_desk relied on, now
     # expressed through wm_open.
-    sw = px_w()
     # Compose the first desktop like a workspace, not a diagnostic dashboard.
     # Terminal is a compact command surface, Browser anchors the lower half
     # and Resources balances it on the right. Empty black client area is not
@@ -5335,12 +5843,19 @@ fn wm_boot_start() {
     # was anchoring the lower half, where Files belongs; leaving it there put a
     # window over the dock and left Files closed, so two of the three boxes
     # were empty and a fourth was occupied by something with no counterpart.
-    if sw >= 1240 * u {
-        desk_ox = (sw - 1280 * u) / 2
-        if desk_ox < 0 { desk_ox = 0 }
+    # THE THREE POSITIONS ARE THE REFERENCE'S, RE-ORIGINED ON THE DESK. They
+    # were `desk_ox + 238` and `desk_ox + 758` measured from the screen, with
+    # desk_ox centring a 1280-unit composition inside px_w(). The desk is
+    # px_w() - 170 dp wide now and starts at 170, so the same arithmetic puts
+    # Terminal's left edge 24 dp inside the rail. Subtracting the rail from the
+    # composition's own origin keeps all three windows in the same relationship
+    # to each other and to the desk, which is what the oracle's regions.json
+    # compares - it names win_term, win_files and win_mon relative to the
+    # composition, not to the panel.
+    if field_w() >= 1070 * u {
         shell_win = create_shell_window()
-        files_win = wm_open(APP_FILES, "Files", desk_ox + 238 * u, 346 * u, 672 * u, 352 * u)
-        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_ox + 758 * u, 76 * u, 424 * u, 376 * u)
+        files_win = wm_open(APP_FILES, "Files", desk_x(106), desk_y(300), 672 * u, 352 * u)
+        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_x(626), desk_y(28), 424 * u, 376 * u)
         # THE BOOT SET GETS ITS WORKSPACE FROM THE TABLE, not from whichever
         # one happens to be current. wm_open puts a new window on the current
         # workspace - correct for everything a person launches, and the wrong
@@ -5384,18 +5899,25 @@ fn wm_boot_start() {
     # tint over it is fixed, and eight of the nine tiles look the same as they
     # did last frame. So all of it goes into the cached bitmap once, and a
     # frame pays one blit at 1.54 cyc/px for the lot.
+    # WHAT IS BAKED AND WHAT IS NOT, and the split is the four bands' own:
+    #   baked   the desk - ZD_VOID, the raking light, the ruled module grid, the
+    #           crop marks and the measured legend - and the rail's STATIC half:
+    #           its ground, its two runs, the identity block, the two section
+    #           captions and the four rules between them.
+    #   live    the register rows (four states, all of them functions of what is
+    #           open), the workspace row, the stat block, the clock, the raster
+    #           strip and the foot. None of those can be cached because none of
+    #           them is the same twice.
     draw_wallpaper()
-    draw_header()
-    draw_dock_bg()
-    # DOCK_BAKED IS THE RETURN VALUE, not 1. wall_save() returns 0 when the
+    draw_rail_static()
+    # SHELL_BAKED IS THE RETURN VALUE, not 1. wall_save() returns 0 when the
     # arena cannot hold the bitmap and it was being ignored, so on any screen
-    # where the cache is refused the flag
-    # still said "the furniture is in the wallpaper". desk_draw and draw_status
-    # both skip drawing the header and the dock background when it is set, and
-    # the wallpaper they were relying on does not exist, so both were painted
-    # once at boot and then never again: a header and a dock that vanish under
-    # the first window you move. Only true when the save actually happened.
-    dock_baked = wall_save()
+    # where the cache is refused the flag still said "the furniture is in the
+    # wallpaper". desk_draw and draw_status both skip the rail's static half
+    # when it is set, and the wallpaper they were relying on does not exist, so
+    # it was painted once at boot and then never again: a rail that vanishes
+    # under the first window you move. Only true when the save actually happened.
+    shell_baked = wall_save()
     # SAY THAT THE COMPOSITOR STARTED, on the serial line, from the BOOT path.
     #
     # con_mute mutes only the pixels, so this reaches a headless gate and lets
@@ -5571,30 +6093,32 @@ fn wm_session() {
 # column is anchored to the right edge and the terminal fills what is left, which
 # reproduces the old 800x600 layout exactly and grows from there.
 fn layout() {
-    mon_x = px_w() - (MON_W + 16) * ui()
-    mon_y = DESK_TOP * ui() + 8 * ui()
+    # EVERY ONE OF THESE IS MEASURED FROM THE DESK NOW. The rail is 170 dp of
+    # opaque plate at x = 0 and the foot is 46 dp at the bottom, so a terminal
+    # at x = 16 spanning to the old dock_y() is a terminal with its left edge under
+    # rail and its bottom edge under the foot. field_x/y/w/h is the one origin.
+    mon_x = desk_r((MON_W + 16) * ui())
+    mon_y = desk_y(8)
     ab_x  = mon_x
     ab_y  = mon_y + (MON_H + 16) * ui()
-    term_x = 16 * ui()
-    term_y = DESK_TOP * ui() + 8 * ui()
-    term_w = mon_x - 32 * ui()
-    term_h = dock_y() - term_y - 16 * ui()
+    term_x = desk_x(16)
+    term_y = desk_y(8)
+    term_w = mon_x - term_x - 16 * ui()
+    term_h = field_y() + field_h() - term_y - 16 * ui()
     lcw = cell_w()                             # the console text box, in cells -
     lch = cell_h()                             # which are 8x16 or 16x32 now
     # round the top-left UP to the next whole cell, the bottom-right DOWN, so
     # the text can never sit on the title bar or spill past the frame
-    term_c0 = (term_x + 10 + lcw - 1) / lcw
-    term_c1 = (term_x + term_w - 12) / lcw
-    term_r0 = (term_y + 34 + lch - 1) / lch
-    term_r1 = (term_y + term_h - 16) / lch
+    term_c0 = idiv(term_x + 10 + lcw - 1, lcw)
+    term_c1 = idiv(term_x + term_w - 12, lcw)
+    term_r0 = idiv(term_y + 34 + lch - 1, lch)
+    term_r1 = idiv(term_y + term_h - 16, lch)
     return 0
 }
 
 fn draw_desk() {
     if px_w() > 0 {
-        w = px_w()
-        grad_rgb(0, 0, w, px_h(), theme(TH_WALL_TOP), theme(TH_WALL_BOT))          # the wallpaper
-        draw_header()
+        desk_ground()                                                             # the desk and its ruling
         draw_window(term_x, term_y, term_w, term_h, "zl shell   ~", 1)
         text_box(term_c0, term_c1)
         region(term_r0, term_r1)
@@ -5603,7 +6127,7 @@ fn draw_desk() {
         present()
     } else {
         cls()
-        draw_header()
+        draw_strip()
         region(5, status_row() - 1)
         draw_status("ready")
         goto_row(5)

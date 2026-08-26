@@ -20,7 +20,7 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-_none — every file the docs describe is tracked._
+- [ ] `kernel/out.c`
 
 ## Open tensions (.ultra/TENSIONS.md)
 

@@ -344,15 +344,26 @@ int main(void)
     {
         begin_draw();
         ui_pill(0, 0, 80, 24, "End", UI_MD, UI_BTN_DANGER, 0);
-        ok(find_rgb(ZD_BAD) != NULL, "destructive: the fill is BAD, one red");
+        ok(find_rgb(ZD_BAD) != NULL, "destructive: BAD is on screen, one red");
         const struct op *lab = find_text("End");
         ok(lab && lab->rgb == (unsigned)ZD_BAD_SOFT,
            "destructive: the label is the softer red, not BAD itself");
-        int tinted = 0;
-        for (int i = 0; i < nops; i++)
-            if (ops[i].kind == OP_RBLEND && ops[i].rgb == (unsigned)ZD_BAD &&
-                ops[i].a < 255) tinted = 1;
-        ok(tinted, "destructive: the fill is a TINT, not a solid red block");
+        /* PRESSWORK: DANGER IS A RULE AND AN INK, NOT A WASH. What this used
+         * to assert - a 16% ZD_BAD tint with a 40% border - is a translucent
+         * red AREA, and a tinted region cannot sit on a ladder whose rungs are
+         * the information. The red is now the seat's RING and nothing else;
+         * ZD_BAD is 3.4161:1 on ZD_RAISE, a mark, and the ink is ZD_BAD_INK. */
+        int washed = 0, ringed = 0;
+        for (int i = 0; i < nops; i++) {
+            if (ops[i].rgb != (unsigned)ZD_BAD) continue;
+            if (ops[i].a < 255) washed = 1;
+            if (ops[i].a == 255 && ops[i].w == 80 && ops[i].h == 24) ringed = 1;
+        }
+        oknum(washed == 0, "destructive: there is NO translucent red wash",
+              washed, 0);
+        ok(ringed, "destructive: the red is the ring, at full strength");
+        ok(find_rgb(ZD_RAISE) != NULL,
+           "destructive: ...over the ordinary raised face, not a red one");
     }
     {
         begin_click(20, 20);
@@ -379,27 +390,35 @@ int main(void)
         int pad = ZD_SEG_PAD, gap = ZD_SEG_GAP;
         int inner = W - 2 * pad - 3 * gap, iw = inner / 4;
         int want = 10 + pad + 2 * (iw + gap);
-        const struct op *act = find_rgb(ZD_ACCENT);
+        /* PRESSWORK: THE ACTIVE ITEM IS THE KNOCKOUT, NOT AN ACCENT PILL.
+         * A five-item segmented control filled with the overprint would spend
+         * the whole overprint budget on a tab bar, and the design's answer to
+         * "this one is selected" is a value flip: ZD_KNOCK at 6.4796:1 on
+         * ZD_BASE with the label reversed out at 8.5329:1. */
+        const struct op *act = find_rgb(ZD_KNOCK);
         oknum(act && act->x == want,
-              "the active pill sits on slot 2's track, not slot 0's or 1's",
+              "the knockout sits on slot 2's track, not slot 0's or 1's",
               act ? act->x : -1, want);
-        oknum(act && act->w == iw, "the active pill is one slot wide",
+        oknum(act && act->w == iw, "the knockout is one slot wide",
               act ? act->w : -1, iw);
         const struct op *lab = find_text("Disk");
         ok(lab && lab->x >= want && lab->x + lab->w <= want + iw,
-           "the label of the active item is inside the active pill");
-        ok(lab && lab->rgb == (unsigned)ZD_INK_DARK,
-           "the active label is the computed ink");
-        const struct op *track = find_rgb(ZD_SURF_1);
-        ok(track && track->r == ZD_SEG_R, "the container is the sunken well at r11");
+           "the label of the active item is inside the knockout");
+        ok(lab && lab->rgb == (unsigned)ZD_KNOCK_INK,
+           "the active label is reversed out of it");
+        ok(find_rgb(ZD_ACCENT) == NULL,
+           "the overprint is NOT spent on a segmented control");
+        const struct op *track = find_rgb(ZD_CUT);
+        ok(track && track->r == ZD_SEG_R,
+           "the container is one raised plate ringed in the groove, at r-chip");
         /* CONTROL: the pill must MOVE when the selection does, or the
          * assertion above would pass against a widget that always draws slot 0
          * and happens to be checked at slot 0's x. */
         begin_draw();
         ui_segmented(10, 10, W, h, items, 0, UI_MD);
-        const struct op *first = find_rgb(ZD_ACCENT);
+        const struct op *first = find_rgb(ZD_KNOCK);
         ok(first && first->x == 10 + pad && first->x != want,
-           "control: selecting item 0 moves the pill to slot 0");
+           "control: selecting item 0 moves the knockout to slot 0");
         /* the click path */
         begin_click(10 + pad + 2 * (iw + gap) + 2, 10 + pad + 2);
         int got = ui_segmented(10, 10, W, h, items, 0, UI_MD);
@@ -448,14 +467,27 @@ int main(void)
         const char *tabs = "Units|Logs";
         begin_draw();
         ui_utabs(0, 0, 600, tabs, 1);
-        int tw0 = 2 * ZD_UTAB_PX + 5 * ROLE_ADV[1];
-        const struct op *rule = find_rgb(ZD_ACCENT);
+        /* the labels are the LABEL style now - SM/bold - and ui_utabs measures
+         * in the same weight it draws, so tab 0's box grows by one unit a glyph */
+        int tw0 = 2 * ZD_UTAB_PX + 5 * (ROLE_ADV[1] + 1);
+        /* PRESSWORK: THE UNDERLINE IS ZD_LIT, NOT THE OVERPRINT. A 2dp rule is
+         * thinner than ZD_FOCUS_BAR so the width rule would allow vermilion -
+         * but the overprint has FOUR jobs and a tab underline is not one of
+         * them, and there is already a token that means "rank boundary" at
+         * exactly this weight: the 2px struck rule, 2.5423:1 on the plate. */
+        const struct op *rule = NULL;
+        for (int i = 0; i < nops; i++)
+            if (ops[i].rgb == (unsigned)ZD_LIT && ops[i].h == ZD_UTAB_RULE)
+                { rule = &ops[i]; break; }
         oknum(rule && rule->x == tw0,
               "the underline sits under the ACTIVE tab, offset by tab 0's width",
               rule ? rule->x : -1, tw0);
         oknum(rule && rule->h == ZD_UTAB_RULE,
-              "the underline is 2px - S4.2's whole affordance",
+              "the underline is the 2px struck rule - the whole affordance",
               rule ? rule->h : -1, ZD_UTAB_RULE);
+        ok(find_rgb(ZD_ACCENT) == NULL,
+           "control: no vermilion anywhere - a fifth overprint job costs the"
+           " other four their meaning");
         /* CONTROL: S4.2 says "No background change at all". If a background
          * ever appears under the active tab this fails. */
         int bgs = 0;
@@ -518,28 +550,51 @@ int main(void)
            "control: the two cells are in different places, not stacked at x=0");
     }
     {
-        /* THE SELECTION TREATMENT - one of the reference's three, S20.2 */
+        /* PRESSWORK: A TABLE ROW'S SELECTION IS THE KNOCKOUT.
+         *
+         * `tr.sel td { background: var(--zd-knock); color: var(--zd-knock-ink); }`
+         * The prototype has TWO row idioms and they are different decisions: a
+         * TABLE row flips value, and the RAIL's register slot takes the
+         * overprint's register mark. So ui_grid_row draws the first and
+         * ui_nav_row still calls ui_row_select(), which draws the second. */
         begin_draw();
         ui_grid_row(0, 0, 300, 0, 1);
-        int tint = 0, bar = 0, solid = 0;
-        for (int i = 0; i < nops; i++) {
-            if (ops[i].rgb != (unsigned)ZD_ACCENT) continue;
-            if (ops[i].kind == OP_RBLEND && ops[i].a < 255) tint = 1;
-            if (ops[i].kind == OP_FILL && ops[i].w <= 4) bar = 1;
-            if (ops[i].kind == OP_RRECT && ops[i].a == 255 && ops[i].w > 100)
-                solid = 1;
-        }
-        ok(tint, "selected row: the accent TINT is drawn");
-        ok(bar, "selected row: the 2px inset left bar is drawn");
-        oknum(solid == 0, "selected row: it is NOT the solid-accent treatment",
-              solid, 0);
+        const struct op *ko = find_rgb(ZD_KNOCK);
+        ok(ko && ko->w == 300 && ko->h == ZD_LISTROW_H,
+           "selected row: the whole row is the knockout");
+        ok(find_rgb(ZD_KO_EDGE) != NULL,
+           "selected row: ...with the knockout's own edge run under it");
+        ok(find_rgb(ZD_ACCENT) == NULL,
+           "selected row: no overprint - the value flip IS the signal");
+        /* AND ITS CELLS MUST FOLLOW IT. A caller passing its usual ZD_TEXT_2
+         * onto a knockout writes 1.2131:1 - invisible on the one row the user
+         * is looking at - so the row publishes its ink and ui_grid_cell takes
+         * it. This is the assertion that fails if that override is removed. */
+        ui_grid("*");
+        ui_grid_cell(0, 300, 0, ZD_LISTROW_H, 0, "zl", UI_ALIGN_L,
+                     ZD_TEXT_2, UI_SM, 0);
+        const struct op *cell = find_text("zl");
+        ok(cell && cell->rgb == (unsigned)ZD_KNOCK_INK,
+           "selected row: a cell drawn on it is reversed out, not ZD_TEXT_2");
         begin_draw();
         ui_grid_row(0, 0, 300, 0, 0);
-        ok(find_rgb(ZD_ACCENT) == NULL,
-           "control: an UNSELECTED row paints no accent at all");
+        ok(find_rgb(ZD_ACCENT) == NULL && find_rgb(ZD_KNOCK) == NULL,
+           "control: an UNSELECTED row paints neither accent nor knockout");
+        ui_grid_cell(0, 300, 0, ZD_LISTROW_H, 0, "zl", UI_ALIGN_L,
+                     ZD_TEXT_2, UI_SM, 0);
+        ok(find_text("zl") && find_text("zl")->rgb == (unsigned)ZD_TEXT_2,
+           "control: ...and its cells keep the colour the caller asked for");
+        /* THE ZEBRA IS GONE AND A RULE REPLACED IT. A 1% white stripe is an
+         * eighth of the smallest step this ladder deliberately shows; `td`
+         * separates rows with `border-bottom: 1px solid var(--zd-cut)`. */
         begin_draw();
-        ui_grid_row(0, 0, 300, 1, 0);   /* odd index -> zebra */
-        ok(count_kind(OP_BLEND) >= 1, "an odd row gets the zebra stripe");
+        ui_grid_row(0, 0, 300, 1, 0);
+        oknum(count_kind(OP_BLEND) == 0, "no row is a translucent stripe any more",
+              count_kind(OP_BLEND), 0);
+        const struct op *g = find_rgb(ZD_CUT);
+        oknum(g && g->y == ZD_LISTROW_H - 1 && g->h == 1,
+              "every row is closed by the 1px groove instead",
+              g ? g->y : -1, ZD_LISTROW_H - 1);
     }
 
     /* ========================================================= STAT STRIP */
@@ -578,14 +633,20 @@ int main(void)
     /* ================================================================ BARS */
     printf("\n  meter / progress / segment / mini bars - S10\n");
     {
+        /* PRESSWORK: A TRACK IS A PIT WITH WALLS. `.mtrack` is
+         * `background: var(--zd-well); border: 1px solid var(--zd-cut)`, so the
+         * fill lives INSIDE a 1px ring and its 100% is the width less two. */
         begin_draw();
         ui_meter(0, 0, 200, 25, ZD_OK);
         const struct op *fill = find_rgb(ZD_OK);
-        oknum(fill && fill->w == 50, "a 25% meter fills a quarter of the track",
-              fill ? fill->w : -1, 50);
+        oknum(fill && fill->w == 198 * 25 / 100,
+              "a 25% meter fills a quarter of the track INSIDE its walls",
+              fill ? fill->w : -1, 198 * 25 / 100);
         const struct op *track = find_rgb(ZD_SURF_1);
         oknum(track && track->w == 200, "the track is the full width",
               track ? track->w : -1, 200);
+        ok(find_rgb(ZD_LITSOFT) != NULL,
+           "the pit is lit along its NEAR wall - the grazed value, 2.5750:1");
         begin_draw();
         ui_meter(0, 0, 200, 0, ZD_OK);
         ok(find_rgb(ZD_OK) == NULL,
@@ -593,8 +654,15 @@ int main(void)
         begin_draw();
         ui_meter(0, 0, 200, 400, ZD_OK);
         fill = find_rgb(ZD_OK);
-        oknum(fill && fill->w == 200, "control: an out-of-range meter clamps to 100%",
-              fill ? fill->w : -1, 200);
+        oknum(fill && fill->w == 198, "control: an out-of-range meter clamps to 100%",
+              fill ? fill->w : -1, 198);
+        /* THE DEFAULT INK IS ZD_STEEL, the machine's own reading, because a
+         * meter is an instrument and the overprint has four jobs and this is
+         * none of them. A caller with no opinion passes 0. */
+        begin_draw();
+        ui_meter(0, 0, 200, 50, 0);
+        ok(find_rgb(ZD_STEEL) != NULL,
+           "a meter with no colour asked for fills in ZD_STEEL, not the accent");
     }
     {
         begin_draw();
@@ -622,33 +690,49 @@ int main(void)
     }
 
     /* ============================================================== TOGGLE */
-    printf("\n  toggle switch - S11, reference geometry\n");
+    printf("\n  toggle switch - `.sw2`, the prototype's geometry\n");
     {
+        /* PRESSWORK's switch is a bolted rectangle, not a capsule: 34 x 17
+         * with a 13 knob at 1px inset, so the travel is symmetric. OFF is a
+         * ZD_WELL pit with a ZD_TEXT_INERT knob; ON is the KNOCKOUT with the
+         * knob reversed out in ZD_KNOCK_INK - the same value inversion the
+         * focused window header and the selected table row make.
+         *
+         * These used to assert the predecessor's 40 x 22 capsule with a white
+         * puck at an asymmetric inset 3. They are rewritten rather than
+         * relaxed, and the two controls at the end fail if the capsule or the
+         * accent fill comes back. */
         int on = 0;
         begin_draw();
         ui_begin(0, 0, 400, 200, UI_DRAW, -1, -1, 0);
         reset();
         ui_toggle("Wrap", &on);
-        const struct op *knob = find_rgb(ZD_INK_LIGHT);
-        const struct op *track = find_rgb(t->border);
+        const struct op *knob  = find_rgb(t->surf_7);      /* ZD_TEXT_INERT */
+        const struct op *track = find_rgb(t->surf_1);      /* ZD_WELL pit   */
         ok(track && track->w == ZD_SW_W && track->h == ZD_SW_H,
-           "the track is 40x22, the reference's own numbers");
-        ok(knob && knob->w == ZD_SW_KNOB,
-           "the knob is 16px inside a 22px track - 3px top and bottom");
-        int offx = knob ? knob->x - track->x : -1;
-        oknum(offx, "off: the knob sits at inset 3", offx, ZD_SW_INSET);
+           "the track is 34x17, the prototype's own numbers");
+        ok(knob && knob->w == ZD_SW_KNOB && knob->h == ZD_SW_KNOB,
+           "the knob is 13 square inside a 17 track - 1px of pit all round");
+        int offx = knob && track ? knob->x - track->x : -1;
+        oknum(offx, "off: the knob sits at inset 1", offx, ZD_SW_INSET);
+        ok(find_rgb(ZD_ACCENT) == NULL,
+           "off: no overprint - a switch is never vermilion in either state");
         on = 1;
         reset();
         ui_begin(0, 0, 400, 200, UI_DRAW, -1, -1, 0);
         ui_toggle("Wrap", &on);
-        knob = find_rgb(ZD_INK_LIGHT);
-        track = find_rgb(t->accent);
-        int onx = (knob && track) ? knob->x - track->x : -1;
-        oknum(onx, "on: 3 + 16 + 21 == 40, so the knob lands flush right",
+        knob  = find_rgb(t->knock_ink);
+        track = find_rgb(t->knock);
+        ok(track && track->w == ZD_SW_W,
+           "on: the track is the KNOCKOUT, not the accent");
+        int onx = knob && track ? knob->x - track->x : -1;
+        oknum(onx, "on: 34 - 13 - 1 == 20, so the travel is symmetric",
               onx, ZD_SW_W - ZD_SW_INSET - ZD_SW_KNOB);
         ok(onx != offx, "control: the knob actually MOVES between states");
-        ok(track && track->rgb == t->accent,
-           "on: the track is the accent, off: it is the border surface");
+        ok(find_rgb(ZD_ACCENT) == NULL,
+           "control: an engaged switch paints no overprint either");
+        ok(find_rgb(ZD_INK_LIGHT) == NULL,
+           "control: the white puck is gone - nothing here is ZD_INK_LIGHT");
     }
 
     /* ============================================================ SPARKLINE */
@@ -706,12 +790,24 @@ int main(void)
         begin_draw();
         ui_menu(0, 0, items, 1);
         ok(find_rgb(ZD_SURF_5) != NULL, "the popover surface is drawn");
-        const struct op *sel = find_rgb(ZD_ACCENT);
-        ok(sel && sel->a < 255,
-           "the highlighted item is a TINT, the same treatment as a list row");
+        /* PRESSWORK: `.mi:hover { background: var(--zd-knock);
+         * color: var(--zd-knock-ink); }` - the highlighted row is the same
+         * value flip a table row and a focused header use. It was a 15%
+         * vermilion tint: an area of overprint the width rule does not allow,
+         * and quiet enough that most people would not see it. */
+        const struct op *sel = find_rgb(ZD_KNOCK);
+        ok(sel && sel->a == 255,
+           "the highlighted item is the KNOCKOUT, solid, not a tint");
         oknum(sel && sel->y == ZD_MENU_PAD + ZD_MENU_ITEM_H,
               "...and it is on item 1, not item 0",
               sel ? sel->y : -1, ZD_MENU_PAD + ZD_MENU_ITEM_H);
+        ok(find_text("Rename") &&
+           find_text("Rename")->rgb == (unsigned)ZD_KNOCK_INK,
+           "...with its label reversed out of it at 8.5329:1");
+        ok(find_rgb(ZD_ACCENT) == NULL,
+           "control: a menu spends no overprint at all");
+        ok(find_rgb(ZD_EDGE_OVER) != NULL,
+           "the popover is ringed in ZD_EDGE_OVER - the boundary under overlap");
         ok(find_text("Delete") != NULL, "every item is drawn");
         ok(w > 0, "the menu reports a width");
         begin_click(ZD_MENU_PAD + 4, ZD_MENU_PAD + 2 * ZD_MENU_ITEM_H + 4);
@@ -735,9 +831,18 @@ int main(void)
         ui_toast_draw(0, 0, ZD_TOAST_W, "Saved", "kernel.zl written", ZD_OK);
         ok(find_text("Saved") && find_text("kernel.zl written"),
            "the toast draws both its title and its body");
-        const struct op *icon = find_rgb(ZD_OK);
-        ok(icon && icon->w == ZD_TOAST_ICON,
-           "the toast icon is a 22px square in the kind colour");
+        /* PRESSWORK: THE 20dp ICON SQUARE IS GONE AND `.toast .bar` REPLACES
+         * IT. A solid 400 square dp block of a state colour carries the state
+         * on its own, which is the failure the prototype's `.sw` rule exists
+         * to prevent; the toast already has a title. The kind is now a
+         * ZD_FOCUS_BAR-wide rule down the left edge - the one width the
+         * overprint budget allows anything to be. */
+        const struct op *bar = find_rgb(ZD_OK);
+        oknum(bar && bar->w == ZD_FOCUS_BAR,
+              "the toast's kind is a focus-bar-wide rule, not an icon block",
+              bar ? bar->w : -1, ZD_FOCUS_BAR);
+        oknum(bar && bar->x == 1, "...on its left edge, inside the ring",
+              bar ? bar->x : -1, 1);
     }
 
     /* ================================================ INDICATORS AND INPUTS */
@@ -745,40 +850,83 @@ int main(void)
     {
         begin_draw();
         ui_badge(0, 0, "rw", ZD_OK);
-        const struct op *bg = find_rgb(ZD_OK);
-        ok(bg && bg->a < 255, "a badge is a TINT of its own semantic colour");
+        /* PRESSWORK: A BADGE IS A SMALL PLATE WITH A SEMANTIC INK ON IT. The
+         * old 14% wash of its own colour is a colour cast, and a colour cast
+         * is what a ladder replaces. Measured on ZD_RAISE: ZD_OK 5.0630:1,
+         * ZD_WARN 5.1997:1, ZD_BAD_INK 4.7396:1, ZD_STEEL 4.9632:1 - the ink
+         * carries the whole semantic and every one of them clears 4.5. */
+        int washed = 0;
+        for (int i = 0; i < nops; i++)
+            if (ops[i].rgb == (unsigned)ZD_OK && ops[i].a < 255) washed = 1;
+        oknum(washed == 0, "a badge is NOT a tint of its semantic colour",
+              washed, 0);
+        ok(find_rgb(ZD_RAISE) != NULL && find_rgb(ZD_LIT) != NULL,
+           "a badge is the ordinary raised seat - a face and a struck run");
         const struct op *lab = find_text("rw");
         ok(lab && lab->rgb == (unsigned)ZD_OK,
-           "...with the label in that colour at full strength");
+           "...with the label in the semantic colour at full strength");
+        /* ZD_BAD IS A FILL AND A MARK, NOT AN INK - 3.4161:1 on ZD_RAISE.
+         * A caller passing it where an ink belongs is corrected here rather
+         * than in 53 apps. */
+        begin_draw();
+        ui_badge(0, 0, "err", ZD_BAD);
+        ok(find_text("err") && find_text("err")->rgb == (unsigned)ZD_BAD_INK,
+           "a badge asked for ZD_BAD writes ZD_BAD_INK - the ink, not the fill");
         begin_draw();
         ui_dot(0, 0, ZD_BAD, 0);
         oknum(count_kind(OP_RRECT), "a dot with no glow is exactly one shape",
               count_kind(OP_RRECT), 1);
+        /* PRESSWORK HAS ONE SHADOW TOKEN and it is drawn under the three
+         * objects that are off the plane. A halo round a 6dp square is not one
+         * of them - design.h zeroed ZD_BLUR_GLOW_A/B for the same reason. The
+         * parameter survives because its MEANING ("this one is live") is still
+         * true; it is simply no longer drawn as light. */
         begin_draw();
         ui_dot(0, 0, ZD_BAD, 1);
-        ok(count_kind(OP_RBLEND) == 2,
-           "a glowing dot adds two soft rings and nothing else");
+        oknum(count_kind(OP_RBLEND) == 0, "a glowing dot draws NO halo",
+              count_kind(OP_RBLEND), 0);
+        oknum(count_kind(OP_RRECT) == 1, "...it is the same single mark",
+              count_kind(OP_RRECT), 1);
     }
     {
         begin_draw();
         ui_input(0, 0, 200, "", "Search rd0", 0);
         const struct op *ph = find_text("Search rd0");
-        ok(ph && ph->rgb == (unsigned)ZD_TEXT_6,
-           "an empty input shows the placeholder in the quaternary ink");
+        /* ZD_TEXT_3, and design.h aliases ZD_TEXT_6 onto it - the widening
+         * cost the ink ramp its fifth rung. The rung BELOW this one is
+         * ZD_TEXT_INERT at 2.0222:1 on ZD_RAISE, and a placeholder is exactly
+         * the "it's only a hint" text that gets demoted into it. It is a
+         * glyph. It does not go there. */
+        ok(ph && ph->rgb == (unsigned)ZD_TEXT_3,
+           "an empty input shows the placeholder in the label rung, ZD_TEXT_3");
+        ok(!text_used_colour(ZD_TEXT_INERT),
+           "control: nothing in an input is written in ZD_TEXT_INERT");
+        ok(find_rgb(ZD_SURF_WELL) != NULL,
+           "the field is a PIT - `.well`, at 12.7802:1 for body ink on it");
         begin_draw();
         ui_input(0, 0, 200, "kernel.zl", "Search rd0", 0);
         ok(find_text("kernel.zl") && !find_text("Search rd0"),
            "control: once there is text the placeholder is gone");
         /* the focus treatment is NEW DESIGN - assert it is there AND that it
          * is only the border, so nobody quietly grows it into a ring */
+        /* PRESSWORK: FOCUS IS THE OVERPRINT'S JOB 1, A BAR - NOT A BORDER.
+         * It used to be a full vermilion box round the field: four sides at
+         * 4.6319:1, which is a loud rectangle and is also vermilion used as a
+         * BORDER, which the two-ink contract forbids outright. It is now the
+         * same ZD_FOCUS_BAR-wide mark down the left edge that `.fbar` puts on
+         * the focused plate, plus the caret. */
         begin_draw();
         ui_input(0, 0, 200, "", "x", 1);
-        int accent_box = 0;
-        for (int i = 0; i < nops; i++)
-            if (ops[i].kind == OP_BOX && ops[i].rgb == (unsigned)ZD_ACCENT)
-                accent_box++;
-        oknum(accent_box, "focused: exactly one accent hairline, no ring, no glow",
-              accent_box, 1);
+        int accent_box = 0, bar = 0;
+        for (int i = 0; i < nops; i++) {
+            if (ops[i].rgb != (unsigned)ZD_ACCENT) continue;
+            if (ops[i].kind == OP_BOX) accent_box++;
+            if (ops[i].kind == OP_FILL && ops[i].w == ZD_FOCUS_BAR &&
+                ops[i].x == 1) bar = 1;
+        }
+        oknum(accent_box == 0, "focused: the overprint is never a border",
+              accent_box, 0);
+        ok(bar, "focused: it is a focus-bar-wide rule down the left edge");
         begin_draw();
         ui_input(0, 0, 200, "", "x", 0);
         accent_box = 0;
@@ -789,15 +937,20 @@ int main(void)
     }
     {
         begin_draw();
+        /* PRESSWORK: a row of eight active filter chips filled with the
+         * overprint is the whole overprint budget spent on a filter bar. The
+         * chip routes through pill_face(), so it and the button cannot drift
+         * about what "selected" looks like: the knockout. */
         ui_chip(0, 0, "All", 1);
-        const struct op *f = find_rgb(ZD_ACCENT);
-        ok(f && f->a == 255, "an ACTIVE chip is a solid accent fill");
-        ok(find_text("All") && find_text("All")->rgb == (unsigned)ZD_INK_DARK,
-           "...with the computed ink on it");
+        const struct op *f = find_rgb(ZD_KNOCK);
+        ok(f && f->a == 255, "an ACTIVE chip is the knockout, solid");
+        ok(find_text("All") && find_text("All")->rgb == (unsigned)ZD_KNOCK_INK,
+           "...with its label reversed out of it");
+        ok(find_rgb(ZD_ACCENT) == NULL, "...and no overprint at all");
         begin_draw();
         ui_chip(0, 0, "All", 0);
-        ok(find_rgb(ZD_ACCENT) == NULL,
-           "control: an inactive chip paints no accent");
+        ok(find_rgb(ZD_ACCENT) == NULL && find_rgb(ZD_KNOCK) == NULL,
+           "control: an inactive chip paints neither accent nor knockout");
     }
 
     /* ========================================================== NAV / CARD */
@@ -810,19 +963,46 @@ int main(void)
         ui_nav_row(0, 0, 150, "Places", 1);
         ok(find_text("Places") &&
            find_text("Places")->rgb == (unsigned)ZD_ACCENT_PALE,
-           "a selected nav row takes the pale lime ink");
-        int tint = 0;
-        for (int i = 0; i < nops; i++)
+           "a selected nav row takes the emphasis ink");
+        /* THE 15% ACCENT WASH IS GONE. A nav row is a POINTER at something
+         * else, so it takes the register mark - a ZD_FOCUS_BAR-wide vermilion
+         * rule on the leading edge, over a ZD_BASE ground. The wash it
+         * replaces was 10,400 px of overprint behind a 78 px bar, against the
+         * rule that vermilion is laid as a rule or a mark and never as an
+         * area. This control fails if the wash returns. */
+        int wash = 0, mark = 0;
+        for (int i = 0; i < nops; i++) {
             if (ops[i].kind == OP_RBLEND && ops[i].rgb == (unsigned)ZD_ACCENT)
-                tint = 1;
-        ok(tint, "control: ...and the same tint treatment as the list row");
+                wash = 1;
+            if (ops[i].kind == OP_FILL && ops[i].rgb == (unsigned)ZD_VERM_BR &&
+                ops[i].w == ZD_SEL_BAR_W)
+                mark = 1;
+        }
+        ok(!wash, "control: no 15% accent wash - the overprint is a mark");
+        ok(mark, "...the register mark is there instead, ZD_FOCUS_BAR wide");
         begin_draw();
         ui_heading(0, 0, 150, "DEVICES");
         ok(find_text("DEVICES") != NULL, "a section heading draws its label");
         begin_draw();
         ui_card(0, 0, 300, 120);
-        ok(find_rgb(t->panel_hi) != NULL && count_kind(OP_BOX) == 1,
-           "a card is a raised surface with exactly one hairline border");
+        /* PRESSWORK: "RAISED, ONE NESTING LEVEL IN. Radius halves; value moves
+         * one rung." The card's outline used to be ZD_SURF_5, which now
+         * resolves to ZD_FLOAT - a LIGHTER surface than the card's own face,
+         * so the card was ringed in something brighter than itself. Under one
+         * lamp that means light from every direction at once. */
+        const struct op *ring = find_rgb(ZD_CUT);
+        ok(find_rgb(t->panel_hi) != NULL,
+           "a card is a raised surface, one rung above the plate");
+        oknum(ring && ring->r == ZD_CARD_R,
+              "...ringed in the groove at r-inset, half the plate's radius",
+              ring ? ring->r : -1, ZD_CARD_R);
+        const struct op *run = find_rgb(ZD_LIT);
+        oknum(run && run->h == 1 && run->y == 1,
+              "...and struck by the lamp along one pixel of its top",
+              run ? run->y : -1, 1);
+        ok(find_rgb(ZD_FLOAT) == NULL,
+           "control: nothing about a card is drawn in a LIGHTER surface"
+           " than its own face");
         begin_draw();
         ui_card_head(0, 0, 300, "CPU", "ok", ZD_OK);
         ok(find_text("CPU") && find_text("ok"),
@@ -845,14 +1025,21 @@ int main(void)
     printf("\n  toolbar / status bar - S5, S6\n");
     {
         begin_draw();
+        /* PRESSWORK: A TOOLBAR IS A REGION BOUNDARY AND THE DESIGN HAS A
+         * WEIGHT THAT MEANS THAT. `#raster` has `border-bottom: 2px solid
+         * var(--zd-lit)` and `#foot` has the same rule on its top. 1px ZD_CUT
+         * means "next row"; 2px ZD_LIT means "next region". */
         ui_toolbar(0, 0, 500, ui_toolbar_h(), 0);
-        const struct op *rule = find_rgb(ZD_SURF_2);
-        oknum(rule && rule->y == ui_toolbar_h() - 1,
-              "a TOP toolbar puts its hairline at the bottom",
-              rule ? rule->y : -1, ui_toolbar_h() - 1);
+        const struct op *rule = find_rgb(ZD_LIT);
+        oknum(rule && rule->y == ui_toolbar_h() - ZD_RULE_H,
+              "a TOP toolbar puts its 2px struck rule at the bottom",
+              rule ? rule->y : -1, ui_toolbar_h() - ZD_RULE_H);
+        oknum(rule && rule->h == ZD_RULE_H,
+              "...and it is the REGION weight, not a hairline",
+              rule ? rule->h : -1, ZD_RULE_H);
         begin_draw();
         ui_toolbar(0, 100, 500, ui_toolbar_h(), 1);
-        rule = find_rgb(ZD_SURF_2);
+        rule = find_rgb(ZD_LIT);
         oknum(rule && rule->y == 100,
               "control: a BOTTOM toolbar puts it at the top instead",
               rule ? rule->y : -1, 100);
@@ -864,23 +1051,44 @@ int main(void)
     /* ====================================================== MONOSPACE PANEL */
     printf("\n  monospace panel - S14\n");
     {
+        /* PRESSWORK: THREE GROUNDS BECAME ONE, and the reason the third
+         * existed went with it. The terminal ground was held at the active
+         * tab's colour so the tab connected to the body; under PRESSWORK the
+         * active tab is a knockout at 6.4796:1 and there is no seam to hide.
+         * Every mono panel is `.well` now, and `kind` selects a line height,
+         * which is what actually differed between the five instances. */
         begin_draw();
         ui_mono_panel(0, 0, 400, 300, UI_PANEL_TERM);
-        ok(find_rgb(ZD_SURF_2) != NULL,
-           "the terminal ground is the same surface an active tab uses");
+        const struct op *pit = find_rgb(ZD_WELL);
+        ok(pit && pit->w == 400 - 2,
+           "the terminal ground is a pit - `.well`, its face inside its ring");
+        ok(find_rgb(ZD_LITSOFT) != NULL,
+           "...lit along its near wall, the sign of the seat flipped");
         begin_draw();
         ui_mono_panel(0, 0, 400, 300, UI_PANEL_HEX);
-        ok(find_rgb(ZD_SURF_1) != NULL, "the hex ground is one step darker");
+        ok(find_rgb(ZD_WELL) != NULL,
+           "control: the hex panel is the SAME pit, not a fourth ground");
+        oknum(ui_mono_line_h(UI_PANEL_HEX) == ui_mono_line_h(UI_PANEL_TERM),
+              "control: `kind` is a line height and both are the cell's 3/2",
+              ui_mono_line_h(UI_PANEL_HEX), ui_mono_line_h(UI_PANEL_TERM));
         begin_draw();
         ui_mono_line(10, 10, 380, "zl: 3 warnings", ZD_TEXT_1, UI_PANEL_TERM, 0);
         ok(find_text("zl: 3 warnings") != NULL, "a plain line is just text");
         oknum(count_kind(OP_RBLEND) == 0, "control: ...with no highlight behind it",
               count_kind(OP_RBLEND), 0);
         begin_draw();
+        /* PRESSWORK: THE JUMP TARGET IS A MARK, NOT A WASH. 7% vermilion
+         * across a whole line is an area of overprint far wider than
+         * ZD_FOCUS_BAR and, at 7%, a change below the ladder's smallest
+         * deliberate step - against the width rule AND too quiet to see. */
         ui_mono_line(10, 10, 380, "kernel.zl:88: note", ZD_TEXT_1,
                      UI_PANEL_TERM, 1);
-        ok(count_kind(OP_RBLEND) == 1,
-           "a jump-target line gets exactly one accent wash");
+        oknum(count_kind(OP_RBLEND) == 0, "a jump-target line draws NO wash",
+              count_kind(OP_RBLEND), 0);
+        const struct op *mk = find_rgb(ZD_ACCENT);
+        oknum(mk && mk->w == ZD_FOCUS_BAR,
+              "it is a focus-bar-wide overprint rule in the left margin",
+              mk ? mk->w : -1, ZD_FOCUS_BAR);
     }
 
     /* ============================================ RULE 1: NO COLOUR LITERAL */
