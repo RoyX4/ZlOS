@@ -196,17 +196,18 @@ viewer is described as current.
 
 ---
 
-## T-9 — Boot recovery policy remains at the kernel root. OPEN.
+## T-9 — Boot recovery policy remains at the kernel root. CLOSED.
 
-`kernel/boot_state.c` and `kernel/boot_state.h` are the only live implementation
-files left at the zlOS product root. The pure policy is compiled by
-`kernel/tests/host/boot_state_test.c`, but neither file appears in
-`kernel/SOURCES`; the typed boot handover document correctly treats target
-wiring as future work.
+`boot_state.c` and `boot_state.h` now live together under their owning subsystem
+at `kernel/src/core/boot/`. The policy source follows `boot_handover.c` in
+`kernel/SOURCES`, so all four build routes compile it without claiming that a
+loader calls it yet. `kernel/tests/host/boot_state_test.c` includes and compiles
+the owned paths directly.
 
-The ownership destination is `kernel/src/core/boot/`. This structure-only pass
-does not move the pair because the host compile gate is deliberately deferred.
-
-**Close by:** move both files together, update the host harness include/source
-paths and every metadata/document reference, rerun `boot_state_test`, and prove
-the shared build/source registries agree before removing this exception.
+**Evidence:** the focused host harness passes all 91 checks with warnings fatal;
+the 32-bit, 64-bit, EFI/LLP64, and raw-lane-equivalent compile checks all accept
+the moved source through the shared manifest. The shared-source recovery
+selftest and directory-capsule check also pass. The dated source snapshot and
+open T-8 build graph remain untouched until their own identity-safe
+regeneration. Stage-zero persistent selection and ready-mark wiring remain
+future boot work, not part of this structure closure.

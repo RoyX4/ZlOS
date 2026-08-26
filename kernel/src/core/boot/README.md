@@ -27,6 +27,8 @@ Typed boot handover and recovery-policy integration.
 
 - `boot_handover.c`
 - `boot_handover.h`
+- `boot_state.c`
+- `boot_state.h`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../../docs/CODE-MAP.md)
 for repository-wide ownership.

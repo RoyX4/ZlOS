@@ -62,14 +62,19 @@ The two self-tests also proved they still catch planted failures.
 - `kernel/docs/mp00-source-snapshot-2026-08-24.md` and
   `kernel/docs/host-freeze-and-gate-containment-2026-08-24.md` remain at their
   hashed decision-ledger paths until that chain can be regenerated atomically.
-- `kernel/boot_state.c` and `kernel/boot_state.h` remain the documented root
-  source exception. Moving them requires the host compile gate, which this run
-  was explicitly not allowed to execute.
+- The `boot_state.c` and `boot_state.h` files then at the kernel root remained
+  the documented source exception. Moving them required the host compile gate,
+  which this run was explicitly not allowed to execute.
 - `kernel/docs/visual-speed-northstar.md` remains at its established path because
   `docs/JOURNAL.md` links to it and journals are not edited without explicit
   approval.
 - Ignored build products in the repository root and kernel tree were not moved
   or deleted. Their placement and generators are documented in `CODE-MAP.md`.
+
+**Later resolution, 2026-08-26:** T-9 moved the recovery-policy pair to
+`kernel/src/core/boot/`, updated the shared source manifest and host harness, and
+ran the deferred focused compile checks. The boundary above remains the honest
+record of what the 2026-08-25 cleanup itself did not execute.
 
 ## Evidence boundary
 

@@ -41,7 +41,8 @@ selftest_recovery() {
     # A dead owner left fully backed-up state. Recovery must restore every
     # authority byte-for-byte and remove all probe debris.
     printf '%s\n' 'mutated SOURCES' > "$fixture/SOURCES"
-    printf '%s\n' 'mutated identity' > "$fixture/build-identity.json"
+    mkdir -p "$fixture/metadata"
+    printf '%s\n' 'mutated identity' > "$fixture/metadata/build-identity.json"
     printf '%s\n' 'mutated embed' > "$fixture/build_identity_embed.zl"
     mkdir "$fixture/.verify-sources-state"
     printf '%s\n' 'original SOURCES' > "$fixture/.verify-sources-state/SOURCES"
@@ -53,7 +54,7 @@ selftest_recovery() {
     : > "$fixture/__srcprobe.o"
     (cd "$fixture" && ./tools/checks/verify-sources.sh --recover-only) >/dev/null
     grep -qx 'original SOURCES' "$fixture/SOURCES"
-    grep -qx 'original identity' "$fixture/build-identity.json"
+    grep -qx 'original identity' "$fixture/metadata/build-identity.json"
     grep -qx 'original embed' "$fixture/build_identity_embed.zl"
     [ ! -e "$fixture/.verify-sources-state" ]
     [ ! -e "$fixture/src/core/_srcprobe.c" ]
@@ -113,6 +114,7 @@ PROBE=src/core/_srcprobe.c
 MARKER=ZL_SOURCES_PROBE_9c3f1a
 STATE_DIR=.verify-sources-state
 SOURCES_BAK=$STATE_DIR/SOURCES
+IDENTITY=metadata/build-identity.json
 IDENTITY_BAK=$STATE_DIR/build-identity.json
 IDENTITY_EMBED_BAK=$STATE_DIR/build_identity_embed.zl
 
@@ -136,7 +138,7 @@ recover_stale_transaction() {
         exit 2
     fi
     cp "$SOURCES_BAK" SOURCES
-    cp "$IDENTITY_BAK" build-identity.json
+    cp "$IDENTITY_BAK" "$IDENTITY"
     cp "$IDENTITY_EMBED_BAK" build_identity_embed.zl
     remove_probe_outputs
     rm -f "$STATE_DIR/pid" "$SOURCES_BAK" "$IDENTITY_BAK" "$IDENTITY_EMBED_BAK"
@@ -159,12 +161,12 @@ if ! mkdir "$STATE_DIR"; then
 fi
 printf '%s\n' "$$" > "$STATE_DIR/pid"
 cp SOURCES "$SOURCES_BAK"
-cp build-identity.json "$IDENTITY_BAK"
+cp "$IDENTITY" "$IDENTITY_BAK"
 cp build_identity_embed.zl "$IDENTITY_EMBED_BAK"
 
 cleanup() {
     cp "$SOURCES_BAK" SOURCES
-    cp "$IDENTITY_BAK" build-identity.json
+    cp "$IDENTITY_BAK" "$IDENTITY"
     cp "$IDENTITY_EMBED_BAK" build_identity_embed.zl
     # The build scripts derive object names as _$(basename $f .c).o and
     # friends, and $f is "_srcprobe.c" - so the objects are __srcprobe.o (TWO
