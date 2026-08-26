@@ -164,6 +164,10 @@ void        notify_rect(int sw, int sh, int reserve_bot, int scale,
 #define SK_UP     3
 #define SK_DOWN   4
 int  snap_zone_for_point(int px, int py, int sw, int sh);
+void snap_set_side_reserves(int left, int right);
+void snap_rect_lr(int z, int sw, int sh, int reserve_top, int reserve_bot,
+                  int reserve_left, int reserve_right,
+                  int *x, int *y, int *w, int *h);
 void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
                int *x, int *y, int *w, int *h);
 int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
@@ -203,10 +207,18 @@ static void snap_preview_set(int zone)
     snap_preview_zone = zone;
     if (zone) {
         const struct ui_theme *t = ui_theme();
-        snap_rect(zone, (int)fb_pxw(), (int)fb_pxh(),
-                  UI_DP(t, 32), UI_DP(t, 64),
-                  &snap_preview_x, &snap_preview_y,
-                  &snap_preview_w, &snap_preview_h);
+        /* THE PREVIEW MUST SHOW WHERE THE WINDOW WILL ACTUALLY LAND, and it
+         * did not: this said UI_DP(t, 32), UI_DP(t, 64) - a THIRD pair of
+         * hand-typed reserves, different from the 48/72 the commit path used
+         * and different again from the shell's real 30/46. So the ghost was
+         * drawn in one rectangle and the window dropped into another. Both
+         * paths take the same macros now, which is the only way they can stay
+         * equal; RESERVE_* are defined further down, hence the extern-style
+         * forward use here being fine - they are macros over the theme. */
+        snap_rect_lr(zone, (int)fb_pxw(), (int)fb_pxh(),
+                     t->strip_h, t->foot_h, t->rail_w, 0,
+                     &snap_preview_x, &snap_preview_y,
+                     &snap_preview_w, &snap_preview_h);
     }
     snap_preview_damage();
 }
@@ -3041,12 +3053,23 @@ static int in_title_control(int win, int which, int x, int y)
 static int in_closebox(int win, int x, int y)
 { return in_title_control(win, TITLE_CLOSE, x, y); }
 
-/* The desktop's furniture, in the only two numbers wm.c needs from it: the
- * header bar at the top and the dock at the bottom. kernel.zl's TOPBAR_H and
- * dock_y() are 48 and 72, times ui(). A "maximised" window that reaches under
- * the dock cannot reach its own status bar. */
-#define RESERVE_TOP(t)  UI_DP((t), 48)
-#define RESERVE_BOT(t)  UI_DP((t), 72)
+/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
+ *
+ * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
+ * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
+ * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
+ * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
+ * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
+ * maximised window was drawn from x = 0 straight over the launcher.
+ *
+ * Numbers that describe the shell belong to the theme, which is where the
+ * shell reads them from too; two copies of 48 in two files is how the first
+ * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
+ * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
+ * scaled by the same q8 as everything else here. */
+#define RESERVE_TOP(t)   ((t)->strip_h)
+#define RESERVE_BOT(t)   ((t)->foot_h)
+#define RESERVE_LEFT(t)  ((t)->rail_w)
 
 /* Show, move or clear the drag preview. Called on every pointer motion during
  * a frame drag, so it does nothing at all when the zone has not changed - the
@@ -3069,7 +3092,8 @@ static void snap_to_rect(int win, int z, int gx, int gy, int gw, int gh)
 
     if (z == SNAP_NONE) {
         if (!snap_release(win, &nx, &ny, &nw, &nh)) return;
-    } else if (!snap_apply(win, z, gx, gy, gw, gh,
+    } else if (snap_set_side_reserves(RESERVE_LEFT(t), 0),
+               !snap_apply(win, z, gx, gy, gw, gh,
                            (int)fb_pxw(), (int)fb_pxh(),
                            RESERVE_TOP(t), RESERVE_BOT(t), &nx, &ny, &nw, &nh)) {
         return;

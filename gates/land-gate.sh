@@ -112,6 +112,13 @@ run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
 run "UI scale contract" "$WT/kernel" bash -c \
     'grep -Eq "^fn ui\(\) \{ return ui_scale\(\) \}$" src/kernel.zl'
 run "memmap guards" "$WT/kernel/tests/host" ./memmap-guard-test.sh
+
+# The shell's own geometry: the rail, the raster strip and the foot have to
+# TILE the panel exactly at every UI scale, and the register has to fit its
+# rows. This guard shipped with the PRESSWORK repaint and was wired into
+# nothing at all - a real check that fires on three planted defects and would
+# never have run again. Exactly the shape GUARDS-THAT-DID-NOT-GUARD.md is for.
+run "shell layout" "$WT/kernel" python3 tools/checks/check-shell-layout.py
 run "unique app ids" "$WT/kernel" ./tools/checks/check-appids.py --selftest
 run "app registry coverage" "$WT" python3 kernel/tests/host/apps53.py --selftest
 run "61-app manifest" "$WT/kernel" python3 tools/generators/gen-app-manifest.py --check --selftest

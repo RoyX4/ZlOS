@@ -93,13 +93,41 @@ int snap_zone_for_point(int px, int py, int sw, int sh)
  * Written out rather than computed from a table, because every one of these
  * is an assertion in the harness and a table would let two of them share a
  * bug. `reserve_top` is the header bar, `reserve_bot` the dock. */
-void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
-               int *x, int *y, int *w, int *h)
+/* The side reserves snap_apply() uses. They default to zero, so every existing
+ * caller - and the whole host suite - keeps the behaviour it was written
+ * against; the shell sets them once at start-up from the theme. A setter
+ * rather than two more parameters for the same reason snap_rect_lr exists. */
+static int snap_reserve_left  = 0;
+static int snap_reserve_right = 0;
+
+void snap_set_side_reserves(int left, int right)
 {
-    int ax = 0;
+    snap_reserve_left  = left  > 0 ? left  : 0;
+    snap_reserve_right = right > 0 ? right : 0;
+}
+
+/* THE LEFT RESERVE, and why it arrived as a second entry point rather than a
+ * fifth parameter. The shell used to put its furniture on the top and bottom
+ * edges only, so two reserves described it completely. It now puts a 170dp
+ * REGISTER RAIL down the left, and a window snapped or maximised against ax = 0
+ * is drawn straight over it - the launcher disappears under the thing you just
+ * maximised.
+ *
+ * snap_rect()'s four-reserve form has twenty-odd call sites in the host suite,
+ * every one of which means "no side furniture" and is still correct. Widening
+ * the signature would have edited all of them to say 0, 0 and proved nothing.
+ * So the old name keeps its meaning and delegates, and the shell calls the
+ * form that knows about sides. */
+void snap_rect_lr(int z, int sw, int sh,
+                  int reserve_top, int reserve_bot,
+                  int reserve_left, int reserve_right,
+                  int *x, int *y, int *w, int *h)
+{
+    int ax = reserve_left;
     int ay = reserve_top;
-    int aw = sw;
+    int aw = sw - reserve_left - reserve_right;
     int ah = sh - reserve_top - reserve_bot;
+    if (aw < 0) aw = 0;
     if (ah < 0) ah = 0;
 
     int lw = aw / 2;              /* left half  */
@@ -117,6 +145,12 @@ void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
     case SNAP_BR:    *x = ax + lw; *y = ay + th; *w = rw; *h = bh; break;
     default:         *x = ax;      *y = ay;      *w = aw; *h = ah; break;
     }
+}
+
+void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
+               int *x, int *y, int *w, int *h)
+{
+    snap_rect_lr(z, sw, sh, reserve_top, reserve_bot, 0, 0, x, y, w, h);
 }
 
 /* ---- apply and release ---------------------------------------------------
@@ -144,7 +178,8 @@ int snap_apply(int win, int z, int cur_x, int cur_y, int cur_w, int cur_h,
         saved[win].h = cur_h;
     }
     zone[win] = z;
-    snap_rect(z, sw, sh, reserve_top, reserve_bot, x, y, w, h);
+    snap_rect_lr(z, sw, sh, reserve_top, reserve_bot,
+                 snap_reserve_left, snap_reserve_right, x, y, w, h);
     return 1;
 }
 
