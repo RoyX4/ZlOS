@@ -264,8 +264,8 @@
 
 /* ---- the radius scale -----------------------------------------------------
  * FOUR rungs. Radius encodes how much the object can move, and nesting halves
- * it. The predecessor measured sixteen distinct radii out of an artifact and
- * shipped all sixteen; sixteen radii is not a scale, it is a file. PRESSWORK
+ * it. The predecessor measured fifteen distinct radii out of an artifact and
+ * shipped all fifteen; fifteen radii is not a scale, it is a file. PRESSWORK
  * collapses them onto four, and the collapse is monotone by size band so no
  * call site changes meaning:
  *      0..3  -> ZD_R_CHIP     4..7  -> ZD_R_INSET     8+ -> ZD_R_PLATE
@@ -280,7 +280,7 @@
 /* the vermilion focus bar. 3dp is the shipped value and it is a slider. */
 #define ZD_FOCUS_BAR 3
 
-/* THE OLD SIXTEEN, kept as names so no call site breaks, collapsed onto the
+/* THE OLD FIFTEEN, kept as names so no call site breaks, collapsed onto the
  * four above. Prefer the four in new code; these exist to be migrated off. */
 #define ZD_R_XS     ZD_R_INSET
 #define ZD_R_SM     ZD_R_INSET
@@ -556,7 +556,7 @@
  * readout. That is not a simplification: a thumb is a grabbable object and
  * therefore has to be raised, and a raised object on a 9dp pit needs a run,
  * a ring and a radius the pit does not have room for. The fill edge is a
- * hard 1px boundary between ZD_STEEL and ZD_WELL - 3.06:1 - which is a more
+ * hard 1px boundary between ZD_STEEL and ZD_WELL - 8.3765:1 - which is a more
  * precise readout than a 13dp puck centred on the same coordinate. */
 #define ZD_SLIDER_H     11
 #define ZD_SLIDER_R     ZD_R_BOLT

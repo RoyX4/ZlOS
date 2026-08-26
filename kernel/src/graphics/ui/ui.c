@@ -757,7 +757,7 @@ int ui_slider(int *v, int lo, int hi)
          * track has no room for, so it was drawn as a flat disc and read as a
          * bubble floating over a wire.
          *
-         * The hard ZD_STEEL / ZD_WELL boundary is 3.06:1 and one pixel wide,
+         * The hard ZD_STEEL / ZD_WELL boundary is 8.3765:1 and one pixel wide,
          * which locates the value more precisely than a 13dp puck centred on
          * the same coordinate ever did. The whole control is grabbable, so
          * losing the puck loses no target area - the pointer grab in wm.c is
@@ -887,7 +887,7 @@ int ui_list_row(const char *s, int selected)
          * NOT call ui_row_select(), which is the other idiom (see above): this
          * row is a file, not a pointer at one.
          *
-         * The ink has to move with it. ZD_TEXT_1 on ZD_KNOCK is 1.19:1, so a
+         * The ink has to move with it. ZD_TEXT_1 on ZD_KNOCK is 1.4571:1, so a
          * selected row drawn with the row ink and an inverted ground is an
          * empty light bar - which is what happens whenever a selection changes
          * the ground and a caller keeps its own colour. theme.knock_ink is
