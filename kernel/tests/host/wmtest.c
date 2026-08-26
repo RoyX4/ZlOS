@@ -1592,6 +1592,61 @@ int main(void)
            frame_log_input_sequence == 0);
     }
 
+
+    /* ---- a window shorter than its own title bar must not paint outside it --
+     *
+     * REGRESSION, found by an out-of-family reviewer on the PRESSWORK chrome.
+     * chrome_header() took theme.title_h unconditionally, which is only the
+     * header's real height while the window is at least that tall. wm_open()
+     * stores the caller's h verbatim - min_h is a RESIZE floor applied later,
+     * not an open-time clamp - so a caller can open a chrome window shorter
+     * than the title bar, and the knockout band and its foot rule both landed
+     * below W->y + W->h. fb_fill_px and fb_rrect_grad_top do not clip on their
+     * own, and neither enclosing path stops it: the retained-shell path sets
+     * the scissor to the whole shell surface, and the direct path clips to
+     * frame-plus-shadow.
+     *
+     * THE PROBE IS THE HEADER'S OWN COLOUR, NOT "was anything written here".
+     * The first version of this test painted a magenta sentinel in the rows
+     * below the window and asserted it survived - and it failed with the fix
+     * in, because those rows are exactly where the window's SHADOW paints. A
+     * presence probe cannot tell an escaped header from a legitimate shadow.
+     * theme.ko_edge is written by nothing else in that band, so finding it
+     * below the frame is unambiguous, and NOT finding it is the fix holding. */
+    {
+        int th = ui_metric(UI_METRIC_TITLE_H);
+        int sh = th / 2;                     /* half a title bar tall */
+        if (sh < 2) sh = 2;
+        int sx = 120, sy = 620, sw = 260;
+        unsigned int koe = ui_color(UI_COLOR_KO_EDGE);
+
+        int win = wm_open(41, "short", sx, sy, sw, sh);
+        wm_focus(win);
+        frame();
+
+        /* every row from the window's real foot down to where a full-height
+         * header would have reached, plus two for slop */
+        int escaped = 0;
+        for (int y = sy + sh; y < sy + th + 2 && !escaped; y++)
+            for (int x = sx + 1; x < sx + sw - 1; x++)
+                if (fb_get_px(x, y) == koe) { escaped = 1; break; }
+
+        ok("a window shorter than title_h keeps its chrome inside the frame",
+           !escaped);
+
+        /* and the control, so this assertion cannot pass by measuring nothing:
+         * the same colour MUST be present inside the frame, on the header's
+         * own foot row. If it is absent there the probe is blind and the line
+         * above is worthless. */
+        int present = 0;
+        for (int x = sx + 1; x < sx + sw - 1; x++)
+            if (fb_get_px(x, sy + sh - 1) == koe) { present = 1; break; }
+        ok("control: the header foot rule IS drawn, inside the frame", present);
+
+        wm_close(win);
+        frame();
+    }
+
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
 }

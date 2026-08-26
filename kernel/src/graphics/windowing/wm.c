@@ -2217,13 +2217,33 @@ static void chrome_header(const struct win *W, int r, int focused)
 {
     const struct ui_theme *t = ui_theme();
     int ix = W->x + 1, iw = W->w - 2;
-    int foot = W->y + t->title_h - 1;
-    if (iw <= 0 || t->title_h < 2) return;
+
+    /* THE HEADER IS CLAMPED TO THE WINDOW, NOT TO THE THEME. It used to take
+     * t->title_h unconditionally, which is only the same number while the
+     * window is at least that tall - and nothing guarantees that. wm_open()
+     * stores the caller's h verbatim and only sets min_h afterwards as a
+     * RESIZE floor, so a caller may open a chrome window shorter than the
+     * title bar. At h < title_h the band and its foot rule both landed below
+     * W->y + W->h.
+     *
+     * That is a write outside the frame, not a cosmetic overrun: fb_fill_px
+     * and fb_rrect_grad_top do not clip on their own, and neither surrounding
+     * path saves us. The retained-shell path enters through
+     * fb_surface_begin_alpha(), which sets the scissor to the whole shell
+     * surface, and the direct path clips to frame-plus-shadow - so the stray
+     * rows land in the shadow band or on the neighbour beneath it.
+     *
+     * hh is the header height this window can actually afford. Everything
+     * below is derived from it rather than from the theme. */
+    int hh = t->title_h;
+    if (hh > W->h) hh = W->h;
+    int foot = W->y + hh - 1;
+    if (iw <= 0 || hh < 2) return;
     if (focused) {
         int ri = r > 0 ? r - 1 : 0;
-        /* rows y+1 .. y+title_h-2; row y is the merged top run above, row
-         * y+title_h-1 is the groove below, so the band is exactly title_h */
-        fb_rrect_grad_top(ix, W->y + 1, iw, t->title_h - 2, ri,
+        /* rows y+1 .. y+hh-2; row y is the merged top run above, row
+         * y+hh-1 is the groove below, so the band is exactly hh */
+        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 2, ri,
                           t->knock, t->knock);
     }
     fb_fill_px(ix, foot, iw, 1, focused ? t->ko_edge : t->border);
