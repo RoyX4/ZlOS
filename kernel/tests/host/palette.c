@@ -377,6 +377,22 @@ int main(void)
     ok(settings_names_token(set, "ZD_ACCENT_ALT_4"),
        "settings.c offers the reference's own five accents");
 
+    /* ...and the values must actually DIFFER. The line above only establishes
+     * that settings.c mentions the token; it reported green while ALT_3 was an
+     * alias of ZD_ACCENT itself, so the picker drew five chips carrying four
+     * colours with two byte-identical. Checking the text was strictly weaker
+     * than the sentence it printed - the shape
+     * docs/GUARDS-THAT-DID-NOT-GUARD.md is about. */
+    {
+        unsigned acc[5] = { ZD_ACCENT, ZD_ACCENT_ALT_1, ZD_ACCENT_ALT_2,
+                            ZD_ACCENT_ALT_3, ZD_ACCENT_ALT_4 };
+        int dup = 0;
+        for (int i = 0; i < 5; i++)
+            for (int j = i + 1; j < 5; j++)
+                if (acc[i] == acc[j]) dup++;
+        ok(dup == 0, "the five accent swatches are five DISTINCT colours");
+    }
+
     /* ---- kernel.zl still holds no colour ----------------------------------- */
     ok(zl_consumes_roles(zl),
        "kernel.zl consumes semantic roles from ui.c instead of copying RGB");

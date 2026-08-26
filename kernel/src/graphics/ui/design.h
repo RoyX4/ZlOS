@@ -674,10 +674,23 @@
  * contract are what keep two inks from reading as decoration, and a user-chosen
  * fifth hue breaks both. The names survive pointing at the values PRESSWORK
  * does have, so the Settings pane keeps compiling while it is rebuilt. */
-#define ZD_ACCENT_ALT_1 ZD_STEEL
-#define ZD_ACCENT_ALT_2 ZD_STEEL_BR
-#define ZD_ACCENT_ALT_3 ZD_VERM
-#define ZD_ACCENT_ALT_4 ZD_VERM_BR
+/* THE FOUR ALTERNATES MUST BE FOUR COLOURS, AND NONE OF THEM MAY BE THE
+ * DEFAULT. ALT_3 was ZD_VERM, which IS ZD_ACCENT, so the Settings picker drew
+ * five chips carrying four colours and two of them were byte-identical. Found
+ * by review, and the palette gate did not catch it because it asserted that
+ * settings.c mentions the token ZD_ACCENT_ALT_4 rather than that the five
+ * values differ - see palette.c, which now checks the values.
+ *
+ * This ladder has exactly four saturated inks besides the default: the two
+ * steels and the pale vermilion. A fifth would have to come from ZD_OK or
+ * ZD_WARN, and those are wired to STATE rather than to taste - an accent
+ * setting that changes what "warning" looks like is a bug, not a preference.
+ * So the fourth alternate is the accent's own bright, which is a different
+ * colour from the accent and legitimately pickable. */
+#define ZD_ACCENT_ALT_1 ZD_STEEL      /* #7FB2E0 */
+#define ZD_ACCENT_ALT_2 ZD_STEEL_BR   /* #A9CFF2 */
+#define ZD_ACCENT_ALT_3 ZD_VERM_BR    /* #F5A184 - was ZD_VERM == the default */
+#define ZD_ACCENT_ALT_4 ZD_BAD_INK    /* #EF9077 */
 
 /* Blur is not drawn. There is no GPU here, PRESSWORK asks for no backdrop
  * blur anywhere, and the three off-plane objects are separated by ZD_LIFT and

@@ -170,6 +170,24 @@ _Static_assert(__builtin_offsetof(struct ui_theme, ink_on)
                "struct ui_theme and enum ui_color_role disagree at the end of "
                "the colour array; UI_COLOR_COUNT no longer describes it");
 
+/* ...and this third one, which is the only one that catches the OTHER
+ * direction. The two above anchor NAMED fields to NAMED enumerators, so they
+ * both stay green if you add an enumerator and no field: UI_COLOR_COUNT simply
+ * grows, every existing pair still agrees, and ui_color(COUNT-1) walks one
+ * slot PAST the colour block into theme.pad - an int metric read as a colour.
+ * Demonstrated rather than feared: inserting one enumerator before
+ * UI_COLOR_COUNT compiled clean and made ui_color(42) return 0x00000014, which
+ * is 20, which is theme.pad.
+ *
+ * Anchoring the first field AFTER the block closes it, because that offset is
+ * the block's true length and it cannot be satisfied by an enum that has grown
+ * without the struct. pad is the first metric and must stay first for this to
+ * mean anything. */
+_Static_assert(__builtin_offsetof(struct ui_theme, pad)
+                   == (unsigned)UI_COLOR_COUNT * sizeof(unsigned),
+               "enum ui_color_role has grown without struct ui_theme; "
+               "ui_color(UI_COLOR_COUNT-1) would read a metric as a colour");
+
 const struct ui_theme *ui_theme(void);
 void ui_theme_init(int scale);          /* build the default theme at a scale */
 void ui_theme_init_q8(int scale_q8);    /* continuous scale; 256 == 1x */

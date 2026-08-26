@@ -77,11 +77,15 @@ static const struct { const char *name; unsigned rgb; } ACCENTS[] = {
      *
      * This table previously led with "Ice" #60D2EB, the blue-slate accent.
      * That colour is retired along with the rest of the old palette. */
-    { "Lime",    ZD_ACCENT },    /* == ui_theme_init's accent. Keep them equal. */
-    { "Mint",    ZD_ACCENT_ALT_1 },
-    { "Azure",   ZD_ACCENT_ALT_2 },
-    { "Violet",  ZD_ACCENT_ALT_3 },
-    { "Magenta", ZD_ACCENT_ALT_4 },
+    /* The names describe the ink that is actually there. They used to read
+     * Lime / Mint / Azure / Violet / Magenta, which were the previous palette's
+     * colours - after the repaint none of those five words named anything on
+     * screen, and two of the swatches were the same hex. */
+    { "Vermilion", ZD_ACCENT },  /* == ui_theme_init's accent. Keep them equal. */
+    { "Steel",     ZD_ACCENT_ALT_1 },
+    { "Steel pale",ZD_ACCENT_ALT_2 },
+    { "Vermilion pale", ZD_ACCENT_ALT_3 },
+    { "Coral",     ZD_ACCENT_ALT_4 },
 };
 #define N_ACCENT ((int)(sizeof ACCENTS / sizeof ACCENTS[0]))
 
