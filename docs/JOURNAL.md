@@ -7,6 +7,64 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — feat(desktop): implement the PRESSWORK design language (07fbf1d)
+
+`design/presswork` · 22 files changed, 13978 insertions(+), 7146 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>22 file(s)</summary>
+
+- `TODO.md`
+- `docs/design/desktop-deciding.md`
+- `docs/design/presswork-prototype.html`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/icons/icons.c`
+- `kernel/src/graphics/ui/design.h`
+- `kernel/src/graphics/ui/ui.c`
+- `kernel/src/graphics/ui/ui.h`
+- _…and 10 more_
+
+</details>
+
+## 2026-08-26 — feat(desktop): implement the PRESSWORK design language (f616c8a)
+
+`design/presswork` · 23 files changed, 14007 insertions(+), 7146 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>23 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `docs/design/desktop-deciding.md`
+- `docs/design/presswork-prototype.html`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/icons/icons.c`
+- `kernel/src/graphics/ui/design.h`
+- `kernel/src/graphics/ui/ui.c`
+- _…and 11 more_
+
+</details>
+
 ## 2026-08-26 — docs: make research index self-contained (69f11cf)
 
 `main` · 1 file changed, 9 insertions(+), 9 deletions(-)
