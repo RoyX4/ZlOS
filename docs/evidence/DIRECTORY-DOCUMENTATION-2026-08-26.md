@@ -6,7 +6,9 @@ Checkout: `/home/roy/Documents/repos/zl-linux-final`
 
 Branch: `codex/full-program`
 
-Publication state: staged locally, not committed, not pushed
+Evidence snapshot: captured while staged locally, before commit or push
+
+Later implementation commit: `c9e6e69`
 
 ## Outcome
 
@@ -138,9 +140,47 @@ real index was never changed by the mutation.
 - This documentation rollout does not refresh dated product implementation
   evidence or close any product-program feature.
 
+## Publication-gate corrections
+
+The first pre-push run was correctly blocked before any remote update. It found
+that the tracked application manifest predated four source changes in the local
+43-commit series. Regeneration changed only the source digest and embedded
+manifest digest; the 62 application identities and all other manifest fields
+remained unchanged.
+
+The same run exposed a false-positive hazard report: the EFI scanner compiled
+the freestanding lexer, parser, and interpreter without the per-file
+`-DZL_FREESTANDING` and parser/interpreter defines used by `buildefi.sh`. Their
+three missing-`stdio.h` errors were mislabeled as pointer truncations. The
+scanner now derives explicit per-source flags directly from `buildefi.sh`, and
+its parser self-test requires those flags. This is gate repair, not product or
+hardware evidence.
+
+## Later local publication gates
+
+After both corrections, `tools/preflight.sh --boot` completed cleanly in 2464
+seconds under concurrent machine load. Its nine reported stages all passed:
+
+- repository build;
+- language suite;
+- engine parity, with only the two pinned expected differences;
+- formatter semantics across 175 checked files;
+- EFI hazard scan with zero truncation sites;
+- GRUB BIOS32 QEMU boot;
+- raw BIOS QEMU boot;
+- GRUB ISO BIOS and UEFI QEMU boots; and
+- native UEFI64 QEMU boot.
+
+The boot routes generated current tracked receipts for the exact artifacts,
+logs, 62-entry application manifest, source head, and route-neutral build
+identity used by that run. These are QEMU results only. No physical boot,
+display, input, storage, network, USB flash, or hardware test was performed.
+
 ## Evidence not run
 
-No language or kernel compilation, sanitizer, test suite, QEMU boot, graphical
-exercise, physical boot, hardware test, flash, commit, remote update, or GitHub
-push was performed for this rollout. The evidence above is repository structure,
-deterministic generation, Git tracking, and documentation-link validation only.
+At the time this receipt's evidence was captured, no language or kernel
+compilation, sanitizer, test suite, QEMU boot, graphical exercise, physical
+boot, hardware test, flash, commit, remote update, or GitHub push had been
+performed for this rollout. Later publication gates must remain separate from
+the evidence above, which proves repository structure, deterministic generation,
+Git tracking, and documentation-link validity only.

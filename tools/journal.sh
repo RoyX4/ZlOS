@@ -58,9 +58,15 @@ when=$(git log -1 --format=%cs "$REV")
 changed=$(git show --name-only --format='' "$REV" | grep -v '^$' | head -12)
 nfiles=$(git show --name-only --format='' "$REV" | grep -cv '^$')
 
+count_nonblank_noncomment() {
+    local file="$1"
+    [ -f "$file" ] || { echo "?"; return; }
+    awk '!/^[[:space:]]*(#|$)/ { count++ } END { print count + 0 }' "$file"
+}
+
 trunc=$(tools/hazard-scan.sh --count 2>/dev/null || echo "?")
-pins=$(grep -vcE '^\s*#|^\s*$' tools/engine-parity-expected.txt 2>/dev/null || echo "?")
-rot=$(grep -vcE '^\s*#|^\s*$' tools/doc-check-ignore.txt 2>/dev/null || echo "?")
+pins=$(count_nonblank_noncomment tools/engine-parity-expected.txt)
+rot=$(count_nonblank_noncomment tools/doc-check-ignore.txt)
 docs_ok=$(tools/doc-check.sh >/dev/null 2>&1 && echo "agree" || echo "STALE")
 
 if [ ! -f "$OUT" ]; then

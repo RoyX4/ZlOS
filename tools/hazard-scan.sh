@@ -14,6 +14,7 @@
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit
+REPO_ROOT=$PWD
 
 COUNT_ONLY=0
 [ "${1:-}" = "--count" ] && COUNT_ONLY=1
@@ -51,6 +52,24 @@ efi_sources() {
     sed -nE 's/^clang \$CF.* -c ([^ ]+\.c) -o .*/\1/p' kernel/buildefi.sh
 }
 
+# Extract flags written between `$CF` and `-c <source>` on explicit compile
+# lines. The freestanding frontend files require these defines; omitting them
+# measures missing host headers rather than pointer truncation.
+efi_source_flags() {
+    local wanted="$1"
+    awk -v wanted="$wanted" '
+        $1 == "clang" && $2 == "$CF" {
+            for (i = 3; i <= NF; i++) {
+                if ($i == "-c" && $(i + 1) == wanted) {
+                    for (j = 3; j < i; j++)
+                        printf "%s%s", (j == 3 ? "" : " "), $j
+                    print ""
+                }
+            }
+        }
+    ' "$REPO_ROOT/kernel/buildefi.sh"
+}
+
 if [ "${1:-}" = "--check-efi-parser" ]; then
     flags=$(efi_cflags)
     sources=$(efi_sources | awk '!seen[$0]++')
@@ -68,6 +87,23 @@ if [ "${1:-}" = "--check-efi-parser" ]; then
             echo "hazard-scan parser: FAIL: missing explicit EFI source $f"
             exit 1
         }
+    done
+    for spec in \
+        '../src/frontend/lexer.c|-DZL_FREESTANDING|-DBUILD_PARSER' \
+        '../src/frontend/parser.c|-DZL_FREESTANDING|-DBUILD_INTERP' \
+        '../src/runtime/interp.c|-DZL_FREESTANDING'; do
+        IFS='|' read -r source required_a required_b <<< "$spec"
+        parsed=" $(efi_source_flags "$source") "
+        case "$parsed" in *" $required_a "*) ;; *)
+            echo "hazard-scan parser: FAIL: $source missing parsed flag $required_a"
+            exit 1
+        esac
+        if [ -n "$required_b" ]; then
+            case "$parsed" in *" $required_b "*) ;; *)
+                echo "hazard-scan parser: FAIL: $source missing parsed flag $required_b"
+                exit 1
+            esac
+        fi
     done
     echo "hazard-scan parser: PASS: expanded flags and complete EFI source manifest"
     exit 0
@@ -116,7 +152,10 @@ if command -v clang >/dev/null 2>&1; then
     pushd kernel >/dev/null || exit 1
     for f in $files; do
         [ -f "$f" ] || continue
-        EXTRA=(); case "$(basename "$f")" in idt.c|apic.c) EXTRA=(-mgeneral-regs-only);; esac
+        SOURCE_FLAGS=()
+        read -r -a SOURCE_FLAGS <<< "$(efi_source_flags "$f")"
+        EXTRA=("${SOURCE_FLAGS[@]}")
+        case "$(basename "$f")" in idt.c|apic.c) EXTRA+=(-mgeneral-regs-only);; esac
         # Match buildefi.sh exactly. Omitting ZL_KERNEL_SERIAL makes one
         # unrelated standalone-translation-unit error appear in every file and
         # used to manufacture a seven-item TODO from a green EFI build.
