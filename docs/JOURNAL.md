@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-26 — fix: reconcile evidence build identities (7686f86)
+
+`codex/full-program` · 34 files changed, 5434 insertions(+), 5187 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>34 file(s)</summary>
+
+- `.ultra/TENSIONS.md`
+- `docs/program/FEATURE-STATUS.json`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/accessibility-registry.json`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/decision-ledger.json`
+- `kernel/metadata/dependency-lock.json`
+- _…and 22 more_
+
+</details>
+
 ## 2026-08-26 — docs: make research index self-contained (69f11cf)
 
 `main` · 1 file changed, 9 insertions(+), 9 deletions(-)

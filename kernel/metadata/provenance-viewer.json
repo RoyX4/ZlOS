@@ -2,7 +2,7 @@
   "schema": "zlos.provenance-viewer.v1",
   "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS",
   "feature_id": "EV-028",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "viewer": {
     "format": "SELF_CONTAINED_HTML",
     "read_only": true,
@@ -44,27 +44,27 @@
   "inputs": [
     {
       "path": "kernel/metadata/build-identity.json",
-      "sha256": "a0acdf8256ab07475512e0287310b27e435cf09245cc60696be187a33c7d1544",
+      "sha256": "525f71ec308235fcc008e6eebffaed84441d95e268845fdc55a2788aa82a08fc",
       "schema": "zlos.build-input-identity.v1"
     },
     {
       "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-      "sha256": "4c272307ecc781575d4d56af37ab1efc6f66c634c257f214cf83e30492aed806",
+      "sha256": "8be2d87d32fd89c623fbe0bd98175595d752a5f8428c289785aae5a7f8c9d625",
       "schema": "zlos.source-snapshot-receipt.v1"
     },
     {
       "path": "kernel/metadata/license-registry.json",
-      "sha256": "d343cc65cd311988821c88fdce44e049f1977e10d9ce74304b844b5502226fee",
+      "sha256": "c3c967999e3d033b03150b069fb02c9a07dc88a0ebf4ae59aa5f5fdddf70368d",
       "schema": "zlos.license-provenance-registry.v1"
     },
     {
       "path": "kernel/metadata/dependency-lock.json",
-      "sha256": "97da2b6401653bf0221e1e8f6f6912a21402b31f4912763d50d1d3768fa1858e",
+      "sha256": "9f0d724cd3d6083126632df88b8e0d3631b422416e0e8fbec68e86ae4837add6",
       "schema": "zlos.host-dependency-lock.v2"
     },
     {
       "path": "kernel/metadata/toolchain-manifest.json",
-      "sha256": "bcbdd494c94f74bd8b5d74b7d99a7c931917941cb83ec844c08a575055b07f6c",
+      "sha256": "0eadb17cf70d8affb49fccc6b5eaa50855568ae689f5db132c733469069dcd89",
       "schema": "zlos.toolchain-manifest.v1"
     },
     {
@@ -99,32 +99,32 @@
     },
     {
       "path": "kernel/metadata/visual-registry.json",
-      "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
+      "sha256": "084de7af42de98ca3888d3acac1464015d5e7f13d0c789fbcd90aafd1d37436f",
       "schema": "zlos.visual-evidence-registry.v1"
     },
     {
       "path": "kernel/metadata/accessibility-registry.json",
-      "sha256": "6643ebf3ef6b24e5319a8ec9e694fa2993ce0f011d5922046626351be98acb99",
+      "sha256": "312740859f67d54dfca638a532de3aa603f022f525d8112f9da2469fdbb94908",
       "schema": "zlos.accessibility-proof-registry.v1"
     },
     {
       "path": "kernel/metadata/security-registry.json",
-      "sha256": "c9cf4ce412a9d47772beff1520e99531865bd4ffa39ccb648b993fc23788c300",
+      "sha256": "a08fd7ed4c2bbb1c9424851fa5e650db9823b2c9826ce62821d79675cdb6e694",
       "schema": "zlos.security-claim-registry.v1"
     },
     {
       "path": "kernel/metadata/observability-registry.json",
-      "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
+      "sha256": "2509dbf4aec4ae908d184b7ae8461bf31ed6b462995f128b3242a91b801094e7",
       "schema": "zlos.observability-registry.v1"
     },
     {
       "path": "kernel/metadata/decision-ledger.json",
-      "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+      "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
       "schema": "zlos.decision-ledger.v1"
     },
     {
       "path": "kernel/metadata/release-notes.json",
-      "sha256": "986a045a2d3303f843118717beec572d8ca8b7d48391e7de480ff9cd0e51ba91",
+      "sha256": "85333a3c1722649b0285685deaa0c7fe78b68d6d346a7c6958b69342e5df446e",
       "schema": "zlos.release-notes.v1"
     }
   ],
@@ -149,17 +149,17 @@
     }
   ],
   "identity": {
-    "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691",
-    "branch": "",
-    "dirty": true,
+    "head": "7686f86c69b62f9071c1daf8e52eb7df876b7841",
+    "branch": "codex/full-program",
+    "dirty": false,
     "release_state": "UNRELEASED_DEVELOPMENT",
     "release_version": null,
     "release_channel": "NONE"
   },
   "origin": {
-    "build_input_count": 146,
-    "archive_bytes": 7413760,
-    "archive_sha256": "07560bc944b91e03f44bac26a6b14f704ce94ef4e7d6d0b20d2f227e247a8bbe",
+    "build_input_count": 148,
+    "archive_bytes": 7424000,
+    "archive_sha256": "a163c116baa393a394f908bf7e3695e8f5653169dfb00ab551ca74b5792f9c8d",
     "off_host_copies": 0,
     "whole_repository_snapshot": false,
     "dependency_commands": 15,
@@ -172,7 +172,7 @@
     ]
   },
   "licensing": {
-    "build_inputs": 146,
+    "build_inputs": 148,
     "declared_license_files": 0,
     "inputs_with_established_redistribution_grant": 0,
     "public_release_blocked": true
@@ -200,7 +200,7 @@
     {
       "area": "Build identity",
       "status": "PASS",
-      "detail": "146 declared inputs bind one exact build-input identity."
+      "detail": "148 declared inputs bind one exact build-input identity."
     },
     {
       "area": "Source custody",
@@ -210,7 +210,7 @@
     {
       "area": "Licensing",
       "status": "BLOCKED",
-      "detail": "146 build inputs lack an established redistribution grant."
+      "detail": "148 build inputs lack an established redistribution grant."
     },
     {
       "area": "Host tests",
@@ -1551,8 +1551,8 @@
       "rationale": "The current kernel zl subset cannot express the required window list and mechanism boundary.",
       "compatibility": "No public ABI change; preserve the current C/zl boundary until the replacement language/runtime contract is proved.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0001"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1572,8 +1572,8 @@
       "rationale": "Measured escape pixels refuted the two-function boundary without adding a per-pixel hot-path branch.",
       "compatibility": "Rendering output must retain the five-path clipping oracle at every supported mode.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0003"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1593,8 +1593,8 @@
       "rationale": "The old path imposed a window-size ceiling, artifacts and fixed memory cost.",
       "compatibility": "Keep the existing drag fallback until retained damage repaint passes equivalent host and target gates.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0004"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1615,8 +1615,8 @@
       "rationale": "A complete i915/Mesa stack assumes kernel facilities outside zlOS, but bounded display/blitter providers remain valid product work.",
       "compatibility": "Intel display/blitter work remains bounded native-provider work; Linux i915/Mesa ABI compatibility is not promised.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0005"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1636,8 +1636,8 @@
       "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
       "compatibility": "Every kernel compile route must consume kernel/SOURCES; route-local source lists are unsupported.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0006"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1657,8 +1657,8 @@
       "rationale": "Fetcher, parser, box model and bounded scripting have finite contracts and current implementation evidence.",
       "compatibility": "The supported browser contract is the explicit bounded compatibility ledger, not Chrome pixel/API parity.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0008"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1678,8 +1678,8 @@
       "rationale": "The old aggregate printed Maze missing while still returning success.",
       "compatibility": "Application identities and routes must match the generated manifest; blank or dead catalogue IDs are invalid.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0009"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1700,8 +1700,8 @@
       "rationale": "Similar names and parent/payload relationships do not prove the exact bytes executed on another route.",
       "compatibility": "A receipt applies only to the exact artifact and route it names.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0010"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1720,8 +1720,8 @@
       "rationale": "The real driver can light the panel from the harness, but no kernel path arms it.",
       "compatibility": "Intel host-harness modesetting is not native-boot display compatibility.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0011"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1741,8 +1741,8 @@
       "rationale": "Source possession and successful builds do not create a distribution license.",
       "compatibility": "No public redistribution channel is supported until licensing authority exists.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0013"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1761,8 +1761,8 @@
       "rationale": "The archive remains unsigned and in the same uncommitted worktree with zero off-host copies.",
       "compatibility": "The local source archive is recovery material, not a signed/off-host repository release.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0014"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1782,8 +1782,8 @@
       "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
       "compatibility": "Tool or firmware byte drift requires an inspected lock refresh; silent compatibility is rejected.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0015"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1802,8 +1802,8 @@
       "rationale": "Dropping them hides identity scope; calling them compiled invents reachability.",
       "compatibility": "Scope-only inputs affect identity but are not claimed as compiled objects.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0016"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1823,8 +1823,8 @@
       "rationale": "Overlapping build/editor/graphics pressure preceded a host freeze and forced shutdown.",
       "compatibility": "Uncontained full landing-gate invocation is unsupported on this host.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0017"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1844,8 +1844,8 @@
       "rationale": "Target integration requires an idle contained rebuild and later per-CPU/IRQ/service ownership.",
       "compatibility": "The structured-event core is host-only and provides no shipped event-service ABI yet.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0018"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1864,8 +1864,8 @@
       "rationale": "The last attempt stopped during EFI build and cannot support an aggregate green claim.",
       "compatibility": "The interrupted complete gate provides no green compatibility or release claim.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0019"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"
@@ -1884,8 +1884,8 @@
       "rationale": "A physical ThinkPad trace proves cursor movement and click edges, superseding the older no-decoder state without inventing tap, scroll or feel completion.",
       "compatibility": "The physical transport/decoder receipt does not promote tap, scroll, gesture feel or current-build hardware proof.",
       "evidence": {
-        "path": "kernel/decision-ledger.json",
-        "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+        "path": "kernel/metadata/decision-ledger.json",
+        "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
         "record_id": "DEC-0020"
       },
       "evidence_ceiling": "unreleased change candidate; not a published or runtime-complete release claim"

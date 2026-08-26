@@ -1,7 +1,7 @@
 {
   "schema": "zlos.security-claim-registry.v1",
   "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "input_bindings": {
     "artifact_registry": {
       "subject_build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",

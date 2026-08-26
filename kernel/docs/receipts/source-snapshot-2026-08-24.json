@@ -1,25 +1,25 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "git": {
-    "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691",
-    "branch": "",
-    "dirty": true,
-    "canonical_status_sha256": "c0d1438f87f418ea457c6328f8776aca44366cf86230666ec807cf9bc319e153",
+    "head": "7686f86c69b62f9071c1daf8e52eb7df876b7841",
+    "branch": "codex/full-program",
+    "dirty": false,
+    "canonical_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "submodule_status": []
   },
   "scope": "active zl import closure, declared C SOURCES, kernel/freestanding headers and all route scripts/entries/linkers/packaging helpers; conservative header superset",
   "archive": {
     "path": "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar",
     "format": "deterministic POSIX ustar; sorted paths; uid/gid/mtime zero",
-    "bytes": 7413760,
-    "sha256": "07560bc944b91e03f44bac26a6b14f704ce94ef4e7d6d0b20d2f227e247a8bbe",
-    "members": 146
+    "bytes": 7424000,
+    "sha256": "a163c116baa393a394f908bf7e3695e8f5653169dfb00ab551ca74b5792f9c8d",
+    "members": 148
   },
   "counts": {
-    "build_inputs": 146,
-    "archived_inputs": 146
+    "build_inputs": 148,
+    "archived_inputs": 148
   },
   "source_files": [
     {
@@ -36,9 +36,9 @@
     },
     {
       "path": "kernel/SOURCES",
-      "bytes": 5143,
+      "bytes": 5170,
       "mode": 436,
-      "sha256": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933"
+      "sha256": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86"
     },
     {
       "path": "kernel/app_manifest_embed.zl",
@@ -291,6 +291,18 @@
       "bytes": 5158,
       "mode": 436,
       "sha256": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d"
+    },
+    {
+      "path": "kernel/src/core/boot/boot_state.c",
+      "bytes": 7763,
+      "mode": 436,
+      "sha256": "261884c89f30c27a2364a1e74d60ba18557395b1b5dac08576ec2d7dee3411a3"
+    },
+    {
+      "path": "kernel/src/core/boot/boot_state.h",
+      "bytes": 2150,
+      "mode": 436,
+      "sha256": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c"
     },
     {
       "path": "kernel/src/core/console.c",

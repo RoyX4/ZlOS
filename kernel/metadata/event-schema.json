@@ -2,7 +2,7 @@
   "schema": "zlos.event-schema-registry.v1",
   "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
   "feature_id": "EV-018",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "contract": {
     "wire": {
       "endianness": "little",

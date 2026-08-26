@@ -3,19 +3,19 @@
   "result": "PASS_WITH_OPEN_GAPS",
   "source_catalogue_sha256": "646202b87733eaab09a1c81ac39964bca99e7e937ee19bbf7d0da783b29cb57b",
   "feature_map_sha256": "fe170e7242556db051e3cf50f096b5d6e9434307032ede6ea1fe7b2920ca4047",
-  "implementation_evidence_registry_sha256": "3c195f4fd570a4877f4d8305160ca775691136c13ca3281a6621678560c70941",
-  "decision_ledger_sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
-  "release_notes_sha256": "986a045a2d3303f843118717beec572d8ca8b7d48391e7de480ff9cd0e51ba91",
-  "provenance_viewer_sha256": "75a2d7f5749515db5973c6a3485d44de9b26e744df825c52a794681274f6294d",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "implementation_evidence_registry_sha256": "e3d9256d0eb071d3544ef9e2779d06429c49dadf59ea6ffedfba6b886ea24b1c",
+  "decision_ledger_sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
+  "release_notes_sha256": "85333a3c1722649b0285685deaa0c7fe78b68d6d346a7c6958b69342e5df446e",
+  "provenance_viewer_sha256": "a475570d6bfd320da3c358501fcbef1ae489d93f71e7247c5666f6580c09ec49",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "implementation_tree": {
     "path": ".",
-    "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+    "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
     "generation_git_context": {
-      "branch": "",
-      "dirty": true,
+      "branch": "codex/full-program",
+      "dirty": false,
       "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-      "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691"
+      "head": "7686f86c69b62f9071c1daf8e52eb7df876b7841"
     },
     "evidence_ceiling": "build-input generation context, not current checkout or artifact commit attestation"
   },
@@ -132,7 +132,7 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-          "sha256": "4c272307ecc781575d4d56af37ab1efc6f66c634c257f214cf83e30492aed806",
+          "sha256": "8be2d87d32fd89c623fbe0bd98175595d752a5f8428c289785aae5a7f8c9d625",
           "schema": "zlos.source-snapshot-receipt.v1",
           "result": "PASS_WITH_OPEN_CUSTODY_GAP"
         }
@@ -145,7 +145,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 146 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
+      "weakest_evidence": "all 148 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
     },
     {
       "id": "EV-003",
@@ -170,14 +170,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/license-registry.json",
-          "sha256": "d343cc65cd311988821c88fdce44e049f1977e10d9ce74304b844b5502226fee",
+          "sha256": "c3c967999e3d033b03150b069fb02c9a07dc88a0ebf4ae59aa5f5fdddf70368d",
           "schema": "zlos.license-provenance-registry.v1",
           "result": "PASS_WITH_RELEASE_BLOCK"
         }
       ],
       "known_gaps": [
         "0 license files",
-        "146 inputs lack an established redistribution grant"
+        "148 inputs lack an established redistribution grant"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
@@ -210,7 +210,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/dependency-lock.json",
-          "sha256": "97da2b6401653bf0221e1e8f6f6912a21402b31f4912763d50d1d3768fa1858e",
+          "sha256": "9f0d724cd3d6083126632df88b8e0d3631b422416e0e8fbec68e86ae4837add6",
           "schema": "zlos.host-dependency-lock.v2",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
@@ -251,14 +251,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/toolchain-manifest.json",
-          "sha256": "bcbdd494c94f74bd8b5d74b7d99a7c931917941cb83ec844c08a575055b07f6c",
+          "sha256": "0eadb17cf70d8affb49fccc6b5eaa50855568ae689f5db132c733469069dcd89",
           "schema": "zlos.toolchain-manifest.v1",
           "result": "PASS_WITH_OPEN_PORTABILITY_GAPS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/dependency-lock.json",
-          "sha256": "97da2b6401653bf0221e1e8f6f6912a21402b31f4912763d50d1d3768fa1858e",
+          "sha256": "9f0d724cd3d6083126632df88b8e0d3631b422416e0e8fbec68e86ae4837add6",
           "schema": "zlos.host-dependency-lock.v2",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
@@ -334,7 +334,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/build-graph.json",
-          "sha256": "a78957da9948b0963a1b9563310d03e5e6c4d745d2b1687d8e9bd7d34870e633",
+          "sha256": "f3266af6c9c73db306760f80c6e11a21490f37680f743d204a523669624c3f7f",
           "schema": "zlos.build-graph.v1",
           "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT"
         },
@@ -354,7 +354,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 146 inputs have recipe positions across 4 lanes; the nine exact artifacts are an explicitly historical snapshot"
+      "weakest_evidence": "all 148 inputs have recipe positions across 4 lanes; the nine exact artifacts are an explicitly historical snapshot"
     },
     {
       "id": "EV-008",
@@ -388,7 +388,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/wrapper-registry.json",
-          "sha256": "6e7f1820d35c27fe5e798b7ee17263c74913181cf5a513e3db4053bcef553c9d",
+          "sha256": "9f88ca1c8d6cebdce3a501a92f8eb1a3b0bdefc55ab5c9515371280068965969",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },
@@ -479,7 +479,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/evidence-registry.json",
-          "sha256": "3c195f4fd570a4877f4d8305160ca775691136c13ca3281a6621678560c70941",
+          "sha256": "e3d9256d0eb071d3544ef9e2779d06429c49dadf59ea6ffedfba6b886ea24b1c",
           "schema": "zlos.evidence-registry.v1",
           "result": "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -698,7 +698,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/visual-registry.json",
-          "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
+          "sha256": "084de7af42de98ca3888d3acac1464015d5e7f13d0c789fbcd90aafd1d37436f",
           "schema": "zlos.visual-evidence-registry.v1",
           "result": "INVENTORY_WITH_OPEN_GAPS"
         }
@@ -737,7 +737,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/observability-registry.json",
-          "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
+          "sha256": "2509dbf4aec4ae908d184b7ae8461bf31ed6b462995f128b3242a91b801094e7",
           "schema": "zlos.observability-registry.v1",
           "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -796,14 +796,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/event-schema.json",
-          "sha256": "3860629e49929b031703a74bc816f302532f03475bfcf289864b8299e4b1af47",
+          "sha256": "3d703d42708dab1bb27c132d227736fcf729395dea6104615d0b5c19880f674d",
           "schema": "zlos.event-schema-registry.v1",
           "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/observability-registry.json",
-          "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
+          "sha256": "2509dbf4aec4ae908d184b7ae8461bf31ed6b462995f128b3242a91b801094e7",
           "schema": "zlos.observability-registry.v1",
           "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -948,7 +948,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/visual-registry.json",
-          "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
+          "sha256": "084de7af42de98ca3888d3acac1464015d5e7f13d0c789fbcd90aafd1d37436f",
           "schema": "zlos.visual-evidence-registry.v1",
           "result": "INVENTORY_WITH_OPEN_GAPS"
         }
@@ -986,7 +986,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/accessibility-registry.json",
-          "sha256": "6643ebf3ef6b24e5319a8ec9e694fa2993ce0f011d5922046626351be98acb99",
+          "sha256": "312740859f67d54dfca638a532de3aa603f022f525d8112f9da2469fdbb94908",
           "schema": "zlos.accessibility-proof-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -1024,7 +1024,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/security-registry.json",
-          "sha256": "c9cf4ce412a9d47772beff1520e99531865bd4ffa39ccb648b993fc23788c300",
+          "sha256": "a08fd7ed4c2bbb1c9424851fa5e650db9823b2c9826ce62821d79675cdb6e694",
           "schema": "zlos.security-claim-registry.v1",
           "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -1103,7 +1103,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/decision-ledger.json",
-          "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+          "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
           "schema": "zlos.decision-ledger.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         },
@@ -1155,7 +1155,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/release-notes.json",
-          "sha256": "986a045a2d3303f843118717beec572d8ca8b7d48391e7de480ff9cd0e51ba91",
+          "sha256": "85333a3c1722649b0285685deaa0c7fe78b68d6d346a7c6958b69342e5df446e",
           "schema": "zlos.release-notes.v1",
           "result": "PASS_UNRELEASED_WITH_BLOCKERS"
         },
@@ -1210,7 +1210,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/provenance-viewer.json",
-          "sha256": "75a2d7f5749515db5973c6a3485d44de9b26e744df825c52a794681274f6294d",
+          "sha256": "a475570d6bfd320da3c358501fcbef1ae489d93f71e7247c5666f6580c09ec49",
           "schema": "zlos.provenance-viewer.v1",
           "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS"
         },
@@ -24602,7 +24602,7 @@
   ],
   "generator": {
     "path": "tools/gen_feature_status.py",
-    "sha256": "406bb8e7694c21742c22181e39442b490189cac86c57c777f76079d86dda1c9d"
+    "sha256": "3e332ff11662dc698debd7e9198f79319f3dda86e99b2f28f14f6c7c74115622"
   },
   "evidence_ceiling": "conservative plan-to-current-evidence join; unlisted current assets are not promoted"
 }

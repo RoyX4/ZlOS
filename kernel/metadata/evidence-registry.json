@@ -1,18 +1,18 @@
 {
   "schema": "zlos.evidence-registry.v1",
   "result": "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "inputs": [
     {
       "path": "kernel/metadata/build-identity.json",
-      "sha256": "a0acdf8256ab07475512e0287310b27e435cf09245cc60696be187a33c7d1544",
+      "sha256": "525f71ec308235fcc008e6eebffaed84441d95e268845fdc55a2788aa82a08fc",
       "schema": "zlos.build-input-identity.v1",
       "result": "IDENTITY_ONLY",
       "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt"
     },
     {
       "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-      "sha256": "4c272307ecc781575d4d56af37ab1efc6f66c634c257f214cf83e30492aed806",
+      "sha256": "8be2d87d32fd89c623fbe0bd98175595d752a5f8428c289785aae5a7f8c9d625",
       "schema": "zlos.source-snapshot-receipt.v1",
       "result": "PASS_WITH_OPEN_CUSTODY_GAP",
       "evidence_ceiling": "exact reconstructable current build-input closure in the same uncommitted worktree; not a signed, off-host, whole-repository or release-custody snapshot"
@@ -47,35 +47,35 @@
     },
     {
       "path": "kernel/metadata/dependency-lock.json",
-      "sha256": "97da2b6401653bf0221e1e8f6f6912a21402b31f4912763d50d1d3768fa1858e",
+      "sha256": "9f0d724cd3d6083126632df88b8e0d3631b422416e0e8fbec68e86ae4837add6",
       "schema": "zlos.host-dependency-lock.v2",
       "result": "PASS_WITH_OPEN_SUPPLY_GAPS",
       "evidence_ceiling": "exact installed binary, runtime-library, firmware and transitive package SBOM; not an offline rebuild, source archive, signature or supply-chain attestation"
     },
     {
       "path": "kernel/metadata/wrapper-registry.json",
-      "sha256": "6e7f1820d35c27fe5e798b7ee17263c74913181cf5a513e3db4053bcef553c9d",
+      "sha256": "9f88ca1c8d6cebdce3a501a92f8eb1a3b0bdefc55ab5c9515371280068965969",
       "schema": "zlos.wrapper-registry.v1",
       "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
       "evidence_ceiling": "complete current shebang-wrapper inventory plus static policy classification; dynamic child-exit proof belongs to check-land-gate.py"
     },
     {
       "path": "kernel/metadata/toolchain-manifest.json",
-      "sha256": "bcbdd494c94f74bd8b5d74b7d99a7c931917941cb83ec844c08a575055b07f6c",
+      "sha256": "0eadb17cf70d8affb49fccc6b5eaa50855568ae689f5db132c733469069dcd89",
       "schema": "zlos.toolchain-manifest.v1",
       "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
       "evidence_ceiling": "exact current compiler/linker/header bytes and ABI policy for four kernel routes; not a hermetic, signed, source-reproducible or cross-host toolchain"
     },
     {
       "path": "kernel/metadata/build-graph.json",
-      "sha256": "a78957da9948b0963a1b9563310d03e5e6c4d745d2b1687d8e9bd7d34870e633",
+      "sha256": "f3266af6c9c73db306760f80c6e11a21490f37680f743d204a523669624c3f7f",
       "schema": "zlos.build-graph.v1",
       "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
       "evidence_ceiling": "complete declared-input build recipe for four lanes joined to a clearly historical nine-artifact snapshot; not current artifact provenance or a compiler-emitted per-object attestation"
     },
     {
       "path": "kernel/metadata/license-registry.json",
-      "sha256": "d343cc65cd311988821c88fdce44e049f1977e10d9ce74304b844b5502226fee",
+      "sha256": "c3c967999e3d033b03150b069fb02c9a07dc88a0ebf4ae59aa5f5fdddf70368d",
       "schema": "zlos.license-provenance-registry.v1",
       "result": "PASS_WITH_RELEASE_BLOCK",
       "evidence_ceiling": "repository-local source/hash and license-file presence only; authorship and legal rights are not inferred"
@@ -124,42 +124,42 @@
     },
     {
       "path": "kernel/metadata/visual-registry.json",
-      "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
+      "sha256": "084de7af42de98ca3888d3acac1464015d5e7f13d0c789fbcd90aafd1d37436f",
       "schema": "zlos.visual-evidence-registry.v1",
       "result": "INVENTORY_WITH_OPEN_GAPS",
       "evidence_ceiling": "asset inventory and unbound BIOS/UEFI pairing only; no current visual-regression promotion"
     },
     {
       "path": "kernel/metadata/accessibility-registry.json",
-      "sha256": "6643ebf3ef6b24e5319a8ec9e694fa2993ce0f011d5922046626351be98acb99",
+      "sha256": "312740859f67d54dfca638a532de3aa603f022f525d8112f9da2469fdbb94908",
       "schema": "zlos.accessibility-proof-registry.v1",
       "result": "PASS_WITH_OPEN_GAPS",
       "evidence_ceiling": "host input/focus/scale primitives only; no complete assistive or target workflow promotion"
     },
     {
       "path": "kernel/metadata/security-registry.json",
-      "sha256": "c9cf4ce412a9d47772beff1520e99531865bd4ffa39ccb648b993fc23788c300",
+      "sha256": "a08fd7ed4c2bbb1c9424851fa5e650db9823b2c9826ce62821d79675cdb6e694",
       "schema": "zlos.security-claim-registry.v1",
       "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
       "evidence_ceiling": "current claim inventory joined to historical static, host and QEMU evidence only"
     },
     {
       "path": "kernel/metadata/decision-ledger.json",
-      "sha256": "a5142920f392d00da46bec574bf33bba3090c2cabf40d3fbb953602926299114",
+      "sha256": "167f7b2b965e648ca24cfac479de18bea7f0ad8e09ad5e46046e96af545b272c",
       "schema": "zlos.decision-ledger.v1",
       "result": "PASS_WITH_OPEN_GAPS",
       "evidence_ceiling": "20 high-impact records plus source-normalized semantics for all 47 legacy labels; not complete system history or independent approval"
     },
     {
       "path": "kernel/metadata/release-notes.json",
-      "sha256": "986a045a2d3303f843118717beec572d8ca8b7d48391e7de480ff9cd0e51ba91",
+      "sha256": "85333a3c1722649b0285685deaa0c7fe78b68d6d346a7c6958b69342e5df446e",
       "schema": "zlos.release-notes.v1",
       "result": "PASS_UNRELEASED_WITH_BLOCKERS",
       "evidence_ceiling": "generated unreleased development changelog; not a versioned, signed, distributed or runtime-complete release"
     },
     {
       "path": "kernel/metadata/provenance-viewer.json",
-      "sha256": "75a2d7f5749515db5973c6a3485d44de9b26e744df825c52a794681274f6294d",
+      "sha256": "a475570d6bfd320da3c358501fcbef1ae489d93f71e7247c5666f6580c09ec49",
       "schema": "zlos.provenance-viewer.v1",
       "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS",
       "evidence_ceiling": "current static provenance projection with explicitly historical artifact/runtime evidence; not current-build execution, a booted zlOS app, live monitor, authenticated remote service or signed release portal"
@@ -173,14 +173,14 @@
     },
     {
       "path": "kernel/metadata/event-schema.json",
-      "sha256": "3860629e49929b031703a74bc816f302532f03475bfcf289864b8299e4b1af47",
+      "sha256": "3d703d42708dab1bb27c132d227736fcf729395dea6104615d0b5c19880f674d",
       "schema": "zlos.event-schema-registry.v1",
       "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
       "evidence_ceiling": "current static schema joined to historical host proof; no current-build or shipped target integration"
     },
     {
       "path": "kernel/metadata/observability-registry.json",
-      "sha256": "2a69620f03f31f914de447bef94b0374a629e435b7d96ebadae20c9d89620950",
+      "sha256": "2509dbf4aec4ae908d184b7ae8461bf31ed6b462995f128b3242a91b801094e7",
       "schema": "zlos.observability-registry.v1",
       "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
       "evidence_ceiling": "current source inventory joined to historical host/QEMU receipts; no current-build execution, target emitter, or durable crash evidence"
@@ -244,7 +244,7 @@
   },
   "counts": {
     "reproducible_artifacts": 9,
-    "source_snapshot_inputs": 146,
+    "source_snapshot_inputs": 148,
     "source_snapshot_off_host_copies": 0,
     "qemu_boot_routes": 6,
     "app_identities": 62,
@@ -262,12 +262,12 @@
     "toolchain_target_lanes": 4,
     "toolchain_external_headers": 82,
     "toolchain_hermetic_builds": 0,
-    "build_graph_source_inputs": 146,
+    "build_graph_source_inputs": 148,
     "build_graph_target_lanes": 4,
     "build_graph_artifacts": 9,
     "build_graph_orphan_inputs": 0,
     "build_graph_scope_only_inputs": 12,
-    "license_build_inputs": 146,
+    "license_build_inputs": 148,
     "license_files": 0,
     "host_targets": 62,
     "host_commands_executed": 53,
@@ -344,7 +344,7 @@
     "physical_exact_hash_artifacts": 9,
     "host_hardware_skips": 3,
     "host_non_runs": 11,
-    "inputs_without_redistribution_grant": 146,
+    "inputs_without_redistribution_grant": 148,
     "public_release_blocked": true,
     "source_snapshot_off_host_missing": true,
     "source_snapshot_signature_missing": true,
@@ -395,7 +395,7 @@
   },
   "generator": {
     "path": "kernel/tools/generators/gen-evidence-registry.py",
-    "sha256": "2bcd75c227bf6c690111a88113b39662931eb3576747c459d290267fdf5ecfbb"
+    "sha256": "4e706cdf941978b1d82b57cb47158a9f0a1cf9b5b23354fb0afaf0037b5ef4c7"
   },
   "evidence_ceiling": "current source/tooling index joined to explicitly historical host/build/QEMU evidence; no current-runtime, physical-artifact, full-workflow or public-release promotion",
   "weakest_link": "off-host signed source custody, physical exact-hash proof, hardware-skipped tests, non-run instruments/manual actions, and license grants remain open"

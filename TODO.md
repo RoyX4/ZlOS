@@ -20,12 +20,13 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-_none — every file the docs describe is tracked._
+- [ ] `kernel/_gen64.c`
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
 
 ## Open tensions (.ultra/TENSIONS.md)
 
-- [ ] **T-8** — Generated evidence manifests disagree on build identity.
-- [ ] **T-9** — Boot recovery policy remains at the kernel root.
+_none open._
 
 ---
 

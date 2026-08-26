@@ -165,8 +165,8 @@ regression check.
 ## T-8 — Generated evidence manifests disagree on build identity. CLOSED.
 
 The authoritative current build-input identity is
-`7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d`
-over 146 declared inputs. Its digest now covers source/toolchain/route fields,
+`9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35`
+over 148 declared inputs. Its digest now covers source/toolchain/route fields,
 while Git head, branch and build-input dirty state remain conservative
 generation context. This removes the impossible cycle in which writing and
 committing the checked-in identity changed the identity itself.
@@ -208,6 +208,6 @@ the owned paths directly.
 the 32-bit, 64-bit, EFI/LLP64, and raw-lane-equivalent compile checks all accept
 the moved source through the shared manifest. The shared-source recovery
 selftest and directory-capsule check also pass. The dated source snapshot and
-open T-8 build graph remain untouched until their own identity-safe
-regeneration. Stage-zero persistent selection and ready-mark wiring remain
-future boot work, not part of this structure closure.
+T-8 build graph were regenerated through the identity-safe evidence chain.
+Stage-zero persistent selection and ready-mark wiring remain future boot work,
+not part of this structure closure.

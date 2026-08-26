@@ -1,7 +1,7 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "landing_gate_sha256": "325923a0ba8945d79e23a86d24967f44a946cf42b8ca6d6e068f9f456c79d4ba",
   "wrappers": [
     {
@@ -171,8 +171,8 @@
     },
     {
       "path": "kernel/tests/host/build.sh",
-      "sha256": "14dccd1d19d2de8dc583c42b6d0c2316c6601ea432351fb26e2c3e390c5e3eb4",
-      "bytes": 39471,
+      "sha256": "fc1ee2f532d121fbe189d3bef0334141c8eeae5040cb6ef295bc900241094795",
+      "bytes": 39491,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -633,8 +633,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-sources.sh",
-      "sha256": "cc6da47d6ee4f593dd2564bcd047f943dca8dbefc5b741a5c5b03afa4d256e28",
-      "bytes": 9835,
+      "sha256": "63d9af35af7a7979d4ac6a7f91586329c9e312d75788f3befd457846506fb24f",
+      "bytes": 9900,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -776,7 +776,7 @@
     },
     {
       "path": "kernel/tools/generators/gen-evidence-registry.py",
-      "sha256": "2bcd75c227bf6c690111a88113b39662931eb3576747c459d290267fdf5ecfbb",
+      "sha256": "4e706cdf941978b1d82b57cb47158a9f0a1cf9b5b23354fb0afaf0037b5ef4c7",
       "bytes": 39783,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
@@ -831,8 +831,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-release-notes.py",
-      "sha256": "2a69c5c11d9c1884352f5ebc75f58981477ec5476dea9cfa4e5aa326607fd17f",
-      "bytes": 29320,
+      "sha256": "d53fb664e2c878dcf628d4b3a5d4a863debbee4db25dc63c3b0dcbd456b90714",
+      "bytes": 29407,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1568,7 +1568,7 @@
     },
     {
       "path": "tools/gen_feature_status.py",
-      "sha256": "406bb8e7694c21742c22181e39442b490189cac86c57c777f76079d86dda1c9d",
+      "sha256": "3e332ff11662dc698debd7e9198f79319f3dda86e99b2f28f14f6c7c74115622",
       "bytes": 38236,
       "executable": true,
       "interpreter": "/usr/bin/env python3",

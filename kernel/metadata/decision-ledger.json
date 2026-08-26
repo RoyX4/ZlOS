@@ -2,7 +2,7 @@
   "schema": "zlos.decision-ledger.v1",
   "result": "PASS_WITH_OPEN_GAPS",
   "feature_id": "EV-026",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "records": [
     {
       "id": "DEC-0001",
@@ -153,7 +153,7 @@
       "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
       "source": {
         "path": "kernel/SOURCES",
-        "sha256": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
+        "sha256": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
         "needle": "# SOURCES - the kernel sources that EVERY target compiles."
       },
       "needle": "# SOURCES - the kernel sources that EVERY target compiles.",

@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
   "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "artifact_snapshot": {
     "subject_build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
     "current_build_bound": false,
     "evidence_ceiling": "exact historical artifact/QEMU registry; recipe edges do not promote those bytes as outputs of the current source identity"
   },
   "artifact_registry_sha256": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
-  "toolchain_manifest_sha256": "bcbdd494c94f74bd8b5d74b7d99a7c931917941cb83ec844c08a575055b07f6c",
+  "toolchain_manifest_sha256": "0eadb17cf70d8affb49fccc6b5eaa50855568ae689f5db132c733469069dcd89",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -55,6 +55,8 @@
     "kernel/src/core/arena.c",
     "kernel/src/core/boot/boot_handover.c",
     "kernel/src/core/boot/boot_handover.h",
+    "kernel/src/core/boot/boot_state.c",
+    "kernel/src/core/boot/boot_state.h",
     "kernel/src/core/console.c",
     "kernel/src/core/crash.c",
     "kernel/src/core/crash.h",
@@ -161,26 +163,26 @@
     {
       "id": "bios-multiboot32",
       "primary_artifact": "kernel.elf",
-      "logical_objects": 77,
-      "declared_c_units": 72
+      "logical_objects": 78,
+      "declared_c_units": 73
     },
     {
       "id": "multiboot64",
       "primary_artifact": "kernel64.elf",
-      "logical_objects": 77,
-      "declared_c_units": 72
+      "logical_objects": 78,
+      "declared_c_units": 73
     },
     {
       "id": "native-uefi64",
       "primary_artifact": "BOOTX64.EFI",
-      "logical_objects": 77,
-      "declared_c_units": 72
+      "logical_objects": 78,
+      "declared_c_units": 73
     },
     {
       "id": "raw-bios-loader32",
       "primary_artifact": "kernel_raw.elf",
-      "logical_objects": 77,
-      "declared_c_units": 72
+      "logical_objects": 78,
+      "declared_c_units": 73
     }
   ],
   "nodes": [
@@ -372,6 +374,12 @@
       "kind": "logical-object",
       "lane": "bios-multiboot32",
       "physical_path": "kernel/_boot_handover.o"
+    },
+    {
+      "id": "object:bios-multiboot32:src/core/boot/boot_state.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_boot_state.o"
     },
     {
       "id": "object:bios-multiboot32:src/core/console.c",
@@ -836,6 +844,12 @@
       "physical_path": "kernel/_boot_handover64.o"
     },
     {
+      "id": "object:multiboot64:src/core/boot/boot_state.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_boot_state64.o"
+    },
+    {
       "id": "object:multiboot64:src/core/console.c",
       "kind": "logical-object",
       "lane": "multiboot64",
@@ -1296,6 +1310,12 @@
       "kind": "logical-object",
       "lane": "native-uefi64",
       "physical_path": "kernel/_efi_boot_handover.o"
+    },
+    {
+      "id": "object:native-uefi64:src/core/boot/boot_state.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_boot_state.o"
     },
     {
       "id": "object:native-uefi64:src/core/console.c",
@@ -1760,6 +1780,12 @@
       "physical_path": "kernel/_boot_handover.o"
     },
     {
+      "id": "object:raw-bios-loader32:src/core/boot/boot_state.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_boot_state.o"
+    },
+    {
       "id": "object:raw-bios-loader32:src/core/console.c",
       "kind": "logical-object",
       "lane": "raw-bios-loader32",
@@ -2142,7 +2168,7 @@
       "id": "source:kernel/SOURCES",
       "kind": "source-input",
       "path": "kernel/SOURCES",
-      "sha256": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
+      "sha256": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
       "suffix": ""
     },
     {
@@ -2437,6 +2463,20 @@
       "kind": "source-input",
       "path": "kernel/src/core/boot/boot_handover.h",
       "sha256": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/src/core/boot/boot_state.c",
+      "kind": "source-input",
+      "path": "kernel/src/core/boot/boot_state.c",
+      "sha256": "261884c89f30c27a2364a1e74d60ba18557395b1b5dac08576ec2d7dee3411a3",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/core/boot/boot_state.h",
+      "kind": "source-input",
+      "path": "kernel/src/core/boot/boot_state.h",
+      "sha256": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c",
       "suffix": ".h"
     },
     {
@@ -3279,6 +3319,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:bios-multiboot32:src/core/boot/boot_state.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:bios-multiboot32:src/core/console.c",
       "to": "artifact:kernel.elf",
       "relation": "linked-into"
@@ -3660,6 +3705,11 @@
     },
     {
       "from": "object:multiboot64:src/core/boot/boot_handover.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:src/core/boot/boot_state.c",
       "to": "artifact:kernel64.elf",
       "relation": "linked-into"
     },
@@ -4049,6 +4099,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:native-uefi64:src/core/boot/boot_state.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:native-uefi64:src/core/console.c",
       "to": "artifact:BOOTX64.EFI",
       "relation": "linked-into"
@@ -4430,6 +4485,11 @@
     },
     {
       "from": "object:raw-bios-loader32:src/core/boot/boot_handover.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:src/core/boot/boot_state.c",
       "to": "artifact:kernel_raw.elf",
       "relation": "linked-into"
     },
@@ -5256,6 +5316,36 @@
     {
       "from": "source:kernel/src/core/boot/boot_handover.h",
       "to": "source:kernel/src/core/boot/boot_handover.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_handover.h",
+      "to": "source:kernel/src/core/boot/boot_state.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_state.c",
+      "to": "object:bios-multiboot32:src/core/boot/boot_state.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_state.c",
+      "to": "object:multiboot64:src/core/boot/boot_state.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_state.c",
+      "to": "object:native-uefi64:src/core/boot/boot_state.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_state.c",
+      "to": "object:raw-bios-loader32:src/core/boot/boot_state.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_state.h",
+      "to": "source:kernel/src/core/boot/boot_state.c",
       "relation": "included-by"
     },
     {
@@ -6815,14 +6905,14 @@
     }
   ],
   "counts": {
-    "source_inputs": 146,
-    "declared_c_units": 72,
+    "source_inputs": 148,
+    "declared_c_units": 73,
     "target_lanes": 4,
     "artifacts": 9,
     "current_artifacts": 0,
     "historical_artifacts": 9,
-    "nodes": 467,
-    "edges": 733,
+    "nodes": 473,
+    "edges": 743,
     "orphan_source_inputs": 0,
     "scope_only_inputs": 12
   },

@@ -97,7 +97,7 @@ def validate(value: dict) -> None:
     counts = value.get("counts", {})
     expected_counts = {
         "reproducible_artifacts": 9,
-        "source_snapshot_inputs": 146,
+        "source_snapshot_inputs": 148,
         "source_snapshot_off_host_copies": 0,
         "qemu_boot_routes": 6,
         "app_identities": 62,
@@ -115,12 +115,12 @@ def validate(value: dict) -> None:
         "toolchain_target_lanes": 4,
         "toolchain_external_headers": 82,
         "toolchain_hermetic_builds": 0,
-        "build_graph_source_inputs": 146,
+        "build_graph_source_inputs": 148,
         "build_graph_target_lanes": 4,
         "build_graph_artifacts": 9,
         "build_graph_orphan_inputs": 0,
         "build_graph_scope_only_inputs": 12,
-        "license_build_inputs": 146,
+        "license_build_inputs": 148,
         "license_files": 0,
         "host_targets": 62,
         "host_commands_executed": 53,
@@ -200,7 +200,7 @@ def validate(value: dict) -> None:
         "physical_exact_hash_artifacts": 9,
         "host_hardware_skips": 3,
         "host_non_runs": 11,
-        "inputs_without_redistribution_grant": 146,
+        "inputs_without_redistribution_grant": 148,
         "public_release_blocked": True,
         "source_snapshot_off_host_missing": True,
         "source_snapshot_signature_missing": True,
@@ -328,7 +328,7 @@ def build() -> dict:
     if any(len(item or "") != 64 or item == identity for item in historical_inputs.values()):
         raise ValueError("historical evidence identity boundary is invalid")
     if source_snapshot.get("result") != "PASS_WITH_OPEN_CUSTODY_GAP" \
-            or source_snapshot.get("counts", {}).get("archived_inputs") != 146 \
+            or source_snapshot.get("counts", {}).get("archived_inputs") != 148 \
             or source_snapshot.get("open_gaps", {}).get("off_host_copies") != 0:
         raise ValueError("source snapshot is missing or overpromoted")
     if artifact.get("result") != "PASS" or app.get("counts", {}).get("with_qemu_open_ready_close") != 62:
@@ -346,7 +346,7 @@ def build() -> dict:
             or toolchain.get("counts") != {"tools": 7, "target_lanes": 4, "external_headers": 82}:
         raise ValueError("toolchain manifest is missing or overpromoted")
     if build_graph.get("result") != "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT" \
-            or build_graph.get("counts", {}).get("source_inputs") != 146 \
+            or build_graph.get("counts", {}).get("source_inputs") != 148 \
             or build_graph.get("counts", {}).get("orphan_source_inputs") != 0 \
             or build_graph.get("counts", {}).get("scope_only_inputs") != 12 \
             or build_graph.get("artifact_snapshot", {}).get("current_build_bound") is not False:

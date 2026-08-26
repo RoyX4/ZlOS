@@ -1,7 +1,7 @@
 {
   "schema": "zlos.accessibility-proof-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "host_test_receipt_sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
   "source_identities": {
     "src/drivers/input/input.c": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0",
@@ -14,7 +14,7 @@
   },
   "visual_registry": {
     "path": "kernel/metadata/visual-registry.json",
-    "sha256": "ff546e6516dbeea042d513f4aa06d429618b027962139d814c4eeab2ad4d76e4",
+    "sha256": "084de7af42de98ca3888d3acac1464015d5e7f13d0c789fbcd90aafd1d37436f",
     "current_build_bound": 0
   },
   "capabilities": [

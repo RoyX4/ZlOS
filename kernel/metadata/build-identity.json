@@ -1,12 +1,12 @@
 {
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
-    "branch": "",
-    "dirty": true,
+    "branch": "codex/full-program",
+    "dirty": false,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "69f11cf8e5792d4430c3f2ce7a07b472054af691"
+    "head": "7686f86c69b62f9071c1daf8e52eb7df876b7841"
   },
-  "identity_sha256": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "identity_sha256": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -17,7 +17,7 @@
   "source_files_sha256": {
     "freestanding/runtime_kernel.c": "fff4cd8b71797353caf22b2f74302410c768459ffa89481ca6dd8c2fa5552aec",
     "freestanding/zl_freestanding.h": "5be9db332d6666dd6332643a05b31774b14f3f93c85546f8dbac18144ef7a843",
-    "kernel/SOURCES": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
+    "kernel/SOURCES": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
     "kernel/app_manifest_embed.zl": "f8db3ec0482624cd718258976a2eb50187ae0f095be1a30f49e94a12b6ef658d",
     "kernel/apps/apps_common.zl": "dc15b6174f21e45a4c51aaa055fa61e56a27f8245e0c4ea99b0a545214bc5df2",
     "kernel/apps/apps_games1.zl": "e64d44bde4aff81bf1b2c8adea2593d99cc5f08c77e931a43effdda7fc884ce1",
@@ -60,6 +60,8 @@
     "kernel/src/core/arena.c": "cf01029e7ff7865a72bd99b47a8463fc1a379944ed17486b182f0c1978343032",
     "kernel/src/core/boot/boot_handover.c": "a47127daa8a60037bf4b2bdb6ea9103c44058e81e1ac0462d5a3738824081a10",
     "kernel/src/core/boot/boot_handover.h": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d",
+    "kernel/src/core/boot/boot_state.c": "261884c89f30c27a2364a1e74d60ba18557395b1b5dac08576ec2d7dee3411a3",
+    "kernel/src/core/boot/boot_state.h": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c",
     "kernel/src/core/console.c": "124025daa79df82856d35d1aee78ff9981a886371fdfd74aa5e6f2f4aa1bd67d",
     "kernel/src/core/crash.c": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
     "kernel/src/core/crash.h": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",

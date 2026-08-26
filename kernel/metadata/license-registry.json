@@ -1,7 +1,7 @@
 {
   "schema": "zlos.license-provenance-registry.v1",
   "result": "PASS_WITH_RELEASE_BLOCK",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "license_files": [],
   "inputs": [
     {
@@ -20,7 +20,7 @@
     },
     {
       "path": "kernel/SOURCES",
-      "sha256": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
+      "sha256": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -315,6 +315,20 @@
     {
       "path": "kernel/src/core/boot/boot_handover.h",
       "sha256": "1e4cba660387285a5f48be493b839c4f1aa5c2769f0d5be49a5b05a2b39ae61d",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/src/core/boot/boot_state.c",
+      "sha256": "261884c89f30c27a2364a1e74d60ba18557395b1b5dac08576ec2d7dee3411a3",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "kernel/src/core/boot/boot_state.h",
+      "sha256": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -1028,7 +1042,7 @@
     }
   ],
   "counts": {
-    "build_inputs": 146,
+    "build_inputs": 148,
     "declared_license_files": 0,
     "inputs_with_established_redistribution_grant": 0
   },

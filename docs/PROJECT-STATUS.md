@@ -76,16 +76,15 @@ implementation status.
 
 The static validator currently passes for program inventory, repository
 identity, identifiers, dependencies and links in the isolated verification
-tree. The visual and accessibility registries also pass their independent
-generator checks. The downstream release-note/provenance/evidence chain is not
-fresh: its inputs contain three incompatible historical build identities, so
-regeneration stops instead of silently joining unlike evidence. That open
-boundary is recorded as T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md).
-T-9 is closed: the recovery-policy pair now lives under
-`kernel/src/core/boot/`, is declared in the shared source manifest, and passed
-its focused host and four-lane compile proof. Ignored local build/test outputs
-are outside Git and are not part of the published layout. These checks prove
-planning consistency, not product implementation.
+tree. All 17 generated registry/status checks now agree on the current
+148-input build identity. Historical artifact and runtime receipts retain their
+original subject identities and are explicitly not current-build-bound. T-8
+and T-9 are closed in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md): the
+evidence chain regenerates without joining unlike builds, and the recovery
+policy is owned under `kernel/src/core/boot/` with focused host and four-lane
+compile proof. Ignored local build/test outputs are outside Git and are not
+part of the published layout. These checks prove planning consistency, not
+product implementation or current runtime behavior.
 
 ## Implementation State
 
@@ -96,7 +95,7 @@ The codebase is substantial but the whole program is partial.
 | Research inventory and dependency plan | Complete and committed. |
 | Branch/worktree integration discovered on 2026-08-24 | Complete and pushed. Historical refs/directories were not deleted. |
 | Existing local implementation batch | Implemented across many host and QEMU lanes; see the dated receipt under `kernel/docs/evidence/`. |
-| `program/FEATURE-STATUS.json` | Dated join against dirty `b8a00ec`: 877 planned, 22 partial, 7 proved. It is not current HEAD implementation status and must be refreshed from evidence before reuse. |
+| `program/FEATURE-STATUS.json` | Current identity-safe join: 877 planned/unproved, 16 partial-current, 6 partial-historical, 3 historical-only and 4 proved-current, for 906 total. Historical execution does not count as current proof. |
 | Post-restructure static and QEMU verification | GitHub docs, repository gates, BIOS32, raw BIOS, GRUB BIOS/UEFI and native UEFI all passed at `69f11cf8e579`. No physical boot was run for this publication commit. |
 | Physical ThinkPad proof | Partial. QEMU and host evidence do not close panel, input feel, I219, USB power-cut, NVMe, suspend, or Intel promotion gates. |
 | Complete MP-00 through MP-20 product | Not complete. The product-first order begins with Wave 1 performance/dependability and proceeds through boot, processes, IPC, services, hardware breadth, apps, browser, tooling, and release. |

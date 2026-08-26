@@ -1,7 +1,7 @@
 {
   "schema": "zlos.observability-registry.v1",
   "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "7a01ae9c753071500184baf9a0b7c75f9fd161aeb165611f3c85e7e0cf582b6d",
+  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
   "boot_transcripts": [
     {
       "path": "kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json",
@@ -78,7 +78,7 @@
   },
   "event_schema": {
     "path": "kernel/metadata/event-schema.json",
-    "sha256": "3860629e49929b031703a74bc816f302532f03475bfcf289864b8299e4b1af47",
+    "sha256": "3d703d42708dab1bb27c132d227736fcf729395dea6104615d0b5c19880f674d",
     "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
     "target_emitters": 0
   },
