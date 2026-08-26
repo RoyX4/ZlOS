@@ -1096,6 +1096,12 @@ int main(void)
     {
         char *uic = slurp("../../src/graphics/ui/ui.c");
         char *kit = slurp("../../src/graphics/ui/uikit.c");
+        /* wm.c was NOT scanned here, and it is the file this design changed most
+         * and the only one that paints the focus signal - so a hardcoded colour
+         * in the chrome passed every gate the rule-1 check was supposed to be.
+         * Found by review; the omission is exactly the shape
+         * docs/GUARDS-THAT-DID-NOT-GUARD.md is about. */
+        char *wmc = slurp("../../src/graphics/windowing/wm.c");
         char *dsg = slurp("../../src/graphics/ui/design.h");
         int draw = count_colour_literals(uic) + count_colour_literals(kit);
         strip_comments(uic); strip_comments(kit);
@@ -1103,6 +1109,9 @@ int main(void)
         int d = count_colour_literals(dsg);
         oknum(a == 0, "ui.c carries no six-digit colour literal", a, 0);
         oknum(b == 0, "uikit.c carries no six-digit colour literal", b, 0);
+        strip_comments(wmc);
+        int c = count_colour_literals(wmc);
+        oknum(c == 0, "wm.c carries no six-digit colour literal", c, 0);
         /* CONTROL: the scanner must FIND them where they are supposed to be,
          * or "zero literals in ui.c" is a statement about the scanner. */
         ok(d > 20, "control: the same scanner finds design.h's own tokens");
