@@ -11,6 +11,7 @@ not be current.
 | `EXECUTION-ROADMAP.md` | Current priority spine. Later implementation notes update it; they do not convert unverified hardware into proof. |
 | `CODE-MAP.md` | Current file-layout map. |
 | `REPOSITORY-STRUCTURE.md` | Layout rules and source-ownership boundaries. |
+| `DIRECTORY-CAPSULE-INDEX.md` | Complete index of the eight local documentation surfaces in every tracked directory. |
 | `design/RESTRUCTURE-REVIEW-2026-08-25.md` | Independent review of the published Phase 1 restructure and the still-unimplemented later destination. |
 | `GUARDS-THAT-DID-NOT-GUARD.md` | Current warning list for false-green gates. |
 | `WORKING-RULE.md` | Current integration rule and why it exists. |

@@ -37,9 +37,11 @@ NVMe, a filesystem, and a windowed compositor.
 > Its measurements are retained, but its ranking was superseded by the execution
 > roadmap and later integration work.
 
-Five more orientation docs worth knowing about:
+Six more orientation docs worth knowing about:
 
 - [`docs/README.md`](docs/README.md) — documentation truth states.
+- [`docs/DIRECTORY-CAPSULE-INDEX.md`](docs/DIRECTORY-CAPSULE-INDEX.md) — every
+  tracked directory, its purpose, class, local status, and local task surface.
 - [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — current source ownership.
 - [`docs/REPOSITORY-STRUCTURE.md`](docs/REPOSITORY-STRUCTURE.md) — placement rules.
 - [`src/README.md`](src/README.md) — language-toolchain ownership.

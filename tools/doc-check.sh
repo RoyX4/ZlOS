@@ -53,7 +53,6 @@ if [ "$LINK_SELFTEST" -eq 1 ]; then
     exit 0
 fi
 
-fail=0
 # Path-looking references that belong to this checkout. The leading character is
 # included to avoid matching repo paths inside sibling links such as
 # ../../../zl/docs/..., then stripped before checking.
@@ -70,6 +69,15 @@ hit()  {
 }
 ok()   { echo "  ok     $*"; }
 note() { echo "  note   $*"; }
+
+fail=0
+
+echo "== 0. every tracked directory has a current documentation capsule =="
+if python3 tools/directory-docs.py --check; then
+    ok "directory documentation capsules are complete and current"
+else
+    hit "directory documentation capsules are missing or stale"
+fi
 
 # TODO.md and docs/JOURNAL.md are GENERATED, and TODO.md's whole job includes
 # listing the broken references doc-check found - checking it would flag the
