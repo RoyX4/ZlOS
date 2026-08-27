@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(boot): raise raw loader capacity (adf8d1a)
+
+`codex/presswork-local-closure` · 6 files changed, 45 insertions(+), 37 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `kernel/boot/link-raw.ld`
+- `kernel/boot/raw_boot.asm`
+- `kernel/boot/raw_entry.S`
+- `kernel/docs/reference/system/memory-model.md`
+- `kernel/src/arch/x86/memmap.h`
+- `kernel/src/core/arena.c`
+
+</details>
+
 ## 2026-08-28 — chore: refresh rail gate provenance (f1256f9)
 
 `codex/presswork-local-closure` · 9 files changed, 97 insertions(+), 85 deletions(-)
