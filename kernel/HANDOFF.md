@@ -9,6 +9,15 @@
 > and reversals. T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) records
 > the metadata chain that cannot currently regenerate as one build identity.
 
+**The 64-bit BIOS+GRUB boot route is BROKEN and no gate watches it.** It stalls
+after "keyboard on IRQ1" and never reaches "ready."; its sibling grub-uefi64
+passes with the same kernel64.elf. Confirmed pre-existing by an A/B against
+`7d1a11b` in a detached worktree - byte-identical failure signature.
+`tools/preflight.sh` runs bios32, raw, iso and efi, and NOT verify-64, which is
+why `grub-bios64`'s boot receipt still carries a PASS dated from `b8a00ec`.
+Details, and why you must not simply add the gate to preflight, are in
+[`../docs/evidence/grub-bios64-unwatched-2026-08-27.md`](../docs/evidence/grub-bios64-unwatched-2026-08-27.md).
+
 The desktop's three edge reserves were written down ELEVEN times across wm.c,
 snap.c, four host tests, four boot gates and the receipt writer, and by
 2026-08-27 no two sets agreed - including a `72 * t->scale` in wm.c whose
