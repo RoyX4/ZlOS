@@ -10,6 +10,7 @@
 # Kept out of run_tests.sh on purpose: it costs ~40s and needs OVMF.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit
+. tools/checks/qemu-crash.sh   # qemu_crashed(): the EMULATOR, not the kernel
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -88,6 +89,7 @@ boot_until() {           # $1 = log file, rest = qemu argv
         sleep 0.5
     done
     kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    qemu_crashed "$?" || true      # reports; the greps below still decide
 }
 
 echo "== ISO: legacy BIOS boot =="

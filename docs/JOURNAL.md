@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(gates): normalise the app count in the golden transcript, not just the sha (f469db8)
+
+`design/presswork` · 4 files changed, 78 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>4 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/one-fact-many-copies-2026-08-27.md`
+- `kernel/tests/fixtures/golden.txt`
+- `kernel/verify.sh`
+
+</details>
+
 ## 2026-08-27 — fix(gates): the kernel printed a hardcoded app count, so every gate hardcoded one too (b71cf81)
 
 `design/presswork` · 7 files changed, 95 insertions(+), 14 deletions(-)

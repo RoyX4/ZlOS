@@ -9,6 +9,17 @@
 > and reversals. T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) records
 > the metadata chain that cannot currently regenerate as one build identity.
 
+**QEMU segfaults on this box, and until 2026-08-27 every gate blamed the
+kernel for it.** Four crashes that day, all at the same binary offset
+(`6ee234`, reading `0x10`), only in `verify-efi.sh` - the one gate driving
+qemu-xhci + usb-storage + usb-kbd + usb-mouse under OVMF. If a boot gate fails
+with "the kernel never started", check for `CRASH QEMU ITSELF crashed` above it
+before bisecting anything:
+[`../docs/evidence/qemu-segfaults-2026-08-27.md`](../docs/evidence/qemu-segfaults-2026-08-27.md).
+`kernel/tools/checks/qemu-crash.sh` is the single detector; all five gates
+source it and it REPORTS rather than deciding, because a teardown crash after
+the markers landed does not unprove the boot.
+
 **The 64-bit BIOS+GRUB boot route is BROKEN and no gate watches it.** It stalls
 after "keyboard on IRQ1" and never reaches "ready."; its sibling grub-uefi64
 passes with the same kernel64.elf. Confirmed pre-existing by an A/B against

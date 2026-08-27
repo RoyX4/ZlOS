@@ -26,6 +26,7 @@
 # serial log looks healthy. kernel/tools/probes/probe-uefi.py measures which devices work.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
+. tools/checks/qemu-crash.sh   # qemu_crashed(): the EMULATOR, not the kernel
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -89,11 +90,18 @@ for _ in $(seq $((CEILING * 2))); do
     sleep 0.5
 done
 sleep 1                      # let the line after the prompt land
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+
+
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
 tr -d '\r' < "$LOG" > "$LOG.c" && mv "$LOG.c" "$LOG"
 
+# The emulator's health is reported BEFORE the verdict and separately from it.
+qemu_crashed "$QSTATUS" && QCRASHED=1 || QCRASHED=0
+
 if ! grep -q "zlOS starting" "$LOG"; then
-    echo "  FAIL  the kernel never started"; fail=1
+    echo "  FAIL  the kernel never started"
+    [ "$QCRASHED" = 1 ] && echo "        ^^ the crash above is WHY. Re-run; do not bisect the kernel."
+    fail=1
 elif ! grep -q "ready\." "$LOG"; then
     echo "  FAIL  it started but never reached the prompt"
     echo "        last thing it managed to say:"

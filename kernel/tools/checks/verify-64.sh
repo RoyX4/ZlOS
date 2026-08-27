@@ -5,6 +5,7 @@
 set -uo pipefail
 KERNEL_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$KERNEL_ROOT"
+. tools/checks/qemu-crash.sh   # qemu_crashed(): the EMULATOR, not the kernel
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -47,6 +48,11 @@ boot_until() { # $1 log, remaining arguments are qemu arguments
     local result=$?
     kill "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
+    local qstatus=$?
+    # Report it; do NOT override the verdict. serial_command.py already failed
+    # if the markers never arrived, and a teardown crash after they did arrive
+    # does not unprove the boot.
+    qemu_crashed "$qstatus" || true
     rm -f "$serial_socket"
     return "$result"
 }

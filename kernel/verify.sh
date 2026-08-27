@@ -5,6 +5,7 @@
 # the transcript, diff against golden.txt, always time out.
 set -uo pipefail
 cd "$(dirname "$0")" || exit
+. tools/checks/qemu-crash.sh   # qemu_crashed(): the EMULATOR, not the kernel
 
 GOLDEN=tests/fixtures/golden.txt
 OUT=$(mktemp)
@@ -41,7 +42,9 @@ for _ in $(seq $((CEILING * 2))); do
     kill -0 "$QPID" 2>/dev/null || break
     sleep 0.5
 done
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+
+
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
 grep -q "halting" "$OUT" 2>/dev/null || { echo "FAIL: kernel never halted - it hung"; exit 1; }
 [ -s "$OUT" ]     || { echo "FAIL: no serial output - it did not boot"; exit 1; }
 
@@ -51,6 +54,10 @@ if [ ! -f "$GOLDEN" ]; then
     cp "$OUT" "$GOLDEN"; echo "wrote $GOLDEN (first run - review, then commit)"; exit 0
 fi
 
+# Reported, not counted: a teardown crash after the markers landed does not
+# unprove the boot, and a mid-boot crash truncates the log so the checks
+# below fail on their own - with this line as the explanation.
+qemu_crashed "$QSTATUS" || true
 MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
 # Derived, like the three identity fields below it. This was `entries=62` in two
 # places in this file while the kernel printed 64 - the gate and the thing it

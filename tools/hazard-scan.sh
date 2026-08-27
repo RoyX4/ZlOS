@@ -253,6 +253,22 @@ else
     skip "check-version.py not present"
 fi
 
+echo "== 7. the boot gates must tell a crashed EMULATOR from a failed kernel =="
+# All five threw QEMU's wait status away and judged on log contents, so when
+# qemu-system-x86_64 segfaulted under load the gate reported "the kernel never
+# started". One shared helper answers it now; this proves the helper can still
+# fire, and - the case that matters - that it stays silent on 143, which is the
+# SIGTERM the gates send themselves on every healthy boot.
+if [ -f kernel/tools/checks/qemu-crash-selftest.sh ]; then
+    if out=$(bash kernel/tools/checks/qemu-crash-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -i fail | head -3)"
+    fi
+else
+    skip "qemu-crash-selftest.sh not present"
+fi
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"
