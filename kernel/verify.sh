@@ -69,8 +69,19 @@ for marker in \
     }
 done
 
+# NORMALISE THE COUNT AS WELL AS THE SHA.
+#
+# golden.txt carried `entries=62` while the kernel printed 64 - the eleventh and
+# last copy of that number in the tree. Bumping it to 64 would have worked and
+# would have left a twelfth chance to go stale, because the golden is the one
+# copy that only a full boot can correct.
+#
+# It is normalised instead, for exactly the reason the sha256 already is: this
+# transcript's job is to prove the boot did not CHANGE, and the count is already
+# asserted, derived from the manifest, by the marker loop above. Recording it
+# literally here re-checks nothing and goes stale every time an app is added.
 sed -E \
-    -e "s/(app-manifest: schema=1 entries=$MANIFEST_N sha256=)[0-9a-f]{64}/\1<CURRENT>/" \
+    -e 's/(app-manifest: schema=1 entries=)[0-9]+( sha256=)[0-9a-f]{64}/\1<CURRENT>\2<CURRENT>/' \
     -e 's/(build-identity: schema=1 id=)[0-9a-f]{64}/\1<CURRENT>/' \
     -e 's/(build-source: head=)[0-9a-f]{40} dirty=[01]/\1<CURRENT>/' \
     "$OUT" > "$NORMALIZED"

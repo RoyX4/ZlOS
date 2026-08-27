@@ -73,6 +73,48 @@ be right. The method could not have told me if they were not.
   status, and reports NOT BUILT as a FAILURE. Its test list is read out of
   `build.sh` so a new test is covered the day it is added.
 
+## Where the app count actually came from
+
+The ten copies of `entries=62` were not ten independent mistakes. They were one
+mistake, copied outward, and the pre-push gate found the source only after I had
+fixed six of the symptoms.
+
+`kernel/tools/generators/gen-app-manifest.py` writes the receipt the kernel
+prints about *itself*:
+
+```python
+digest = hashlib.sha256(serialized_manifest.encode("utf-8")).hexdigest()
+return (
+    "fn app_manifest_report() {\n"
+    f'    print("  app-manifest: schema=1 entries=64 sha256={digest}")\n'
+    ...
+```
+
+**The digest is computed. The count is typed.** So the running kernel announces a
+number that nothing derived — and from that moment every gate that checks the
+kernel's announcement has to write the same number down in order to match it.
+Six did. When apps were added, this one line was bumped 62 → 64 and the six were
+not.
+
+`kernel/verify.sh` is the clearest picture of the disease, because it does both
+things four lines apart:
+
+```sh
+MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+BUILD_ID=$(python3 -c '... ["identity_sha256"]')
+BUILD_HEAD=$(python3 -c '... ["git"]["head"]')
+BUILD_DIRTY=$(python3 -c '... ["git"]["dirty"]')
+for marker in \
+    "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" \
+```
+
+Four identity fields derived from JSON, one count typed. The typed one is the
+only one that ever went wrong, and it went wrong in six files at once.
+
+The generator derives it now, so the kernel and every gate read the same number
+from the same file, and the receipt cannot disagree with the manifest it is a
+receipt *for*.
+
 ## The guard I wrote was blind to one of the six
 
 Worth recording separately, because it happened *after* the lesson above and in
