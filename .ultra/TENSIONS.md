@@ -210,3 +210,77 @@ does not move the pair because the host compile gate is deliberately deferred.
 **Close by:** move both files together, update the host harness include/source
 paths and every metadata/document reference, rerun `boot_state_test`, and prove
 the shared build/source registries agree before removing this exception.
+
+---
+
+## T-20 — `NAMESET_MAX` silently dropped names; the kernel built clean and halted. CLOSED.
+
+**Gate:** boot under QEMU after the PRESSWORK depth pass. **RED**, with a green build.
+
+The depth pass took the kernel from 927 zl functions to 1083. `NAMESET_MAX` in
+`src/backends/c/compile.c` was 1024 and `set_add()` had no failure path - past the
+cap it simply stopped storing. The last 59 names were dropped in silence.
+
+A dropped name is not a compile error. `set_has()` reports it unknown, so calls to it
+are emitted as dynamic `zl_calln()` rather than direct `zl_fn_x()`, and the runtime
+answers an unknown name with `kfatal("builtin not available in the kernel subset")`.
+`kernel.elf` linked with **0 undefined symbols** at 5.59 MB and halted on boot.
+
+`check-zlcalls.py` reported **"every call site resolves"** throughout, because it
+verifies a name exists in the zl sources - not that the backend bound it.
+
+**Cause, verified.** Compiling `origin/main`'s `kernel.zl` with the SAME compiler emits
+2 direct `zl_fn_layout()` calls; this tree emitted 2 dynamic `zl_calln("layout")` for
+the identical construct. Same source shape, different binding, therefore the tool.
+
+Three earlier hypotheses died to measurement first: builtins conditionally compiled out
+(preprocessed with the kernel's own flags - 759 both sides, zero difference); C calling
+zl by name (zero `zl_calln(` outside generated files); a zero-argument binding quirk
+(`label_windows` and `rail_reg_rows` are zero-arg and bind directly).
+
+**The comment above the constant recorded this same bug at 256 and then said:**
+*"1024 is headroom, not a guess - the kernel is nowhere near it either way."* It was at
+1083. That sentence is why nobody looked at the compiler for three hypotheses.
+
+**Closed by** raising the cap to 4096 AND removing the silence - `set_add()` now fails
+hard, names the function it could not fit, and states the consequence. Validated in both
+directions: cap planted at 64 gives `zl: too many names for the C backend: 'au_row_x10'
+is number 65 and NAMESET_MAX is 64` with build exit 1; restored gives toolchain exit 0,
+kernel exit 0, and a booting desktop.
+
+**Still open from it:** `check-zlcalls.py` is structurally blind to this class. The
+direct test is to scan generated `out.c` for a `zl_calln()` whose name is a known zl
+function. Not written. Recorded in TODO.md.
+
+---
+
+## T-21 — the harness cannot render the shell, and screenshots from it were read as the OS. OPEN.
+
+`kernel/tests/host/wmshot.c` links `wm.c`, `ui.c`, `uikit.c` and `fb.c` and draws its
+own wallpaper, top bar and dock. The rail, raster strip and foot are `kernel.zl` and do
+not compile into it, so **no wmshot render can show the shell** - and its furniture is
+not the shell's.
+
+This was read as the desktop being wrong, twice, before anyone booted the real thing.
+It also renders geometry at `ui_theme_init(2)` while `fb.c` derives its type scale as
+`width*256/1920` = 1.0 at 1920 wide, so harness shots understate the type by half.
+
+Not closed: the honest fix is either to make the harness say so on the image itself, or
+to make the desktop-shot CI job boot QEMU rather than run wmshot. Neither is done.
+
+---
+
+## T-22 — eyes were used as a colour instrument, and were wrong three times. CLOSED as a rule.
+
+The focused window's knockout was called broken on two separate occasions, hours apart,
+from downscaled renders. Sampling the framebuffer both times gave `#B6B0AB` exactly -
+`ZD_KNOCK` - with its title ink at `#181411`, exactly `ZD_KNOCK_INK`.
+
+At normal viewing scale that token against a dark surround reads as mid-grey. It is not
+mid-grey.
+
+**The rule:** eyes answer *"is the focus obvious at a glance"*; they do not answer *"is
+this the right colour"*. Both questions get asked of the same picture, which is what
+makes them easy to conflate. Sample the framebuffer for the second one - the instrument
+is three lines of Python and it has been right every time against a confident wrong
+reading.
