@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — docs: register check-version.py and its selftest in the checks capsule (dbfa270)
+
+`design/presswork` · 3 files changed, 32 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/tools/checks/README.md`
+
+</details>
+
 ## 2026-08-27 — fix(identity): the OS reported three different versions, two of them on screen at once (b088f2c)
 
 `design/presswork` · 24 files changed, 542 insertions(+), 105 deletions(-)
