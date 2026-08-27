@@ -7,6 +7,31 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(gates): a host test that stopped LINKING stopped RUNNING, and nothing said so (116b88a)
+
+`design/presswork` · 9 files changed, 300 insertions(+), 46 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>9 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/tests/host/run-all.sh`
+- `kernel/tests/host/settingstest.c`
+- `kernel/tests/host/toasttest.c`
+- `kernel/tests/host/wmtest.c`
+- `kernel/tests/host/wmtest_feel.c`
+
+</details>
+
 ## 2026-08-27 — fix(term): break the shell's wrap on words, and hang the continuation (7f42013)
 
 `design/presswork` · 8 files changed, 311 insertions(+), 51 deletions(-)

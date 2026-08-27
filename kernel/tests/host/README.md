@@ -91,6 +91,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `parsestat.c`
 - `pngtest.c`
 - `rtctest.c`
+- `run-all.sh`
 - `runtest.c`
 - `settingstest.c`
 - `systest.c`
