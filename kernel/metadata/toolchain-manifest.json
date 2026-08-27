@@ -1,8 +1,8 @@
 {
   "schema": "zlos.toolchain-manifest.v1",
   "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
-  "build_identity": "cc920413744a060dea0a0b8f39a1b9906fabdd81967de0bb4bbc9dbd970596ef",
-  "dependency_lock_sha256": "7f360b6fe2ccacf2147a8f07a3f576861aad94263f6861e75a81adfb5c62ba58",
+  "build_identity": "031a4848f695622e10501c5187017ae467c97ef821e9c2bbab995c5152adb20e",
+  "dependency_lock_sha256": "8e60fad73ffe37cbeb54dc98f3b848335cee110266daafdc6fe317532ad152e3",
   "environment": {
     "CC": "UNSET_EFFECTIVE_GCC",
     "forbidden_variables": [

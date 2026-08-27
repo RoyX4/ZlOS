@@ -1,7 +1,7 @@
 {
   "schema": "zlos.license-provenance-registry.v1",
   "result": "PASS_WITH_RELEASE_BLOCK",
-  "build_identity": "cc920413744a060dea0a0b8f39a1b9906fabdd81967de0bb4bbc9dbd970596ef",
+  "build_identity": "031a4848f695622e10501c5187017ae467c97ef821e9c2bbab995c5152adb20e",
   "license_files": [],
   "inputs": [
     {
@@ -139,7 +139,7 @@
     },
     {
       "path": "kernel/boot/link-raw.ld",
-      "sha256": "3f2743872e2f6f87f583ea236285d9b8176e9a4e25d883ac02bbe9fd1cc77e0b",
+      "sha256": "bac577d99957f34803f4fb526570178cf275e56bac1d4c039bc29161d704a746",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -160,14 +160,14 @@
     },
     {
       "path": "kernel/boot/raw_boot.asm",
-      "sha256": "c37c4ecb83f30cd89988fec09fb77c94d56ca33814b360dc2f2899db6c6217ea",
+      "sha256": "62c8267a96dc87d4fafa34bf384e4084e42c3423ae208b7e6969d1929c9bda59",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/boot/raw_entry.S",
-      "sha256": "0ea086961cf4be6068164cd83ffffee5c4eb0a36a5640d97d8d4ea6089a1e4b7",
+      "sha256": "c15907cb98f454b7a0ba5b258d0497719620b7a1f3746c285b94054e64cb83d0",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -251,7 +251,7 @@
     },
     {
       "path": "kernel/src/arch/x86/memmap.h",
-      "sha256": "af9281ea4b7075b45b18b0d1ef85d8b0399c8c78721ae25d743b132dcd4fede1",
+      "sha256": "889e741fd504aa5f315a0eeeef45d1f6cb0c8135eabf1b467d04265f46db9651",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -300,7 +300,7 @@
     },
     {
       "path": "kernel/src/core/arena.c",
-      "sha256": "cf01029e7ff7865a72bd99b47a8463fc1a379944ed17486b182f0c1978343032",
+      "sha256": "19165eff77c31731bef6d7d7b91c8a283b4ad61ce39647ae9d9f10414314f8a2",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
