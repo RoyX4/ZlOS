@@ -142,13 +142,23 @@ if [ -f "$WT/kernel/SOURCES" ]; then
   # SOURCES proves every listed file is compiled. This proves the reverse: that
   # a .c sitting in kernel/src is not silently absent from the build. Three
   # outcomes, and only one of them is a failure.
-  miss=0; hostonly=0; dead=0
+  miss=0; hostonly=0; generated_data=0; dead=0
   while IFS= read -r f; do
     b=$(basename "$f")
     rel=${f#"$WT/kernel/"}
     # compiled outside the SOURCES loop by every target, deliberately
     case "$rel" in src/runtime/interp_kernel.c) continue;; esac
     grep -qx "$rel" "$WT/kernel/SOURCES" && continue
+    case "$rel" in
+      src/graphics/fonts/font_big.c|src/graphics/icons/icons_rgb.c)
+        # Generated const-data products, not translation units. font_big is
+        # deliberately excluded from the raw image's 640 KiB loader budget;
+        # icons_rgb is retained generator output for a future renderer.
+        echo "generated data (intentionally not linked): $b"
+        generated_data=$((generated_data+1))
+        continue
+        ;;
+    esac
     if grep -q "$rel\|$b" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
       # host-only: a harness compiles it, the kernel does not. Correct.
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
@@ -165,7 +175,7 @@ if [ -f "$WT/kernel/SOURCES" ]; then
   if [ $miss -gt 0 ]; then
     FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: $miss silently uncompiled)"
   else
-    echo ">>> ok (reverse SOURCES; $hostonly host-only, $dead dead)"
+    echo ">>> ok (reverse SOURCES; $hostonly host-only, $generated_data generated data, $dead dead)"
   fi
 else
   FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: kernel/SOURCES is missing)"
@@ -198,7 +208,7 @@ until guard; do sleep 30; done
 run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --no-build \
     --receipt docs/receipts/app-lifecycle-qemu-2026-08-22.json
 until guard; do sleep 30; done
-run "Run route QEMU" "$WT/kernel" python3 probe-run.py --no-build \
+run "Run route QEMU" "$WT/kernel" python3 tools/probes/probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
 run "application evidence registry write" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --write --verify-artifact

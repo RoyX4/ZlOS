@@ -2,7 +2,7 @@
   "schema": "zlos.decision-ledger.v1",
   "result": "PASS_WITH_OPEN_GAPS",
   "feature_id": "EV-026",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "records": [
     {
       "id": "DEC-0001",
@@ -229,7 +229,7 @@
       "rationale": "The old aggregate printed Maze missing while still returning success.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "sha256": "041ebe0abe30e0685b1492ff6b6fa4b93953ead7df86d6ec909bb6f75687e608",
         "needle": "It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`"
       },
       "needle": "It replaces the old aggregate `apps53.py` green that printed `Maze exists NO`",
@@ -279,7 +279,7 @@
       "rationale": "The real driver can light the panel from the harness, but no kernel path arms it.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "sha256": "041ebe0abe30e0685b1492ff6b6fa4b93953ead7df86d6ec909bb6f75687e608",
         "needle": "**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only."
       },
       "needle": "**Nothing in the kernel arms `lt_armed`.** This runs from the host harness only.",
@@ -303,7 +303,7 @@
       "rationale": "Raw bytes are exposed but no x/y/button decoder exists.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "sha256": "041ebe0abe30e0685b1492ff6b6fa4b93953ead7df86d6ec909bb6f75687e608",
         "needle": "it is a **transport with\nno decoder**."
       },
       "needle": "it is a **transport with\nno decoder**.",
@@ -328,7 +328,7 @@
       "rationale": "Source possession and successful builds do not create a distribution license.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "sha256": "041ebe0abe30e0685b1492ff6b6fa4b93953ead7df86d6ec909bb6f75687e608",
         "needle": "There is currently no repository license file, so public release is explicitly"
       },
       "needle": "There is currently no repository license file, so public release is explicitly",
@@ -489,7 +489,7 @@
       "rationale": "A physical ThinkPad trace proves cursor movement and click edges, superseding the older no-decoder state without inventing tap, scroll or feel completion.",
       "source": {
         "path": "kernel/HANDOFF.md",
-        "sha256": "1a00c6456d29d969a78c69a22cecd6f0faa00220cb06145ddf505efce515d03b",
+        "sha256": "041ebe0abe30e0685b1492ff6b6fa4b93953ead7df86d6ec909bb6f75687e608",
         "needle": "Transport, decoder and compositor routing are therefore physical"
       },
       "needle": "Transport, decoder and compositor routing are therefore physical",

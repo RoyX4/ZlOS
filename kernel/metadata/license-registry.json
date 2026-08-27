@@ -1,12 +1,12 @@
 {
   "schema": "zlos.license-provenance-registry.v1",
   "result": "PASS_WITH_RELEASE_BLOCK",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "license_files": [],
   "inputs": [
     {
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "02d7b39e463e2bd3c02ed18faa816eab3cf5af6557927e1fc54748e92af41d47",
+      "sha256": "09480f71df8576a9bde15d903ecd7936699c3cf199e0f360a91dcaf0d6996e1c",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -27,7 +27,7 @@
     },
     {
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "0fa3e5b84411e569398e7a00e48522f7507205825e875375b11b0592913fd0f3",
+      "sha256": "23fb728c6767f8615ef6c6907de64235ce51cb95e6a1d627eba5349b87c155df",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -69,7 +69,7 @@
     },
     {
       "path": "kernel/apps/apps_registry.zl",
-      "sha256": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a",
+      "sha256": "632ac333ca4bef2da712d9507b5614dc9fc951904d78b557ec738597976a94c7",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -209,7 +209,7 @@
     },
     {
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d",
+      "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -383,6 +383,13 @@
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
+      "path": "kernel/src/core/version.h",
+      "sha256": "0c621712a817f2c75a5ffd76a485fac332f3ba81320942e0783751704a644626",
+      "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
+      "license_status": "UNDECLARED_IN_REPOSITORY",
+      "redistribution_grant": "NOT_ESTABLISHED"
+    },
+    {
       "path": "kernel/src/core/zllog.c",
       "sha256": "dba5ebc9ef8fe249a1dc2c35e120a27431ebf4982172edadc29b63099fd7804e",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
@@ -510,7 +517,7 @@
     },
     {
       "path": "kernel/src/drivers/input/input.c",
-      "sha256": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0",
+      "sha256": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -524,7 +531,7 @@
     },
     {
       "path": "kernel/src/drivers/input/xhci.c",
-      "sha256": "6c1985ca01d6c2b12c9ddfcc8017c940ee600a10a780f4fc15f65451d0ef4e7e",
+      "sha256": "79863802b82f352794ea15943ba239ea319fd6a8673dbbae0a833540589dd62d",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -650,7 +657,7 @@
     },
     {
       "path": "kernel/src/graphics/icons/icons.c",
-      "sha256": "290a1449bddae89cd7e368e7254435c474566b3e766cea70a7a6fdda307d5919",
+      "sha256": "2d7d07beca39fb0db12fc990a4545ee5334d496cc75b124153d6aa97a9d4d910",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -671,7 +678,7 @@
     },
     {
       "path": "kernel/src/graphics/ui/design.h",
-      "sha256": "f7f41d856f24c3acd4465545775247ad4131136009b3fe60d5eeacfb423d304c",
+      "sha256": "8bd34fdb56acb467ca586d6ac69106bfc44617d8141f334f0b02d8a01cdbe4ed",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -699,35 +706,35 @@
     },
     {
       "path": "kernel/src/graphics/ui/settings.c",
-      "sha256": "34953c6d92b31233397c4b576d5182ab2708f9068dea37e3b793e66f9b8b42bb",
+      "sha256": "bec8d5eee5d2525e108e592d528b5ecba7024ea46c18f59c2479b59e89da3397",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/src/graphics/ui/snap.c",
-      "sha256": "77bb9397c504b1a59ae35d67befb96586ec2b7ff33705241ac2b0ac6531ecc9c",
+      "sha256": "58cd52f8fa7271dc4544927fb8d3379b4aa677b61f671f1069da7ba6b7969c88",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/src/graphics/ui/ui.c",
-      "sha256": "1d9a00f73eb8a5f735de053e5d9b6e19dfdbcaec845b1a142c797826830b757d",
+      "sha256": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/src/graphics/ui/ui.h",
-      "sha256": "004c669a87915915ee560aded670dd94cdd5c9f02842f823031d8663203ff002",
+      "sha256": "2cf1b0f0e09088dc7f62cad99179a97b991bb5d60285cf25d3b6cee548a362b8",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/src/graphics/ui/uikit.c",
-      "sha256": "91b93e196897b60cfae7d2895704ce1d84442cacc0696c149db1d8d50ff2eca5",
+      "sha256": "7cd585e1655cee456aff151d911abff93ce31efc2869a91711a1f83841531389",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -741,7 +748,7 @@
     },
     {
       "path": "kernel/src/graphics/windowing/term.c",
-      "sha256": "689c524cbdce81c9ce9d16651c30df40a2b0272fcf8da4eac007858110825425",
+      "sha256": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -755,21 +762,21 @@
     },
     {
       "path": "kernel/src/graphics/windowing/wm.c",
-      "sha256": "ee96dca48bec8e59199a01e567a3a77cfd6a5d291bae7b383c17db746561a019",
+      "sha256": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/src/graphics/windowing/wmglue.c",
-      "sha256": "5429294c4351cbe46b5b6eefb52eb9ffb25d992fb4fc0ef124fd074c11861e76",
+      "sha256": "0dbea309de2b1fbc2847d23c8ba6b8d9ebceb27f536c67007eeabf28527db578",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
     },
     {
       "path": "kernel/src/kernel.zl",
-      "sha256": "71c3b3ce79d356b03c16c27f6919d8646e20561fb1ac3d031df19cc0c9490869",
+      "sha256": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -986,7 +993,7 @@
     },
     {
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "sha256": "9b41d56391f2d5a4a6ba2f942e99699cc74b870aa6c0d678cbe0e9856967a5b2",
+      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -1042,7 +1049,7 @@
     }
   ],
   "counts": {
-    "build_inputs": 148,
+    "build_inputs": 149,
     "declared_license_files": 0,
     "inputs_with_established_redistribution_grant": 0
   },

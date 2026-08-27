@@ -47,6 +47,7 @@ REQUIRED_SNIPPETS = (
     'run "reproducible artifact verifier"',
     'run "high-RAM map"',
     'FAIL (reverse SOURCES: kernel/SOURCES is missing)',
+    'src/graphics/fonts/font_big.c|src/graphics/icons/icons_rgb.c)',
     'run "reproducible kernel and ISO"',
     'tools/images/mkiso.sh verify.sh tools/checks/verify-iso.sh',
     'tools/checks/verify-64.sh tools/checks/verify-efi.sh',
@@ -57,6 +58,7 @@ REQUIRED_SNIPPETS = (
     'run "app routes QEMU"',
     'run "47-app lifecycle QEMU"',
     'run "Run route QEMU"',
+    'python3 tools/probes/probe-run.py --no-build',
     'run "application evidence registry write"',
     'run "application evidence registry check"',
     'run "artifact and boot-route registry write"',
@@ -142,6 +144,14 @@ def selftest(source: str) -> None:
     )
     expect_failure(
         source.replace(
+            'src/graphics/fonts/font_big.c|src/graphics/icons/icons_rgb.c)',
+            'src/graphics/fonts/font_big.c)',
+            1,
+        ),
+        "deleted-generated-data-classification",
+    )
+    expect_failure(
+        source.replace(
             'tools/checks/verify-64.sh tools/checks/verify-efi.sh',
             'tools/checks/verify-efi.sh',
             1,
@@ -159,7 +169,8 @@ def selftest(source: str) -> None:
     )
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
-        "missing-SOURCES, deleted-boot-route, masked-final-exit and masked-child-failure"
+        "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
+        "masked-final-exit and masked-child-failure"
     )
 
 
