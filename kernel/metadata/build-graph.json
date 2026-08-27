@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
-  "result": "PASS_CURRENT_ARTIFACTS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
+  "build_identity": "cc920413744a060dea0a0b8f39a1b9906fabdd81967de0bb4bbc9dbd970596ef",
   "artifact_snapshot": {
     "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-    "current_build_bound": true,
-    "evidence_ceiling": "exact current artifact/QEMU registry bound to this build identity"
+    "current_build_bound": false,
+    "evidence_ceiling": "exact historical artifact/QEMU registry; recipe edges do not promote those bytes as outputs of the current source identity"
   },
   "artifact_registry_sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
-  "toolchain_manifest_sha256": "e192dbdc1ad28d0ba338837a99044f15435e96ae1640228c37c5b9f62b112c4c",
+  "toolchain_manifest_sha256": "ddade59002733283fc09ff4ab1b34172eeb4201298e7a1ca08a64bf6414fa060",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -189,75 +189,75 @@
   "nodes": [
     {
       "id": "artifact:BOOTX64.EFI",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/BOOTX64.EFI",
       "sha256": "ce5d87163f213d834895621b0e34c8ebe027dd1eb9947df9341a70f720f6eca0",
       "bytes": 20480,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:boot-media-ids.json",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/metadata/boot-media-ids.json",
       "sha256": "29956c845b74435ebfbeef9a12b7ab090012c4f3fe7690562ab136951e032320",
       "bytes": 484,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:kernel.elf",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/kernel.elf",
       "sha256": "07108633eba499c522b78ced4d5fdccefadb9c76d7a13721eebe3c413423ec7c",
       "bytes": 6396228,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:kernel64.elf",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/kernel64.elf",
       "sha256": "14f3edd97712b08073acffe724d630c2ad3981339a3f66930bbbbda9fcf82aa2",
       "bytes": 3305128,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:kernel_raw.elf",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/kernel_raw.elf",
       "sha256": "723c2c7b69e181c9f7784b5073a7b3a2422593e6f7d09d63f8e3765954f50935",
       "bytes": 6396136,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:zlOS-usb.img",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/zlOS-usb.img",
       "sha256": "c79fd1ed720b91f89c13806c7fa8689196f118b4d843e8661138b91ea1d671ac",
       "bytes": 138412032,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:zlOS.img",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/zlOS.img",
       "sha256": "987798d9f1aa7d493bf0f4533980b5a6eff9b8d04f76361210788f098bd7530c",
       "bytes": 6291968,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:zlOS.iso",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/zlOS.iso",
       "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d",
       "bytes": 31539200,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "artifact:zlOS64.iso",
-      "kind": "artifact",
+      "kind": "historical-artifact",
       "path": "kernel/zlOS64.iso",
       "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee",
       "bytes": 28446720,
-      "current_build_bound": true
+      "current_build_bound": false
     },
     {
       "id": "generated:zl-c",
@@ -2176,7 +2176,7 @@
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "23fb728c6767f8615ef6c6907de64235ce51cb95e6a1d627eba5349b87c155df",
+      "sha256": "477d8de32fa50a725eba24943a17b6d22faa80dda7089f6ef79142413ed68fe8",
       "suffix": ".zl"
     },
     {
@@ -2358,7 +2358,7 @@
       "id": "source:kernel/metadata/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447",
+      "sha256": "e9aba30166dd52acc3d2f1baa1d835ef00057af3c9faa95483f133ab8b480eca",
       "suffix": ".json"
     },
     {
@@ -2876,7 +2876,7 @@
       "id": "source:kernel/src/graphics/ui/ui.h",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/ui.h",
-      "sha256": "2cf1b0f0e09088dc7f62cad99179a97b991bb5d60285cf25d3b6cee548a362b8",
+      "sha256": "8263e5ff73116c7ebecad58d578096d85e0518061595dd2384c5532ac770a68f",
       "suffix": ".h"
     },
     {
@@ -2897,7 +2897,7 @@
       "id": "source:kernel/src/graphics/windowing/term.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/term.c",
-      "sha256": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8",
+      "sha256": "48d9563f12b91bc4280b6fbb553a80fcbf933f6f9a7edc66057eb287ef5b9c04",
       "suffix": ".c"
     },
     {
@@ -2911,21 +2911,21 @@
       "id": "source:kernel/src/graphics/windowing/wm.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/wm.c",
-      "sha256": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
+      "sha256": "8d5a1e6a5d4429581a7a2e891ff05b350870050df85413db8afa4ad29ccbd536",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/graphics/windowing/wmglue.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/wmglue.c",
-      "sha256": "0dbea309de2b1fbc2847d23c8ba6b8d9ebceb27f536c67007eeabf28527db578",
+      "sha256": "e9650d97407672ee07542b9b0893380765069e30bf6798c369354d17d507c20d",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/kernel.zl",
       "kind": "source-input",
       "path": "kernel/src/kernel.zl",
-      "sha256": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
+      "sha256": "fdb07843b32f1b72a9d85917099ee6a20e67713607d1377869327edfda2f7784",
       "suffix": ".zl"
     },
     {
@@ -6932,8 +6932,8 @@
     "declared_c_units": 73,
     "target_lanes": 4,
     "artifacts": 9,
-    "current_artifacts": 9,
-    "historical_artifacts": 0,
+    "current_artifacts": 0,
+    "historical_artifacts": 9,
     "nodes": 474,
     "edges": 746,
     "orphan_source_inputs": 0,
@@ -6953,11 +6953,12 @@
   "open_gaps": [
     "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",
     "conservative header-superset inputs may be scope-only rather than active includes",
-    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes"
+    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes",
+    "the exact artifact snapshot is historical and no artifact hash is bound to the current source identity"
   ],
   "generator": {
     "path": "kernel/tools/generators/gen-build-graph.py",
     "sha256": "6d40497bab0ac7ff63e82ad1c5b1562922981f75c5e1ee4b325e8316dc2fcf7d"
   },
-  "evidence_ceiling": "complete declared-input build recipe for four lanes joined to the current reproducible nine-artifact snapshot; not a compiler-emitted per-object attestation"
+  "evidence_ceiling": "complete declared-input build recipe for four lanes joined to a clearly historical nine-artifact snapshot; not current artifact provenance or a compiler-emitted per-object attestation"
 }

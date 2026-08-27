@@ -1,8 +1,8 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-  "landing_gate_sha256": "218e014b7b877d6ec63a6bd794273962f065831e7ae761264440d4d6c56ef4d9",
+  "build_identity": "cc920413744a060dea0a0b8f39a1b9906fabdd81967de0bb4bbc9dbd970596ef",
+  "landing_gate_sha256": "c8438bcb78fb83ef978d24bf9e9e1c6f41c1b494c6d989eab9fe886e7fd282ee",
   "wrappers": [
     {
       "path": ".github/scripts/render-desktop.sh",
@@ -94,8 +94,8 @@
     },
     {
       "path": "gates/land-gate.sh",
-      "sha256": "218e014b7b877d6ec63a6bd794273962f065831e7ae761264440d4d6c56ef4d9",
-      "bytes": 15871,
+      "sha256": "c8438bcb78fb83ef978d24bf9e9e1c6f41c1b494c6d989eab9fe886e7fd282ee",
+      "bytes": 15986,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -468,8 +468,8 @@
     },
     {
       "path": "kernel/tools/checks/check-land-gate.py",
-      "sha256": "908307345db522c803a3550415049aa0e02ec4cb9ac878b556edebec205408d2",
-      "bytes": 7089,
+      "sha256": "12610c5f72b074779f367f5c02db1b4b9c7728240546b26be8bd2a16d85153ce",
+      "bytes": 7337,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1402,6 +1402,17 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/probes/probe-rail.py",
+      "sha256": "7ab7bfd895a44ebc4c3a0f66fb87db22b57ecfd4faa20ad8c535c2e329ebe13b",
+      "bytes": 11003,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
       "path": "kernel/tools/probes/probe-resize.py",
       "sha256": "72bfafd00906892a82294854f8d397ad06590782ca81527b35420874059361c6",
       "bytes": 5895,
@@ -1656,8 +1667,8 @@
     },
     {
       "path": "tools/gen_feature_status.py",
-      "sha256": "447a34e48e04397d2ab65f8ebf6c687c61bd603f8c27a83a91ee5260ad955bea",
-      "bytes": 38499,
+      "sha256": "e94a56aaef35c7ace17f2ed5e1fee770f039d774bd384880ae5c709ca649ef33",
+      "bytes": 38912,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1810,9 +1821,9 @@
     }
   ],
   "counts": {
-    "wrappers": 164,
-    "executable": 162,
-    "named_by_landing_gate": 63,
+    "wrappers": 165,
+    "executable": 163,
+    "named_by_landing_gate": 64,
     "no_static_failure_policy": 18
   },
   "authority_contract": {
