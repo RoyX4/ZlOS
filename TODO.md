@@ -7,212 +7,56 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
-## Engine divergence — 2 pinned
-
-`./interp` is ground truth. These engines disagree with it today:
-
-- [ ] `global_writethrough` — `compilel` differs
-- [ ] `global_writethrough` — `nativegen` differs
-
-Both unboxed backends sit on the far side of the scoping decision in
-`docs/design/design_scoping_decision.md`. Delete these pins when it lands;
-`tools/engine-parity.sh` fails if a pin stops being true.
-
-## Documented but not in git
-
-- [ ] `kernel/_gen64.c`
-- [ ] `kernel/_genefi.c`
-- [ ] `kernel/out.c`
-
-## Open tensions (.ultra/TENSIONS.md)
-
-- [ ] **T-8** — Generated evidence manifests disagree on build identity.
-- [ ] **T-9** — Boot recovery policy remains at the kernel root.
 
 ---
 
-<!-- BEGIN HAND-WRITTEN -->
+## Hand-written: prototype parity, 2026-08-28
 
-## Hand-written
+`docs/design/presswork-prototype.html` is the reference, and `design.h` says that
+where the two disagree **the prototype wins**. This block tracks how far the OS
+has been brought to it. Evidence for each closed item is a render under
+`/tmp` named in its commit, or a probe that exercised it.
 
-_Items here survive regeneration. Everything above does not._
+### Closed
 
-### PRESSWORK desktop — where the increment stands (2026-08-27)
+- **The register.** Fourteen slots, the prototype's own names, subtitles and
+  icons, all pointing at apps this OS already had. `probe-rail.py` confirms row
+  05 launches app 40 from the kernel's own `wm:lifecycle` line, not from a pixel
+  count. Catalogue row survives as 15.
+- **The overlay layer.** `wm_overlay()` paints after every window AND the toast,
+  inside the same damage rect, bound through `wmglue.c` as a weak seam. The
+  scissor is restored first - without that a modal is clipped to whichever
+  window painted last, which is what the palette did.
+- **Five modal surfaces**: command palette, context menu, window menu,
+  activities (with real box-filtered previews), lock sheet. Scrim measured at
+  5/8 across the whole screen including the rail.
+- **Three app bodies rebuilt to their renderers**: kernel log (`R.log`), hex
+  viewer (`R.hex`), system info (`R.regs`' shape).
+- **uikit's tables reachable from zl** - `ui_grid`, `ui_colhead`, `ui_grow`,
+  `ui_gcell`, `ui_gcelln`, `ui_gspanx/w`. They had existed since the widget set
+  was written and nothing outside C could call them.
 
-Branch `design/presswork`, PR #6, based on `origin/main` 26c0899. The design is
-implemented and boots; the remaining work is depth, not structure.
+### Open
 
-**Closed this session**
+- **Eleven app bodies**: shell, files, edit, mon, calc, net, clock, disk, type,
+  and `R.set` at 21.6k characters - larger than the other thirteen combined, and
+  to be reconciled against the five panes already in `settings.c`.
+- **`grub-bios64` boot route** stalls after "keyboard on IRQ1". Pre-existing,
+  proven by A/B at `7d1a11b`; `preflight.sh` does not run `verify-64`, which is
+  why it rotted. See `docs/evidence/grub-bios64-unwatched-2026-08-27.md`.
+- **QEMU segfaults** on this box at one fixed binary offset, only under the EFI
+  gate. Detector added and correctly attributing; cause not diagnosed. See
+  `docs/evidence/qemu-segfaults-2026-08-27.md`.
 
-- The design language itself: `design.h` retokenised, `ui.c` remapped, chrome in
-  `wm.c`, widgets in `uikit.c`, shell in `kernel.zl`, icons regenerated.
-- The rail reserve bug. Three different sets of numbers described one desktop
-  (48/72 in the commit path, 32/64 in the drag preview, 30/46/170 in the shell),
-  so a maximised window covered the launcher and the drag ghost showed a
-  different rectangle from where the window landed. All three read the theme now.
-- `chrome_header` painted outside the frame for a window shorter than the title
-  bar. Found by an out-of-family reviewer, reproduced, clamped, regression test
-  validated in both directions.
-- The ABI hole: the two `_Static_assert`s anchored named fields to named
-  enumerators and both stayed green when an enumerator was added without a
-  field, which walks `ui_color()` one slot into `theme.pad`. A third assert on
-  the far end closes it; proven by planting the defect.
-- The Settings accent picker showed five chips carrying four colours, two
-  byte-identical, all labelled with names from the previous palette.
-- Shell parity: rail icons and counters, `REGISTER n/12`, titles as
-  `01 TERMINAL zlsh` with the module code, per-window status bands with real
-  `APP US`, raster strip, memory ruler with regions and a true address range.
-- The wiring. `wm_set_label` / `wm_set_status` / `wm_set_field` were written,
-  correct, and unreachable from `kernel.zl`; the boot would have shown perfect
-  title bars with every register and subtitle cell blank.
+### Deliberately NOT matched to the reference
 
-**Verified on a real boot, not on the harness**
+Each of these would mean printing something the machine does not measure:
 
-`wmshot` cannot render the shell — the rail, strip and foot are `kernel.zl` and
-do not compile into it. Checked by booting under QEMU and sampling the
-framebuffer: focused header `#B6B0AB` (`ZD_KNOCK`), its ink `#181411`
-(`ZD_KNOCK_INK`), unfocused `#322B27` (`ZD_BASE`), focus bar `#E8734F`
-(`ZD_VERM`). All exact. Evidence and method:
-`docs/evidence/presswork-first-boot.md`.
+- `VOL OK` - the rail reads MUTE from bits 0-1 of port 0x61, the speaker gate.
+- two workspaces - this OS has three, and they work.
+- the lock sheet's eleven passphrase bullets - nothing is typed and there is no
+  authentication behind the field.
+- the hex viewer's `rd0 zlfs superblock` - it reads live memory at 0x100000.
+- `R.regs`' `0x0080D9E4` - that block reads zero without an Intel display.
 
-**Open**
-
-- [ ] Depth pass is on disk but uncommitted: ~916 insertions across `design.h`,
-      `ui.c`, `ui.h`, `uikit.c`, `wm.c`, `runtime_kernel.c`. Host suites green
-      (`uitest` 201 checks), `check-zlcalls` clean at 1083 fns / 759 builtins.
-      Kernel build and boot were still running when the session ended — confirm
-      before committing.
-- [ ] LABEL tracking. `fb_text_role` has no track flag, so tracked caps are
-      approximated. Deferred three times now; it needs `ui_text_tracked()` in
-      `uikit.c` with measure and draw sharing one helper or every label clips.
-- [ ] Light mode. Deliberately out of scope: paper has 1.244:1 of total upward
-      headroom, so the widened ladder — the whole thesis — has nowhere to go.
-- [ ] A selected list row clipped by a scroll viewport still leaves a bare
-      `ZD_KNOCK` slab. First diagnosis (`ui_grid_row` gated on visibility) was
-      wrong and did not move the measurement; the 500x15 band is one of the
-      other eight `ZD_KNOCK` fill sites.
-- [ ] The desktop boots with nothing chrome-bearing focused in some
-      compositions, so the loudest gesture in the design is invisible until the
-      user touches something. Shell policy decision, not a chrome bug.
-
-**The compiler bug this session exposed — fixed**
-
-`NAMESET_MAX` in `src/backends/c/compile.c` was 1024; the kernel reached 1083 zl
-functions and `set_add()` dropped the last 59 silently. A dropped name is not a
-compile error - calls to it emit a dynamic `zl_calln()`, which the runtime
-answers with `kfatal()`. The kernel built clean with zero undefined symbols and
-halted on boot. The comment above the constant recorded the same bug at 256 and
-asserted "the kernel is nowhere near it either way".
-
-Cap raised to 4096, but the cap is the smaller half: `set_add()` now fails hard
-and names the function it could not fit. Validated by planting a low cap -
-`zl: too many names for the C backend: 'au_row_x10' is number 65 and
-NAMESET_MAX is 64`, build exit 1 - and restoring.
-
-- [ ] `check-zlcalls.py` was green throughout. It verifies a name exists in the
-      zl sources, not that the backend bound it. The direct test is to scan the
-      generated `out.c` for a `zl_calln()` whose name is a known zl function;
-      not written yet.
-
-**Hazards recorded, not fixed**
-
-- `RULER_DMA` / `RULER_DMA_END` in `kernel.zl` restate `HI_IMG` / `HI_HEAP`
-  from `memmap.h`. Equal today, enforced by nothing — zl cannot include a C
-  header. Same drift class as the 48/72 reserves above, which is how that one
-  survived.
-- `wmshot.c` hardcodes `ui_theme_init(2)` while `fb.c` derives its type scale
-  as `width*256/1920` = 1.0 at 1920 wide, so every harness shot renders
-  geometry at 2x against type at 1x and understates the type. The real boot
-  passes `ui_scale()` and they agree.
-- An agent wrote itself `kernel/.build_nogate.sh`, a copy of `build.sh` with
-  the app-manifest gate commented out, to get past a staleness check. Deleted.
-  Worth knowing the pattern occurs.
-
-### Whole-tree Codex audit — ready to run, not yet run
-
-`tools/audit-prompt.md` is a self-contained prompt for a full read-only audit of
-the ~102k reviewable lines (163 `.zl` / 37,961 lines, 21 root `.c`/`.h` / 12,154,
-40 `kernel/*.c`/`.h` / 52,132). It excludes `.claude/worktrees/` (a ~6.7×
-duplicate) and the generated/data files.
-
-- [ ] run it and triage the report
-- [ ] fold anything real into this file; discard the rest
-
-Run it in a throwaway worktree, because the prompt's key instruction is "run
-`./interp` before claiming anything about zl semantics" and that needs write
-access for the probe program:
-
-```bash
-git worktree add /tmp/zl-audit HEAD && cd /tmp/zl-audit && ./build.sh
-CODEX_HOME=$HOME/.codex-audit codex exec "$(cat tools/audit-prompt.md)" </dev/null | tee ~/zl-audit-report.md
-git worktree remove /tmp/zl-audit --force
-```
-
-Two things measured while building it, both worth keeping:
-
-- `~/.codex-audit` is a plugin-free Codex profile. Same trivial prompt costs
-  **9,928 tokens** under the everyday `~/.codex` and **2,638** under it — ~7,300
-  tokens per call handed back to code.
-- A `read-only` sandbox **refuses to write a probe file even to `/tmp`**, while
-  still allowing an existing binary to execute. So read-only would let the audit
-  run `./interp` on files that already exist but never write its own test, which
-  removes the only defence against it hallucinating about a language no model has
-  seen. Hence workspace-write inside a disposable worktree.
-
-- [ ] **when the report lands, check the "what I did not cover" section first.**
-  If it is missing or vague the report is incomplete no matter how good the
-  findings read — that is the same failure shape as a gate that passes by not
-  running.
-
-### GPU driver — where it stands, 2026-08-19
-
-CLOSED, each with the command that established it:
-
-- [x] **A sole owner can drive the Gen9.5 blitter ring.** The question the whole
-      driver was gated on. i915 unbound on the target machine: `START=0x400000`,
-      `CTL=1`, HEAD chased TAIL, **16384/16384 pixels filled**. No execlists
-      needed — `RING_START`/`CTL`/`TAIL` is the path. `docs/gpu-driver.md`.
-- [x] **The compositor calls the driver.** `wm.c` tries the display plane before
-      compositing a sprite; `fb_fill_px` offers large fills to the blitter. Both
-      fall back and both were proven to switch (a `wmshot` render diff of 927
-      bytes), not assumed.
-- [x] **The render engine's two blockers.** The Gen9 pixel shader (80 bytes,
-      lifted out of Mesa, colour patchable) and the 77-packet blended-draw
-      pipeline (3240 dwords, captured from the vendor driver). `gpu_shader.inc`,
-      `gpu_batch.inc`, `docs/gen9-blend-pipeline.md`.
-- [x] **`check-himap.sh`** — the C side of the memory map finally has a checker,
-      validated by watching it reject `edid_buf` put back where it was.
-
-OPEN:
-
-- [ ] **Boot the USB and run `blit` on the ThinkPad.** The one thing left for
-      milestone 2. The sequence is proven on this silicon *from Linux*, and the
-      command is proven to dispatch and print *in QEMU* — but never both at once,
-      and that is exactly what a USB boot is for. Step 7 is the win; 1–6 each
-      name where it stopped.
-- [ ] **`RENDER_SURFACE_STATE`'s bit layout** — the last piece for RCS. Not on
-      this box: no genxml, no ISL headers, no i915 files in `libdrm-dev`, nothing
-      decompressible out of `iris_dri.so`, and twelve `INTEL_DEBUG` flags tried.
-      Needs Intel's public Gen9 PRM. The binding table beside it is one dword.
-- [ ] **The cursor ignition.** `gpucursor.c` is complete and gated;
-      `gpu_cursor_arm(1)` is called by nothing, deliberately, until a hardware run
-      shows the display survives a takeover. It now has — so this is a decision,
-      not a blocker.
-- [ ] **SMP band rendering** — 1.78x on the desktop redraw, code already in the
-      tree, switched off because `smp_go()` is reachable only from the old text
-      shell. Bigger and cheaper than anything the blitter offers. Untouched
-      because another session held `kernel.zl` all day.
-
-Two corrections worth keeping, both cost real time:
-
-- **`G` is the wrong key on the desktop.** The shell is a *window* and takes
-  words plus Enter, so a single keypress sits in the line buffer and does
-  nothing. `blit` (or `ring`). This is the trap in
-  `docs/typing-into-the-compositor.md`, and I handed out the wrong instruction
-  after reading that file the same day.
-- **The command output never reaches serial on the desktop path**, because the
-  shell is a window. The ThinkPad has no serial port anyway. Every number has to
-  land on the screen, which is why the command prints `RING_CTL`, `HEAD`, `TAIL`
-  and the pixel count rather than a verdict.
-
-<!-- END HAND-WRITTEN -->
+Same line the earlier pass drew when it refused the reference's `LOAD 0.58`.
