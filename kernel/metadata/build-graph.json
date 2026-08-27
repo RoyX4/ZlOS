@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
-  "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
-  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
+  "result": "PASS_CURRENT_ARTIFACTS",
+  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "artifact_snapshot": {
-    "subject_build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
-    "current_build_bound": false,
-    "evidence_ceiling": "exact historical artifact/QEMU registry; recipe edges do not promote those bytes as outputs of the current source identity"
+    "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+    "current_build_bound": true,
+    "evidence_ceiling": "exact current artifact/QEMU registry bound to this build identity"
   },
-  "artifact_registry_sha256": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
-  "toolchain_manifest_sha256": "0eadb17cf70d8affb49fccc6b5eaa50855568ae689f5db132c733469069dcd89",
+  "artifact_registry_sha256": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
+  "toolchain_manifest_sha256": "75767929710d73de3f10b16da06c7fb6f5c07b472b9fe00ae9ca058857220659",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -188,75 +188,75 @@
   "nodes": [
     {
       "id": "artifact:BOOTX64.EFI",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/BOOTX64.EFI",
-      "sha256": "63b6c7053839294e8dccfc55b98c0dfa78d59889e3c27e83b503b51e94e607c1",
-      "bytes": 2716672,
-      "current_build_bound": false
+      "sha256": "ce5d87163f213d834895621b0e34c8ebe027dd1eb9947df9341a70f720f6eca0",
+      "bytes": 20480,
+      "current_build_bound": true
     },
     {
       "id": "artifact:boot-media-ids.json",
-      "kind": "historical-artifact",
-      "path": "kernel/boot-media-ids.json",
-      "sha256": "52d6cdf60cf45be671e522216af4cecee444a3895592fb197a7a3df38e7f7cbb",
-      "bytes": 414,
-      "current_build_bound": false
+      "kind": "artifact",
+      "path": "kernel/metadata/boot-media-ids.json",
+      "sha256": "31485f161218a04280db9fffc813542b2e79df2402636002e2c231bb4aa9e701",
+      "bytes": 484,
+      "current_build_bound": true
     },
     {
       "id": "artifact:kernel.elf",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/kernel.elf",
-      "sha256": "63669c18afb3ed2454be1155cd4381a1dc370105aefad07461e536d2e121e286",
-      "bytes": 4592648,
-      "current_build_bound": false
+      "sha256": "715e7da1f3dd5a7899ed934048513d247880fdfac5f9d2c9503a61864a7d9a20",
+      "bytes": 5594240,
+      "current_build_bound": true
     },
     {
       "id": "artifact:kernel64.elf",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/kernel64.elf",
-      "sha256": "686affb711ab6a7a1d2f5836eefb98b550e0cdf6398e97938651ff84dbef29df",
-      "bytes": 2702592,
-      "current_build_bound": false
+      "sha256": "afcd4996cb688ebe5a95bb510cd851515e3f48af10337d4a89636cf49aa78b9b",
+      "bytes": 3031456,
+      "current_build_bound": true
     },
     {
       "id": "artifact:kernel_raw.elf",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/kernel_raw.elf",
-      "sha256": "3b695cdc24fc059f97342bc0e5bcd2f389004a56b1e62b725824e1faa84f32ee",
-      "bytes": 4592492,
-      "current_build_bound": false
+      "sha256": "f08946e28d262fb687eed1a46b13b01a41ca16eaf47c2239a2b83d6d119f1cb8",
+      "bytes": 5594084,
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS-usb.img",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS-usb.img",
-      "sha256": "16f239108c9d68502b1d8b97d1275baa8efe278380dbbd2c5646d8d423a615ef",
-      "bytes": 67108864,
-      "current_build_bound": false
+      "sha256": "9951b2a04259f923929ebce8c75221b6a2e4050449fb9049505f48ce6c4a99b8",
+      "bytes": 138412032,
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS.img",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS.img",
-      "sha256": "f97a0ec1b439a41dfa954a76052b08c285a0562aaa6331a8f03cfa85c71c3c42",
+      "sha256": "d2acd9ffde79af69830929e0ee6242259900aae3e617fb615735174a4d440d0c",
       "bytes": 6291968,
-      "current_build_bound": false
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS.iso",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS.iso",
-      "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46",
-      "bytes": 29734912,
-      "current_build_bound": false
+      "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273",
+      "bytes": 30736384,
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS64.iso",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS64.iso",
-      "sha256": "3ea3ea875fdfaa60f0754f5e782111b9a04acf32d8188a92ed8ffdf3a5d16ab7",
-      "bytes": 27844608,
-      "current_build_bound": false
+      "sha256": "7c84021c510008cdd48b27564ad27db8f909d4a3d06d3a7eb97583a84396d163",
+      "bytes": 28174336,
+      "current_build_bound": true
     },
     {
       "id": "generated:zl-c",
@@ -2154,7 +2154,7 @@
       "id": "source:freestanding/runtime_kernel.c",
       "kind": "source-input",
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "fff4cd8b71797353caf22b2f74302410c768459ffa89481ca6dd8c2fa5552aec",
+      "sha256": "02d7b39e463e2bd3c02ed18faa816eab3cf5af6557927e1fc54748e92af41d47",
       "suffix": ".c"
     },
     {
@@ -2175,7 +2175,7 @@
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "f8db3ec0482624cd718258976a2eb50187ae0f095be1a30f49e94a12b6ef658d",
+      "sha256": "0fa3e5b84411e569398e7a00e48522f7507205825e875375b11b0592913fd0f3",
       "suffix": ".zl"
     },
     {
@@ -2259,14 +2259,14 @@
       "id": "source:kernel/boot/boot64.S",
       "kind": "source-input",
       "path": "kernel/boot/boot64.S",
-      "sha256": "5dd28b445937cb093bbce36572497114a4643eddaf89270f5c055cd8259d1221",
+      "sha256": "56f7198cf6823afb69b63ab28684f8e61c38617571f07a3f3c17109ad1eb6e38",
       "suffix": ".S"
     },
     {
       "id": "source:kernel/boot/efi.c",
       "kind": "source-input",
       "path": "kernel/boot/efi.c",
-      "sha256": "08b4a15453543f69a90b370ee067d5b2b1918bd6542d9c9461b84955d4b929d2",
+      "sha256": "44e049d6354fb3994d1fcee4abb10ed66b2148870cff863c66e5ab76bfc6fc2b",
       "suffix": ".c"
     },
     {
@@ -2329,7 +2329,7 @@
       "id": "source:kernel/boot/smp_trampoline64.S",
       "kind": "source-input",
       "path": "kernel/boot/smp_trampoline64.S",
-      "sha256": "f3443d9976cad1ef7c1f1c483dbc25fcc2888ec6fd264de2b590862017d7cef8",
+      "sha256": "70aed7ca56b6bd10b386d53c19dd78f973fad944cd81509f26050fa3d72bc69b",
       "suffix": ".S"
     },
     {
@@ -2357,14 +2357,14 @@
       "id": "source:kernel/metadata/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "51eddc02a028add86a4dda92cdba1b77aa51b3675b9b129fa1bbf650eb36219d",
+      "sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d",
       "suffix": ".json"
     },
     {
       "id": "source:kernel/src/arch/x86/apic.c",
       "kind": "source-input",
       "path": "kernel/src/arch/x86/apic.c",
-      "sha256": "708dae2c5007c0c3b2f0bd3a8fba29f1db022185cfa12c19119fe8ea5e85eb8d",
+      "sha256": "25232a3ed83a29da00b4a54ec097acb0c977b93827ce2d800010fd7de2f4da01",
       "suffix": ".c"
     },
     {
@@ -2518,7 +2518,7 @@
       "id": "source:kernel/src/core/sched.c",
       "kind": "source-input",
       "path": "kernel/src/core/sched.c",
-      "sha256": "2ffe51d069ccdfa18afeb29cc5509c6eca0711d3ad16ddcd551b0a62e81667e2",
+      "sha256": "d110c6c3fb7b31010155a8fc46efd44561273f7aa74449467e2f0b678205c394",
       "suffix": ".c"
     },
     {
@@ -2574,7 +2574,7 @@
       "id": "source:kernel/src/drivers/display/bga.c",
       "kind": "source-input",
       "path": "kernel/src/drivers/display/bga.c",
-      "sha256": "c93051fbfa31247ba498cb7f67e571d0b97b7b2a4d8a7d32c3763c26368410a4",
+      "sha256": "f52dadcdb2f9d7d7d11a1dba811b6e16f78ff84f28527efdf5c0634afa8be20c",
       "suffix": ".c"
     },
     {
@@ -2616,7 +2616,7 @@
       "id": "source:kernel/src/drivers/display/intel.c",
       "kind": "source-input",
       "path": "kernel/src/drivers/display/intel.c",
-      "sha256": "a33cfa268a53eb78975333c536b86fd0e00bb5ada27bd0ee3c5fb6fea4f88efa",
+      "sha256": "88f88dd3e99faf1f191fe74a3c81c07c0ff784bf3890710947cebcdc2a18f96f",
       "suffix": ".c"
     },
     {
@@ -2630,7 +2630,7 @@
       "id": "source:kernel/src/drivers/display/virtio_gpu.c",
       "kind": "source-input",
       "path": "kernel/src/drivers/display/virtio_gpu.c",
-      "sha256": "39b634236e53158bc7c601531f8e83b7ac95dc2f3be879781ce1f37338b5f7c7",
+      "sha256": "c9d02a1a2889621ada26869a8d394d2a5dd01f5781c9609ac26054962aaca326",
       "suffix": ".c"
     },
     {
@@ -2735,7 +2735,7 @@
       "id": "source:kernel/src/drivers/storage/nvme.c",
       "kind": "source-input",
       "path": "kernel/src/drivers/storage/nvme.c",
-      "sha256": "1fa574bddb7515d19825147dbfc45e959a52c20b357c9cccc5ceff47cd6451ac",
+      "sha256": "2542ac1587cfcbecff1981c0c978eb6f2e647e3d8a1e76a5fa0cb36ad99b61d0",
       "suffix": ".c"
     },
     {
@@ -2784,7 +2784,7 @@
       "id": "source:kernel/src/graphics/framebuffer/fb.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/framebuffer/fb.c",
-      "sha256": "33a54ce9ca9167be31791c3d3f6e4d919dcc54a35e92d0c752c66a6ae02f7582",
+      "sha256": "95da572bbd42c430b0c16ddeb946edb365d3c2cee968376c0926329412a39cb1",
       "suffix": ".c"
     },
     {
@@ -2889,7 +2889,7 @@
       "id": "source:kernel/src/graphics/windowing/term.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/term.c",
-      "sha256": "c94684e7bd4848f3020ceea98dab3c6bcf1d90cfe8a1041a8c2f9fe9b5f9d54a",
+      "sha256": "689c524cbdce81c9ce9d16651c30df40a2b0272fcf8da4eac007858110825425",
       "suffix": ".c"
     },
     {
@@ -2903,7 +2903,7 @@
       "id": "source:kernel/src/graphics/windowing/wm.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/wm.c",
-      "sha256": "d50f8d82df45cde849efc5b8c15f99d7a221e721709234a4713179498fad749c",
+      "sha256": "ee96dca48bec8e59199a01e567a3a77cfd6a5d291bae7b383c17db746561a019",
       "suffix": ".c"
     },
     {
@@ -2917,7 +2917,7 @@
       "id": "source:kernel/src/kernel.zl",
       "kind": "source-input",
       "path": "kernel/src/kernel.zl",
-      "sha256": "8d5f7ada7d8fcbf91e8c3d19fe39c8e61ae02a40cdad77ce2206567e217a5ddc",
+      "sha256": "71c3b3ce79d356b03c16c27f6919d8646e20561fb1ac3d031df19cc0c9490869",
       "suffix": ".zl"
     },
     {
@@ -6860,8 +6860,8 @@
     },
     {
       "from": "source:kernel/tools/generators/gen-boot-media-ids.py",
-      "to": "scope:declared-build-input",
-      "relation": "declared-scope-only"
+      "to": "artifact:boot-media-ids.json",
+      "relation": "producer-script"
     },
     {
       "from": "source:kernel/tools/generators/gen-build-identity.py",
@@ -6874,19 +6874,29 @@
       "relation": "build-script-produces"
     },
     {
+      "from": "source:kernel/tools/images/mkdisk.sh",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "producer-script"
+    },
+    {
+      "from": "source:kernel/tools/images/mkdisk.sh",
+      "to": "artifact:zlOS.img",
+      "relation": "producer-script"
+    },
+    {
       "from": "source:kernel/tools/images/mkiso.sh",
-      "to": "scope:declared-build-input",
-      "relation": "declared-scope-only"
+      "to": "artifact:zlOS.iso",
+      "relation": "producer-script"
     },
     {
       "from": "source:kernel/tools/images/mkiso64.sh",
-      "to": "scope:declared-build-input",
-      "relation": "declared-scope-only"
+      "to": "artifact:zlOS64.iso",
+      "relation": "producer-script"
     },
     {
       "from": "source:kernel/tools/images/mkusb.sh",
-      "to": "scope:declared-build-input",
-      "relation": "declared-scope-only"
+      "to": "artifact:zlOS-usb.img",
+      "relation": "producer-script"
     },
     {
       "from": "source:kernel/tools/reproducible_time.c",
@@ -6909,12 +6919,12 @@
     "declared_c_units": 73,
     "target_lanes": 4,
     "artifacts": 9,
-    "current_artifacts": 0,
-    "historical_artifacts": 9,
+    "current_artifacts": 9,
+    "historical_artifacts": 0,
     "nodes": 473,
-    "edges": 743,
+    "edges": 745,
     "orphan_source_inputs": 0,
-    "scope_only_inputs": 12
+    "scope_only_inputs": 8
   },
   "scope_only_inputs": [
     "freestanding/zl_freestanding.h",
@@ -6924,21 +6934,16 @@
     "kernel/src/drivers/display/assets/gpu_shader.inc",
     "kernel/src/drivers/display/assets/gpu_surface.inc",
     "kernel/src/graphics/fonts/font_prop.h",
-    "kernel/src/graphics/fonts/font_prop.inc",
-    "kernel/tools/generators/gen-boot-media-ids.py",
-    "kernel/tools/images/mkiso.sh",
-    "kernel/tools/images/mkiso64.sh",
-    "kernel/tools/images/mkusb.sh"
+    "kernel/src/graphics/fonts/font_prop.inc"
   ],
   "open_gaps": [
     "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",
     "conservative header-superset inputs may be scope-only rather than active includes",
-    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes",
-    "the exact artifact snapshot is historical and no artifact hash is bound to the current source identity"
+    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes"
   ],
   "generator": {
     "path": "kernel/tools/generators/gen-build-graph.py",
-    "sha256": "46c1f4d200bfbc917d392b1a7357ce0f3fb0baaf0234184da23c82bef09f1467"
+    "sha256": "6d40497bab0ac7ff63e82ad1c5b1562922981f75c5e1ee4b325e8316dc2fcf7d"
   },
-  "evidence_ceiling": "complete declared-input build recipe for four lanes joined to a clearly historical nine-artifact snapshot; not current artifact provenance or a compiler-emitted per-object attestation"
+  "evidence_ceiling": "complete declared-input build recipe for four lanes joined to the current reproducible nine-artifact snapshot; not a compiler-emitted per-object attestation"
 }

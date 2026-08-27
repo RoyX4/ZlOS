@@ -54,10 +54,21 @@ def main() -> int:
         assert marker in image, f"ZLOS.EFI missing {marker!r}"
 
     assert "#define WITNESS_SIZE_LIMIT (64ULL * 1024ULL)" in source
-    assert "#define FIXED_ARENA_START 0x00800000ULL" in source
-    assert "#define FIXED_ARENA_END   0x0A800000ULL" in source
+    assert "#define FIXED_ARENA_START 0x00E00000ULL" in source
+    assert "#define FIXED_ARENA_END   0x01E00000ULL" in source
+    assert "#define FIXED_ZL_START    0x02000000ULL" in source
+    assert "#define FIXED_IMAGE_START 0x03000000ULL" in source
+    assert "#define FIXED_NET_START   0x04000000ULL" in source
+    assert "#define FIXED_DOM_START   0x05000000ULL" in source
+    assert "#define FIXED_HIGH_START  0x08000000ULL" in source
+    assert "#define FIXED_HIGH_END    0x14000000ULL" in source
     assert "#define HI_BACK_START     0x08000000ULL" in source
+    assert "#define HI_BACK_END       0x0A800000ULL" in source
     assert "size == line->length" in source, "short EFI writes are not rejected"
+    assert "offset <= map_size - descriptor_size" in source
+    assert "return type == 3 || type == 4 || type == 7;" in source
+    assert "if (!fixed_type_reclaimable(d->type)) safe = 0;" in source
+    assert 'witness_marker(safe ? "FIXED_MEMORY safe" : "FIXED_MEMORY REFUSED")' in source
 
     entry = source.index("MS efi_status efi_main")
     init = source.index("witness_init(image, st);", entry)
@@ -69,10 +80,11 @@ def main() -> int:
     attempt = source.index('witness_begin("MEMORY_MAP_ATTEMPT attempt=")', entry)
     result = source.index('witness_begin("MEMORY_MAP_RESULT status=")', entry)
     fixed = source.index("witness_fixed_memory(", result)
+    refusal = source.index("return EFI_OUT_OF_RESOURCES;", fixed)
     before = source.index('witness_begin("BEFORE_EXIT_BOOT_SERVICES attempt=")', result)
     refresh = source.index("map_status = bs->get_memory_map(", before)
     exit_call = source.index("bs->exit_boot_services(image, map_key)", refresh)
-    assert init < diag_arm < acpi < gop < wc < back < attempt < result < fixed < before < refresh < exit_call
+    assert init < diag_arm < acpi < gop < wc < back < attempt < result < fixed < refusal < before < refresh < exit_call
 
     assert "EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS |" in source
     assert "EFI_VARIABLE_RUNTIME_ACCESS" in source

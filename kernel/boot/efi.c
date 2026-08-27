@@ -44,9 +44,20 @@ typedef void              *efi_handle;
 #define EFI_FILE_POSITION_END 0xffffffffffffffffULL
 #define EFI_MEMORY_WC         0x0000000000000002ULL
 #define WITNESS_SIZE_LIMIT (64ULL * 1024ULL)
-#define FIXED_ARENA_START 0x00800000ULL
-#define FIXED_ARENA_END   0x0A800000ULL
+#define FIXED_ARENA_START 0x00E00000ULL
+#define FIXED_ARENA_END   0x01E00000ULL
+#define FIXED_ZL_START    0x02000000ULL
+#define FIXED_ZL_END      0x02100000ULL
+#define FIXED_IMAGE_START 0x03000000ULL
+#define FIXED_IMAGE_END   0x03401000ULL
+#define FIXED_NET_START   0x04000000ULL
+#define FIXED_NET_END     0x04100000ULL
+#define FIXED_DOM_START   0x05000000ULL
+#define FIXED_DOM_END     0x06000000ULL
+#define FIXED_HIGH_START  0x08000000ULL
+#define FIXED_HIGH_END    0x14000000ULL
 #define HI_BACK_START     0x08000000ULL
+#define HI_BACK_END       0x0A800000ULL
 
 /* ---- the tiny slice of the UEFI spec we actually use -------------------- */
 typedef struct {
@@ -565,20 +576,41 @@ static void witness_init(efi_handle image, efi_system_table *st)
     }
 }
 
-/* Record the firmware ownership of the fixed low-memory span that zlOS later
- * treats as arenas. Type 7 is EfiConventionalMemory; any other type here is a
- * collision. The explicit HI_BACK overlap flag isolates the physical
- * 128..168 MiB compositor backbuffer without guessing from a screen failure. */
-static void witness_fixed_memory(efi_memory_descriptor *map, u64 map_size,
-                                 u64 descriptor_size)
+static int fixed_arena_overlap(u64 start, u64 end)
+{
+    return (end > FIXED_ARENA_START && start < FIXED_ARENA_END) ||
+           (end > FIXED_ZL_START && start < FIXED_ZL_END) ||
+           (end > FIXED_IMAGE_START && start < FIXED_IMAGE_END) ||
+           (end > FIXED_NET_START && start < FIXED_NET_END) ||
+           (end > FIXED_DOM_START && start < FIXED_DOM_END) ||
+           (end > FIXED_HIGH_START && start < FIXED_HIGH_END);
+}
+
+/* EfiBootServicesCode/Data and EfiConventionalMemory are released to the OS
+ * after a successful ExitBootServices. Loader memory is not accepted here: it
+ * can contain this image or the allocated compositor buffer. Runtime, ACPI,
+ * reserved, unusable and MMIO descriptors are also hard collisions. */
+static int fixed_type_reclaimable(u32 type)
+{
+    return type == 3 || type == 4 || type == 7;
+}
+
+/* Enforce firmware ownership of each fixed physical range zlOS actually uses.
+ * The low map has deliberate gaps; the high map is reserved from the legacy
+ * backbuffer through the 64 MiB heap ending at 320 MiB. The explicit HI_BACK
+ * flag remains useful on non-UEFI paths, even though UEFI allocates its
+ * compositor backbuffer through firmware. */
+static int witness_fixed_memory(efi_memory_descriptor *map, u64 map_size,
+                                u64 descriptor_size)
 {
     if (!map || descriptor_size < sizeof(efi_memory_descriptor) ||
         map_size < descriptor_size) {
         witness_marker("FIXED_MEMORY unavailable");
-        return;
+        return 0;
     }
 
     unsigned emitted = 0;
+    int safe = 1;
     for (u64 offset = 0; offset <= map_size - descriptor_size;
          offset += descriptor_size) {
         efi_memory_descriptor *d =
@@ -587,23 +619,28 @@ static void witness_fixed_memory(efi_memory_descriptor *map, u64 map_size,
         u64 bytes = d->number_of_pages > (~0ULL >> 12)
             ? ~0ULL : d->number_of_pages << 12;
         u64 end = bytes > ~start ? ~0ULL : start + bytes;
-        if (end <= FIXED_ARENA_START || start >= FIXED_ARENA_END) continue;
+        if (!fixed_arena_overlap(start, end)) continue;
 
-        witness_line line = witness_begin("FIXED_MEMORY type=");
-        witness_dec(&line, d->type);
-        witness_text(&line, " start=");
-        witness_hex(&line, start);
-        witness_text(&line, " end=");
-        witness_hex(&line, end);
-        witness_text(&line, " conventional=");
-        witness_text(&line, d->type == 7 ? "yes" : "NO");
-        witness_text(&line, " hi_back_overlap=");
-        witness_text(&line,
-            end > HI_BACK_START && start < FIXED_ARENA_END ? "yes" : "no");
-        witness_append_line(&line);
-        if (++emitted == 32) break;
+        if (!fixed_type_reclaimable(d->type)) safe = 0;
+        if (emitted < 32) {
+            witness_line line = witness_begin("FIXED_MEMORY type=");
+            witness_dec(&line, d->type);
+            witness_text(&line, " start=");
+            witness_hex(&line, start);
+            witness_text(&line, " end=");
+            witness_hex(&line, end);
+            witness_text(&line, " reclaimable=");
+            witness_text(&line, fixed_type_reclaimable(d->type) ? "yes" : "NO");
+            witness_text(&line, " hi_back_overlap=");
+            witness_text(&line,
+                end > HI_BACK_START && start < HI_BACK_END ? "yes" : "no");
+            witness_append_line(&line);
+            emitted++;
+        }
     }
-    if (!emitted) witness_marker("FIXED_MEMORY no_descriptors_8MiB_to_168MiB");
+    if (!emitted) witness_marker("FIXED_MEMORY no_fixed_range_descriptors");
+    witness_marker(safe ? "FIXED_MEMORY safe" : "FIXED_MEMORY REFUSED");
+    return safe;
 }
 
 /* The Microsoft toolchain emits a reference to this whenever a translation
@@ -897,8 +934,9 @@ MS efi_status efi_main(efi_handle image, efi_system_table *st)
             continue;
         }
         if (!fixed_memory_recorded) {
-            witness_fixed_memory((efi_memory_descriptor *)map, map_size,
-                                 desc_size);
+            if (!witness_fixed_memory((efi_memory_descriptor *)map, map_size,
+                                      desc_size))
+                return EFI_OUT_OF_RESOURCES;
             fixed_memory_recorded = 1;
         }
 

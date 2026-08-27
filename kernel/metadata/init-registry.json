@@ -1,15 +1,15 @@
 {
   "schema": "zlos.init-registry.v1",
   "result": "PASS",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "source": {
-    "path": "kernel/kernel.zl",
-    "sha256": "e953981eff624423b9d751f972a031591d46e9595ddbc24911f606178442e643",
-    "boot_marker_line": 5409
+    "path": "kernel/src/kernel.zl",
+    "sha256": "71c3b3ce79d356b03c16c27f6919d8646e20561fb1ac3d031df19cc0c9490869",
+    "boot_marker_line": 5665
   },
   "generator": {
-    "path": "kernel/gen-init-registry.py",
-    "sha256": "24bbec59133a077a06227751c8a4bea703c3e41417c7fa5d7d66d4c7f7e19783"
+    "path": "kernel/tools/generators/gen-init-registry.py",
+    "sha256": "69951d7db8b64376ddde0a387447179d2f850c939fc634c530804b220eeed974"
   },
   "routes": [
     "raw-bios",
@@ -22,114 +22,11 @@
   "stages": [
     {
       "id": "INIT-001",
-      "name": "keyboard-state",
-      "owner": "input",
-      "source_anchor": "kbd_init()",
-      "source_line": 5410,
-      "dependencies": [],
-      "obligation": "required-attempt",
-      "failure_behavior": "Initializes shared keyboard translation/state; hardware providers are admitted later.",
-      "routes": [
-        "raw-bios",
-        "native-uefi64",
-        "grub-bios32",
-        "grub-uefi32",
-        "grub-bios64",
-        "grub-uefi64"
-      ],
-      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
-    },
-    {
-      "id": "INIT-002",
-      "name": "filesystem-state",
-      "owner": "storage",
-      "source_anchor": "fs_init()",
-      "source_line": 5411,
-      "dependencies": [],
-      "obligation": "required-attempt",
-      "failure_behavior": "Initializes filesystem state without forcing a disk write or mount.",
-      "routes": [
-        "raw-bios",
-        "native-uefi64",
-        "grub-bios32",
-        "grub-uefi32",
-        "grub-bios64",
-        "grub-uefi64"
-      ],
-      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
-    },
-    {
-      "id": "INIT-003",
-      "name": "settings-load",
-      "owner": "settings",
-      "source_anchor": "set_load()",
-      "source_line": 5417,
-      "dependencies": [
-        "INIT-002"
-      ],
-      "obligation": "optional-data",
-      "failure_behavior": "Missing or invalid persisted settings retain defaults and report why.",
-      "routes": [
-        "raw-bios",
-        "native-uefi64",
-        "grub-bios32",
-        "grub-uefi32",
-        "grub-bios64",
-        "grub-uefi64"
-      ],
-      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
-    },
-    {
-      "id": "INIT-004",
-      "name": "display-layout",
-      "owner": "display",
-      "source_anchor": "if px_w() > 0 { layout() }",
-      "source_line": 5448,
-      "dependencies": [
-        "INIT-003"
-      ],
-      "obligation": "conditional",
-      "failure_behavior": "Framebuffer routes negotiate a mode and layout; text-only routes retain VGA geometry.",
-      "routes": [
-        "raw-bios",
-        "native-uefi64",
-        "grub-bios32",
-        "grub-uefi32",
-        "grub-bios64",
-        "grub-uefi64"
-      ],
-      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
-    },
-    {
-      "id": "INIT-005",
-      "name": "compositor-bootstrap",
-      "owner": "window-system",
-      "source_anchor": "wm_boot = wm_boot_start()",
-      "source_line": 5463,
-      "dependencies": [
-        "INIT-004"
-      ],
-      "obligation": "conditional",
-      "failure_behavior": "Framebuffer routes require a compositor; no-framebuffer routes keep the text shell fallback.",
-      "routes": [
-        "raw-bios",
-        "native-uefi64",
-        "grub-bios32",
-        "grub-uefi32",
-        "grub-bios64",
-        "grub-uefi64"
-      ],
-      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
-    },
-    {
-      "id": "INIT-006",
       "name": "gdt",
       "owner": "cpu",
       "source_anchor": "setup_gdt()",
-      "source_line": 5498,
-      "dependencies": [
-        "INIT-005"
-      ],
+      "source_line": 5687,
+      "dependencies": [],
       "obligation": "required-success",
       "failure_behavior": "Failure is fatal before protected execution can continue.",
       "routes": [
@@ -143,13 +40,13 @@
       "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
     },
     {
-      "id": "INIT-007",
+      "id": "INIT-002",
       "name": "idt-pic-pit-ps2",
       "owner": "interrupts",
       "source_anchor": "setup_idt()",
-      "source_line": 5504,
+      "source_line": 5688,
       "dependencies": [
-        "INIT-006"
+        "INIT-001"
       ],
       "obligation": "required-success",
       "failure_behavior": "Installs the IDT, remaps PIC, starts PIT and baseline PS/2 handling.",
@@ -164,13 +61,34 @@
       "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
     },
     {
-      "id": "INIT-008",
+      "id": "INIT-003",
+      "name": "framebuffer-write-combining",
+      "owner": "display",
+      "source_anchor": "fb_wc()",
+      "source_line": 5689,
+      "dependencies": [
+        "INIT-002"
+      ],
+      "obligation": "optional-provider",
+      "failure_behavior": "Applies the framebuffer cache policy when the current mapping supports it.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-004",
       "name": "apic-routing",
       "owner": "interrupts",
-      "source_anchor": "if apic_up() == 1 {",
-      "source_line": 5510,
+      "source_anchor": "boot_apic = apic_up()",
+      "source_line": 5690,
       "dependencies": [
-        "INIT-007"
+        "INIT-002"
       ],
       "obligation": "optional-provider",
       "failure_behavior": "A failed APIC admission explicitly retains the legacy 8259 PIC path.",
@@ -185,16 +103,102 @@
       "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
     },
     {
-      "id": "INIT-009",
+      "id": "INIT-005",
       "name": "usb-bootstrap",
       "owner": "usb",
-      "source_anchor": "usb_boot()",
-      "source_line": 5523,
+      "source_anchor": "boot_usb = usb_boot()",
+      "source_line": 5691,
       "dependencies": [
-        "INIT-007"
+        "INIT-002"
       ],
       "obligation": "required-attempt",
       "failure_behavior": "Controller/class admission is bounded; unsupported hardware leaves fallback input paths.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-006",
+      "name": "persistent-observer",
+      "owner": "storage",
+      "source_anchor": "diag_boot = diag_up()",
+      "source_line": 5692,
+      "dependencies": [
+        "INIT-005"
+      ],
+      "obligation": "optional-provider",
+      "failure_behavior": "Admits only the exact ZLLOG target; otherwise evidence remains RAM-only.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-007",
+      "name": "keyboard-state",
+      "owner": "input",
+      "source_anchor": "kbd_init()",
+      "source_line": 5694,
+      "dependencies": [
+        "INIT-002"
+      ],
+      "obligation": "required-attempt",
+      "failure_behavior": "Initializes shared keyboard translation state after interrupt ownership is established.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-008",
+      "name": "settings-load",
+      "owner": "settings",
+      "source_anchor": "set_load()",
+      "source_line": 5700,
+      "dependencies": [
+        "INIT-006",
+        "INIT-007"
+      ],
+      "obligation": "optional-data",
+      "failure_behavior": "Missing or invalid persisted settings retain defaults and report why.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-009",
+      "name": "filesystem-mount",
+      "owner": "storage",
+      "source_anchor": "fs_try()",
+      "source_line": 5703,
+      "dependencies": [
+        "INIT-006",
+        "INIT-008"
+      ],
+      "obligation": "optional-data",
+      "failure_behavior": "Mounts an existing zlfs volume without formatting unknown media.",
       "routes": [
         "raw-bios",
         "native-uefi64",
@@ -210,7 +214,7 @@
       "name": "program-arena",
       "owner": "memory",
       "source_anchor": "arena_up()",
-      "source_line": 5531,
+      "source_line": 5713,
       "dependencies": [
         "INIT-009"
       ],
@@ -231,7 +235,7 @@
       "name": "kernel-heap",
       "owner": "memory",
       "source_anchor": "heap_up()",
-      "source_line": 5539,
+      "source_line": 5715,
       "dependencies": [
         "INIT-010"
       ],
@@ -252,7 +256,7 @@
       "name": "virtual-memory-report",
       "owner": "memory",
       "source_anchor": "vmm_up()",
-      "source_line": 5543,
+      "source_line": 5717,
       "dependencies": [
         "INIT-011"
       ],
@@ -270,13 +274,56 @@
     },
     {
       "id": "INIT-013",
+      "name": "display-layout",
+      "owner": "display",
+      "source_anchor": "if px_w() > 0 { layout() }",
+      "source_line": 5749,
+      "dependencies": [
+        "INIT-012"
+      ],
+      "obligation": "conditional",
+      "failure_behavior": "Framebuffer routes negotiate a mode and layout; text-only routes retain VGA geometry.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-014",
+      "name": "compositor-bootstrap",
+      "owner": "window-system",
+      "source_anchor": "wm_boot = wm_boot_start()",
+      "source_line": 5764,
+      "dependencies": [
+        "INIT-013"
+      ],
+      "obligation": "conditional",
+      "failure_behavior": "Framebuffer routes require a compositor; no-framebuffer routes keep the text shell fallback.",
+      "routes": [
+        "raw-bios",
+        "native-uefi64",
+        "grub-bios32",
+        "grub-uefi32",
+        "grub-bios64",
+        "grub-uefi64"
+      ],
+      "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
+    },
+    {
+      "id": "INIT-015",
       "name": "ring3-smoke",
       "owner": "process",
       "source_anchor": "user_up()",
-      "source_line": 5549,
+      "source_line": 5857,
       "dependencies": [
-        "INIT-007",
-        "INIT-012"
+        "INIT-002",
+        "INIT-012",
+        "INIT-014"
       ],
       "obligation": "required-proof",
       "failure_behavior": "Runs the current ring-3 syscall smoke path; failure prevents the later ready marker.",
@@ -291,13 +338,13 @@
       "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
     },
     {
-      "id": "INIT-014",
+      "id": "INIT-016",
       "name": "application-manifest",
       "owner": "product-identity",
       "source_anchor": "app_manifest_report()",
-      "source_line": 5558,
+      "source_line": 5865,
       "dependencies": [
-        "INIT-013"
+        "INIT-015"
       ],
       "obligation": "required-proof",
       "failure_behavior": "The running image must report the exact 62-surface manifest digest.",
@@ -312,13 +359,13 @@
       "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
     },
     {
-      "id": "INIT-015",
+      "id": "INIT-017",
       "name": "build-identity",
       "owner": "artifact-identity",
       "source_anchor": "build_identity_report()",
-      "source_line": 5559,
+      "source_line": 5866,
       "dependencies": [
-        "INIT-014"
+        "INIT-016"
       ],
       "obligation": "required-proof",
       "failure_behavior": "The running image must report the exact build-input identity and source state.",
@@ -333,13 +380,13 @@
       "evidence": "SOURCE_ORDER_AND_LATER_READY_ON_ALL_PROMOTED_QEMU_ROUTES"
     },
     {
-      "id": "INIT-016",
+      "id": "INIT-018",
       "name": "ready-publication",
       "owner": "boot",
       "source_anchor": "color(C_GREEN)  print(\"  ready.\")",
-      "source_line": 5562,
+      "source_line": 5869,
       "dependencies": [
-        "INIT-015"
+        "INIT-017"
       ],
       "obligation": "required-proof",
       "failure_behavior": "Published only after every earlier required attempt/proof; all promoted QEMU routes require it.",

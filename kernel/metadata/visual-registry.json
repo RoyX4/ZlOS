@@ -1,7 +1,7 @@
 {
   "schema": "zlos.visual-evidence-registry.v1",
   "result": "INVENTORY_WITH_OPEN_GAPS",
-  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
+  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "assets": [
     {
       "path": "docs/evidence/exercises/2026-08-24/bios/anim-before.ppm",

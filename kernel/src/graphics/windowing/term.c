@@ -415,7 +415,13 @@ static int match_cmd(void)
     int arg = 0;
     while (input[i] == ' ') i++;
     int astart = i;
-    while (input[i] >= '0' && input[i] <= '9') arg = arg * 10 + (input[i++] - '0');
+    while (input[i] >= '0' && input[i] <= '9') {
+        int digit = input[i++] - '0';
+        if (arg > 214748364 || (arg == 214748364 && digit > 7))
+            arg = 2147483647;
+        else
+            arg = arg * 10 + digit;
+    }
 
     for (int k = 0; table[k].word; k++) {
         if (streq_n(input + start, table[k].word, wlen)) {

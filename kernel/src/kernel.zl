@@ -1759,9 +1759,17 @@ EDIT_MAX = 8000
 #
 # ESC still saves and exits - but "exits" now means the window CLOSES, which is
 # the same thing every other window means by it. No "press any key".
-ed_slot = 0
+ed_slot = 0 - 1
 ed_len  = 0
 ed_dirty = 0
+
+fn editor_open_unsaved() {
+    fill_mem(EDIT_BUF, 0, EDIT_MAX)
+    ed_len = 0
+    ed_slot = 0 - 1
+    ed_dirty = 0
+    return 1
+}
 
 fn editor_open_disk(slot) {
     if fs_ok() == 0 { return 0 }
@@ -1788,6 +1796,10 @@ fn editor_open_default() {
 }
 
 fn editor_save() {
+    if ed_slot < 0 {
+        note_say("no zlfs volume - document is unsaved", 400)
+        return 0
+    }
     if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
         note_say("file save failed", 400)
         return 0
@@ -4472,8 +4484,8 @@ fn open_app(cmd, arg) {
                 wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
         if editor_open_default() == 0 {
-            note_say("no zlfs volume for /user/notes.txt", 400)
-            return 0
+            editor_open_unsaved()
+            note_say("storage unavailable - new unsaved document", 400)
         }
         edit_win = wm_open(APP_EDIT, "Text Editor", 322 * oa_u, 140 * oa_u, 522 * oa_u, 360 * oa_u)
         if edit_win < 0 { return 0 }
@@ -5847,13 +5859,9 @@ diag_mark(205)                           # Ring-3 self-test returned
 net_boot()
 diag_mark(206)                           # network boot returned
 ok_line("zl runtime, kernel subset")
-# STILL TRUE, and it is worth saying why rather than leaving the next reader to
-# wonder whether it was just missed. A bump allocator with no free() and no
-# reuse inside a run is not a heap - there is nothing to fragment, nothing to
-# double-free, and nothing to leak that a reset does not reclaim. The line stops
-# being honest the day the interpreter boxes lists and strings (EXEC-PROMPT §8),
-# and that is the change that has to carry it, not this one.
-info_line("no heap, zlfs mounts on demand, no scheduler")
+# The kernel heap is live before compositor construction. The scheduler exists
+# but stays idle until an explicit sched_go diagnostic starts its demo tasks.
+info_line("heap online, zlfs mounts on demand, scheduler opt-in")
 app_manifest_report()
 build_identity_report()
 

@@ -52,19 +52,19 @@ OVERRIDES = {
                 "external header drift", "environment injection"),
                ("0 hermetic builds", "unsigned toolchain", "compiler/sysroot sources unarchived"),
                "7 tools, 4 ABI lanes and 82 external headers are exact locally, but the toolchain is not hermetic or source-custodied"),
-    "EV-006": ("HISTORICAL_ONLY", (("implementation", "kernel/docs/receipts/reproducible-build-2026-08-22.json"),),
+    "EV-006": ("PROVED_CURRENT", (("implementation", "kernel/docs/receipts/reproducible-build-2026-08-22.json"),),
                ("python3 kernel/tools/checks/check-reproducible-build.py --check --selftest",),
                ("kernel/docs/receipts/reproducible-build-2026-08-22.json",),
                ("byte drift in every artifact", "missing artifact", "stale resume snapshot"), (),
-               "two-run reproducibility is proved for its historical nine-artifact subject build, not the current identity"),
+               "two independent complete recipe runs match for all nine artifacts on the current build identity"),
     "EV-007": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/build-graph.json"),
                                     ("implementation", "kernel/metadata/artifact-registry.json")),
                ("python3 kernel/tools/generators/gen-build-graph.py --check --selftest",),
                ("kernel/metadata/build-graph.json", "kernel/metadata/artifact-registry.json"),
                ("missing source", "missing lane", "orphan source", "missing artifact"),
-               ("1 conservative scope-only header", "no per-object binary receipts",
+               ("8 conservative scope-only inputs", "no per-object binary receipts",
                 "future package/service outputs absent"),
-               "all 148 inputs have recipe positions across 4 lanes; the nine exact artifacts are an explicitly historical snapshot"),
+               "all 148 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"),
     "EV-008": ("PROVED_CURRENT", (("implementation", "kernel/metadata/wrapper-registry.json"),
                                      ("implementation", "kernel/metadata/adversarial-registry.json")),
                ("python3 kernel/tools/generators/gen-wrapper-registry.py --check --selftest",
@@ -73,12 +73,12 @@ OVERRIDES = {
                ("missing wrapper", "duplicate wrapper", "missing policy", "hidden authority boundary",
                 "deleted verifier", "optional verifier", "missing route", "masked final exit", "masked child failure"),
                (), "all 156 current shebang wrappers are inventoried; the contained landing authority rejects child/final exit masking"),
-    "EV-009": ("HISTORICAL_ONLY", (("implementation", "kernel/metadata/artifact-registry.json"),
+    "EV-009": ("PROVED_CURRENT", (("implementation", "kernel/metadata/artifact-registry.json"),
                                    ("implementation", "kernel/metadata/app-evidence.json")),
                ("python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest",),
                ("kernel/metadata/artifact-registry.json", "kernel/metadata/app-evidence.json"),
                ("artifact mismatch", "wrong build identity"), (),
-               "the exact artifact and QEMU routes remain valid for their historical subject build; no current artifact proof exists"),
+               "all nine exact artifacts and six QEMU boot routes are bound to the current build identity"),
     "EV-010": ("PROVED_CURRENT", (("plan", "docs/program/PROOF-GATES.md"),
                                    ("implementation", "kernel/metadata/evidence-registry.json")),
                ("python3 kernel/tools/generators/gen-evidence-registry.py --check --selftest",),
@@ -94,12 +94,12 @@ OVERRIDES = {
                ("python3 kernel/tools/run/run-host-tests.py --selftest",),
                ("kernel/tests/host/test-inventory.json", "kernel/tests/host/test-run-receipt.json"),
                ("missing target", "promoted instrument", "hidden skip"), (),
-               "the dated 62-target receipt records 48 passes and 3 hardware skips; it is not bound to the current build"),
-    "EV-013": ("PARTIAL_HISTORICAL", (("implementation", "kernel/metadata/adversarial-registry.json"),),
+               "the dated 73-target receipt records 59 passes, 3 hardware skips and 11 manual/instrument non-runs; it is not build-identity bound"),
+    "EV-013": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/adversarial-registry.json"),),
                ("python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest",),
                ("kernel/metadata/adversarial-registry.json",), ("19 planted verifier mutations",),
                ("one mutation per every future required field is not yet possible",),
-               "19 historical verifier canaries proved red; they are not a current verifier run"),
+               "19 current verifier canaries proved red; four hostile-corpus families and all exhaustive failure-family claims remain open"),
     "EV-014": ("PARTIAL_HISTORICAL", (("implementation", "kernel/docs/receipts/benchmark-host-2026-08-23.json"),),
                ("python3 kernel/tools/run/run-benchmarks.py --check --selftest",),
                ("kernel/docs/receipts/benchmark-host-2026-08-23.json",),
@@ -171,7 +171,7 @@ OVERRIDES = {
                ("kernel/metadata/security-registry.json",),
                ("production overclaim", "hidden DMA risk", "invented DMA proof"),
                ("17 residual-risk claims open", "0 production-complete security claims"),
-               "historical static/host/QEMU evidence exists for six limited areas; no claim is current-build bound and eleven foundations are missing"),
+               "current artifact/QEMU evidence covers two limited claims, historical host evidence covers four, and eleven foundations remain missing"),
     "EV-025": ("PARTIAL_CURRENT", (("plan", "docs/program/VALIDATION-RECEIPT.md"),),
                ("python3 tools/validate_master_program.py --self-test",),
                ("docs/program/VALIDATION-RECEIPT.md",), ("missing feature", "unknown contract"),
@@ -333,14 +333,15 @@ def validate_feature_status_value(value: dict) -> None:
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("feature-status build identity missing")
     blockers = value.get("global_blockers", {})
-    if any(item is not True for item in blockers.values() if isinstance(item, bool)):
-        raise ValueError("feature-status hid a boolean blocker")
+    closed = {"current_artifact_snapshot_missing", "current_qemu_evidence_missing"}
+    for name, item in blockers.items():
+        if isinstance(item, bool) and item is not (name not in closed):
+            raise ValueError(f"feature-status blocker state drift: {name}")
     for name, item in blockers.items():
         if isinstance(item, int) and not isinstance(item, bool) \
                 and name != "decision_legacy_semantics_open" and item <= 0:
             raise ValueError(f"feature-status hid numeric blocker: {name}")
-    for name in ("public_release_blocked", "current_artifact_snapshot_missing",
-                 "current_qemu_evidence_missing", "current_host_test_receipt_missing",
+    for name in ("public_release_blocked", "current_host_test_receipt_missing",
                  "current_host_benchmark_missing"):
         if blockers.get(name) is not True:
             raise ValueError(f"feature-status hid blocker: {name}")
@@ -352,7 +353,7 @@ def build(evidence_root: Path) -> dict:
     master.validate_features(features)
     dependencies = phase_dependencies()
     joined = json.loads((evidence_root / "kernel/metadata/evidence-registry.json").read_text())
-    if joined.get("result") != "PASS_CURRENT_INDEX_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS":
+    if joined.get("result") != "PASS_CURRENT_INDEX_WITH_MIXED_EXECUTION_EVIDENCE_AND_OPEN_GAPS":
         raise ValueError("implementation evidence registry is absent or overpromoted")
     decisions = json.loads((evidence_root / "kernel/metadata/decision-ledger.json").read_text())
     release_notes = json.loads((evidence_root / "kernel/metadata/release-notes.json").read_text())

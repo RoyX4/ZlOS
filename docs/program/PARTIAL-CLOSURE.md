@@ -7,7 +7,7 @@ closing every row currently marked `PARTIAL_CURRENT`; it is not a claim
 that legal authority, trusted custody, physical hardware, release authority
 or independent review can be manufactured inside this checkout.
 
-Exact batch rows: **23**. Promoted current: **1**. Still partial: **22**. Locally finishable under the current contract: **3**. Rows with explicit external authority: **9**.
+Exact batch rows: **23**. Promoted current: **1**. Still partial: **17**. Locally finishable under the current contract: **3**. Rows with explicit external authority: **9**.
 
 ## Dependency flow
 
@@ -35,14 +35,14 @@ invalidating the exact historical receipt for an earlier build.
 | EV-007 | build graph truth | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | EV-004<br>EV-005<br>EV-006 | no | none | Emit per-object command/input/output hashes for the current four build lanes. |
 | EV-008 | strict exit propagation | PROVED_CURRENT | H1_HOST_TRUTH | EV-012<br>EV-013 | closed | none | Enumerate all executable and CI entry points, then mutation-test their child exit propagation. |
 | EV-013 | canary/mutation gate | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | EV-008<br>EV-012<br>EV-019<br>EV-020 | no | none | Generate mutation obligations from the current JSON schemas and land-gate registry. |
-| EV-014 | benchmark receipt | PARTIAL_CURRENT | X2_PHYSICAL | EV-005<br>EV-009<br>EV-021 | no | physical target and controlled reboot access | Upgrade the host benchmark receipt to retain raw samples, percentiles, peaks and machine identity. |
-| EV-015 | hardware receipt | PARTIAL_CURRENT | X2_PHYSICAL | EV-009<br>EV-014 | no | physical machines/devices<br>controlled cold/warm reboot and failure injection | Prepare the hardware receipt runner and device matrix without claiming a physical run. |
+| EV-014 | benchmark receipt | PARTIAL_HISTORICAL | X2_PHYSICAL | EV-005<br>EV-009<br>EV-021 | no | physical target and controlled reboot access | Upgrade the host benchmark receipt to retain raw samples, percentiles, peaks and machine identity. |
+| EV-015 | hardware receipt | PARTIAL_HISTORICAL | X2_PHYSICAL | EV-009<br>EV-014 | no | physical machines/devices<br>controlled cold/warm reboot and failure injection | Prepare the hardware receipt runner and device matrix without claiming a physical run. |
 | EV-016 | screenshot/video receipt | PARTIAL_CURRENT | Q1_CONTAINED_RUNTIME | EV-009<br>EV-022<br>EV-023 | yes | none | Add deterministic QEMU capture and bind new goldens to the current artifact identity. |
 | EV-017 | crash/panic receipt | PARTIAL_CURRENT | Q1_CONTAINED_RUNTIME | EV-009<br>EV-018<br>EV-024<br>KR-032 | no | none | Extend the typed exception frame to all general registers and define a double-fault-safe crash store. |
 | EV-018 | structured event trace | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | EV-017<br>EV-024<br>AU-028 | no | none | Compile the current event core into the kernel and emit boot, interrupt, fault and lifecycle events. |
-| EV-019 | failure-injection registry | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | EV-013<br>EV-020<br>EV-024 | no | none | Generate injection points for current allocation, queue and I/O commit paths, then compare pre/post state. |
-| EV-020 | hostile corpus registry | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | EV-013<br>EV-019<br>EV-024 | no | none | Add ELF, archive and font host corpora now; add IPC cases when the typed transport lands. |
-| EV-021 | performance regression registry | PARTIAL_CURRENT | Q1_CONTAINED_RUNTIME | EV-014<br>EV-016<br>EV-019<br>EV-022 | no | none | Register current input, block I/O, network, launch, memory and build metrics beside frame timings. |
+| EV-019 | failure-injection registry | PARTIAL_HISTORICAL | B1_CROSS_PHASE_FOUNDATION | EV-013<br>EV-020<br>EV-024 | no | none | Generate injection points for current allocation, queue and I/O commit paths, then compare pre/post state. |
+| EV-020 | hostile corpus registry | PARTIAL_HISTORICAL | B1_CROSS_PHASE_FOUNDATION | EV-013<br>EV-019<br>EV-024 | no | none | Add ELF, archive and font host corpora now; add IPC cases when the typed transport lands. |
+| EV-021 | performance regression registry | PARTIAL_HISTORICAL | Q1_CONTAINED_RUNTIME | EV-014<br>EV-016<br>EV-019<br>EV-022 | no | none | Register current input, block I/O, network, launch, memory and build metrics beside frame timings. |
 | EV-022 | visual regression registry | PARTIAL_CURRENT | Q1_CONTAINED_RUNTIME | EV-016<br>EV-023<br>EV-028 | yes | none | Establish current QEMU goldens only after the build-bound capture runner exists. |
 | EV-023 | accessibility proof registry | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | AX-001<br>AX-003<br>AP-001<br>EV-022 | no | none | Implement the semantic-tree transport and require every current primitive to expose a deterministic snapshot. |
 | EV-024 | security claim registry | PARTIAL_CURRENT | B1_CROSS_PHASE_FOUNDATION | AU-001<br>AU-006<br>AU-012<br>AU-024<br>AU-028 | no | independent security reviewer for final promotion | Implement capability handles and bounded typed IPC before migrating privileged policy out of the kernel. |
@@ -65,7 +65,7 @@ invalidating the exact historical receipt for an earlier build.
 
 ### EV-003 — license ledger
 
-- Current gaps: 0 license files<br>123 inputs lack an established redistribution grant.
+- Current gaps: 0 license files<br>148 inputs lack an established redistribution grant.
 - Deliverables: SPDX inventory for every first- and third-party file<br>repository license decision<br>redistribution notices and incompatible-license rejection.
 - Deterministic proof: every shipped byte resolves to a license and provenance record<br>missing, conflicting and unknown licenses block release.
 - QEMU proof: none.
@@ -74,7 +74,7 @@ invalidating the exact historical receipt for an earlier build.
 
 ### EV-004 — dependency lock
 
-- Current gaps: 156 package source archives absent<br>offline rebuild not proved.
+- Current gaps: 145 package source archives absent<br>offline rebuild not proved.
 - Deliverables: transitive source and binary SBOM<br>locked package/source/archive identities<br>offline dependency verification.
 - Deterministic proof: offline resolution succeeds from the lock and fails on any dependency mutation<br>SBOM covers every build-graph input and artifact.
 - QEMU proof: none.
@@ -92,7 +92,7 @@ invalidating the exact historical receipt for an earlier build.
 
 ### EV-007 — build graph truth
 
-- Current gaps: 1 conservative scope-only header<br>no per-object binary receipts<br>future package/service outputs absent.
+- Current gaps: 8 conservative scope-only inputs<br>no per-object binary receipts<br>future package/service outputs absent.
 - Deliverables: per-object and generated-output receipts<br>complete package/service/image output graph<br>scope-only input elimination.
 - Deterministic proof: every output traces to exact inputs, command, environment and toolchain<br>orphan input/output mutations fail.
 - QEMU proof: booted image identity joins to the same graph root.
@@ -137,7 +137,7 @@ invalidating the exact historical receipt for an earlier build.
 
 ### EV-016 — screenshot/video receipt
 
-- Current gaps: 46 visual assets are unbound to the current build<br>6 variant dimensions are open.
+- Current gaps: 41 visual assets are unbound to the current build<br>6 variant dimensions are open.
 - Deliverables: current-build screenshot/video capture runner<br>variant and interaction metadata.
 - Deterministic proof: asset hash, dimensions, build identity and capture metadata are internally consistent.
 - QEMU proof: capture the current BIOS/UEFI UI across required states and variants.

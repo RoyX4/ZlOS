@@ -101,6 +101,9 @@ def validate_cycle(opened, ready, closed, app, baseline):
 
 
 def selftest():
+    geometry = zb.dock_geometry(1920, 1200)
+    if len(geometry["slots"]) != 9:
+        fail("selftest dock geometry did not expose all nine routes")
     good = (
         {"event": "open", "slot": 4, "app": 15, "generation": 3, "live": 5},
         {"event": "ready", "slot": 4, "app": 15, "generation": 3, "live": 5},

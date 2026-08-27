@@ -370,14 +370,25 @@ int nvme_identify_namespace(void)
     if (admin_cmd(ADMIN_IDENTIFY, nv_nsid, dma_addr(NMEM_IDENT), 0, 0) != 0) return 0;
 
     volatile u32 *id = (volatile u32 *)(uptr)NMEM_IDENT;
+    volatile u8 *raw = (volatile u8 *)(uptr)NMEM_IDENT;
     nv_blocks    = ((u64)id[1] << 32) | (u64)id[0];       /* NSZE, in blocks */
     nv_maxlba_lo = id[0];
 
-    /* LBA Format 0 is at byte 128; its LBADS field (byte 130) is the block
-     * size as a power of two. 9 means 512 bytes, 12 means 4096. */
-    u32 lbaf0 = id[32];
-    u32 lbads = (lbaf0 >> 16) & 0xFF;
-    if (lbads >= 9 && lbads <= 16) nv_blocksize = 1u << lbads;
+    /* FLBAS selects the active entry in the LBAF table at byte 128. Bits 3:0
+     * are the low format bits and 6:5 extend the index on newer controllers. */
+    u32 flbas = raw[26];
+    u32 lbaf = (flbas & 0x0fu) | ((flbas >> 1) & 0x30u);
+    u32 nlbaf = (u32)raw[25] + 1u;
+    if (lbaf >= nlbaf || lbaf >= 64u) {
+        nv_fault = NVF_BLOCKSIZE;
+        return 0;
+    }
+    u32 lbads = raw[128u + lbaf * 4u + 2u];
+    if (lbads < 9 || lbads > 16) {
+        nv_fault = NVF_BLOCKSIZE;
+        return 0;
+    }
+    nv_blocksize = 1u << lbads;
 
     /* Every command this driver issues carries PRP1 and no PRP2, so one
      * transfer is one 4 KiB page. A device with a larger logical block would
@@ -524,6 +535,19 @@ void nvme_data_set(int i, int v)
 
 int nvme_ready(void) { return nv_ready; }
 
+static void nvme_abandon_partial_setup(void)
+{
+    if (nv_ready && nv_base) {
+        u32 cc = rd32(nv_base + NVME_CC);
+        if (cc & CC_EN) {
+            wr32(nv_base + NVME_CC, cc & ~CC_EN);
+            (void)wait_csts(CSTS_RDY, 0, 2000);
+        }
+    }
+    nv_ready = 0;
+    nv_setup_done = 0;
+}
+
 /* Bring the whole thing up: enable, identify, create I/O queues. */
 int nvme_setup(void)
 {
@@ -535,22 +559,25 @@ int nvme_setup(void)
      * Once the full sequence succeeds, it is already the requested state. */
     if (nv_setup_done) return 1;
     nv_fault = NVF_NONE;
-    /* Discovery is a service boundary, not a one-shot demo. Files, Settings,
-     * the editor and explicit diagnostics may all ask for the same mounted
-     * controller. Reissuing CREATE_IO_CQ/SQ against live queue IDs is rejected
-     * by real hardware and QEMU (fault 5), so a ready controller must make
-     * setup idempotent. */
-    if (nv_ready) return 1;
     if (!nvme_present() && nvme_find() < 0) { nv_fault = NVF_NO_DEV;    return 0; }
     if (!nvme_ram_ok())                     { nv_fault = NVF_RAM;       return 0; }
     if (!nvme_init())                       { nv_fault = NVF_NOT_READY; return 0; }
-    if (!nvme_identify_controller())        { nv_fault = NVF_IDENT;     return 0; }
+    if (!nvme_identify_controller()) {
+        nv_fault = NVF_IDENT;
+        nvme_abandon_partial_setup();
+        return 0;
+    }
     /* identify_namespace sets NVF_BLOCKSIZE itself when that is the reason */
     if (!nvme_identify_namespace()) {
         if (nv_fault == NVF_NONE) nv_fault = NVF_IDENT;
+        nvme_abandon_partial_setup();
         return 0;
     }
-    if (!nvme_create_io_queues())           { nv_fault = NVF_QUEUES;    return 0; }
+    if (!nvme_create_io_queues()) {
+        nv_fault = NVF_QUEUES;
+        nvme_abandon_partial_setup();
+        return 0;
+    }
     nv_setup_done = 1;
     return 1;
 }

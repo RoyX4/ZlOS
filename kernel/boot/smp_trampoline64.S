@@ -14,7 +14,7 @@
  *                    already built: they identity map the low 4 GiB, which is
  *                    everything any core needs, and building a second set
  *                    would be a second thing to keep in step.
- *     4. EFER.LME  - "long mode enable", via MSR 0xC0000080
+ *     4. EFER.LME|NXE - long mode plus NX page entries, via MSR 0xC0000080
  *     5. CR0.PG|PE - turning paging on is what actually ENTERS long mode
  *     6. a far jump to reload CS with the 64-bit selector
  *
@@ -62,10 +62,10 @@ smp_tramp64_start:
     movl    CR3_PTR, %eax
     movl    %eax, %cr3
 
-    /* EFER.LME */
+    /* EFER.LME|NXE: match the boot processor's page-table contract */
     movl    $0xC0000080, %ecx
     rdmsr
-    orl     $(1 << 8), %eax
+    orl     $((1 << 8) | (1 << 11)), %eax
     wrmsr
 
     /* paging + protection on: this is the instant we enter long mode */

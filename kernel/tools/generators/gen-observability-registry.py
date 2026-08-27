@@ -55,7 +55,7 @@ def sha256(path: Path) -> str:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.observability-registry.v1":
         raise ValueError("wrong observability schema")
-    if value.get("result") != "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS":
+    if value.get("result") != "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS":
         raise ValueError("observability registry overpromoted current evidence")
     rows = value.get("capabilities", [])
     if [row.get("id") for row in rows] != [row[0] for row in CAPABILITIES]:
@@ -77,8 +77,8 @@ def validate(value: dict) -> None:
         "qemu_crash_receipts": 1,
         "durable_crash_receipts": 0,
         "typed_structured_event_fields": 28,
-        "current_build_bound_qemu_receipts": 0,
-        "historical_qemu_receipts": 7,
+        "current_build_bound_qemu_receipts": 7,
+        "historical_qemu_receipts": 0,
     }
     if value.get("counts") != expected_counts:
         raise ValueError("observability counts drift")
@@ -91,11 +91,11 @@ def validate(value: dict) -> None:
         raise ValueError("boot transcript identities missing")
     if any(row.get("raw_log_preserved") is not False for row in boot):
         raise ValueError("unearned raw boot-log preservation claim")
-    if any(row.get("current_build_bound") is not False \
+    if any(row.get("current_build_bound") is not True \
            or len(row.get("subject_build_identity", "")) != 64 for row in boot):
-        raise ValueError("historical boot transcript was promoted as current")
-    if value.get("qemu_crash_receipt", {}).get("current_build_bound") is not False:
-        raise ValueError("historical crash receipt was promoted as current")
+        raise ValueError("current boot transcript binding was lost")
+    if value.get("qemu_crash_receipt", {}).get("current_build_bound") is not True:
+        raise ValueError("current crash receipt binding was lost")
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("observability build identity missing")
 
@@ -104,7 +104,7 @@ def build() -> dict:
     identity = json.loads((METADATA / "build-identity.json").read_text())["identity_sha256"]
     event_schema_path = METADATA / "event-schema.json"
     event_schema = json.loads(event_schema_path.read_text())
-    if event_schema.get("result") != "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED" or \
+    if event_schema.get("result") != "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED" or \
             event_schema.get("build_identity") != identity or \
             event_schema.get("counts", {}).get("wire_fields") != 28 or \
             event_schema.get("counts", {}).get("target_emitters") != 0:
@@ -147,11 +147,11 @@ def build() -> dict:
             or "last_record.magic = CRASH_RECORD_MAGIC" not in crash_source:
         raise ValueError("fault-record source boundary drift")
     ceilings = {
-        "QEMU_HASH_ONLY": "historical QEMU receipt hash only",
-        "QEMU_PROVED": "historical exact QEMU target behavior",
-        "QEMU_PROVED_PARTIAL": "historical exact QEMU target behavior, explicitly partial fields",
+        "QEMU_HASH_ONLY": "current-build QEMU receipt hash only",
+        "QEMU_PROVED": "current-build exact QEMU target behavior",
+        "QEMU_PROVED_PARTIAL": "current-build exact QEMU target behavior, explicitly partial fields",
         "HOST_PROVED_LIMITED": "historical host behavior only",
-        "HOST_PROVED_CORE": "historical host-proved core, explicitly target-unintegrated",
+        "HOST_PROVED_CORE": "current-build host-proved core, explicitly target-unintegrated",
         "HOST_PROVED_PARTIAL": "historical host-proved partial behavior",
         "SOURCE_ONLY": "source inspection only",
         "MISSING": "no current evidence",
@@ -163,7 +163,7 @@ def build() -> dict:
     ]
     value = {
         "schema": "zlos.observability-registry.v1",
-        "result": "PASS_WITH_HISTORICAL_EXECUTION_EVIDENCE_AND_OPEN_GAPS",
+        "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS",
         "build_identity": identity,
         "boot_transcripts": transcripts,
         "host_test_receipt": {"path": "kernel/tests/host/test-run-receipt.json", "sha256": sha256(host_receipt_path),
@@ -202,14 +202,14 @@ def build() -> dict:
             "qemu_crash_receipts": 1,
             "durable_crash_receipts": 0,
             "typed_structured_event_fields": 28,
-            "current_build_bound_qemu_receipts": 0,
-            "historical_qemu_receipts": len(transcripts) + 1,
+            "current_build_bound_qemu_receipts": len(transcripts) + 1,
+            "historical_qemu_receipts": 0,
         },
         "open_gaps": [row["id"] for row in rows
                       if row["status"] not in ("QEMU_HASH_ONLY", "QEMU_PROVED")],
-        "evidence_ceiling": "current source inventory joined to historical host/QEMU receipts; no current-build execution, target emitter, or durable crash evidence",
+        "evidence_ceiling": "current source inventory joined to current-build QEMU boot/crash and event-schema host evidence; no target event emitter or durable crash evidence",
         "weakest_link": "the structured core is externally serialized and target-unintegrated; general registers, stack symbols and durable recovery remain absent",
-        "generator": {"path": "kernel/gen-observability-registry.py", "sha256": sha256(Path(__file__).resolve())},
+        "generator": {"path": "kernel/tools/generators/gen-observability-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
     validate(value)
     return value
@@ -229,9 +229,9 @@ def selftest(value: dict) -> None:
     raw = copy.deepcopy(value)
     raw["boot_transcripts"][0]["raw_log_preserved"] = True
     mutations["invented-raw-log"] = raw
-    current = copy.deepcopy(value)
-    current["boot_transcripts"][0]["current_build_bound"] = True
-    mutations["invented-current-boot-proof"] = current
+    binding = copy.deepcopy(value)
+    binding["boot_transcripts"][0]["current_build_bound"] = False
+    mutations["lost-current-boot-proof"] = binding
     typed = copy.deepcopy(value)
     typed["counts"]["typed_structured_event_fields"] = 29
     mutations["event-schema-field-drift"] = typed

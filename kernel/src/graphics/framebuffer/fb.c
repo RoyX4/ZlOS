@@ -849,7 +849,8 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
      * Refused only when the mode does not fit between `back` and its
      * neighbour, in which case everything still works - just slower, straight
      * to VRAM - and the boot log SAYS SO. See the high-RAM map above. */
-    unsigned int need = width * height * 4u;
+    unsigned long long need64 = (unsigned long long)width * height * 4u;
+    unsigned int need = need64 > 0xffffffffULL ? 0xffffffffu : (unsigned int)need64;
     /* ONE SPAN NOW, and it is big enough for every mode this kernel can be
      * handed. Deleting the drag buffers (C4) gave `back` 128..168 MiB - 40 MiB
      * against 3840x2160's 31.6 - so the two-tier "prefer back's own span, fall
@@ -869,7 +870,7 @@ void fb_setup(unsigned long long addr, unsigned int pitch, unsigned int width,
         back_capacity = BACK_LIMIT;
         back_is_loader_reserved = 0;
     }
-    back_on = (need <= back_capacity);
+    back_on = (need64 <= (unsigned long long)back_capacity);
     ndmg    = 0;                 /* the mode changed; old damage means nothing */
     pdirty  = 0;
     fb_report_mode(need);

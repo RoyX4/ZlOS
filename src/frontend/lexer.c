@@ -90,7 +90,11 @@ static Token make_token(TokenType type, const char *start, int len, int line)
     t.type = type;
     t.line = line;
 
-    if (len >= MAX_TEXT) len = MAX_TEXT - 1;   /* never overflow */
+    if (len >= MAX_TEXT) {
+        fprintf(stderr, "line %d: token exceeds the %d-byte text limit\n",
+                line, MAX_TEXT - 1);
+        exit(1);
+    }
     memcpy(t.text, start, (size_t)len);
     t.text[len] = '\0';
     return t;
@@ -111,6 +115,16 @@ static int hex_val(char c)
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
     return -1;
+}
+
+static void string_put(Token *t, int *out, int line, char c)
+{
+    if (*out >= MAX_TEXT - 1) {
+        fprintf(stderr, "line %d: string literal exceeds the %d-byte text limit\n",
+                line, MAX_TEXT - 1);
+        exit(1);
+    }
+    t->text[(*out)++] = c;
 }
 
 /* 5   42   3.14   0xFF
@@ -195,7 +209,7 @@ static Token lex_string(Lexer *lx)
         }
 
         if (c != '\\') {
-            if (out < MAX_TEXT - 1) t.text[out++] = c;
+            string_put(&t, &out, line, c);
             advance(lx);
             continue;
         }
@@ -227,7 +241,7 @@ static Token lex_string(Lexer *lx)
         }
 
         if (real < 0) {
-            if (out < MAX_TEXT - 1) t.text[out++] = '\\';
+            string_put(&t, &out, line, '\\');
             advance(lx);                              /* only the backslash */
             continue;
         }
@@ -238,7 +252,7 @@ static Token lex_string(Lexer *lx)
             exit(1);
         }
 
-        if (out < MAX_TEXT - 1) t.text[out++] = (char)real;
+        string_put(&t, &out, line, (char)real);
         lx->pos += eaten;
     }
 

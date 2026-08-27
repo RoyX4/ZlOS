@@ -120,9 +120,11 @@ u32 bga_vram_bytes(void)  { return bga_vram; }
  * the card will not refuse on our behalf. */
 int bga_mode_fits(int w, int h, int bpp)
 {
+    if (w <= 0 || h <= 0 || w > 0xffff || h > 0xffff) return 0;
+    if (bpp != 32 && bpp != 24 && bpp != 16) return 0;
     if (!bga_vram) return 1;                 /* size unknown - let it try */
-    u32 need = (u32)w * (u32)h * (u32)(bpp / 8);
-    return need <= bga_vram;
+    unsigned long long need = (unsigned long long)(u32)w * (u32)h * (u32)(bpp / 8);
+    return need <= (unsigned long long)bga_vram;
 }
 
 /* SET THE MODE. This is the whole point of the file: after this call the

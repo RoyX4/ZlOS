@@ -1,25 +1,25 @@
 {
   "schema": "zlos.security-claim-registry.v1",
-  "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35",
+  "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
+  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "input_bindings": {
     "artifact_registry": {
-      "subject_build_identity": "1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04",
-      "current_build_bound": false
+      "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+      "current_build_bound": true
     },
     "init_registry": {
-      "subject_build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
-      "current_build_bound": false
+      "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+      "current_build_bound": true
     },
     "host_test_receipt": {
-      "subject_head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+      "subject_head": "528a21f5f7fe8061b9e86c377d075529a433a558",
       "current_build_bound": false
     }
   },
   "input_receipts": {
-    "kernel/metadata/artifact-registry.json": "d279b2373f57684b95376f46bfbda0dd4cbadf0ac4468a7ba5ee5fc356a79fa3",
-    "kernel/metadata/init-registry.json": "d69d62c3d007521d1a875b11f3791d1476aa04f07eff025dc3617c37d141760e",
-    "kernel/tests/host/test-run-receipt.json": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f"
+    "kernel/metadata/artifact-registry.json": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
+    "kernel/metadata/init-registry.json": "9bda15002df55cc1f208003659917598416e29e45138c34502846aa1ad239d59",
+    "kernel/tests/host/test-run-receipt.json": "cbdf04b522526da240aa763999121eae1f97bd74f02a71cc948e0ed0e1059cc3"
   },
   "claims": [
     {
@@ -31,7 +31,8 @@
       "passed_host_targets": [],
       "adversarial_proof": "planted RWX mutation",
       "residual_risk": "page-table enforcement after boot is not separately proved",
-      "evidence_ceiling": "historical static artifact structure only"
+      "current_build_bound": true,
+      "evidence_ceiling": "current build-bound artifact/QEMU reachability only"
     },
     {
       "id": "filesystem-integrity",
@@ -44,6 +45,7 @@
       ],
       "adversarial_proof": "corrupt superblock/geometry/write rollback cases",
       "residual_risk": "no power-cut target receipt, permissions or multi-process adversary",
+      "current_build_bound": false,
       "evidence_ceiling": "historical host behavior only"
     },
     {
@@ -61,6 +63,7 @@
       ],
       "adversarial_proof": "deterministic fuzz and scripted hostile packets",
       "residual_risk": "host parsers are not process-isolated and not every protocol is covered",
+      "current_build_bound": false,
       "evidence_ceiling": "historical host behavior only"
     },
     {
@@ -76,6 +79,7 @@
       ],
       "adversarial_proof": "forged root, truncation, hostname/time refusal",
       "residual_risk": "root distribution, revocation, persistent secrets and production policy remain incomplete",
+      "current_build_bound": false,
       "evidence_ceiling": "historical host behavior only"
     },
     {
@@ -89,6 +93,7 @@
       ],
       "adversarial_proof": "budget/confine hostile programs",
       "residual_risk": "this is an interpreter harness, not general process containment",
+      "current_build_bound": false,
       "evidence_ceiling": "historical host behavior only"
     },
     {
@@ -100,7 +105,8 @@
       "passed_host_targets": [],
       "adversarial_proof": "boot reaches the cooperative Ring-3 smoke stage",
       "residual_risk": "no general preemptive process/usercopy hostile matrix or physical proof",
-      "evidence_ceiling": "historical QEMU boot reachability only"
+      "current_build_bound": true,
+      "evidence_ceiling": "current build-bound artifact/QEMU reachability only"
     },
     {
       "id": "syscall-usercopy-boundary",
@@ -111,6 +117,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "no exhaustive syscall/usercopy hostile receipt",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -122,6 +129,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "capability handle table and derivation/revoke graph do not exist",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -133,6 +141,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "credential model and transition matrix do not exist",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -144,6 +153,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "current PID IPC is not the bounded typed capability transport",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -155,6 +165,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "no enforced IOMMU domain; passthrough cannot be called isolated",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -166,6 +177,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "no secrets service, zeroization or redaction receipt",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -177,6 +189,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "byte identity is not signature, measured boot or anti-rollback",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -188,6 +201,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "manifest/portal sandbox and complete mediation do not exist",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -199,6 +213,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "no publisher trust, staged atomic install or uninstall revocation",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -210,6 +225,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "no durable append/anchor/drop/redaction security audit service",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     },
     {
@@ -221,6 +237,7 @@
       "passed_host_targets": [],
       "adversarial_proof": "none",
       "residual_risk": "no complete operation-rights matrix and denial suite",
+      "current_build_bound": false,
       "evidence_ceiling": "no current proof"
     }
   ],
@@ -232,8 +249,8 @@
     "missing": 11,
     "production_complete": 0,
     "native_hardware_complete": 0,
-    "current_build_bound_claims": 0,
-    "historical_evidence_claims": 6
+    "current_build_bound_claims": 2,
+    "historical_evidence_claims": 4
   },
   "open_claims": [
     "non-rwx-kernel-images",
@@ -254,10 +271,10 @@
     "audit-integrity",
     "privileged-operation-mediation"
   ],
-  "evidence_ceiling": "current claim inventory joined to historical static, host and QEMU evidence only",
+  "evidence_ceiling": "current claim inventory joined to current artifact/QEMU reachability and historical host evidence; no production or physical completeness",
   "weakest_link": "no claim is production-complete; capability/usercopy/DMA/credential/IPC/sandbox/boot/package/audit mediation is absent",
   "generator": {
-    "path": "kernel/gen-security-registry.py",
-    "sha256": "1965831a74e666391b7f4d791d66d6f82733d284156f6821a339c26719623341"
+    "path": "kernel/tools/generators/gen-security-registry.py",
+    "sha256": "a603856b563fcaa0e61ad5f509d113cc3e15b243fe9725159e5de0c8c55f3529"
   }
 }

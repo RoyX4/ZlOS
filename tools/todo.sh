@@ -81,21 +81,26 @@ if command -v clang >/dev/null 2>&1; then
     fi
 fi
 
-# ---- 2. engine divergences --------------------------------------------------
+# ---- 2. engine expectations -------------------------------------------------
 if [ -f tools/engine-parity-expected.txt ]; then
     pins=$(grep -vE '^\s*#|^\s*$' tools/engine-parity-expected.txt | wc -l)
     if [ "$pins" -gt 0 ]; then
-        echo "## Engine divergence — $pins pinned"
+        echo "## Engine expectations — $pins pinned"
         echo
-        echo "\`./interp\` is ground truth. These engines disagree with it today:"
+        echo "\`./interp\` is ground truth. These pins record either an output divergence"
+        echo "or a deliberately unsupported native subset case:"
         echo
-        grep -vE '^\s*#|^\s*$' tools/engine-parity-expected.txt | while read -r case eng; do
-            echo "- [ ] \`$case\` — \`$eng\` differs"
+        grep -vE '^\s*#|^\s*$' tools/engine-parity-expected.txt | while read -r case eng kind; do
+            if [ "${kind:-diff}" = "reject" ]; then
+                echo "- [ ] \`$case\` — \`$eng\` deliberately rejects this subset case"
+            else
+                echo "- [ ] \`$case\` — \`$eng\` output differs"
+            fi
         done
         echo
-        echo "Both unboxed backends sit on the far side of the scoping decision in"
+        echo "The unboxed backends sit on the far side of the scoping decision in"
         echo "\`docs/design/design_scoping_decision.md\`. Delete these pins when it lands;"
-        echo "\`tools/engine-parity.sh\` fails if a pin stops being true."
+        echo "\`tools/engine-parity.sh\` fails if a pin stops being true or an unpinned case appears."
         echo
     fi
 fi

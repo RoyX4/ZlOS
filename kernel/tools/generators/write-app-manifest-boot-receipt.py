@@ -35,6 +35,13 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def repo_relative(path):
+    relative = os.path.relpath(os.path.abspath(path), REPO_ROOT)
+    if relative == ".." or relative.startswith("../"):
+        raise ValueError(f"receipt source escapes repository: {path}")
+    return relative
+
+
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--route", required=True,
@@ -69,19 +76,20 @@ def main(argv):
             raise ValueError(f"build source mismatch: {source_found!r}, expected {source_wanted!r}")
         artifact = os.path.abspath(args.artifact)
         source_files = {
-            "app-manifest.json": expected,
-            "app_manifest_embed.zl": sha256(EMBED),
-            "build-identity.json": sha256(BUILD_IDENTITY),
-            "build_identity_embed.zl": sha256(BUILD_EMBED),
-            "kernel.zl": sha256(os.path.join(KERNEL_ROOT, "src", "kernel.zl")),
-            os.path.basename(args.harness): sha256(os.path.abspath(args.harness)),
-            "write-app-manifest-boot-receipt.py": sha256(os.path.abspath(__file__)),
+            repo_relative(MANIFEST): expected,
+            repo_relative(EMBED): sha256(EMBED),
+            repo_relative(BUILD_IDENTITY): sha256(BUILD_IDENTITY),
+            repo_relative(BUILD_EMBED): sha256(BUILD_EMBED),
+            repo_relative(os.path.join(KERNEL_ROOT, "src", "kernel.zl")):
+                sha256(os.path.join(KERNEL_ROOT, "src", "kernel.zl")),
+            repo_relative(args.harness): sha256(os.path.abspath(args.harness)),
+            repo_relative(__file__): sha256(os.path.abspath(__file__)),
         }
         for source in args.source_file:
             source_path = os.path.abspath(source)
             if not os.path.isfile(source_path):
                 raise ValueError(f"extra receipt source is missing: {source}")
-            source_files[os.path.relpath(source_path, KERNEL_ROOT)] = sha256(source_path)
+            source_files[repo_relative(source_path)] = sha256(source_path)
         receipt = {
             "schema": "zlos.application-manifest-boot-receipt.v1",
             "route": args.route,

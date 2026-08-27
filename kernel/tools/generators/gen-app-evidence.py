@@ -19,6 +19,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.dirname(os.path.dirname(HERE))
+REPO_ROOT = os.path.dirname(KERNEL_ROOT)
 METADATA = os.path.join(KERNEL_ROOT, "metadata")
 MANIFEST = os.path.join(METADATA, "app-manifest.json")
 BUILD_IDENTITY = os.path.join(METADATA, "build-identity.json")
@@ -56,12 +57,18 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def repo_path(relative, label):
+    if os.path.isabs(relative) or relative == ".." or relative.startswith("../"):
+        fail(f"{label} path escapes repository: {relative}")
+    return os.path.join(REPO_ROOT, relative)
+
+
 def check_source_hashes(receipt_name, receipt):
     hashes = receipt.get("source_files_sha256")
     if not isinstance(hashes, dict) or not hashes:
         fail(f"{receipt_name}: missing source hashes")
     for relative, expected in hashes.items():
-        path = os.path.join(HERE, relative)
+        path = repo_path(relative, f"{receipt_name}: source")
         if not os.path.isfile(path):
             fail(f"{receipt_name}: source disappeared: {relative}")
         actual = sha256(path)
@@ -194,7 +201,7 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
         if not artifact.get("sha256") or not artifact.get("path"):
             fail(f"{route}: missing artifact identity")
         if verify_artifact:
-            artifact_path = os.path.join(os.path.dirname(HERE), artifact["path"])
+            artifact_path = repo_path(artifact["path"], f"{route}: artifact")
             if sha256(artifact_path) != artifact["sha256"]:
                 fail(f"{route}: current artifact does not match its runtime receipt")
         runtime_boot_routes.append({
@@ -301,6 +308,12 @@ def serialized(value):
 
 
 def selftest(manifest, receipts, boot_receipts):
+    try:
+        check_source_hashes("escape", {"source_files_sha256": {"../escape": "0" * 64}})
+    except ValueError:
+        print("app-evidence source selftest: caught path-escape")
+    else:
+        fail("selftest mutation escaped: path-escape")
     mutations = []
     mismatched = copy.deepcopy(receipts)
     mismatched["run"]["artifact"]["sha256"] = "0" * 64

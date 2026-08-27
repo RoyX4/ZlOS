@@ -23,6 +23,50 @@ for t in tests/*.zl; do
     grep -q " 0 failed" <<<"$out" && echo "  ok    $name" || { echo "  FAIL  $name"; fail=1; }
 done
 
+echo "== semantic refusal and evaluation-order regressions =="
+cat > "$tmp/too_long.zl" <<'EOF'
+print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+EOF
+./interp "$tmp/too_long.zl" >"$tmp/too_long.interp" 2>&1 && long_i=0 || long_i=$?
+./compile "$tmp/too_long.zl" >"$tmp/too_long.compile" 2>&1 && long_c=0 || long_c=$?
+if [ "$long_i" -ne 0 ] && [ "$long_c" -ne 0 ] &&
+   grep -q "string literal exceeds" "$tmp/too_long.interp" &&
+   grep -q "string literal exceeds" "$tmp/too_long.compile"; then
+    echo "  ok    over-limit string literals are refused, never truncated"
+else
+    echo "  FAIL  over-limit string literal was accepted or changed silently"; fail=1
+fi
+
+cat > "$tmp/for_nonlist.zl" <<'EOF'
+for x in 7 { print(x) }
+EOF
+./interp "$tmp/for_nonlist.zl" >"$tmp/for_nonlist.interp" 2>&1 || true
+( cd "$tmp" && "$OLDPWD/compile" for_nonlist.zl >/dev/null 2>&1 &&
+  gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o for_nonlist.bin out.c \
+      "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm 2>/dev/null )
+"$tmp/for_nonlist.bin" >"$tmp/for_nonlist.compiled" 2>&1 || true
+if grep -q "'for' can only loop over a list" "$tmp/for_nonlist.interp" &&
+   grep -q "'for' can only loop over a list" "$tmp/for_nonlist.compiled"; then
+    echo "  ok    interpreter and C backend both reject for over a non-list"
+else
+    echo "  FAIL  for-over-non-list semantics diverged"; fail=1
+fi
+
+cat > "$tmp/stdlib_regressions.zl" <<'EOF'
+import strx
+import listx
+print(word_count(""))
+print(word_count("a  b"))
+print(chunk([1, 2, 3], 2))
+EOF
+if [ "$(./interp "$tmp/stdlib_regressions.zl" 2>&1 | tr '\n' ' ')" = "0 2 [[1, 2], [3]] " ] &&
+   ./interp stdlib/json_parse.zl >/dev/null 2>&1 &&
+   ./interp stdlib/json_pretty.zl >/dev/null 2>&1; then
+    echo "  ok    stdlib edge contracts and JSON self-tests"
+else
+    echo "  FAIL  stdlib edge or JSON regression"; fail=1
+fi
+
 echo "== C backend: cross-check against interpreter =="
 for t in tests/*.zl; do
     name=$(basename "$t" .zl)
@@ -374,6 +418,22 @@ if [ -x "$tmp/native_out" ]; then
     fi
 else
     echo "  BUILD FAIL nativegen"; fail=1
+fi
+
+cat > "$tmp/native_arg16.zl" <<'EOF'
+fn f(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) { return a + p }
+i = 0
+while i < 40000 {
+    f(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)
+    i = i + 1
+}
+print(i)
+EOF
+( cd "$tmp" && "$OLDPWD/nativegen" native_arg16.zl >/dev/null 2>&1 )
+if [ "$("$tmp/native_out" 2>&1)" = "40000" ]; then
+    echo "  ok    native backend reclaims 16-argument call frames"
+else
+    echo "  FAIL  native backend corrupts 16-argument call frames"; fail=1
 fi
 
 echo "== nativegen kernel intrinsics (the gcc-replacement path) =="

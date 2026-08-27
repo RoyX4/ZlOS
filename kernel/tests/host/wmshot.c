@@ -112,7 +112,7 @@ static void app_draw(int app, int x, int y, int w, int h, int focused)
         ui_label("[  OK  ] framebuffer console, 120x37");
         ui_label("[  OK  ] APIC: IRQs via I/O APIC, 4 CPU(s)");
         ui_label("[  OK  ] zl runtime, kernel subset");
-        ui_label_dim("[ INFO ] no heap, zlfs mounts on demand, no scheduler");
+        ui_label_dim("[ INFO ] heap online, zlfs mounts on demand, scheduler opt-in");
         ui_space(t->gap);
         ui_label("ready.");
         ui_space(t->gap);

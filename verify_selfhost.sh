@@ -59,10 +59,26 @@ mv "$tmp/out.c" "$tmp/gen2.c"
 
 if cmp -s "$tmp/gen1.c" "$tmp/gen2.c"; then
     echo "  ok    self-hosting fixpoint: gen1 == gen2 ($(wc -l < "$tmp/gen1.c") lines, $(md5sum < "$tmp/gen1.c" | cut -c1-12))"
-    exit 0
+else
+    echo "  FAIL  self-hosting fixpoint BROKEN - gen1 and gen2 differ" >&2
+    echo "        the compiler does not reproduce itself; first differences:" >&2
+    diff "$tmp/gen1.c" "$tmp/gen2.c" | head -20 >&2
+    exit 1
 fi
 
-echo "  FAIL  self-hosting fixpoint BROKEN - gen1 and gen2 differ" >&2
-echo "        the compiler does not reproduce itself; first differences:" >&2
-diff "$tmp/gen1.c" "$tmp/gen2.c" | head -20 >&2
-exit 1
+cat > "$tmp/input.zl" <<'EOF'
+x = 0
+fn side() { x = 1 return true }
+print(false and side())
+print(x)
+EOF
+if ! ( cd "$tmp" && ./zlc1 >/dev/null 2>&1 &&
+       gcc -O2 -w -D_strdup=strdup -o semantic out.c runtime.c os_linux.c -lm 2>/dev/null ); then
+    echo "FAIL  generation-1 compiler could not build the semantic probe" >&2
+    exit 1
+fi
+if [ "$(cd "$tmp" && ./semantic | tr '\n' ' ')" != "false 0 " ]; then
+    echo "FAIL  self-hosted compiler does not preserve short-circuit semantics" >&2
+    exit 1
+fi
+echo "  ok    self-hosted and/or short-circuits"

@@ -8,7 +8,7 @@
  [  OK  ] VGA text console, 80x25
  [  OK  ] zl runtime, kernel subset
  [ INFO ] no interrupts - the shell polls
- [ INFO ] no heap, zlfs mounts on demand, no scheduler
+ [ INFO ] heap online, zlfs mounts on demand, scheduler opt-in
 
  ready.
  zl> 20f

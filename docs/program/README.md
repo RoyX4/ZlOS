@@ -55,6 +55,10 @@ but zlOS owns its design and code.
     refutations, the three 174-contract source backlogs, and read-only snapshots
     of the zl language plans used by the clean-room program.
 
+The local `AGENTS.md`, `CLAUDE.md`, `RULES.md`, `SOP.md`, `STATUS.md`, `TODO.md`
+and `VALUES.md` files are the standard per-directory contributor surface. They
+orient work in this folder; they do not add features or change program status.
+
 ## What each file proves
 
 | File | What it proves | What it does not prove |

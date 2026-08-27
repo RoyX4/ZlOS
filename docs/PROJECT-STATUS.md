@@ -1,6 +1,6 @@
 # Project Status
 
-Checked 2026-08-26. This page separates repository state, planning state, and
+Checked 2026-08-27. This page separates repository state, planning state, and
 implementation state. They are not the same thing.
 
 ## Read This First
@@ -13,14 +13,16 @@ implementation state. They are not the same thing.
    performance queue.
 4. [`STATE-OF-THE-PROJECT-2026-08-19.md`](evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md)
    is evidence-rich historical audit material, not the current queue.
-5. [`REMAINING-WORK.md`](REMAINING-WORK.md) is the post-integration H0-H3 map.
+5. [`WHOLE-TREE-CODEX-AUDIT-2026-08-26.md`](evidence/status-audits/WHOLE-TREE-CODEX-AUDIT-2026-08-26.md)
+   records the current source-audit repairs and their hardware boundary.
+6. [`REMAINING-WORK.md`](REMAINING-WORK.md) is the post-integration H0-H3 map.
 
 ## Repository State
 
 | Repository or checkout | Commit state | Meaning |
 |---|---|---|
-| `RoyX4/zl-linux:main` | Structure payload gated at `69f11cf8e579`; derived-doc refresh `26c089947dfa` | The complete structure and directory-documentation series is on `main`. GitHub repository gates, documentation checks, BIOS32, raw BIOS, GRUB BIOS/UEFI and native UEFI jobs passed on the payload checkpoint. The later commit only refreshed generated TODO/journal state. This is repository closure and QEMU evidence, not product or physical-hardware completion. |
-| This reconciliation worktree | `codex/full-program`, fast-forwarded from `origin/main` at `26c089947dfa` before the live T-8/T-9 closure pass | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The published cleanup series repairs status and static checker contracts, preserves historical inputs, separates retained evidence from disposable output, groups kernel documentation by purpose/subsystem, and adds eight local documentation surfaces to all 113 repository directories. [`evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md`](evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md) records the rollout and evidence limits. Exact live Git state remains the publication authority. No physical-hardware result is claimed. |
+| `RoyX4/zl-linux:main` | Published structure baseline at `26c089947dfa`; current authority is the live remote ref | The structure and directory-documentation series plus the whole-tree repair/evidence closure are published on `main`. Host, build, reproducibility and all six retained QEMU boot routes are covered by current receipts. This is repository closure and QEMU evidence, not product or physical-hardware completion. |
+| This reconciliation worktree | `codex/full-program`, based on `origin/main` at `26c089947dfa` before the closure series | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The cleanup series repairs status and static checker contracts, preserves historical inputs, separates retained evidence from disposable output, groups kernel documentation by purpose/subsystem, and adds eight local documentation surfaces to all 113 repository directories. The final repair pass also closes accepted language/kernel audit findings and refreshes current build/QEMU evidence. [`evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md`](evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md) records the structure rollout. Exact live Git state remains the publication authority. No physical-hardware result is claimed. |
 | Older structure worktree | Dirty `codex/full-restructure`, based on `85fcdf542b9c` | Preserved at `/home/roy/Documents/repos/zl-linux-structure` with 566 pending entries from the older migration. It is input history, not the active finalization tree. |
 | Original shared checkout | Dirty `codex/local-zlos-snapshot-2026-08-24` at `/home/roy/Documents/repos/zl-linux` | Preserved with 183 pending entries. Its untracked display audit has now been recovered into this branch as explicitly historical evidence; the shared checkout itself was not rewritten. |
 | Desktop redesign worktree | `design/desktop-redesign` at `66eadd0` with 143 pending entries on the 2026-08-26 recheck | Preserved at `/home/roy/Documents/repos/zl-linux-desktop-redesign`. The pending design/prototype/render work is concurrent input, was not edited by this reconciliation pass, and is not merged or pushed. No kernel implementation is claimed. |
@@ -95,8 +97,8 @@ The codebase is substantial but the whole program is partial.
 | Research inventory and dependency plan | Complete and committed. |
 | Branch/worktree integration discovered on 2026-08-24 | Complete and pushed. Historical refs/directories were not deleted. |
 | Existing local implementation batch | Implemented across many host and QEMU lanes; see the dated receipt under `kernel/docs/evidence/`. |
-| `program/FEATURE-STATUS.json` | Current identity-safe join: 877 planned/unproved, 16 partial-current, 6 partial-historical, 3 historical-only and 4 proved-current, for 906 total. Historical execution does not count as current proof. |
-| Post-restructure static and QEMU verification | GitHub docs, repository gates, BIOS32, raw BIOS, GRUB BIOS/UEFI and native UEFI all passed at `69f11cf8e579`. No physical boot was run for this publication commit. |
+| `program/FEATURE-STATUS.json` | Current identity-safe join: 877 planned/unproved, 17 partial-current, 5 partial-historical, 1 historical-only and 6 proved-current, for 906 total. Historical execution does not count as current proof. |
+| Post-restructure static and QEMU verification | Language/build gates, two-build reproducibility, raw BIOS, GRUB32 BIOS/UEFI, GRUB64 BIOS/UEFI and native UEFI64 passed for the current source identity. The complete app route sweep, 47 lifecycle cycles and 62 app open-ready-close checks also passed. No physical boot was run. |
 | Physical ThinkPad proof | Partial. QEMU and host evidence do not close panel, input feel, I219, USB power-cut, NVMe, suspend, or Intel promotion gates. |
 | Complete MP-00 through MP-20 product | Not complete. The product-first order begins with Wave 1 performance/dependability and proceeds through boot, processes, IPC, services, hardware breadth, apps, browser, tooling, and release. |
 

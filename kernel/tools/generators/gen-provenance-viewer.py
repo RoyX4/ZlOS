@@ -50,8 +50,8 @@ OPEN_GAPS = {
     "target_accessibility_workflow_missing": True,
     "authenticated_remote_serving_missing": True,
     "public_release_missing": True,
-    "current_artifact_snapshot_missing": True,
-    "current_qemu_evidence_missing": True,
+    "current_artifact_snapshot_missing": False,
+    "current_qemu_evidence_missing": False,
     "current_host_test_receipt_missing": True,
     "current_host_benchmark_missing": True,
 }
@@ -199,14 +199,17 @@ def build_model() -> dict:
     )
     if any(item != identity for item in current_identities):
         raise ValueError("provenance current inputs disagree on build identity")
-    historical_inputs = {
+    evidence_inputs = {
         "kernel/metadata/artifact-registry.json": artifact["build_identity"]["id"],
         "kernel/metadata/app-evidence.json": app_evidence["shipped_build_identity"]["id"],
         "kernel/docs/receipts/benchmark-host-2026-08-23.json": docs[
             "docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"],
     }
-    if any(len(item) != 64 or item == identity for item in historical_inputs.values()):
-        raise ValueError("provenance historical evidence boundary is invalid")
+    if any(len(item) != 64 for item in evidence_inputs.values()) \
+            or evidence_inputs["kernel/metadata/artifact-registry.json"] != identity \
+            or evidence_inputs["kernel/metadata/app-evidence.json"] != identity \
+            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] == identity:
+        raise ValueError("provenance evidence boundary is invalid")
     apps = application_rows(app_manifest, app_evidence)
     artifacts = artifact_rows(artifact)
     security_claims = security_rows(security)
@@ -241,12 +244,13 @@ def build_model() -> dict:
             "sha256": sha256(input_path(path)),
             "schema": docs[path].get("schema"),
         } for path in INPUTS],
-        "historical_evidence": [{
+        "evidence_bindings": [{
             "path": path,
             "subject_build_identity": subject,
-            "current_build_bound": False,
-            "evidence_ceiling": "dated evidence for its named subject build only",
-        } for path, subject in historical_inputs.items()],
+            "current_build_bound": subject == identity,
+            "evidence_ceiling": ("current build-bound evidence" if subject == identity else
+                                 "dated evidence for its named subject build only"),
+        } for path, subject in evidence_inputs.items()],
         "identity": {
             "head": build_identity["git"]["head"],
             "branch": build_identity["git"]["branch"],
@@ -276,7 +280,8 @@ def build_model() -> dict:
             **tests["counts"],
             "qemu_boot_routes": len(artifact["boot_routes"]),
             "app_lifecycle_qemu_proved": app_evidence["counts"]["with_qemu_open_ready_close"],
-            "current_build_bound": False,
+            "qemu_current_build_bound": True,
+            "host_current_build_bound": False,
         },
         "health": health,
         "artifacts": artifacts,
@@ -304,7 +309,7 @@ def build_model() -> dict:
             "path": "kernel/tools/generators/gen-provenance-viewer.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
-        "evidence_ceiling": "current static provenance projection with explicitly historical artifact/runtime evidence; not current-build execution, a booted zlOS app, live monitor, authenticated remote service or signed release portal",
+        "evidence_ceiling": "current static provenance projection with current artifact/QEMU evidence and historical host metrics; not a booted zlOS provenance app, live monitor, authenticated remote service or signed release portal",
         "weakest_link": "permissions are security claim state rather than admitted per-app grants, signatures are absent, and the viewer has no current visual or target accessibility receipt",
     }
     validate_model(model, docs)
@@ -335,18 +340,19 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
     } for path in INPUTS]
     if value.get("inputs") != expected_inputs:
         raise ValueError("viewer input closure drift")
-    expected_historical = [
-        ("kernel/metadata/artifact-registry.json", docs["artifact-registry.json"]["build_identity"]["id"]),
-        ("kernel/metadata/app-evidence.json", docs["app-evidence.json"]["shipped_build_identity"]["id"]),
+    expected_bindings = [
+        ("kernel/metadata/artifact-registry.json", docs["artifact-registry.json"]["build_identity"]["id"], True),
+        ("kernel/metadata/app-evidence.json", docs["app-evidence.json"]["shipped_build_identity"]["id"], True),
         ("kernel/docs/receipts/benchmark-host-2026-08-23.json",
-         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"]),
+         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"], False),
     ]
-    if value.get("historical_evidence") != [{
+    if value.get("evidence_bindings") != [{
             "path": path, "subject_build_identity": subject,
-            "current_build_bound": False,
-            "evidence_ceiling": "dated evidence for its named subject build only",
-    } for path, subject in expected_historical]:
-        raise ValueError("viewer historical evidence boundary drift")
+            "current_build_bound": current,
+            "evidence_ceiling": ("current build-bound evidence" if current else
+                                 "dated evidence for its named subject build only"),
+    } for path, subject, current in expected_bindings]:
+        raise ValueError("viewer evidence binding drift")
     if value.get("artifacts") != artifact_rows(docs["artifact-registry.json"]):
         raise ValueError("viewer artifact projection drift")
     if value.get("applications") != application_rows(
@@ -358,8 +364,9 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
         raise ValueError("viewer health projection drift")
     if value.get("changes") != docs["release-notes.json"]["changes"]:
         raise ValueError("viewer change projection drift")
-    if value.get("tests", {}).get("current_build_bound") is not False:
-        raise ValueError("viewer promoted historical test evidence as current")
+    if value.get("tests", {}).get("qemu_current_build_bound") is not True \
+            or value.get("tests", {}).get("host_current_build_bound") is not False:
+        raise ValueError("viewer test evidence binding drift")
     if value.get("licensing", {}).get("public_release_blocked") is not True:
         raise ValueError("viewer hid release licensing block")
     if value.get("signatures") != {
@@ -692,9 +699,9 @@ def selftest(value: dict, docs: dict[str, dict], html_text: str) -> None:
     gap = copy.deepcopy(value)
     gap["open_gaps"]["runtime_zlos_app_route_missing"] = False
     mutations["invented-runtime-route"] = gap
-    current = copy.deepcopy(value)
-    current["historical_evidence"][0]["current_build_bound"] = True
-    mutations["invented-current-artifact-proof"] = current
+    binding = copy.deepcopy(value)
+    binding["evidence_bindings"][0]["current_build_bound"] = False
+    mutations["lost-current-artifact-proof"] = binding
     caught = []
     for name, mutant in mutations.items():
         try:

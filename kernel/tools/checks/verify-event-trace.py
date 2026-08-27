@@ -103,7 +103,7 @@ def selftest(value: dict) -> None:
     failed["proof"]["host_execution"]["exit_code"] = 1
     mutations["hidden-host-failure"] = failed
     missing = copy.deepcopy(value)
-    missing["source_identities"].pop("hosttest/trace_event.c")
+    missing["source_identities"].pop("tests/host/trace_event.c")
     mutations["missing-source"] = missing
     lane = copy.deepcopy(value)
     lane["proof"]["compile_lanes"].pop()
@@ -140,8 +140,8 @@ def build_receipt() -> dict:
         host_command = ["gcc", "-O1", "-g", *common,
                         "-fsanitize=address,undefined",
                         "-fno-sanitize-recover=all", "-DZLOS_TRACE_HOSTTEST",
-                        "-o", str(host), "hosttest/eventtracetest.c",
-                        "hosttest/trace_event.c"]
+                        "-o", str(host), "tests/host/eventtracetest.c",
+                        "tests/host/trace_event.c"]
         host_compile = run(host_command)
         if host_compile.returncode != 0:
             raise ValueError("host event-trace compile failed:\n" + host_compile.stdout)
@@ -152,7 +152,7 @@ def build_receipt() -> dict:
 
         ilp32 = temp / "trace-event-32.o"
         ilp32_command = ["gcc", "-m32", "-ffreestanding", "-fno-builtin",
-                         *common, "-c", "hosttest/trace_event.c", "-o", str(ilp32)]
+                         *common, "-c", "tests/host/trace_event.c", "-o", str(ilp32)]
         ilp32_compile = run(ilp32_command)
         if ilp32_compile.returncode != 0:
             raise ValueError("ILP32 event-trace compile failed:\n" + ilp32_compile.stdout)
@@ -160,7 +160,7 @@ def build_receipt() -> dict:
         uefi = temp / "trace-event-uefi.obj"
         uefi_command = ["clang", "--target=x86_64-pc-win32-coff",
                         "-ffreestanding", "-fshort-wchar", "-mno-red-zone",
-                        *common, "-c", "hosttest/trace_event.c", "-o", str(uefi)]
+                        *common, "-c", "tests/host/trace_event.c", "-o", str(uefi)]
         uefi_compile = run(uefi_command)
         if uefi_compile.returncode != 0:
             raise ValueError("LLP64 event-trace compile failed:\n" + uefi_compile.stdout)

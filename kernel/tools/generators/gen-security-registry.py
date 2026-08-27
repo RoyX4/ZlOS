@@ -49,8 +49,8 @@ def sha256(path: Path) -> str:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.security-claim-registry.v1":
         raise ValueError("wrong security registry schema")
-    if value.get("result") != "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS":
-        raise ValueError("security registry overpromoted current claims")
+    if value.get("result") != "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS":
+        raise ValueError("security registry evidence binding/result drift")
     rows = value.get("claims", [])
     if [row.get("id") for row in rows] != [row[0] for row in CLAIMS]:
         raise ValueError("security claim set/order drift")
@@ -70,8 +70,8 @@ def validate(value: dict) -> None:
         "missing": 11,
         "production_complete": 0,
         "native_hardware_complete": 0,
-        "current_build_bound_claims": 0,
-        "historical_evidence_claims": 6,
+        "current_build_bound_claims": 2,
+        "historical_evidence_claims": 4,
     }
     if value.get("counts") != expected_counts:
         raise ValueError("security claim counts drift")
@@ -80,9 +80,18 @@ def validate(value: dict) -> None:
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("security registry build identity missing")
     bindings = value.get("input_bindings", {})
-    if set(bindings) != {"artifact_registry", "init_registry", "host_test_receipt"} \
-            or any(row.get("current_build_bound") is not False for row in bindings.values()):
-        raise ValueError("historical security input was promoted as current")
+    expected_bindings = {
+        "artifact_registry": True,
+        "init_registry": True,
+        "host_test_receipt": False,
+    }
+    if set(bindings) != set(expected_bindings) or any(
+            bindings[name].get("current_build_bound") is not expected
+            for name, expected in expected_bindings.items()):
+        raise ValueError("security input binding drift")
+    current_ids = {row["id"] for row in rows if row.get("current_build_bound")}
+    if current_ids != {"non-rwx-kernel-images", "ring3-address-space-isolation"}:
+        raise ValueError("security claim build binding drift")
 
 
 def build() -> dict:
@@ -94,13 +103,20 @@ def build() -> dict:
     init = json.loads((METADATA / "init-registry.json").read_text())
     if any(row.get("memory_permissions") != "NO_RWX_LOAD" for row in artifact["artifacts"].values() if row["path"].endswith(".elf")):
         raise ValueError("non-RWX source claim lost its artifact evidence")
-    if not any(row["id"] == "INIT-013" and row["name"] == "ring3-smoke" for row in init["stages"]):
+    if not any(row["id"] == "INIT-015" and row["name"] == "ring3-smoke" for row in init["stages"]):
         raise ValueError("Ring-3 boot-reachability source disappeared")
+    artifact_current = artifact["build_identity"]["id"] == identity
+    init_current = init["build_identity"] == identity
     rows = []
     for claim_id, status, asset, threat, enforcement, targets, adversarial, residual in CLAIMS:
         missing = sorted(set(targets) - passed)
         if missing:
             raise ValueError(f"{claim_id}: mapped host proof is not passing: {missing}")
+        current_claim = (
+            status == "STATIC_PROVED" and artifact_current
+        ) or (
+            claim_id == "ring3-address-space-isolation" and artifact_current and init_current
+        )
         rows.append({
             "id": claim_id,
             "status": status,
@@ -110,15 +126,15 @@ def build() -> dict:
             "passed_host_targets": list(targets),
             "adversarial_proof": adversarial,
             "residual_risk": residual,
+            "current_build_bound": current_claim,
             "evidence_ceiling": (
-                "historical host behavior only" if targets else
-                ("historical QEMU boot reachability only" if status == "QEMU_BOOT_REACHABLE_PARTIAL" else
-                 ("historical static artifact structure only" if status == "STATIC_PROVED" else "no current proof"))
+                "current build-bound artifact/QEMU reachability only" if current_claim else
+                ("historical host behavior only" if targets else "no current proof")
             ),
         })
     value = {
         "schema": "zlos.security-claim-registry.v1",
-        "result": "PASS_WITH_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
+        "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
         "build_identity": identity,
         "input_bindings": {
             "artifact_registry": {
@@ -148,13 +164,14 @@ def build() -> dict:
             "missing": sum(row["status"] == "MISSING" for row in rows),
             "production_complete": 0,
             "native_hardware_complete": 0,
-            "current_build_bound_claims": 0,
-            "historical_evidence_claims": sum(row["status"] != "MISSING" for row in rows),
+            "current_build_bound_claims": sum(row["current_build_bound"] for row in rows),
+            "historical_evidence_claims": sum(
+                row["status"] != "MISSING" and not row["current_build_bound"] for row in rows),
         },
         "open_claims": [row["id"] for row in rows],
-        "evidence_ceiling": "current claim inventory joined to historical static, host and QEMU evidence only",
+        "evidence_ceiling": "current claim inventory joined to current artifact/QEMU reachability and historical host evidence; no production or physical completeness",
         "weakest_link": "no claim is production-complete; capability/usercopy/DMA/credential/IPC/sandbox/boot/package/audit mediation is absent",
-        "generator": {"path": "kernel/gen-security-registry.py", "sha256": sha256(Path(__file__).resolve())},
+        "generator": {"path": "kernel/tools/generators/gen-security-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
     validate(value)
     return value
@@ -177,9 +194,9 @@ def selftest(value: dict) -> None:
     threat = copy.deepcopy(value)
     threat["claims"][0]["protected_asset"] = ""
     mutations["missing-protected-asset"] = threat
-    current = copy.deepcopy(value)
-    current["input_bindings"]["artifact_registry"]["current_build_bound"] = True
-    mutations["invented-current-artifact-proof"] = current
+    binding = copy.deepcopy(value)
+    binding["input_bindings"]["artifact_registry"]["current_build_bound"] = False
+    mutations["lost-current-artifact-binding"] = binding
     caught = []
     for name, mutated in mutations.items():
         try:

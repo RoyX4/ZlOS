@@ -92,7 +92,7 @@ def sha256(path: Path) -> str:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.event-schema-registry.v1":
         raise ValueError("wrong event-schema registry version")
-    if value.get("result") != "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED":
+    if value.get("result") != "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED":
         raise ValueError("event schema was failed or overpromoted")
     expected_identity = json.loads((METADATA / "build-identity.json").read_text())[
         "identity_sha256"]
@@ -137,8 +137,8 @@ def validate(value: dict) -> None:
             receipt.get("target_integration", {}).get("target_emitters") != 0:
         raise ValueError("event-schema receipt overclaims target reachability")
     if proof.get("subject_build_identity") != receipt.get("build_identity") \
-            or proof.get("current_build_bound") is not False:
-        raise ValueError("historical event-trace receipt was promoted as current")
+            or proof.get("current_build_bound") is not True:
+        raise ValueError("current event-trace receipt binding was lost")
     if value.get("counts") != {
             "wire_fields": 28,
             "wire_bytes": 152,
@@ -166,7 +166,7 @@ def build() -> dict:
     receipt = json.loads(RECEIPT.read_text())
     value = {
         "schema": "zlos.event-schema-registry.v1",
-        "result": "PASS_CURRENT_SCHEMA_WITH_HISTORICAL_HOST_PROOF_TARGET_UNINTEGRATED",
+        "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED",
         "feature_id": "EV-018",
         "build_identity": json.loads((METADATA / "build-identity.json").read_text())[
             "identity_sha256"],
@@ -198,7 +198,7 @@ def build() -> dict:
             "subject_build_identity": receipt["build_identity"],
             "current_build_bound": receipt["build_identity"] == json.loads(
                 (METADATA / "build-identity.json").read_text())["identity_sha256"],
-            "evidence_ceiling": "dated host execution receipt; not current-build target proof",
+            "evidence_ceiling": "current-build host execution and ABI compile receipt; target remains unintegrated",
         },
         "source_identities": {
             path: sha256(KERNEL_ROOT / path) for path in
@@ -246,9 +246,9 @@ def selftest(value: dict) -> None:
     promoted = copy.deepcopy(value)
     promoted["counts"]["target_emitters"] = 1
     mutations["invented-target-emitter"] = promoted
-    current = copy.deepcopy(value)
-    current["proof"]["current_build_bound"] = True
-    mutations["invented-current-host-proof"] = current
+    binding = copy.deepcopy(value)
+    binding["proof"]["current_build_bound"] = False
+    mutations["lost-current-host-proof"] = binding
     caught = []
     for name, mutant in mutations.items():
         try:

@@ -227,6 +227,13 @@ static void emit_seq_call(FILE *out, const char *head, const char *extra_before,
     fputs("); })", out);
 }
 
+static void emit_seq_pair(FILE *out, const char *head, const char *extra_before,
+                          Node *left, Node *right)
+{
+    Node *kids[2] = { left, right };
+    emit_seq_call(out, head, extra_before, kids, 2);
+}
+
 /* emit a call node - user function or built-in */
 static void emit_call(FILE *out, Node *n)
 {
@@ -309,18 +316,14 @@ static void emit_expr(FILE *out, Node *n)
             if (strcmp(n->text, "in") == 0) {
                 /* not a zl_binop: 'in' picks contains() or has() by the
                  * runtime type of the right operand. See emit_in_helper. */
-                fputs("zl_in(", out);
-                emit_expr(out, n->a);
-                fputs(", ", out);
-                emit_expr(out, n->b);
-                fputc(')', out);
+                emit_seq_pair(out, "zl_in", NULL, n->a, n->b);
                 break;
             }
-            fprintf(out, "zl_binop(");
-            emit_c_string(out, n->text);
-            fputs(", ", out); emit_expr(out, n->a);
-            fputs(", ", out); emit_expr(out, n->b);
-            fputc(')', out);
+            {
+                char op[MAX_TEXT + 4];
+                snprintf(op, sizeof(op), "\"%s\"", n->text);
+                emit_seq_pair(out, "zl_binop", op, n->a, n->b);
+            }
             break;
 
         case N_UNARY:
@@ -346,11 +349,7 @@ static void emit_expr(FILE *out, Node *n)
         case N_CALL:  emit_call(out, n); break;
 
         case N_INDEX:
-            fprintf(out, "zl_index(");
-            emit_expr(out, n->a);
-            fputs(", ", out);
-            emit_expr(out, n->b);
-            fputc(')', out);
+            emit_seq_pair(out, "zl_index", NULL, n->a, n->b);
             break;
 
         default:
@@ -387,19 +386,19 @@ static void emit_stmt(FILE *out, Node *n, int indent)
                 if (n->text[0]) {
                     fputs("{ Value _c = ", out); emit_expr(out, n->a->a);
                     fputs("; Value _i = ", out);  emit_expr(out, n->a->b);
+                    fputs("; Value _old = zl_index(_c, _i); Value _rhs = ", out);
+                    emit_expr(out, n->b);
                     fputs("; zl_set(_c, _i, zl_binop(", out);
                     emit_c_string(out, n->text);
-                    fputs(", zl_index(_c, _i), ", out);
-                    emit_expr(out, n->b);
-                    fputs(")); }\n", out);
+                    fputs(", _old, _rhs)); }\n", out);
                 } else {
-                    fputs("zl_set(", out);
+                    fputs("{ Value _c = ", out);
                     emit_expr(out, n->a->a);          /* the list  */
-                    fputs(", ", out);
+                    fputs("; Value _i = ", out);
                     emit_expr(out, n->a->b);          /* the index */
-                    fputs(", ", out);
+                    fputs("; Value _rhs = ", out);
                     emit_expr(out, n->b);             /* the value */
-                    fputs(");\n", out);
+                    fputs("; zl_set(_c, _i, _rhs); }\n", out);
                 }
             } else if (n->text[0]) {
                 fprintf(out, "v_%s = zl_binop(", n->a->text);

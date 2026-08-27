@@ -10,11 +10,10 @@
  * wm.c calls fb_clip and app_draw; it never draws a widget and never knows
  * what a button is.
  *
- * NO ALLOCATION ANYWHERE. Fixed arrays, WM_MAX windows, and "no free slot" is
- * a refusal that says so - never a silent drop. The zl kernel subset has no
- * lists at all (zl_list_n is a hard fault), which is why the window table is
- * in C rather than in kernel.zl: it is not a style choice, the language cannot
- * express it.
+ * The window table and z-order are fixed arrays, so exhausting WM_MAX is an
+ * explicit refusal. Retained client and shell pixel surfaces use the kernel
+ * heap and are freed when their windows close; allocation failure is likewise
+ * reported instead of silently dropping a surface.
  *
  * Z-ORDER IS THE zorder ARRAY. Iteration order is paint order, back to front.
  * Raise is remove-and-append. Hit-test walks it backwards. There is no other

@@ -89,7 +89,7 @@ def guest_ui(width):
 
 def dock_geometry(width, height):
     """The dock/app-grid/topbar pointer targets derived from kernel.zl."""
-    src = open(os.path.join(KERNEL, "kernel.zl"), encoding="utf-8").read()
+    src = open(os.path.join(KERNEL, "src", "kernel.zl"), encoding="utf-8").read()
     values = {}
     for name in ("DOCK_PADX", "DOCK_PADY", "DOCK_GAP", "DOCK_TW", "DOCK_H",
                  "DOCK_BOT", "DOCK_PITCH", "DOCK_N", "TOPBAR_H"):

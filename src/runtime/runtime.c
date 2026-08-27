@@ -228,7 +228,10 @@ static char *to_string(Value v)
         case V_STR:  return _strdup(v.str ? v.str : "");
         case V_FN:   return _strdup("<function>");   /* matches interp.c */
         case V_NUM:
-            if (v.num == (long long)v.num)
+            if (v.num == v.num &&
+                v.num >= -9223372036854775808.0 &&
+                v.num <   9223372036854775808.0 &&
+                v.num == trunc(v.num))
                 snprintf(buf, sizeof(buf), "%lld", (long long)v.num);
             else
                 snprintf(buf, sizeof(buf), "%g", v.num);
@@ -458,7 +461,11 @@ Value zl_unop(const char *op, Value a)
     return zl_nil();
 }
 
-int   zl_len_list(Value v) { return v.type == V_LIST ? v.nitems : 0; }
+int zl_len_list(Value v)
+{
+    if (v.type != V_LIST) rt_error("'for' can only loop over a list");
+    return v.nitems;
+}
 Value zl_item(Value v, int i) { return *v.items[i]; }
 
 /* x[i] = v : mutate a list element in place (items array is shared). */

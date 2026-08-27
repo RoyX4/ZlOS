@@ -162,10 +162,10 @@ fn parse(pSrc) {
 
 # ---- rendering (for the self-test only) --------------------------------------
 
-# TRUE when v is a list. A list compared to itself is never equal (interpreter
-# quirk), so the self-comparison is false exactly for lists.
+# TRUE when v is a list. `type` is the language contract; list equality is now
+# structural and reflexive, so the old self-inequality trick is invalid.
 fn isList(ilV) {
-    return not (ilV == ilV)
+    return type(ilV) == "list"
 }
 
 # Render any parsed value back to a compact JSON-ish string. Order of checks
@@ -192,7 +192,7 @@ fn show(shV) {
     if shV == "null" {
         return "null"
     }
-    if shV == num(shV) {          # number equals its own num(); string does not
+    if type(shV) == "number" {
         return "" + shV
     }
     return "\"" + shV + "\""

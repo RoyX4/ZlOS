@@ -26,6 +26,7 @@ Dated project-state audits retained as evidence snapshots.
 ## Direct tracked contents
 
 - `STATE-OF-THE-PROJECT-2026-08-19.md`
+- `WHOLE-TREE-CODEX-AUDIT-2026-08-26.md`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../CODE-MAP.md)
 for repository-wide ownership.

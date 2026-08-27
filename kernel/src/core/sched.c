@@ -3,7 +3,8 @@
  * Up to now zlOS has run exactly one thread of control. The shell loops
  * waiting for a key; while it waits, nothing else in the machine happens. That
  * is the last structural thing separating it from an operating system, and the
- * boot log has been honest about it: "no heap, zlfs mounts on demand, no scheduler".
+ * The boot log reports this as opt-in: the scheduler is present, but its demo
+ * tasks do not start until the explicit sched_go diagnostic requests them.
  *
  * WHAT A SCHEDULER ACTUALLY IS
  * ----------------------------
@@ -217,11 +218,18 @@ static int pick_next(void)
     for (int n = 1; n <= ntasks; n++) {
         int i = (current + n) % ntasks;
         if (tasks[i].state == TASK_DONE || tasks[i].state == TASK_FREE) continue;
-        if (tasks[i].wake_at && now < tasks[i].wake_at) continue;
+        if (tasks[i].wake_at && (int)(now - tasks[i].wake_at) < 0) continue;
         tasks[i].wake_at = 0;
         return i;
     }
     return current;
+}
+
+static u32 sleep_deadline(u32 now, u32 ticks)
+{
+    if (ticks > 0x7fffffffu) ticks = 0x7fffffffu;
+    u32 deadline = now + ticks;
+    return deadline ? deadline : 1u; /* zero is the not-sleeping sentinel */
 }
 
 /* Give up the CPU. Everything above exists to make this one call safe. */
@@ -248,8 +256,12 @@ void yield(void)
 /* Sleep for a number of 100 Hz ticks, letting everything else run. */
 void task_sleep(u32 ticks)
 {
-    if (!sched_on) { u32 t = idt_ticks() + ticks; while (idt_ticks() < t) { } return; }
-    tasks[current].wake_at = idt_ticks() + ticks;
+    if (!sched_on) {
+        u32 t = sleep_deadline(idt_ticks(), ticks);
+        while ((int)(idt_ticks() - t) < 0) { }
+        return;
+    }
+    tasks[current].wake_at = sleep_deadline(idt_ticks(), ticks);
     yield();
 }
 

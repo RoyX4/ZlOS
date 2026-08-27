@@ -313,14 +313,18 @@ def build() -> dict:
     if artifact_current and any(count == 0 for count in artifact_incoming.values()):
         raise ValueError("one or more artifacts has no producing edge")
 
+    result = ("PASS_CURRENT_ARTIFACTS" if artifact_current
+              else "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT")
     value = {
         "schema": "zlos.build-graph.v1",
-        "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
+        "result": result,
         "build_identity": build_id,
         "artifact_snapshot": {
             "subject_build_identity": artifact_build_id,
             "current_build_bound": artifact_current,
             "evidence_ceiling": (
+                "exact current artifact/QEMU registry bound to this build identity"
+                if artifact_current else
                 "exact historical artifact/QEMU registry; recipe edges do not promote "
                 "those bytes as outputs of the current source identity"
             ),
@@ -348,10 +352,14 @@ def build() -> dict:
             "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",
             "conservative header-superset inputs may be scope-only rather than active includes",
             "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes",
+        ] + ([] if artifact_current else [
             "the exact artifact snapshot is historical and no artifact hash is bound to the current source identity",
-        ],
+        ]),
         "generator": {"path": "kernel/tools/generators/gen-build-graph.py", "sha256": sha256(Path(__file__).resolve())},
         "evidence_ceiling": (
+            "complete declared-input build recipe for four lanes joined to the current reproducible "
+            "nine-artifact snapshot; not a compiler-emitted per-object attestation"
+            if artifact_current else
             "complete declared-input build recipe for four lanes joined to a clearly historical "
             "nine-artifact snapshot; not current artifact provenance or a compiler-emitted per-object attestation"
         ),
@@ -361,8 +369,7 @@ def build() -> dict:
 
 
 def validate(value: dict, source_hashes: dict[str, str], artifact_names: list[str]) -> None:
-    if value.get("schema") != "zlos.build-graph.v1" \
-            or value.get("result") != "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT":
+    if value.get("schema") != "zlos.build-graph.v1":
         raise ValueError("wrong build-graph schema/result")
     if value.get("source_inputs") != sorted(source_hashes):
         raise ValueError("build graph source-input set/order drifted")
@@ -403,11 +410,16 @@ def validate(value: dict, source_hashes: dict[str, str], artifact_names: list[st
     if counts != expected_counts or counts.get("declared_c_units", 0) <= 0:
         raise ValueError("build graph counts drifted")
     snapshot = value.get("artifact_snapshot", {})
-    if snapshot.get("current_build_bound") is not False \
-            or counts.get("current_artifacts") != 0 \
-            or counts.get("historical_artifacts") != len(artifact_names) \
+    current = snapshot.get("current_build_bound") is True
+    expected_result = ("PASS_CURRENT_ARTIFACTS" if current
+                       else "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT")
+    expected_current = len(artifact_names) if current else 0
+    expected_historical = 0 if current else len(artifact_names)
+    if value.get("result") != expected_result \
+            or counts.get("current_artifacts") != expected_current \
+            or counts.get("historical_artifacts") != expected_historical \
             or len(snapshot.get("subject_build_identity", "")) != 64:
-        raise ValueError("historical artifact snapshot was promoted as current")
+        raise ValueError("artifact snapshot binding/counts disagree")
     if len(value.get("artifact_registry_sha256", "")) != 64 \
             or len(value.get("toolchain_manifest_sha256", "")) != 64 \
             or len(value.get("generator", {}).get("sha256", "")) != 64:
@@ -433,11 +445,9 @@ def selftest(value: dict, source_hashes: dict[str, str], artifact_names: list[st
     artifact["nodes"] = [row for row in artifact["nodes"] if row.get("id") != "artifact:zlOS.iso"]
     artifact["counts"]["nodes"] = len(artifact["nodes"])
     mutations["missing-artifact"] = artifact
-    current = copy.deepcopy(value)
-    current["artifact_snapshot"]["current_build_bound"] = True
-    current["counts"]["current_artifacts"] = len(artifact_names)
-    current["counts"]["historical_artifacts"] = 0
-    mutations["invented-current-artifact-binding"] = current
+    binding = copy.deepcopy(value)
+    binding["artifact_snapshot"]["current_build_bound"] = not binding["artifact_snapshot"]["current_build_bound"]
+    mutations["artifact-binding-count-drift"] = binding
     caught = []
     for name, mutant in mutations.items():
         try:

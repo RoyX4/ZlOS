@@ -50,6 +50,7 @@ python3 ./tests/host/efi_kernel_witness_test.py || exit 1
 
 VARS=$(mktemp); cp "$OVMF_VARS" "$VARS"
 LOG=$(mktemp)
+BOOT_IMAGE=$(mktemp --suffix=.img); cp zlOS-usb.img "$BOOT_IMAGE"
 
 # Wait for the expected OUTPUT, never for a fixed number of seconds. A gate
 # that fails because the host was busy costs a bisect every time it lies
@@ -76,7 +77,7 @@ timeout "$CEILING" qemu-system-x86_64 \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,unit=1,file="$VARS" \
     -device qemu-xhci,id=xhci \
-    -drive format=raw,file=zlOS-usb.img,if=none,id=boot \
+    -drive format=raw,file="$BOOT_IMAGE",if=none,id=boot \
     -device usb-storage,bus=xhci.0,drive=boot \
     -device usb-kbd,bus=xhci.0 \
     -device usb-mouse,bus=xhci.0 \
@@ -181,7 +182,7 @@ fi
 # separate kernel before StartImage transferred control.  It is flushed before
 # the child starts, so killing QEMU after the prompt cannot lose this evidence.
 TRACE=$(mktemp)
-if ! mtype -i zlOS-usb.img@@1M ::/EFI/ZLOS/WITNESS.LOG >"$TRACE" 2>/dev/null; then
+if ! mtype -i "$BOOT_IMAGE"@@1M ::/EFI/ZLOS/WITNESS.LOG >"$TRACE" 2>/dev/null; then
     echo "  FAIL  stage 0 left no ESP witness"; fail=1
 elif ! grep -q "STAGE0 ENTER" "$TRACE"; then
     echo "  FAIL  ESP witness has no entry marker"; fail=1
@@ -205,7 +206,11 @@ elif ! grep -q "GOP_RESULT status=" "$TRACE" ||
 elif ! grep -q "MEMORY_MAP_RESULT status=0x0000000000000000" "$TRACE"; then
     echo "  FAIL  kernel did not record a successful memory map"; fail=1
 elif ! grep -q "FIXED_MEMORY .*hi_back_overlap=yes" "$TRACE"; then
-    echo "  FAIL  kernel did not classify the 128..168 MiB backbuffer span"; fail=1
+    echo "  FAIL  kernel did not classify the legacy 128..168 MiB backbuffer span"; fail=1
+elif ! grep -q "FIXED_MEMORY safe" "$TRACE"; then
+    echo "  FAIL  firmware owns part of a fixed zlOS memory range"
+    grep "FIXED_MEMORY" "$TRACE" | tail -34 | sed 's/^/          /'
+    fail=1
 elif ! grep -q "BEFORE_EXIT_BOOT_SERVICES" "$TRACE"; then
     echo "  FAIL  kernel never reached the final firmware-exit boundary"; fail=1
 else
@@ -222,7 +227,7 @@ if [ "$fail" -eq 0 ]; then
 fi
 
 JOURNAL=$(mktemp)
-if ! python3 ../tools/zllog.py read zlOS-usb.img --latest >"$JOURNAL" 2>/dev/null; then
+if ! python3 ../tools/zllog.py read "$BOOT_IMAGE" --latest >"$JOURNAL" 2>/dev/null; then
     echo "  FAIL  could not read the QEMU journal after boot"; fail=1
 elif ! grep -q "cache=write-combining" "$JOURNAL"; then
     echo "  FAIL  framebuffer stayed uncacheable after the WC transition"; fail=1
@@ -232,6 +237,6 @@ fi
 
 python3 ./tests/host/efi_runtime_diag_test.py || fail=1
 
-rm -f "$VARS" "$LOG" "$TRACE" "$JOURNAL"
+rm -f "$VARS" "$LOG" "$BOOT_IMAGE" "$TRACE" "$JOURNAL"
 [ "$fail" -eq 0 ] && echo "EFI gate green" || echo "EFI gate FAILED"
 exit $fail

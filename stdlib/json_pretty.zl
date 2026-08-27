@@ -2,24 +2,15 @@
 # and nested lists) as indented, bracketed text. Recurses over the structure.
 # Standalone: every helper it needs is a built-in or defined below.
 #
-# The language has no type() built-in, so type detection is done by exploiting
-# two error-free behaviours of the interpreter's `==`:
-#   * two lists are never "equal" to each other (not even a list to itself),
-#     so  (v == v)  is TRUE for scalars and FALSE for lists.
-#   * comparing values of different types is FALSE (never an error), so a real
-#     number equals its own num(), while a string never does.
+# Runtime type checks use the language's `type()` builtin. This stays correct
+# when equality semantics evolve and avoids coercing a string through num().
 
-# TRUE when v is a list. A list compared to itself is never equal, so the
-# self-comparison is false exactly for lists.
 fn il(ilV) {
-    return not (ilV == ilV)
+    return type(ilV) == "list"
 }
 
-# TRUE when v is a number (not a string). num() of a number is that same
-# number (equal); num() of a string is a number of a different type (never
-# equal). Only call on non-list scalars.
 fn isNum(inV) {
-    return inV == num(inV)
+    return type(inV) == "number"
 }
 
 # n levels of indent, two spaces per level.

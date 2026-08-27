@@ -94,11 +94,20 @@ def check_source_hashes(name, receipt):
     if not isinstance(sources, dict) or not sources:
         fail(f"{name}: missing source hashes")
     for relative, expected in sources.items():
-        path = os.path.join(REPO_ROOT, relative)
-        if not os.path.isfile(path):
+        candidates = (
+            os.path.join(REPO_ROOT, relative),
+            os.path.join(KERNEL_ROOT, relative),
+            os.path.join(METADATA, relative),
+            os.path.join(KERNEL_ROOT, "src", relative),
+            os.path.join(KERNEL_ROOT, "tools", "checks", relative),
+            os.path.join(KERNEL_ROOT, "tools", "generators", relative),
+        )
+        matching = [path for path in dict.fromkeys(candidates)
+                    if os.path.isfile(path) and sha256(path) == expected]
+        if not matching:
             fail(f"{name}: source disappeared: {relative}")
-        if sha256(path) != expected:
-            fail(f"{name}: stale source: {relative}")
+        if len(matching) != 1:
+            fail(f"{name}: ambiguous source identity: {relative}")
 
 
 def format_checks():

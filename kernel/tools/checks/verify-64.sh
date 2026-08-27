@@ -12,6 +12,13 @@ CEILING=${ZLOS_BOOT_CEILING:-360}
 ORIGIN="multiboot handoff, then OUR jump into 64-bit long mode"
 fail=0
 
+for source in boot/boot64.S boot/smp_trampoline64.S; do
+    if ! grep -Fq '$((1 << 8) | (1 << 11))' "$source"; then
+        echo "FAIL: $source must enable EFER.LME and EFER.NXE together"
+        exit 1
+    fi
+done
+
 command -v qemu-system-x86_64 >/dev/null || {
     echo "skip: no qemu-system-x86_64"; exit 0;
 }

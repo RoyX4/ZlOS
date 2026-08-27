@@ -34,3 +34,11 @@
 # fail as FIXED, which is the intended signal.
 global_writethrough  compilel
 global_writethrough  nativegen
+
+# nativegen's documented integer subset has no list values or for-in loops.
+# This is an explicit subset refusal, not permission for unrelated build errors.
+loop_var_scope       nativegen reject
+
+# Native number printing intentionally refuses fractional doubles with exit 7;
+# integer_division includes 7/2 and therefore crosses that documented boundary.
+integer_division     nativegen reject
