@@ -99,9 +99,10 @@ def validate(value: dict) -> None:
     app = load("app-evidence.json")
     provenance = load("provenance-viewer.json")
     application_count = len(manifest.get("entries", []))
+    build_input_count = len(load("build-identity.json").get("source_files_sha256", {}))
     expected_counts = {
         "reproducible_artifacts": 9,
-        "source_snapshot_inputs": 148,
+        "source_snapshot_inputs": build_input_count,
         "source_snapshot_off_host_copies": 0,
         "qemu_boot_routes": 6,
         "app_identities": application_count,
@@ -119,12 +120,12 @@ def validate(value: dict) -> None:
         "toolchain_target_lanes": 4,
         "toolchain_external_headers": 82,
         "toolchain_hermetic_builds": 0,
-        "build_graph_source_inputs": 148,
+        "build_graph_source_inputs": build_input_count,
         "build_graph_target_lanes": 4,
         "build_graph_artifacts": 9,
         "build_graph_orphan_inputs": 0,
         "build_graph_scope_only_inputs": 8,
-        "license_build_inputs": 148,
+        "license_build_inputs": build_input_count,
         "license_files": 0,
         "host_targets": 73,
         "host_commands_executed": 64,
@@ -204,7 +205,7 @@ def validate(value: dict) -> None:
         "physical_exact_hash_artifacts": 9,
         "host_hardware_skips": 3,
         "host_non_runs": 11,
-        "inputs_without_redistribution_grant": 148,
+        "inputs_without_redistribution_grant": build_input_count,
         "public_release_blocked": True,
         "source_snapshot_off_host_missing": True,
         "source_snapshot_signature_missing": True,
@@ -301,6 +302,7 @@ def build() -> dict:
     event_receipt = documents["docs/receipts/event-trace-host-2026-08-24.json"]
     event_schema = documents["event-schema.json"]
     observability = documents["observability-registry.json"]
+    build_input_count = len(documents["build-identity.json"].get("source_files_sha256", {}))
 
     current_identities = (
         source_snapshot.get("build_identity"),
@@ -336,7 +338,7 @@ def build() -> dict:
             or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] == identity:
         raise ValueError("evidence identity boundary is invalid")
     if source_snapshot.get("result") != "PASS_WITH_OPEN_CUSTODY_GAP" \
-            or source_snapshot.get("counts", {}).get("archived_inputs") != 148 \
+            or source_snapshot.get("counts", {}).get("archived_inputs") != build_input_count \
             or source_snapshot.get("open_gaps", {}).get("off_host_copies") != 0:
         raise ValueError("source snapshot is missing or overpromoted")
     application_count = len(manifest.get("entries", []))
@@ -357,7 +359,7 @@ def build() -> dict:
             or toolchain.get("counts") != {"tools": 7, "target_lanes": 4, "external_headers": 82}:
         raise ValueError("toolchain manifest is missing or overpromoted")
     if build_graph.get("result") != "PASS_CURRENT_ARTIFACTS" \
-            or build_graph.get("counts", {}).get("source_inputs") != 148 \
+            or build_graph.get("counts", {}).get("source_inputs") != build_input_count \
             or build_graph.get("counts", {}).get("orphan_source_inputs") != 0 \
             or build_graph.get("counts", {}).get("scope_only_inputs") != 8 \
             or build_graph.get("artifact_snapshot", {}).get("current_build_bound") is not True:

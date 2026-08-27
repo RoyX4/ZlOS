@@ -9,6 +9,26 @@
 > and reversals. T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) records
 > the metadata chain that cannot currently regenerate as one build identity.
 
+The desktop's three edge reserves were written down ELEVEN times across wm.c,
+snap.c, four host tests, four boot gates and the receipt writer, and by
+2026-08-27 no two sets agreed - including a `72 * t->scale` in wm.c whose
+comment cited a `dock_y()` that had been deleted. The full table, why every
+gate was blind to it (several of the gates WERE copies), and what replaced it
+are in
+[`../docs/evidence/one-fact-many-copies-2026-08-27.md`](../docs/evidence/one-fact-many-copies-2026-08-27.md).
+Read it before writing a number that describes the shell.
+
+**`kernel/tests/host/run-all.sh` is how you run the host suite** - not
+`build.sh` followed by running binaries by name. `build.sh` has `set -e` and
+stops at the first link error, and the previous run's binaries stay on disk, so
+that habit reports "all passed" from code that predates your change. It happened
+in this session. run-all.sh deletes first and treats NOT BUILT as a failure.
+
+About 125 tracked files were truncated to zero bytes on 2026-08-27 and committed
+via `git add -A`; the recovery, and the fact that two simultaneous registered-claim
+failures were the only thing that noticed, are in
+[`../docs/evidence/truncation-incident-2026-08-27.md`](../docs/evidence/truncation-incident-2026-08-27.md).
+
 The 2026-08-24 host freeze, the evidence that survived it, and the mandatory
 resource-contained landing-gate procedure are recorded in
 [`docs/host-freeze-and-gate-containment-2026-08-24.md`](docs/host-freeze-and-gate-containment-2026-08-24.md).

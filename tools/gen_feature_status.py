@@ -18,6 +18,9 @@ import validate_master_program as master
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/program/FEATURE-STATUS.json"
 DEFAULT_EVIDENCE_ROOT = ROOT
+BUILD_INPUT_COUNT = len(json.loads(
+    (ROOT / "kernel/metadata/build-identity.json").read_text()
+).get("source_files_sha256", {}))
 
 OVERRIDES = {
     "EV-001": ("PROVED_CURRENT", (("plan", "docs/program/FEATURE-MAP.md"),),
@@ -31,11 +34,11 @@ OVERRIDES = {
                 "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar"),
                ("missing input", "archive hash drift", "archive byte corruption", "invented custody"),
                ("0 off-host copies", "unsigned receipt", "not a whole-repository snapshot"),
-               "all 148 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"),
+               f"all {BUILD_INPUT_COUNT} exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"),
     "EV-003": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/license-registry.json"),),
                ("python3 kernel/tools/generators/gen-license-registry.py --check --selftest",),
                ("kernel/metadata/license-registry.json",), ("invented grant", "false release green"),
-               ("0 license files", "148 inputs lack an established redistribution grant"),
+               ("0 license files", f"{BUILD_INPUT_COUNT} inputs lack an established redistribution grant"),
                "build-input inventory exists, but public redistribution authority is absent"),
     "EV-004": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/dependency-lock.json"),),
                ("python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest",),
@@ -64,7 +67,7 @@ OVERRIDES = {
                ("missing source", "missing lane", "orphan source", "missing artifact"),
                ("8 conservative scope-only inputs", "no per-object binary receipts",
                 "future package/service outputs absent"),
-               "all 148 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"),
+               f"all {BUILD_INPUT_COUNT} inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"),
     "EV-008": ("PROVED_CURRENT", (("implementation", "kernel/metadata/wrapper-registry.json"),
                                      ("implementation", "kernel/metadata/adversarial-registry.json")),
                ("python3 kernel/tools/generators/gen-wrapper-registry.py --check --selftest",

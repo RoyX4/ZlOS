@@ -79,7 +79,7 @@ implementation status.
 The static validator currently passes for program inventory, repository
 identity, identifiers, dependencies and links in the isolated verification
 tree. All 17 generated registry/status checks now agree on the current
-148-input build identity. Historical artifact and runtime receipts retain their
+149-input build identity. Historical artifact and runtime receipts retain their
 original subject identities and are explicitly not current-build-bound. T-8
 and T-9 are closed in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md): the
 evidence chain regenerates without joining unlike builds, and the recovery
