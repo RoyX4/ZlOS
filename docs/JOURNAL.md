@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — docs: fix a dangling link and refresh the checks capsule (b49158f)
+
+`design/presswork` · 3 files changed, 67 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/design/desktop-deciding.md`
+- `kernel/tools/checks/README.md`
+
+</details>
+
 ## 2026-08-27 — fix(zlc): NAMESET_MAX silently dropped names; the kernel built clean and halted (3b8692b)
 
 `design/presswork` · 19 files changed, 4013 insertions(+), 158 deletions(-)
