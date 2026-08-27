@@ -52,6 +52,9 @@ fn clk_tick() {
 # this changes fast enough to need one, and app_draw already re-runs on
 # every repaint.
 # ==============================================================================
+# the cell modes: size in the low byte, 256 right-aligns, 512 is the mono face
+SI_M_MONO = 512
+SI_M_NUM  = 768
 fn si_yn(v) { if v == 1 { return "yes" }  return "no" }
 fn si_row(ax, y, k, v) {
     label(ax, y, k, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
@@ -64,19 +67,84 @@ fn si_rownum(ax, y, k, v) {
     return 0
 }
 
+# THE REFERENCE'S SHAPE, THIS MACHINE'S REGISTERS. R.regs is `block`, a
+# register / value / decode table, a derivation well and a band - and its
+# subject is the Intel display block, reading PIPE_LINK_M/N off real silicon.
+#
+# That block reads ZERO under QEMU, which is the same reason the rail's PWR row
+# shows WARN there. Printing the reference's 0x0080D9E4 on a machine with no
+# Intel display would be inventing a reading, so the table shows the registers
+# this machine DOES answer - cpuid and the APIC - and decodes each one. Same
+# structure, real values, and it says which block it is reading.
+SI_N = 9
+fn si_reg(i) {
+    if i == 0 { return "CPUID.1:EBX[23:16]" }
+    if i == 1 { return "CPUID.1:EBX[31:24]" }
+    if i == 2 { return "APIC:ICR startup" }
+    if i == 3 { return "TSC / PIT gate" }
+    if i == 4 { return "TSC frequency" }
+    if i == 5 { return "CPUID.1:EDX[26]" }
+    if i == 6 { return "CPUID.1:ECX[28]" }
+    if i == 7 { return "CPUID.1:ECX[31]" }
+    return "IA32_APIC_BASE[11]"
+}
+fn si_dec(i) {
+    if i == 0 { return "logical cores this package reports" }
+    if i == 1 { return "threads the topology leaf enumerates" }
+    if i == 2 { return "processors that answered INIT/STARTUP" }
+    if i == 3 { return "core clock, measured against the PIT" }
+    if i == 4 { return "invariant TSC, kHz" }
+    if i == 5 { return "SSE2 - the float path this kernel forbids" }
+    if i == 6 { return "AVX - present, unused, no XSAVE area" }
+    if i == 7 { return "hypervisor present bit" }
+    return "local APIC enabled, not the 8259" }
+fn si_val(i) {
+    if i == 0 { return cpu_cores() }
+    if i == 1 { return cpu_thr() }
+    if i == 2 { return smp_n() }
+    if i == 3 { return cpu_mhz() }
+    if i == 4 { return cpu_khz() }
+    if i == 5 { return cpu_sse2() }
+    if i == 6 { return cpu_avx() }
+    if i == 7 { return cpu_hv() }
+    return apic_on()
+}
+# rows 5..8 are flags: their value column reads yes/no, not a figure
+fn si_isflag(i) { if i >= 5 { return 1 }  return 0 }
+
 fn si_draw(ax, ay, aw, ah) {
     u = ui()
-    x = ax + 8 * u
-    y = ay + 8 * u
-    si_rownum(x, y, "cores", cpu_cores())               y = y + 20 * u
-    si_rownum(x, y, "threads", cpu_thr())               y = y + 20 * u
-    si_rownum(x, y, "SMP online", smp_n())               y = y + 20 * u
-    si_rownum(x, y, "CPU MHz", cpu_mhz())                y = y + 20 * u
-    si_rownum(x, y, "TSC kHz", cpu_khz())                y = y + 20 * u
-    si_row(x, y, "SSE2", si_yn(cpu_sse2()))              y = y + 20 * u
-    si_row(x, y, "AVX", si_yn(cpu_avx()))                y = y + 20 * u
-    si_row(x, y, "hypervisor", si_yn(cpu_hv()))          y = y + 20 * u
-    si_row(x, y, "APIC active", si_yn(apic_on()))
+    hdh = 22 * u
+    # the head: which block, and whether it answered
+    ui_caps(ax + 10 * u, ay + 6 * u, "BLOCK", theme(TH_TEXT_2), T_CAPTION)
+    label(ax + 62 * u, ay + 6 * u, "cpuid + local apic", theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    sidx = ax + aw - 96 * u
+    sicol = theme(TH_OK)
+    if apic_on() == 0 { sicol = theme(TH_WARN) }
+    ui_dot(sidx, ay + 6 * u + 5 * u, sicol, 0)
+    if apic_on() == 1 { label(sidx + 12 * u, ay + 6 * u, "apic live", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+    if apic_on() == 0 { label(sidx + 12 * u, ay + 6 * u, "pic only", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+
+    # the table: the reference's 30 / 24 / 46
+    ui_grid("150|90|*")
+    ui_colhead(ax, ay + hdh, aw, "register|value|decode", 0 - 1, 0)
+    ry = ay + hdh + ui_colhead_h()
+    rh = ui_growh()
+    i = 0
+    while i < SI_N {
+        if ry + rh <= ay + ah - 8 * u {
+            ui_grow(ax, ry, aw, i, 0)
+            ui_gcell(ax, aw, ry, rh, 0, si_reg(i), theme(TH_TEXT_2), SI_M_MONO)
+            if si_isflag(i) == 1 {
+                ui_gcell(ax, aw, ry, rh, 1, si_yn(si_val(i)), theme(TH_TEXT_HI), SI_M_NUM)
+            } else {
+                ui_gcelln(ax, aw, ry, rh, 1, si_val(i), theme(TH_TEXT_HI), SI_M_NUM)
+            }
+            ui_gcell(ax, aw, ry, rh, 2, si_dec(i), theme(TH_TEXT_DIM), 0)
+            ry = ry + rh
+        }
+        i = i + 1
+    }
     return 0
 }
 

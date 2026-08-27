@@ -7,6 +7,40 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — docs: record where prototype parity stands, and what is deliberately unmatched (8f2835b)
+
+`design/presswork` · 1 file changed, 50 insertions(+), 206 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>1 file(s)</summary>
+
+- `TODO.md`
+
+</details>
+
+## 2026-08-28 — feat(apps): the hex viewer gets the reference's offset|bytes|ascii head (77860bc)
+
+`design/presswork` · 1 file changed, 27 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-28 — feat(apps): rebuild the kernel log to the reference, and reach uikit's tables from zl (65a23df)
 
 `design/presswork` · 11 files changed, 297 insertions(+), 70 deletions(-)

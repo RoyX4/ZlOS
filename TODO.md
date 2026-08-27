@@ -7,56 +7,34 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
+## Engine divergence — 2 pinned
+
+`./interp` is ground truth. These engines disagree with it today:
+
+- [ ] `global_writethrough` — `compilel` differs
+- [ ] `global_writethrough` — `nativegen` differs
+
+Both unboxed backends sit on the far side of the scoping decision in
+`docs/design/design_scoping_decision.md`. Delete these pins when it lands;
+`tools/engine-parity.sh` fails if a pin stops being true.
+
+## Documented but not in git
+
+- [ ] `kernel/_gen64.c`
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
+
+## Open tensions (.ultra/TENSIONS.md)
+
+- [ ] **T-8** — Generated evidence manifests disagree on build identity.
+- [ ] **T-9** — Boot recovery policy remains at the kernel root.
 
 ---
 
-## Hand-written: prototype parity, 2026-08-28
+<!-- BEGIN HAND-WRITTEN -->
 
-`docs/design/presswork-prototype.html` is the reference, and `design.h` says that
-where the two disagree **the prototype wins**. This block tracks how far the OS
-has been brought to it. Evidence for each closed item is a render under
-`/tmp` named in its commit, or a probe that exercised it.
+## Hand-written
 
-### Closed
+_Items here survive regeneration. Everything above does not._
 
-- **The register.** Fourteen slots, the prototype's own names, subtitles and
-  icons, all pointing at apps this OS already had. `probe-rail.py` confirms row
-  05 launches app 40 from the kernel's own `wm:lifecycle` line, not from a pixel
-  count. Catalogue row survives as 15.
-- **The overlay layer.** `wm_overlay()` paints after every window AND the toast,
-  inside the same damage rect, bound through `wmglue.c` as a weak seam. The
-  scissor is restored first - without that a modal is clipped to whichever
-  window painted last, which is what the palette did.
-- **Five modal surfaces**: command palette, context menu, window menu,
-  activities (with real box-filtered previews), lock sheet. Scrim measured at
-  5/8 across the whole screen including the rail.
-- **Three app bodies rebuilt to their renderers**: kernel log (`R.log`), hex
-  viewer (`R.hex`), system info (`R.regs`' shape).
-- **uikit's tables reachable from zl** - `ui_grid`, `ui_colhead`, `ui_grow`,
-  `ui_gcell`, `ui_gcelln`, `ui_gspanx/w`. They had existed since the widget set
-  was written and nothing outside C could call them.
-
-### Open
-
-- **Eleven app bodies**: shell, files, edit, mon, calc, net, clock, disk, type,
-  and `R.set` at 21.6k characters - larger than the other thirteen combined, and
-  to be reconciled against the five panes already in `settings.c`.
-- **`grub-bios64` boot route** stalls after "keyboard on IRQ1". Pre-existing,
-  proven by A/B at `7d1a11b`; `preflight.sh` does not run `verify-64`, which is
-  why it rotted. See `docs/evidence/grub-bios64-unwatched-2026-08-27.md`.
-- **QEMU segfaults** on this box at one fixed binary offset, only under the EFI
-  gate. Detector added and correctly attributing; cause not diagnosed. See
-  `docs/evidence/qemu-segfaults-2026-08-27.md`.
-
-### Deliberately NOT matched to the reference
-
-Each of these would mean printing something the machine does not measure:
-
-- `VOL OK` - the rail reads MUTE from bits 0-1 of port 0x61, the speaker gate.
-- two workspaces - this OS has three, and they work.
-- the lock sheet's eleven passphrase bullets - nothing is typed and there is no
-  authentication behind the field.
-- the hex viewer's `rd0 zlfs superblock` - it reads live memory at 0x100000.
-- `R.regs`' `0x0080D9E4` - that block reads zero without an Intel display.
-
-Same line the earlier pass drew when it refused the reference's `LOAD 0.58`.
+<!-- END HAND-WRITTEN -->
