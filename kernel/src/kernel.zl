@@ -4562,6 +4562,13 @@ fn run_command(cmd, arg) {
     # THE COMMAND PALETTE, and it needs the compositor: an overlay is drawn by
     # the compositor's paint walk, so in text mode there is nothing to draw it
     # onto. Saying so is better than opening a modal nobody can see.
+    # The context menu at a fixed point, for rendering and for gates. It opens
+    # a third of the way across the field so it is clear of the rail and of the
+    # boot composition's windows.
+    if cmd == 204 {
+        if wm_run() == 0 { return needs_wm("the context menu") }
+        return desk_menu_at(rail_w() + field_w() / 3, px_h() / 4)
+    }
     if cmd == 203 {
         if wm_run() == 0 { return needs_wm("the command palette") }
         ov_mode = OV_PALETTE
@@ -8884,6 +8891,178 @@ fn ov_draw_palette(u) {
     return 0
 }
 
+# ---- the two menus -----------------------------------------------------------
+# The prototype's ctxmenu and winmenu, item for item. showMenu takes
+# `[label, action, arg, disabled, shortcut]`, so each row here is a label, a
+# right-aligned shortcut, and whether it is a separator or disabled.
+#
+# THE SHORTCUT COLUMN IS NOT DECORATION. Every one of these keys exists: f1 and
+# ctrl+k open the two modals below, ctrl+g and the knockout toggle are already
+# wired at ecode 107, and alt+1/alt+2 are the workspace switch. A menu that
+# lists a key the system does not answer is a picture of a menu.
+OV_MENU_FIELD = 0                  # the desk was right-clicked
+OV_MENU_WIN   = 1                  # a window was
+ov_menu_kind = 0
+ov_menu_x = 0
+ov_menu_y = 0
+ov_menu_win = 0 - 1
+
+OV_CTX_N = 11
+fn ov_ctx_label(i) {
+    if i == 0 { return "activities" }
+    if i == 1 { return "command palette" }
+    if i == 2 { return "-" }
+    if i == 3 { return "tile onto the module" }
+    if i == 4 { return "toggle desk grid" }
+    if i == 5 { return "toggle the knockout" }
+    if i == 6 { return "-" }
+    if i == 7 { return "workspace 01" }
+    if i == 8 { return "workspace 02" }
+    if i == 9 { return "-" }
+    return "lock session"
+}
+# SEPARATORS AND SHORTCUTS ARE ANSWERED BY NUMBER, not by comparing text.
+# zl's kernel subset has string LITERALS but no string VALUES - a literal can be
+# passed to a native that takes a const char*, and that is all. `label == "-"`
+# cannot work, and the first version of this menu was written that way: the
+# scrim appeared and not one row did, because every row test was false.
+fn ov_ctx_sep(i) {
+    if i == 2 { return 1 }
+    if i == 6 { return 1 }
+    if i == 9 { return 1 }
+    return 0
+}
+fn ov_ctx_haskey(i) {
+    if i == 0 { return 1 }
+    if i == 1 { return 1 }
+    if i == 4 { return 1 }
+    if i == 7 { return 1 }
+    if i == 8 { return 1 }
+    if i == 10 { return 1 }
+    return 0
+}
+fn ov_ctx_key(i) {
+    if i == 0 { return "F1" }
+    if i == 1 { return "CTRL K" }
+    if i == 4 { return "CTRL G" }
+    if i == 7 { return "ALT 1" }
+    if i == 8 { return "ALT 2" }
+    if i == 10 { return "CTRL L" }
+    return ""
+}
+
+OV_WIN_N = 8
+fn ov_win_label(i) {
+    if i == 0 { return "bring to front" }
+    if i == 1 { return "minimise" }
+    if i == 2 { return "maximise" }
+    if i == 3 { return "-" }
+    if i == 4 { return "tile onto the module" }
+    if i == 5 { return "this plate is on the field" }
+    if i == 6 { return "-" }
+    return "close"
+}
+fn ov_win_sep(i) {
+    if i == 3 { return 1 }
+    if i == 6 { return 1 }
+    return 0
+}
+fn ov_win_haskey(i) {
+    if i == 0 { return 1 }
+    if i == 2 { return 1 }
+    return 0
+}
+fn ov_win_key(i) {
+    if i == 0 { return "CLICK" }
+    if i == 2 { return "DOUBLE CLICK" }
+    return ""
+}
+# Row 5 is DISABLED in the prototype - it states a fact about the plate rather
+# than offering an action, and it is set at the caption rung to say so.
+fn ov_win_dis(i) { if i == 5 { return 1 }  return 0 }
+
+OV_MENU_W = 210                    # design units, the prototype's .menu
+fn ov_menu_rows() {
+    if ov_menu_kind == OV_MENU_WIN { return OV_WIN_N }
+    return OV_CTX_N
+}
+fn ov_menu_label(i) {
+    if ov_menu_kind == OV_MENU_WIN { return ov_win_label(i) }
+    return ov_ctx_label(i)
+}
+fn ov_menu_key(i) {
+    if ov_menu_kind == OV_MENU_WIN { return ov_win_key(i) }
+    return ov_ctx_key(i)
+}
+fn ov_menu_dis(i) {
+    if ov_menu_kind == OV_MENU_WIN { return ov_win_dis(i) }
+    return 0
+}
+fn ov_menu_sep(i) {
+    if ov_menu_kind == OV_MENU_WIN { return ov_win_sep(i) }
+    return ov_ctx_sep(i)
+}
+fn ov_menu_haskey(i) {
+    if ov_menu_kind == OV_MENU_WIN { return ov_win_haskey(i) }
+    return ov_ctx_haskey(i)
+}
+
+fn ov_draw_menu(u) {
+    mw = OV_MENU_W * u
+    rowh = 20 * u
+    seph = 7 * u
+    headh = 20 * u
+    # measure first: separators are shorter than rows, so the height is a sum
+    mh = headh
+    mi = 0
+    while mi < ov_menu_rows() {
+        if ov_menu_sep(mi) == 1 { mh = mh + seph } else { mh = mh + rowh }
+        mi = mi + 1
+    }
+    mh = mh + 6 * u
+    # KEEP IT ON SCREEN. The prototype clamps to the desktop with an 8 px
+    # margin; a menu opened near the right or bottom edge otherwise draws off
+    # the panel and the rows nearest the pointer are the ones lost.
+    mx = ov_menu_x
+    my = ov_menu_y
+    if mx + mw > px_w() - 8 * u { mx = px_w() - mw - 8 * u }
+    if my + mh > px_h() - 8 * u { my = px_h() - mh - 8 * u }
+    if mx < 0 { mx = 0 }
+    if my < 0 { my = 0 }
+    fill_rgb(mx, my, mw, mh, theme(TH_PANEL_HI))
+    fill_rgb(mx, my, mw, 1, theme(TH_LIT))
+    fill_rgb(mx, my + mh - 1, mw, 1, theme(TH_CUT))
+    # the header names what was clicked - "field", or the window's register row
+    if ov_menu_kind == OV_MENU_WIN {
+        ui_caps(mx + 10 * u, my + 6 * u, "WINDOW", theme(TH_TEXT_2), T_CAPTION)
+    } else {
+        ui_caps(mx + 10 * u, my + 6 * u, "FIELD", theme(TH_TEXT_2), T_CAPTION)
+    }
+    fill_rgb(mx, my + headh - 1, mw, 1, theme(TH_CUT))
+    ry = my + headh
+    mi = 0
+    while mi < ov_menu_rows() {
+        if ov_menu_sep(mi) == 1 {
+            fill_rgb(mx + 8 * u, ry + seph / 2, mw - 16 * u, 1, theme(TH_CUT))
+            ry = ry + seph
+        } else {
+            tc = theme(TH_TEXT_HI)
+            if ov_menu_dis(mi) == 1 { tc = theme(TH_TEXT_DIM) }
+            if mi == ov_sel { if ov_menu_dis(mi) == 0 {
+                fill_rgb(mx, ry, mw, rowh, theme(TH_SURF_5))
+                fill_rgb(mx, ry, focus_bar(), rowh, theme(TH_ACCENT))
+            }}
+            label(mx + 14 * u, ry + 3 * u, ov_menu_label(mi), tc, T_BODY, W_REG)
+            if ov_menu_haskey(mi) == 1 {
+                ui_caps(mx + mw - 74 * u, ry + 4 * u, ov_menu_key(mi), theme(TH_TEXT_2), T_CAPTION)
+            }
+            ry = ry + rowh
+        }
+        mi = mi + 1
+    }
+    return 0
+}
+
 # THE ONE ENTRY POINT the compositor calls. x0,y0,x1,y1 is the DAMAGE rect, in
 # the same form wm.c's paint walk carries it.
 fn overlay_draw(ox0, oy0, ox1, oy1) {
@@ -8904,6 +9083,7 @@ fn overlay_draw(ox0, oy0, ox1, oy1) {
         shade(sx0, sy0, sx1 - sx0, sy1 - sy0, OV_SCRIM_NUM, OV_SCRIM_DEN)
     }}
     if ov_mode == OV_PALETTE { return ov_draw_palette(ou) }
+    if ov_mode == OV_MENU { return ov_draw_menu(ou) }
     return 0
 }
 
@@ -9132,8 +9312,32 @@ fn desk_click(cx, cy, cbtn) {
 # here rather than to whichever window has focus, because the start menu is the
 # desktop's and not any app's.
 fn desk_key(kcode, kmods) {
+    # ESC DISMISSES WHATEVER IS UP, and it is tested first so a modal cannot
+    # trap the desktop. The prototype prints "esc to dismiss" on two of its five
+    # surfaces; a modal that lists a key it does not answer is worse than one
+    # that lists none.
+    if kcode == 27 {
+        if ov_mode != OV_NONE {
+            ov_mode = OV_NONE
+            ov_sel = 0
+            wm_damage(0, 0, px_w(), px_h())
+            return 1
+        }
+    }
     if kcode == 0x11A { return open_menu() }
     return 0
+}
+
+# THE DESK'S RIGHT-CLICK MENU. wm.c routes a click on the field here, and the
+# prototype opens ctxmenu at the pointer with the field's own item list.
+fn desk_menu_at(mx, my) {
+    ov_mode = OV_MENU
+    ov_menu_kind = OV_MENU_FIELD
+    ov_menu_x = mx
+    ov_menu_y = my
+    ov_sel = 0 - 1
+    wm_damage(0, 0, px_w(), px_h())
+    return 1
 }
 
 # ---- THE WINDOW LIST IS THE REGISTER'S TAIL ---------------------------------
