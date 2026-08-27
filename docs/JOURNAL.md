@@ -7,6 +7,64 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(zlc): NAMESET_MAX silently dropped names; the kernel built clean and halted (3b8692b)
+
+`design/presswork` · 19 files changed, 4013 insertions(+), 158 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>19 file(s)</summary>
+
+- `TODO.md`
+- `docs/evidence/presswork-boot-depth.png`
+- `docs/evidence/presswork-first-boot.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/design.h`
+- `kernel/src/graphics/ui/ui.c`
+- `kernel/src/graphics/ui/ui.h`
+- `kernel/src/graphics/ui/uikit.c`
+- _…and 7 more_
+
+</details>
+
+## 2026-08-27 — feat(desktop): bring the shell to prototype parity, and wire the chrome to it (74eb0d8)
+
+`design/presswork` · 20 files changed, 2346 insertions(+), 249 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>20 file(s)</summary>
+
+- `docs/evidence/presswork-boot-1920x1200.png`
+- `docs/evidence/presswork-boot-focused.png`
+- `docs/evidence/presswork-boot-parity.png`
+- `docs/evidence/presswork-first-boot.md`
+- `docs/evidence/presswork-real-vs-prototype.png`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/boot-media-ids.json`
+- _…and 8 more_
+
+</details>
+
 ## 2026-08-27 — feat(desktop): implement the PRESSWORK design language (07fbf1d)
 
 `design/presswork` · 22 files changed, 13978 insertions(+), 7146 deletions(-)

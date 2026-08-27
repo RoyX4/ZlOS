@@ -35,6 +35,7 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-memmap.sh`
 - `check-ram.sh`
 - `check-reproducible-build.py`
+- `check-shell-layout.py`
 - `check-zl-calls.sh`
 - `check-zlcalls.py`
 - `test-real-xhci.sh`

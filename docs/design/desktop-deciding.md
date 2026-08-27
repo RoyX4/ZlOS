@@ -8,7 +8,14 @@ means the bundling is wrong, not the taste.
 So stop picking a direction. Pick a **position per axis**, in the order at the
 bottom, and check each pick against the conflict matrix before moving on.
 
-**[`prototypes/decide.html`](prototypes/decide.html) is this page as a working
+> **Note on provenance.** This document was written in the design worktree
+> (`zl-linux-desktop-redesign`) and is vendored here so the PRESSWORK change
+> carries its own reasoning. Its companion tools - the sixteen interactive
+> prototypes and `decide.html`, the axis picker - live in that worktree under
+> `docs/design/prototypes/` and are not copied in; only the one prototype this
+> branch implements, `presswork-prototype.html`, is.
+
+**`decide.html` (in the design worktree) is this page as a working
 tool.** Same axes in settling order, same costs on the face of every option, and
 the conflict matrix runs live against the current selection: an exclusive pair
 comes back as a hard conflict naming the mechanism, a degrading pair as a warning
