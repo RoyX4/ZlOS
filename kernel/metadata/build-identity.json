@@ -4,7 +4,7 @@
     "branch": "codex/presswork-close",
     "dirty": true,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "9fd5600bc8e44ea9868cf78e9cf608a71eb98e3b"
+    "head": "e4c3be5e9cdab60989b71bf899a1e64fd70659d4"
   },
   "identity_sha256": "3bb959e7aada0a9da4e7d18a919c3c6b488723beed90e51035eef236bf3fdf28",
   "routes": [
