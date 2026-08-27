@@ -392,7 +392,11 @@ int virtio_gpu_display_info(void)
         u32 w  = r[i * 6 + 2];
         u32 h  = r[i * 6 + 3];
         u32 en = r[i * 6 + 4];
-        if (en && w && h) { vg_w = (int)w; vg_h = (int)h; return 1; }
+        if (en && w && h && w <= 0x7fffffffu && h <= 0x7fffffffu) {
+            u64 bytes = (u64)w * (u64)h * 4u;
+            if (bytes > VMEM_FB_MAX) continue;
+            vg_w = (int)w; vg_h = (int)h; return 1;
+        }
     }
     return 0;
 }
@@ -482,8 +486,9 @@ u32 virtio_gpu_setup(void)
     if (!virtio_gpu_display_info()) return 0;
     if (vg_w <= 0 || vg_h <= 0)    return 0;
 
-    u32 bytes = (u32)vg_w * (u32)vg_h * 4;
-    if (bytes > VMEM_FB_MAX) return 0;      /* wider than our arena - say so */
+    u64 bytes64 = (u64)(u32)vg_w * (u64)(u32)vg_h * 4u;
+    if (bytes64 > VMEM_FB_MAX) return 0;    /* wider than our arena - say so */
+    u32 bytes = (u32)bytes64;
     if (!virtio_gpu_create_2d(1, (u32)vg_w, (u32)vg_h))     return 0;
     if (!virtio_gpu_attach_backing(1, bytes))               return 0;
     if (!virtio_gpu_set_scanout(1, (u32)vg_w, (u32)vg_h))   return 0;

@@ -37,6 +37,8 @@ never proves the side effect.
 | CUR-008 | All Applications | MP-12 | exact generated catalogue; fix Maze/blank-ID false green |
 | CUR-009 | Files | MP-12 | VFS/file-portal manager with search/removable/trash |
 | CUR-010 | Text Editor | MP-12 | multi-document text editor with undo/recovery/encoding |
+| CUR-039 | System | MP-12 | PRESSWORK system pane backed by typed providers |
+| CUR-040 | Type | MP-12 | PRESSWORK typography pane with persistent accessible settings |
 
 ## Current creative, graphics and inspection apps — preserve and deepen
 
@@ -81,9 +83,9 @@ never proves the side effect.
 | CUR-037 | Archive Manager | MP-12 | isolated parser and transactional extraction/creation |
 | CUR-038 | Network | MP-12 | interfaces, routes, addresses, diagnostics and radios |
 
-The 38 non-game entries above include `All Applications`. Excluding that
-separate catalogue surface leaves 37 named non-game implementations; together
-with the 24 games below they total the 61 current named implementations.
+The 40 non-game entries above include `All Applications`. Excluding that
+separate catalogue surface leaves 39 named non-game implementations; together
+with the 24 games below they total the 63 current named implementations.
 
 ## All 24 current games — preserve as product and platform probes
 

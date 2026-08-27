@@ -340,12 +340,12 @@ extern int  xhci_ecm_diag_byte(int);
 extern int  apic_init(void);
 extern int  apic_active(void);
 extern int  apic_supported(void);
-extern unsigned int apic_lapic_base(void);
-extern unsigned int apic_ioapic_base(void);
+extern unsigned long long apic_lapic_base(void);
+extern unsigned long long apic_ioapic_base(void);
 extern int  apic_ioapic_pins(void);
 extern int  apic_madt_ok(void);
 extern int  apic_cpus(void);
-extern unsigned int apic_rsdp(void);
+extern unsigned long long apic_rsdp(void);
 extern int  apic_gsi(int irq);
 extern int  apic_id(void);
 extern unsigned int apic_redtbl(int irq);
@@ -1008,7 +1008,7 @@ extern int  intel_stride(void);
 /* The whole panel bring-up in one call: pick memory in stolen, map it through
  * the GGTT, run the 34-step modeset, and hand back a CPU-writable framebuffer
  * address - or 0, having left the loader's screen alone. */
-extern unsigned int intel_bringup_panel(void);
+extern zl_uptr intel_bringup_panel(void);
 extern int  intel_shutdown_panel(void);
 extern int  intel_bringup_failed_step(void);
 extern int  intel_panel_takeover(void);

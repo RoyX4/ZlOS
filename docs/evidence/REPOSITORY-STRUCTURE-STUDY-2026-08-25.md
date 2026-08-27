@@ -105,12 +105,17 @@ The pre-migration zlOS root's 199 immediate files contained 126 code-like files
 and 66 shell/Python scripts or probes. This was the largest clear structural
 deviation from the good large-project patterns.
 
-After migration, `kernel/` has 13 immediate tracked files and 7 ownership
+At this study's 2026-08-25 snapshot, `kernel/` had 13 immediate tracked files and 7 ownership
 directories: `apps`, `boot`, `docs`, `metadata`, `src`, `tests`, and `tools`.
 Two immediate files, `boot_state.c/.h`, are still implementation source. They
 are host-test inputs but not members of the shipped `kernel/SOURCES` manifest;
 their relocation remains open as T-9 because this structure-only pass does not
 run the required compile gate.
+
+**2026-08-26 resolution:** T-9 moved both files to
+`kernel/src/core/boot/`, added `boot_state.c` to the shared manifest, updated the
+host harness, and passed its focused host and compile-lane checks. The paragraph
+above remains the dated observation this study originally measured.
 
 ## Patterns Worth Copying
 
@@ -138,11 +143,11 @@ The comparison produced this layout, implemented on 2026-08-25:
 ```text
 kernel/
 |-- README.md, SOURCES, build and primary verification entry points
-|-- boot_state.c/.h    host-tested recovery-policy exception; not shipped
 |-- boot/               BIOS, UEFI, assembly entry, linker layouts
 |-- src/
 |   |-- arch/x86/       CPU, GDT, IDT, APIC, SMP, paging primitives
 |   |-- core/           scheduler, processes, IPC, heap, logging
+|   |   `-- boot/       typed handover and recovery policy
 |   |-- drivers/        display, input, storage, network, platform buses
 |   |-- fs/             VFS and concrete filesystems
 |   |-- net/            protocol stack and network services

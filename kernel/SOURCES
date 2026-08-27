@@ -27,6 +27,7 @@
 # linker; it is kept as it was so a diff against the old scripts is readable.
 src/arch/x86/support.c
 src/core/boot/boot_handover.c
+src/core/boot/boot_state.c
 src/core/zllog.c
 src/core/crash.c
 src/drivers/display/vga.c

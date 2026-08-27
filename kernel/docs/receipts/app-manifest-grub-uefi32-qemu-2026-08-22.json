@@ -1,10 +1,10 @@
 {
   "artifact": {
-    "bytes": 30035968,
+    "bytes": 31535104,
     "path": "kernel/zlOS.iso",
-    "sha256": "21e97551279499d19ec8a9024529a70d320dc0f7344e65df1cdfb9072af94e7e"
+    "sha256": "c5c62c4625f38cf8a7cc9c169727c7f7f46050b967f4f994ef23c95d0d544d48"
   },
-  "boot_log_sha256": "0aa9d983844a2135f0358af29fa8ee889aa09762c3857596888e63c61c277722",
+  "boot_log_sha256": "329a523c6db1a07ccca02702c4ca9aed2c98f7bbd80bdf65ed5b2f4d047fc106",
   "boot_origin": "multiboot handoff, 32-bit protected mode",
   "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
   "qemu": "QEMU emulator version 11.0.3 (Debian 1:11.0.3+ds-2)",
@@ -13,24 +13,24 @@
   "schema": "zlos.application-manifest-boot-receipt.v1",
   "shipped_build_identity": {
     "dirty": true,
-    "head": "c9e6e69c6b58745aeba278d838a84147fea67980",
-    "id": "236ab3190b889b9cd62e3e08545a7a8a9e4c556c305a2a158c428ecabb12ea7b",
+    "head": "d0f463bfc66315cbfba0988e5af9d9f65f919153",
+    "id": "3acfdcaf7913bce1cac875a0e155a28f4a549c6f6be6ea69dd1d9e8f8eba34db",
     "schema": 1
   },
   "shipped_manifest": {
-    "entries": 62,
+    "entries": 64,
     "schema": 1,
-    "sha256": "51eddc02a028add86a4dda92cdba1b77aa51b3675b9b129fa1bbf650eb36219d"
+    "sha256": "454bcf1e6623d1cc690aa1b3add48fb750478e099e458d9c11334d9a4ab4d69a"
   },
   "source_files_sha256": {
-    "app-manifest.json": "51eddc02a028add86a4dda92cdba1b77aa51b3675b9b129fa1bbf650eb36219d",
-    "app_manifest_embed.zl": "f8db3ec0482624cd718258976a2eb50187ae0f095be1a30f49e94a12b6ef658d",
-    "build-identity.json": "fa6cb5897dafc6f0a5b2959075a76f737b42c1f9fb6625e47820d4202670f36d",
-    "build_identity_embed.zl": "93d97241efac96e9343417ad606cbb9d893ef4dcbb12c0ae99ede73c64b49173",
-    "kernel.zl": "8d5f7ada7d8fcbf91e8c3d19fe39c8e61ae02a40cdad77ce2206567e217a5ddc",
-    "verify-iso.sh": "4a2c81a06301f75275e23d02a9e83a1c99c2ecb074cc1dc01ac8f8d8b09679bc",
-    "write-app-manifest-boot-receipt.py": "f2f986b7c0be9bf8b08899427e3c7cf5a921fded5a1ead496c03de72e99ba58f"
+    "kernel/app_manifest_embed.zl": "84eb3c6902e4930f85b5c16536ca67f60249a967e1414bb70841b4c0b5688264",
+    "kernel/build_identity_embed.zl": "5cb845cde6e37cd017c0cda07a200365c6f8cafcef3d8c868891a52fafa54ee4",
+    "kernel/metadata/app-manifest.json": "454bcf1e6623d1cc690aa1b3add48fb750478e099e458d9c11334d9a4ab4d69a",
+    "kernel/metadata/build-identity.json": "7d0502cb7ea266babfe36c9827ec6d7e7270140c370bf31eaebf5e841e7c9912",
+    "kernel/src/kernel.zl": "3852df41f62faf2f8136a96667b2572059b11262c70286c509ae7402af26a1f6",
+    "kernel/tools/checks/verify-iso.sh": "0fc95433f0f01a4ecef63cc4959e82afd8704ff9b1ed71a97837ee915fd05748",
+    "kernel/tools/generators/write-app-manifest-boot-receipt.py": "8fd46a74b51a6eac0c438f1dbe6e96729f13cd339456cd02be06cb387577852c"
   },
-  "source_head": "c9e6e69c6b58745aeba278d838a84147fea67980",
+  "source_head": "d0f463bfc66315cbfba0988e5af9d9f65f919153",
   "weakest_link": "QEMU proves this boot artifact and manifest marker, not physical firmware/display/input behavior"
 }

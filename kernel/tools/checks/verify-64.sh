@@ -12,6 +12,13 @@ CEILING=${ZLOS_BOOT_CEILING:-360}
 ORIGIN="multiboot handoff, then OUR jump into 64-bit long mode"
 fail=0
 
+for source in boot/boot64.S boot/smp_trampoline64.S; do
+    if ! grep -Fq '$((1 << 8) | (1 << 11))' "$source"; then
+        echo "FAIL: $source must enable EFER.LME and EFER.NXE together"
+        exit 1
+    fi
+done
+
 command -v qemu-system-x86_64 >/dev/null || {
     echo "skip: no qemu-system-x86_64"; exit 0;
 }
@@ -53,13 +60,13 @@ boot_until() { # $1 log, remaining arguments are qemu arguments
 
 check() { # $1 label, $2 log
     local label="$1" log="$2"
-    local manifest_sha build_id build_head build_dirty
-    manifest_sha=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+    local manifest_marker build_id build_head build_dirty
+    manifest_marker=$(python3 ./tools/generators/gen-app-manifest.py --marker)
     build_id=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
     build_head=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
     build_dirty=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
     for required in "zlOS starting" "$ORIGIN" "ready." "compositor:" "6765" \
-            "app-manifest: schema=1 entries=62 sha256=$manifest_sha" \
+            "$manifest_marker" \
             "build-identity: schema=1 id=$build_id" \
             "build-source: head=$build_head dirty=$build_dirty"; do
         if ! grep -Fq "$required" "$log" 2>/dev/null; then

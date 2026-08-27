@@ -1,11 +1,11 @@
 {
   "schema": "zlos.partial-closure.v1",
   "result": "PASS_WITH_EXTERNAL_GATES",
-  "feature_status_sha256": "ff8ed3ecb743e7bcd4df07f346bf86a76c10c057466bff83ce00ab536e35d994",
+  "feature_status_sha256": "08935d8c5e2481363211ec12fd447339c6458a0a3bed49efb292c4b8ff6dbc7c",
   "counts": {
     "total": 23,
     "proved_current": 1,
-    "still_partial": 22,
+    "still_partial": 17,
     "locally_finishable_now": 3,
     "external_authority_required": 9,
     "by_wave": {
@@ -27,7 +27,7 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-          "sha256": "4e7c5aeed8be8c11182dd2f0e7686233efba97367501df992f3ac551e844de21",
+          "sha256": "386e75963bcc6dbb246d6339cdcad3578c3aed9eeb4c91e4fbe22dc1b3cd8149",
           "schema": "zlos.source-snapshot-receipt.v1",
           "result": "PASS_WITH_OPEN_CUSTODY_GAP"
         }
@@ -79,8 +79,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/license-registry.json",
-          "sha256": "1f36d1d3630970ebf6711b30b4c13d192ad03e658e0dea9b025b4d44f0559395",
+          "path": "kernel/metadata/license-registry.json",
+          "sha256": "e2fdefd84c37ffb71885a9ef39842d918a70a3da127434575df88a4ef22a6695",
           "schema": "zlos.license-provenance-registry.v1",
           "result": "PASS_WITH_RELEASE_BLOCK"
         }
@@ -91,7 +91,7 @@
       ],
       "current_known_gaps": [
         "0 license files",
-        "123 inputs lack an established redistribution grant"
+        "148 inputs lack an established redistribution grant"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "X1_EXTERNAL_AUTHORITY",
@@ -126,8 +126,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/dependency-lock.json",
-          "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+          "path": "kernel/metadata/dependency-lock.json",
+          "sha256": "1ac9aa895410e65a1848b17132af2a8d622570ca4860723da9ea0f39b6abfcb2",
           "schema": "zlos.host-dependency-lock.v2",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
@@ -140,7 +140,7 @@
         "invented source-archive custody"
       ],
       "current_known_gaps": [
-        "156 package source archives absent",
+        "145 package source archives absent",
         "offline rebuild not proved"
       ],
       "current_maturity": "PARTIAL_CURRENT",
@@ -174,15 +174,15 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/toolchain-manifest.json",
-          "sha256": "2a0a0481c50a81eef7a1e179ff4f306527a7fd5792ea4b766f4659e51ffa9f22",
+          "path": "kernel/metadata/toolchain-manifest.json",
+          "sha256": "75767929710d73de3f10b16da06c7fb6f5c07b472b9fe00ae9ca058857220659",
           "schema": "zlos.toolchain-manifest.v1",
           "result": "PASS_WITH_OPEN_PORTABILITY_GAPS"
         },
         {
           "root": "implementation",
-          "path": "kernel/dependency-lock.json",
-          "sha256": "25cf47fb8ba38f757db5912f06c8c4895f826663f66e24526f0b389921384f20",
+          "path": "kernel/metadata/dependency-lock.json",
+          "sha256": "1ac9aa895410e65a1848b17132af2a8d622570ca4860723da9ea0f39b6abfcb2",
           "schema": "zlos.host-dependency-lock.v2",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
@@ -234,15 +234,15 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/build-graph.json",
-          "sha256": "184110f6c8d281caa7c71b292765ed42987aed56590ce22ced11619f35c55194",
+          "path": "kernel/metadata/build-graph.json",
+          "sha256": "a049ca6856141358c1af93ca0c6d266018fc11923522bf5d20146ef56cb5821d",
           "schema": "zlos.build-graph.v1",
-          "result": "PASS_WITH_DECLARED_SUPERSET"
+          "result": "PASS_CURRENT_ARTIFACTS"
         },
         {
           "root": "implementation",
-          "path": "kernel/artifact-registry.json",
-          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
@@ -254,7 +254,7 @@
         "missing artifact"
       ],
       "current_known_gaps": [
-        "1 conservative scope-only header",
+        "8 conservative scope-only inputs",
         "no per-object binary receipts",
         "future package/service outputs absent"
       ],
@@ -291,15 +291,15 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/wrapper-registry.json",
-          "sha256": "971594596a876be208ab27d3f6013027a084222f58c3b1560c8cd046ae939314",
+          "path": "kernel/metadata/wrapper-registry.json",
+          "sha256": "c1b15101d7fa5795fe80e6be902e1fdd01d1465bcfaa81e35b2119ae77c7c821",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
-          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "path": "kernel/metadata/adversarial-registry.json",
+          "sha256": "0c6587f80d035869c5f0eef5f518c6c7650eef66b3584db07216abf85f25a7f3",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -343,8 +343,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
-          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "path": "kernel/metadata/adversarial-registry.json",
+          "sha256": "0c6587f80d035869c5f0eef5f518c6c7650eef66b3584db07216abf85f25a7f3",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -403,7 +403,7 @@
         "4 frame metrics over budget",
         "no percentiles/peaks/native-target distribution"
       ],
-      "current_maturity": "PARTIAL_CURRENT",
+      "current_maturity": "PARTIAL_HISTORICAL",
       "wave": "X2_PHYSICAL",
       "dependencies": [
         "EV-005",
@@ -437,8 +437,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/artifact-registry.json",
-          "sha256": "8378d40d2f0a0f5cc5dff9a334be31911fe1d5a8f257845cc8d30870865d96c1",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
@@ -449,7 +449,7 @@
       "current_known_gaps": [
         "0 of 9 exact artifact hashes have native physical proof"
       ],
-      "current_maturity": "PARTIAL_CURRENT",
+      "current_maturity": "PARTIAL_HISTORICAL",
       "wave": "X2_PHYSICAL",
       "dependencies": [
         "EV-009",
@@ -482,8 +482,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/visual-registry.json",
-          "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+          "path": "kernel/metadata/visual-registry.json",
+          "sha256": "799e41a7184128be873545b66c43e2d3e9a0a5362337da77535687147a72ab6f",
           "schema": "zlos.visual-evidence-registry.v1",
           "result": "INVENTORY_WITH_OPEN_GAPS"
         }
@@ -493,7 +493,7 @@
         "hidden variant gap"
       ],
       "current_known_gaps": [
-        "46 visual assets are unbound to the current build",
+        "41 visual assets are unbound to the current build",
         "6 variant dimensions are open"
       ],
       "current_maturity": "PARTIAL_CURRENT",
@@ -527,10 +527,10 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/observability-registry.json",
-          "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+          "path": "kernel/metadata/observability-registry.json",
+          "sha256": "0b71a65bd0a30b38a16e266922e0bfe513d60042033d4ad8ef08a91548ee9893",
           "schema": "zlos.observability-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "current_tests": [
@@ -590,17 +590,17 @@
         },
         {
           "root": "implementation",
-          "path": "kernel/event-schema.json",
-          "sha256": "23c89a049d50e4e19314d45a483404c206fc05e11f9f6fbfc0e994f5633fd86a",
+          "path": "kernel/metadata/event-schema.json",
+          "sha256": "a3c949d4cf8dd388d8ca048cbe9dc6b41d45b17daaae56ce3355539e2ef064e9",
           "schema": "zlos.event-schema-registry.v1",
-          "result": "PASS_HOST_SCHEMA_TARGET_UNINTEGRATED"
+          "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED"
         },
         {
           "root": "implementation",
-          "path": "kernel/observability-registry.json",
-          "sha256": "b7dd0e1a365b0b5ba3048baea2723890cdc50c00983ce83bea5e1fb62d74992a",
+          "path": "kernel/metadata/observability-registry.json",
+          "sha256": "0b71a65bd0a30b38a16e266922e0bfe513d60042033d4ad8ef08a91548ee9893",
           "schema": "zlos.observability-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "current_tests": [
@@ -650,8 +650,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
-          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "path": "kernel/metadata/adversarial-registry.json",
+          "sha256": "0c6587f80d035869c5f0eef5f518c6c7650eef66b3584db07216abf85f25a7f3",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -662,7 +662,7 @@
       "current_known_gaps": [
         "all 7 failure families remain non-exhaustive"
       ],
-      "current_maturity": "PARTIAL_CURRENT",
+      "current_maturity": "PARTIAL_HISTORICAL",
       "wave": "B1_CROSS_PHASE_FOUNDATION",
       "dependencies": [
         "EV-013",
@@ -693,8 +693,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/adversarial-registry.json",
-          "sha256": "18e1217ccdb668b7421a737d9a84b14ff8defce2481bb9ca28605e065338cdc1",
+          "path": "kernel/metadata/adversarial-registry.json",
+          "sha256": "0c6587f80d035869c5f0eef5f518c6c7650eef66b3584db07216abf85f25a7f3",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -706,7 +706,7 @@
       "current_known_gaps": [
         "ELF/archive/font/IPC absent"
       ],
-      "current_maturity": "PARTIAL_CURRENT",
+      "current_maturity": "PARTIAL_HISTORICAL",
       "wave": "B1_CROSS_PHASE_FOUNDATION",
       "dependencies": [
         "EV-013",
@@ -747,7 +747,7 @@
       "current_known_gaps": [
         "input/I/O/network/launch/memory/build budgets are not joined"
       ],
-      "current_maturity": "PARTIAL_CURRENT",
+      "current_maturity": "PARTIAL_HISTORICAL",
       "wave": "Q1_CONTAINED_RUNTIME",
       "dependencies": [
         "EV-014",
@@ -780,8 +780,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/visual-registry.json",
-          "sha256": "f7c6171e66ad750f918803c3a24c3bba57890cfc596e79abe61ab0217bce9b0b",
+          "path": "kernel/metadata/visual-registry.json",
+          "sha256": "799e41a7184128be873545b66c43e2d3e9a0a5362337da77535687147a72ab6f",
           "schema": "zlos.visual-evidence-registry.v1",
           "result": "INVENTORY_WITH_OPEN_GAPS"
         }
@@ -826,8 +826,8 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/accessibility-registry.json",
-          "sha256": "86fb47133c8017ef22740c64cca408dff3119a924a93173ec08b8d507a0008ba",
+          "path": "kernel/metadata/accessibility-registry.json",
+          "sha256": "53ce725a96de7114a81918026ecfc20ecce078d7f1a4f91172b39278c78d2086",
           "schema": "zlos.accessibility-proof-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -875,10 +875,10 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/security-registry.json",
-          "sha256": "8c6b73406fd6b617a10c00f8a2540397782a0197d18ae265b4204aa0e32261ae",
+          "path": "kernel/metadata/security-registry.json",
+          "sha256": "e558f32581230378a78b45159c530920c331034e2ac5092f1943306fa7a53c74",
           "schema": "zlos.security-claim-registry.v1",
-          "result": "PASS_WITH_OPEN_GAPS"
+          "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "current_tests": [
@@ -928,7 +928,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -975,15 +975,15 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/decision-ledger.json",
-          "sha256": "1ac84eec045913d5f847126caf5b4971b7118d42b065ace24b990c80dc760e86",
+          "path": "kernel/metadata/decision-ledger.json",
+          "sha256": "1d3c57e5dd51ccdd96aa461bb5ccc4f6c99310573eb3aae0a8812cf48ae64f63",
           "schema": "zlos.decision-ledger.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         },
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1036,15 +1036,15 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/release-notes.json",
-          "sha256": "fd2af9b6aa18a5538d2c57faa9758fd5c43bba552a454fdad7334318321dda4f",
+          "path": "kernel/metadata/release-notes.json",
+          "sha256": "4f057145393b16f5ef1e5eeca4ef5189fb5aaa99dd08670a8133d888e7a7a036",
           "schema": "zlos.release-notes.v1",
           "result": "PASS_UNRELEASED_WITH_BLOCKERS"
         },
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1106,15 +1106,15 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/provenance-viewer.json",
-          "sha256": "8ba4c6e41b479c7de50ba1e2c64bddde1e3f06fe55ed34bf7f230be2fdb66205",
+          "path": "kernel/metadata/provenance-viewer.json",
+          "sha256": "d16f4dbb474dbbe18a6c5426fc772fb475a63aa865dc500660daff0e6e57c591",
           "schema": "zlos.provenance-viewer.v1",
           "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS"
         },
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "d64842aef7044b6f81f22d7f675fdf78512af5c2a6c42768b05326f1daa6a39f",
+          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1174,22 +1174,22 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/crash.c",
+          "path": "kernel/src/core/crash.c",
           "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
-          "path": "kernel/idt.c",
-          "sha256": "e98cbb7b86d37250268b0be84f6068af4017c2cd5cb870c14dfb09ecca40c810",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-          "sha256": "bd144c4cde0217f87d8549655039cbcc55fe049515621c9eec698c078f674c8d",
+          "sha256": "83d59554ee4b537c16770a04b47236ff0e492eb3c26410ae7a268a09072ed313",
           "schema": "zlos.cpu-fault-qemu-receipt.v1",
           "result": "PASS"
         }

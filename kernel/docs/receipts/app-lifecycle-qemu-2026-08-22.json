@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "ca67eacab5d0c4913a40f12307b7998ac7f0fcd743773544d0a1552838550f46"
+    "sha256": "c5c62c4625f38cf8a7cc9c169727c7f7f46050b967f4f994ef23c95d0d544d48"
   },
   "catalogue": {
     "baseline_live": 4,
@@ -26,12 +26,12 @@
       1200
     ],
     "pointer": "QEMU absolute usb-tablet through zlOS input routing",
-    "qemu": "QEMU emulator version 11.0.1 (Debian 1:11.0.1+ds-1)"
+    "qemu": "QEMU emulator version 11.0.3 (Debian 1:11.0.3+ds-2)"
   },
   "evidence": "QEMU pointer/compositor lifecycle; not workflow or physical proof",
   "excluded_routes": [
     "boot-open",
-    "dock",
+    "register",
     "menu",
     "Run",
     "shell-word"
@@ -1268,24 +1268,24 @@
   "scope": "47 All Applications registry entries only",
   "shipped_build_identity": {
     "dirty": true,
-    "head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
-    "id": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+    "head": "d0f463bfc66315cbfba0988e5af9d9f65f919153",
+    "id": "3acfdcaf7913bce1cac875a0e155a28f4a549c6f6be6ea69dd1d9e8f8eba34db",
     "schema": 1
   },
   "shipped_manifest": {
-    "entries": 62,
+    "entries": 64,
     "schema": 1,
-    "sha256": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7"
+    "sha256": "454bcf1e6623d1cc690aa1b3add48fb750478e099e458d9c11334d9a4ab4d69a"
   },
   "source_files_sha256": {
-    "app-manifest.json": "a1c4ec15e88d709e59096dce8f08b1b6e37adee91148d706c439f59d3d2d9da7",
-    "apps_registry.zl": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a",
-    "build-identity.json": "22414d9ea92b9d48bc68fc2160fe6f950e39bffcb723adb29923f4ad05da524f",
-    "build_identity_embed.zl": "d92ab13aa0a550c701809b85ff01e2d006a8976f90bebbfd9fc4da914bf4ac90",
-    "kernel.zl": "e953981eff624423b9d751f972a031591d46e9595ddbc24911f606178442e643",
-    "probe-app-lifecycle.py": "a2b264f15e16f2094d27a0aba26cffd657ac11e1d020b829ede67e0839ef057d",
-    "wm.c": "c3aa3282c28a3ee35b836a353fc0da9c555c4c04cd2f735b057b1a834d07f86c"
+    "kernel/apps/apps_registry.zl": "632ac333ca4bef2da712d9507b5614dc9fc951904d78b557ec738597976a94c7",
+    "kernel/build_identity_embed.zl": "5cb845cde6e37cd017c0cda07a200365c6f8cafcef3d8c868891a52fafa54ee4",
+    "kernel/metadata/app-manifest.json": "454bcf1e6623d1cc690aa1b3add48fb750478e099e458d9c11334d9a4ab4d69a",
+    "kernel/metadata/build-identity.json": "7d0502cb7ea266babfe36c9827ec6d7e7270140c370bf31eaebf5e841e7c9912",
+    "kernel/src/graphics/windowing/wm.c": "dc824d7efd4e51d7f5c6c6b916a3f0996f6dc6bf61cf30fe2b33d898ecf2bc7d",
+    "kernel/src/kernel.zl": "3852df41f62faf2f8136a96667b2572059b11262c70286c509ae7402af26a1f6",
+    "kernel/tools/probes/probe-app-lifecycle.py": "615832a6ced66c3641bc4a3707ec449b4b58338c6315d0b21b1b6cc273e466e6"
   },
-  "source_head": "b8a00ec45ac1f9f955ba79ed63f0072540067d4e",
+  "source_head": "d0f463bfc66315cbfba0988e5af9d9f65f919153",
   "weakest_link": "first compositor draw is readiness, not a successful user workflow; non-catalog routes remain unproven here"
 }

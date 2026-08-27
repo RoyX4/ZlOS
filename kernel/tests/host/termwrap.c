@@ -85,6 +85,7 @@ int  term_key(int code);
 int  term_input_len(void);
 int  term_input_cursor(void);
 int  term_cmd(void);
+int  term_arg(void);
 int  term_unknown(void);
 void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                unsigned int accent, int cursor_on);
@@ -163,6 +164,9 @@ int main(void)
        "typed `ls` reaches the textual zlfs listing");
     ok(submit("files") == 1 && term_cmd() == 77,
        "typed `files` remains distinct and opens the graphical manager");
+    ok(submit("fib 999999999999999999999999") == 1 &&
+       term_cmd() == 102 && term_arg() == 2147483647,
+       "an oversized numeric argument clamps without signed overflow");
     ok(submit("nonsense") == 0 && term_unknown() == 1,
        "an unknown typed command is reported, not silently accepted");
 

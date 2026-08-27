@@ -99,17 +99,10 @@ def archive_bytes(rows: list[dict]) -> bytes:
     return output.getvalue()
 
 
-def canonical_status() -> str:
-    omitted = {ARCHIVE_REL, RECEIPT_REL}
-    lines = []
-    raw = command("git", "status", "--porcelain=v1", "--untracked-files=all")
-    for line in raw.splitlines():
-        # Porcelain paths begin at column 4. Snapshot outputs are deliberately
-        # omitted to prevent the receipt from depending on its own existence.
-        path = line[3:].split(" -> ")[-1]
-        if path not in omitted:
-            lines.append(line)
-    return "\n".join(lines) + ("\n" if lines else "")
+def canonical_status(identity: dict) -> str:
+    paths = sorted(identity["source_files_sha256"])
+    raw = command("git", "status", "--porcelain=v1", "--untracked-files=all", "--", *paths)
+    return raw + ("\n" if raw else "")
 
 
 def build(identity: dict, rows: list[dict], payload: bytes) -> dict:
@@ -122,7 +115,7 @@ def build(identity: dict, rows: list[dict], payload: bytes) -> dict:
             "head": command("git", "rev-parse", "HEAD"),
             "branch": command("git", "branch", "--show-current"),
             "dirty": identity["git"]["dirty"],
-            "canonical_status_sha256": sha256_bytes(canonical_status().encode()),
+            "canonical_status_sha256": sha256_bytes(canonical_status(identity).encode()),
             "submodule_status": submodules.splitlines() if submodules else [],
         },
         "scope": identity["source_scope"],

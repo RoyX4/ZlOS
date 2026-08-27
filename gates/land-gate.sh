@@ -121,7 +121,7 @@ run "memmap guards" "$WT/kernel/tests/host" ./memmap-guard-test.sh
 run "shell layout" "$WT/kernel" python3 tools/checks/check-shell-layout.py
 run "unique app ids" "$WT/kernel" ./tools/checks/check-appids.py --selftest
 run "app registry coverage" "$WT" python3 kernel/tests/host/apps53.py --selftest
-run "61-app manifest" "$WT/kernel" python3 tools/generators/gen-app-manifest.py --check --selftest
+run "application manifest" "$WT/kernel" python3 tools/generators/gen-app-manifest.py --check --selftest
 run "app lifecycle verifier" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --selftest
 run "reproducible artifact verifier" "$WT/kernel" python3 tools/checks/check-reproducible-build.py --selftest
 # check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
@@ -194,9 +194,9 @@ run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycl
 until guard; do sleep 30; done
 run "Run route QEMU" "$WT/kernel" python3 probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
-run "62-surface evidence registry write" "$WT/kernel" \
+run "application evidence registry write" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --write --verify-artifact
-run "62-surface evidence registry check" "$WT/kernel" \
+run "application evidence registry check" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --check --selftest --verify-artifact
 run "artifact and boot-route registry write" "$WT/kernel" \
     python3 tools/generators/gen-artifact-registry.py --write --selftest

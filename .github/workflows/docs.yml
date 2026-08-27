@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   docs:
@@ -41,6 +42,8 @@ jobs:
         run: tools/doc-check.sh
 
       - name: regenerate the derived docs
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           tools/todo.sh
           tools/journal.sh HEAD || true

@@ -162,54 +162,55 @@ regression check.
 
 ---
 
-## T-8 — Generated evidence manifests disagree on build identity. OPEN.
+## T-8 — Generated evidence manifests disagree on build identity. CLOSED.
 
-The retained visual evidence moved from ignored `kernel/exercise-out/` into
-`kernel/docs/evidence/exercises/2026-08-24/`. The visual and accessibility
-registries now regenerate independently, but the downstream release-note,
-provenance-viewer and joined-evidence generators cannot refresh honestly.
+The authoritative current build-input identity is
+`9ff27c31667052639c426eb6675779e381c9798cabc1064efa49a93592c41d35`
+over 148 declared inputs. Its digest now covers source/toolchain/route fields,
+while Git head, branch and build-input dirty state remain conservative
+generation context. This removes the impossible cycle in which writing and
+committing the checked-in identity changed the identity itself.
 
-The checked-in inputs contain three incompatible build identities:
+Source snapshot, dependency, toolchain, license, wrapper, build-recipe, visual,
+accessibility, decision, event-schema, security and observability registries
+regenerate on that identity. Release notes, the JSON/HTML provenance viewer,
+the joined evidence registry and the 906-row feature status then regenerate in
+dependency order from the same current identity.
 
-| Identity | Current owners |
-|---|---|
-| `2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e` | build identity, license, toolchain, visual and accessibility registries |
-| `1f9e16ad4e48590f1f19c9fbdb64fee01171b48d7ebc294540652307a682fb04` | source/build graph, wrapper and artifact registries |
-| `85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13` | decision, benchmark, security, observability, release, provenance and joined-evidence registries |
+The dated artifact, application, init, reproducibility, benchmark, crash,
+event-trace and adversarial receipts were not relabelled. They remain exact
+evidence for their original `1f9e16ad...`, `85027b15...` or later historical
+subject builds. Current registries carry those subject identities with
+`current_build_bound: false`; current artifact, QEMU, host-test and benchmark
+gaps remain explicit. Mutation tests reject changing those flags to true.
 
-`python3 kernel/tools/generators/gen-release-notes.py --check --selftest`
-currently stops with `release-note manifests disagree on build identity`.
-The provenance check independently stops with `provenance inputs disagree on
-build identity`, and the joined-evidence check stops with `registry build
-identities disagree`. After the Handoff authority correction, the decision
-ledger check also stops with `decision ledger has stale build context`; it must
-not be refreshed alone against the incompatible registry families.
-Consequently, `kernel/metadata/provenance-viewer.json` and
-`kernel/docs/provenance-viewer.html` remain dated artifacts: they still report
-46 visuals while the current visual registry discovers 41.
+**Closure evidence:** every affected generator passes `--check --selftest`.
+The current joined registry reports 0 current-build-bound artifacts, 9
+historical artifacts, 0 current-build-bound QEMU routes and 6 historical QEMU
+routes. Feature status demotes stale runtime claims to `HISTORICAL_ONLY` or
+`PARTIAL_HISTORICAL`; it does not promote historical execution as current.
 
-**Close by:** choose or regenerate one authoritative build identity, bring every
-input registry onto it from the same source/artifact snapshot, then regenerate
-release notes, provenance viewer, evidence registry and feature status in
-dependency order. All generator `--check --selftest` gates must pass before the
-viewer is described as current.
+**Irreducible historical boundary:** old exact artifact/runtime receipts cannot
+be made current without producing and testing new artifacts. Rewriting their
+identity would destroy provenance, so they remain historical by design.
 
 ---
 
-## T-9 — Boot recovery policy remains at the kernel root. OPEN.
+## T-9 — Boot recovery policy remains at the kernel root. CLOSED.
 
-`kernel/boot_state.c` and `kernel/boot_state.h` are the only live implementation
-files left at the zlOS product root. The pure policy is compiled by
-`kernel/tests/host/boot_state_test.c`, but neither file appears in
-`kernel/SOURCES`; the typed boot handover document correctly treats target
-wiring as future work.
+`boot_state.c` and `boot_state.h` now live together under their owning subsystem
+at `kernel/src/core/boot/`. The policy source follows `boot_handover.c` in
+`kernel/SOURCES`, so all four build routes compile it without claiming that a
+loader calls it yet. `kernel/tests/host/boot_state_test.c` includes and compiles
+the owned paths directly.
 
-The ownership destination is `kernel/src/core/boot/`. This structure-only pass
-does not move the pair because the host compile gate is deliberately deferred.
-
-**Close by:** move both files together, update the host harness include/source
-paths and every metadata/document reference, rerun `boot_state_test`, and prove
-the shared build/source registries agree before removing this exception.
+**Evidence:** the focused host harness passes all 91 checks with warnings fatal;
+the 32-bit, 64-bit, EFI/LLP64, and raw-lane-equivalent compile checks all accept
+the moved source through the shared manifest. The shared-source recovery
+selftest and directory-capsule check also pass. The dated source snapshot and
+T-8 build graph were regenerated through the identity-safe evidence chain.
+Stage-zero persistent selection and ready-mark wiring remain future boot work,
+not part of this structure closure.
 
 ---
 
@@ -254,7 +255,7 @@ function. Not written. Recorded in TODO.md.
 
 ---
 
-## T-21 — the harness cannot render the shell, and screenshots from it were read as the OS. OPEN.
+## T-21 — the harness cannot render the shell, and screenshots from it were read as the OS. CLOSED.
 
 `kernel/tests/host/wmshot.c` links `wm.c`, `ui.c`, `uikit.c` and `fb.c` and draws its
 own wallpaper, top bar and dock. The rail, raster strip and foot are `kernel.zl` and do
@@ -265,8 +266,16 @@ This was read as the desktop being wrong, twice, before anyone booted the real t
 It also renders geometry at `ui_theme_init(2)` while `fb.c` derives its type scale as
 `width*256/1920` = 1.0 at 1920 wide, so harness shots understate the type by half.
 
-Not closed: the honest fix is either to make the harness say so on the image itself, or
-to make the desktop-shot CI job boot QEMU rather than run wmshot. Neither is done.
+Closed as an evidence-contract defect, not by pretending the harness gained the
+zl shell. Every frame and its stdout now say `HOST HARNESS / NO zl SHELL`; the
+workflow and artifact call themselves a host compositor harness. The theme uses
+`fb_ui_scale_q8()` instead of a hard-coded 2x, and scene coordinates scale from
+the viewport instead of placing three windows off-canvas at 1024 pixels wide.
+
+**Evidence:** `.github/scripts/render-desktop.sh` builds and renders 1024x768 and
+1920x1200 frames, asserts the boundary marker in stdout, and both inspected PNGs
+show the marker plus all four windows. This remains host compositor/widget proof,
+not QEMU, GPU, kernel.zl shell, or physical-panel evidence.
 
 ---
 

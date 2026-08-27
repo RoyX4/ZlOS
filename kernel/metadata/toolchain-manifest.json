@@ -1,8 +1,8 @@
 {
   "schema": "zlos.toolchain-manifest.v1",
   "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
-  "build_identity": "2c873b665279da5a53c3a58bfa9cdd1c53a8a36f73702259a1bb991c1524d90e",
-  "dependency_lock_sha256": "e0ba859f38513bc0a707c33c6aee3b2f0997b45d769eb2fd1a719f1f739efe9d",
+  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "dependency_lock_sha256": "1ac9aa895410e65a1848b17132af2a8d622570ca4860723da9ea0f39b6abfcb2",
   "environment": {
     "CC": "UNSET_EFFECTIVE_GCC",
     "forbidden_variables": [
@@ -22,8 +22,8 @@
       "name": "zl-compiler",
       "invoked_path": "/home/roy/Documents/repos/zl-linux-final/compile",
       "resolved_path": "/home/roy/Documents/repos/zl-linux-final/compile",
-      "bytes": 51920,
-      "sha256": "25410ced86a4e6c9a12b5786c8ef1facd5ec13d177a2aa9c9a128f7a18264ddc",
+      "bytes": 47824,
+      "sha256": "9931485cf58c1a9c7964d16dc8879874d50ea92906e03c8ac996495d3a5be6d6",
       "version": "repository-built archived zl-to-C compiler; byte identity is authoritative"
     },
     {
@@ -39,8 +39,8 @@
       "invoked_path": "/usr/bin/clang",
       "resolved_path": "/usr/lib/llvm-21/bin/clang",
       "bytes": 133960,
-      "sha256": "3a0f9481c3c29fce75adcb7f6c989e0db14b422c431659cf346bb9efdfcb1f04",
-      "version": "Debian clang version 21.1.8 (7+b3)"
+      "sha256": "bcc14c05505b873adb12af5d84fc3b4b92054f2713d0141e8257b051d6e88e37",
+      "version": "Debian clang version 21.1.8 (10)"
     },
     {
       "name": "ld",
@@ -55,7 +55,7 @@
       "invoked_path": "/usr/bin/lld-link",
       "resolved_path": "/usr/lib/llvm-21/bin/lld",
       "bytes": 5962912,
-      "sha256": "6d4782d096e907aed6d2b1f0708889f99729e51f2256d1a938801976342b7689",
+      "sha256": "1ec0b708e4a8afe63152b0980f38923e7af80e66aa70a85984445722f20530f0",
       "version": "Debian LLD 21.1.8"
     },
     {
@@ -79,7 +79,7 @@
     {
       "id": "bios-multiboot32",
       "script": "kernel/build.sh",
-      "script_sha256": "814e5ba47740e072f61a4c04871923154818036ca04f8c696d2eef54b6b1d8e5",
+      "script_sha256": "ed63792c70b9d2491e46aec11e79ef0b8b98f2185d6e8ea960b7cce3e598d5f1",
       "compiler": "gcc",
       "compiler_flags": [
         "-m32",
@@ -94,6 +94,7 @@
         "-Werror",
         "-Wno-unused-parameter",
         "-I..",
+        "-I../src/frontend",
         "-I../src/runtime",
         "-Isrc",
         "-Iboot",
@@ -141,7 +142,7 @@
     {
       "id": "multiboot64",
       "script": "kernel/build64.sh",
-      "script_sha256": "c5e1838a0a350c8818066a6fed8a50e1f168e9320e5ddc66e6e3d2800ceee305",
+      "script_sha256": "01a1476a9c0089f7f430a54af521ac9fde84c73b75671f75ca686913afeffde0",
       "compiler": "gcc",
       "compiler_flags": [
         "-m64",
@@ -159,6 +160,7 @@
         "-Werror",
         "-Wno-unused-parameter",
         "-I..",
+        "-I../src/frontend",
         "-I../src/runtime",
         "-Isrc",
         "-Iboot",
@@ -206,7 +208,7 @@
     {
       "id": "native-uefi64",
       "script": "kernel/buildefi.sh",
-      "script_sha256": "ade87279b49298ab53f63cc6acdd8f25a60ccea17e854d00b667911135a842f6",
+      "script_sha256": "cf8abf6f91ac9a9cdb2e7d9208645b2087d0d8397f75c4ae217ff05d6645ee80",
       "compiler": "clang",
       "compiler_flags": [
         "-target",
@@ -219,6 +221,7 @@
         "-DZL_64",
         "-DZL_EFI",
         "-I..",
+        "-I../src/frontend",
         "-I../src/runtime",
         "-Isrc",
         "-Iboot",
@@ -278,7 +281,7 @@
     {
       "id": "raw-bios-loader32",
       "script": "kernel/tools/images/mkdisk.sh",
-      "script_sha256": "9002e37dd6d99f03eb5ae8f5cda5e5535e5bffcadbca9f61dd1d72112e42608b",
+      "script_sha256": "afe1a1fc7cc781090f0d48b7443725040ec283e6404c9216272ccf2faa57d9ea",
       "compiler": "gcc",
       "compiler_flags": [
         "-m32",
@@ -293,6 +296,7 @@
         "-Werror",
         "-Wno-unused-parameter",
         "-I..",
+        "-I../src/frontend",
         "-I../src/runtime",
         "-Isrc",
         "-Iboot",

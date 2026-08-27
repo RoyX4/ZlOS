@@ -109,23 +109,46 @@ run_engine() {   # run_engine <engine> <srcfile> ; echoes output or __BUILDFAIL_
     mkdir -p "$d"
     case "$eng" in
       interp)   ./interp "$src" 2>&1 ;;
-      compile)  ( ./compile "$src" >/dev/null 2>&1 \
-                  && gcc -O2 -D_strdup=strdup -Isrc/runtime -o "$d/a.bin" out.c src/runtime/runtime.c src/runtime/os_linux.c -lm 2>/dev/null \
-                  && "$d/a.bin" 2>&1 ) || echo "__BUILDFAIL__" ;;
-      compilel) ( ./compilel "$src" >/dev/null 2>&1 \
-                  && clang -O2 out.ll src/runtime/runtime.c src/runtime/os_linux.c -Isrc/runtime -D_strdup=strdup -o "$d/a.bin" -lm 2>/dev/null \
-                  && "$d/a.bin" 2>&1 ) || echo "__BUILDFAIL__" ;;
+      compile)
+        if ! ./compile "$src" >/dev/null 2>&1 ||
+           ! gcc -O2 -D_strdup=strdup -Isrc/runtime -o "$d/a.bin" out.c \
+                 src/runtime/runtime.c src/runtime/os_linux.c -lm 2>/dev/null; then
+            echo "__BUILDFAIL__"
+        else
+            local out status
+            out=$("$d/a.bin" 2>&1); status=$?
+            [ "$status" -eq 0 ] && printf '%s' "$out" || echo "__RUNFAIL__:$status"
+        fi ;;
+      compilel)
+        if ! ./compilel "$src" >/dev/null 2>&1 ||
+           ! clang -O2 out.ll src/runtime/runtime.c src/runtime/os_linux.c \
+                 -Isrc/runtime -D_strdup=strdup -o "$d/a.bin" -lm 2>/dev/null; then
+            echo "__BUILDFAIL__"
+        else
+            local out status
+            out=$("$d/a.bin" 2>&1); status=$?
+            [ "$status" -eq 0 ] && printf '%s' "$out" || echo "__RUNFAIL__:$status"
+        fi ;;
       # nativegen writes ./native_out into the current directory, so it runs in
       # a scratch dir. $src is already absolute - prefixing it with the repo
       # root produced a path that did not exist and read as a build failure.
-      nativegen)( cd "$d" && "$root/nativegen" "$src" >/dev/null 2>&1 \
-                  && [ -x native_out ] && ./native_out 2>&1 ) || echo "__BUILDFAIL__" ;;
+      nativegen)
+        if ! ( cd "$d" && "$root/nativegen" "$src" >/dev/null 2>&1 && [ -x native_out ] ); then
+            echo "__BUILDFAIL__"
+        else
+            local out status
+            out=$(cd "$d" && ./native_out 2>&1); status=$?
+            [ "$status" -eq 0 ] && printf '%s' "$out" || echo "__RUNFAIL__:$status"
+        fi ;;
     esac
 }
 
 # ---- expectations ----------------------------------------------------------
 pinned() {  # pinned <case> <engine>  -> 0 if a divergence is pinned
     grep -qE "^[[:space:]]*$1[[:space:]]+$2([[:space:]]|$)" "$EXPECTED" 2>/dev/null
+}
+rejected() { # rejected <case> <engine> -> documented subset rejection
+    grep -qE "^[[:space:]]*$1[[:space:]]+$2[[:space:]]+reject([[:space:]]|$)" "$EXPECTED" 2>/dev/null
 }
 
 printf "%-24s %-10s %-10s %-10s\n" CASE compile compilel nativegen
@@ -138,16 +161,38 @@ for c in $CASES; do
     for eng in compile compilel nativegen; do
         got=$(run_engine "$eng" "$src")
         if [ "$got" = "__BUILDFAIL__" ]; then
-            mark="build!"
+            if rejected "$c" "$eng"; then
+                mark="reject*"
+            else
+                mark="BUILDFAIL"
+                echo "  ::: $c/$eng failed to build and has no documented subset rejection"
+                fail=1
+            fi
+        elif [[ "$got" == __RUNFAIL__:* ]]; then
+            if rejected "$c" "$eng"; then
+                mark="reject*"
+            else
+                mark="RUNFAIL"
+                echo "  ::: $c/$eng failed at runtime (${got#__RUNFAIL__:}) with no documented subset rejection"
+                fail=1
+            fi
         elif [ "$got" = "$truth" ]; then
             mark="match"
-            if pinned "$c" "$eng"; then
+            if rejected "$c" "$eng"; then
+                mark="ACCEPTED"
+                echo "  ::: $c/$eng is pinned as rejected but now builds - remove the reject pin"
+                fail=1
+            elif pinned "$c" "$eng"; then
                 mark="FIXED"
                 echo "  ::: $c/$eng is pinned as divergent but now MATCHES - remove it from $EXPECTED"
                 fail=1
             fi
         else
-            if pinned "$c" "$eng"; then
+            if rejected "$c" "$eng"; then
+                mark="ACCEPTED"
+                echo "  ::: $c/$eng is pinned as rejected but now runs - replace or remove the reject pin"
+                fail=1
+            elif pinned "$c" "$eng"; then
                 mark="differ*"
             else
                 mark="DIFFER"
@@ -163,7 +208,7 @@ for c in $CASES; do
 done
 
 echo
-echo "  match = agrees with interp   differ* = pinned, known   build! = engine rejected it"
+echo "  match = agrees   differ* = pinned output divergence   reject* = pinned subset rejection"
 echo
 [ "$fail" -ne 0 ] && { echo "engine-parity: FAILED"; exit 1; }
 echo "engine-parity: no unpinned divergence"

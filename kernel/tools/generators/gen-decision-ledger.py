@@ -369,7 +369,7 @@ def validate(value: dict) -> None:
     legacy = value.get("legacy_source_inventory", {})
     labels = legacy_labels()
     if legacy != {"path": LEGACY_SOURCE, "sha256": sha256(ROOT / LEGACY_SOURCE),
-                  "labels": labels, "labels_count": 47}:
+                  "labels": labels, "labels_count": len(labels)}:
         raise ValueError("legacy decision inventory drift")
     semantics = value.get("legacy_semantics", [])
     if semantics != legacy_semantics() or [row.get("label") for row in semantics] != labels:
@@ -379,10 +379,10 @@ def validate(value: dict) -> None:
         raise ValueError("legacy semantic identity/scope missing")
     normalized_labels = [row["label"] for row in semantics]
     if value.get("coverage") != {
-            "normalized_records": 19,
-            "legacy_labels_indexed": 47,
-            "legacy_labels_semantically_normalized": 47,
-            "legacy_labels_remaining": 0,
+            "normalized_records": len(RECORDS),
+            "legacy_labels_indexed": len(labels),
+            "legacy_labels_semantically_normalized": len(normalized_labels),
+            "legacy_labels_remaining": len(labels) - len(normalized_labels),
             "normalized_legacy_labels": normalized_labels,
     }:
         raise ValueError("decision coverage accounting drift")
@@ -390,7 +390,7 @@ def validate(value: dict) -> None:
                        for name in sorted(STATUSES)}
     expected_action = {name: sum(row["action"] == name for row in records)
                        for name in sorted(ACTIONS)}
-    if value.get("counts") != {"records": 19, "status": expected_status,
+    if value.get("counts") != {"records": len(RECORDS), "status": expected_status,
                                "action": expected_action}:
         raise ValueError("decision counts drift")
     if value.get("open_gaps") != OPEN_GAPS:
@@ -434,7 +434,7 @@ def build() -> dict:
                        for name in sorted(ACTIONS)},
         },
         "open_gaps": OPEN_GAPS,
-        "evidence_ceiling": "19 high-impact records plus source-normalized semantics for all 47 legacy labels; not complete system history or independent approval",
+        "evidence_ceiling": f"{len(records)} high-impact records plus source-normalized semantics for all {len(labels)} legacy labels; not complete system history or independent approval",
         "weakest_link": "system-wide non-DECISIONS.md sources, independent approval, automatic migration and target history UI remain open",
         "generator": {"path": "kernel/gen-decision-ledger.py",
                       "sha256": sha256(Path(__file__).resolve())},

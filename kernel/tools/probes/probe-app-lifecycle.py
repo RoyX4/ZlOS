@@ -3,7 +3,7 @@
 
 This consumes app-manifest.json and the compositor's serial-only lifecycle
 stream. It deliberately proves only the 47 applications reached through All
-Applications; boot, dock, menu, Run, and shell-word routes are different
+Applications; boot, register, menu, Run, and shell-word routes are different
 contracts and remain explicitly outside this receipt.
 """
 
@@ -101,6 +101,11 @@ def validate_cycle(opened, ready, closed, app, baseline):
 
 
 def selftest():
+    geometry = zb.rail_geometry(1920, 1200)
+    if len(geometry["slots"]) != 11:
+        fail("selftest rail geometry did not expose all eleven routes")
+    if geometry["catalogue"][1] <= geometry["slots"][-1][1]:
+        fail("selftest rail geometry did not put All Applications after the register")
     good = (
         {"event": "open", "slot": 4, "app": 15, "generation": 3, "live": 5},
         {"event": "ready", "slot": 4, "app": 15, "generation": 3, "live": 5},
@@ -138,16 +143,28 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def manifest_contract(path=MANIFEST):
+    manifest = read_json(path)
+    schema = manifest.get("schema", "")
+    entries = manifest.get("entries")
+    prefix = "zlos.application-identity-manifest.v"
+    if not schema.startswith(prefix) or not schema[len(prefix):].isdigit():
+        fail(f"application manifest has invalid schema {schema!r}")
+    if not isinstance(entries, list):
+        fail("application manifest entries are not a list")
+    return int(schema[len(prefix):]), len(entries), sha256(path)
+
+
 def shipped_manifest(text, manifest_path=MANIFEST):
     matches = MANIFEST_RE.findall(text)
     if len(matches) != 1:
         fail(f"guest emitted {len(matches)} app-manifest receipts, expected exactly one")
     schema, entries, digest = matches[0]
-    expected = sha256(manifest_path)
-    if (int(schema), int(entries), digest) != (1, 62, expected):
+    expected = manifest_contract(manifest_path)
+    if (int(schema), int(entries), digest) != expected:
         fail(
             "guest app-manifest receipt mismatch: "
-            f"schema={schema} entries={entries} sha256={digest}, expected 1/62/{expected}"
+            f"schema={schema} entries={entries} sha256={digest}, expected {expected!r}"
         )
     return {"schema": int(schema), "entries": int(entries), "sha256": digest}
 
@@ -267,7 +284,7 @@ def run(receipt_path, no_build, timeout):
         "schema": "zlos.application-lifecycle-qemu-receipt.v1",
         "evidence": "QEMU pointer/compositor lifecycle; not workflow or physical proof",
         "scope": "47 All Applications registry entries only",
-        "excluded_routes": ["boot-open", "dock", "menu", "Run", "shell-word"],
+        "excluded_routes": ["boot-open", "register", "menu", "Run", "shell-word"],
         "source_head": command_output(["git", "rev-parse", "HEAD"]),
         "source_files_sha256": {
             os.path.relpath(path, REPO_ROOT): sha256(path) for path in source_paths

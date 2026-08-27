@@ -24,7 +24,17 @@
 static unsigned char code[1 << 20];
 static int codelen = 0;
 
-static void b(unsigned char x) { code[codelen++] = x; }
+static void backend_limit(const char *what)
+{
+    fprintf(stderr, "native: %s limit exceeded\n", what);
+    exit(1);
+}
+
+static void b(unsigned char x)
+{
+    if (codelen >= (int)sizeof(code)) backend_limit("1 MiB code buffer");
+    code[codelen++] = x;
+}
 static void b4(int v) { for (int i=0;i<4;i++) b((unsigned char)((v>>(8*i))&0xFF)); }
 static void bytes(const unsigned char *p, int n) { for (int i=0;i<n;i++) b(p[i]); }
 static void patch4(int at, int v) { for (int i=0;i<4;i++) code[at+i]=(unsigned char)((v>>(8*i))&0xFF); }
@@ -71,6 +81,8 @@ static char locals[256][MAX_TEXT]; static int nlocals = 0;
 static int local_slot(const char *name)
 {
     for (int i=0;i<nlocals;i++) if(!strcmp(locals[i],name)) return i;
+    if (nlocals >= (int)(sizeof(locals) / sizeof(locals[0])))
+        backend_limit("local variable");
     strncpy(locals[nlocals], name, MAX_TEXT-1); locals[nlocals][MAX_TEXT-1]='\0';
     return nlocals++;
 }
@@ -384,13 +396,15 @@ static void emit_user_call(Node *call)
         b(0x50);                                  /* push rax */
     }
     b(0xE8);                                       /* call rel32 (backpatched) */
+    if (nfixups >= (int)(sizeof(fixups) / sizeof(fixups[0])))
+        backend_limit("call fixup");
     fixups[nfixups].pos = codelen;
     strncpy(fixups[nfixups].name, call->a->text, MAX_TEXT-1);
     fixups[nfixups].name[MAX_TEXT-1]='\0';
     nfixups++;
     b4(0);
     if (nargs > 0) {                               /* add rsp, 8*nargs (caller cleanup) */
-        unsigned char x[]={0x48,0x83,0xC4}; bytes(x,3); b((unsigned char)(8*nargs));
+        unsigned char x[]={0x48,0x81,0xC4}; bytes(x,3); b4(8*nargs);
     }
 }
 
@@ -545,6 +559,10 @@ static void gen_stmt(Node *n)
             if (e->type == N_CALL && e->a->type == N_IDENT && !strcmp(e->a->text,"print")) {
                 Node *arg = e->kids[0];
                 if (arg->type == N_STRING) {
+                    if (nsfix >= (int)(sizeof(sfix) / sizeof(sfix[0])))
+                        backend_limit("string fixup");
+                    if (npsfix >= (int)(sizeof(psfix) / sizeof(psfix[0])))
+                        backend_limit("print-string fixup");
                     /* print a string literal: lea rsi,[rip+str]; mov edx,len; call print_str */
                     int slen = (int)strlen(arg->text) + 1;   /* +newline */
                     b(0x48); b(0x8D); b(0x35);               /* lea rsi,[rip+disp] */
@@ -554,9 +572,13 @@ static void gen_stmt(Node *n)
                     b(0xBA); b4(slen);                       /* mov edx, slen */
                     b(0xE8); psfix[npsfix++] = codelen; b4(0); /* call print_str */
                 } else if (expr_ty(cur_ty, arg) == T_NUM) {
+                    if (npnfix >= (int)(sizeof(pnfix) / sizeof(pnfix[0])))
+                        backend_limit("print-number fixup");
                     gen_expr(arg);                           /* double -> rax */
                     b(0xE8); pnfix[npnfix++] = codelen; b4(0); /* call print_num */
                 } else {
+                    if (npfix >= (int)(sizeof(pfix) / sizeof(pfix[0])))
+                        backend_limit("print-integer fixup");
                     gen_expr(arg);                           /* value -> rax */
                     b(0xE8); pfix[npfix++] = codelen; b4(0); /* call print_int */
                 }
@@ -634,7 +656,12 @@ static void gen_function(Node *fn)
     cur_ty = &tyfns[fn_index(fn->text)];
 
     nparams = 0;
-    for (int i=0;i<fn->nkids;i++) { strncpy(params[nparams],fn->kids[i]->text,MAX_TEXT-1); params[nparams][MAX_TEXT-1]='\0'; nparams++; }
+    for (int i=0;i<fn->nkids;i++) {
+        if (nparams >= (int)(sizeof(params) / sizeof(params[0])))
+            backend_limit("function parameter");
+        strncpy(params[nparams],fn->kids[i]->text,MAX_TEXT-1);
+        params[nparams][MAX_TEXT-1]='\0'; nparams++;
+    }
     nlocals = 0;
     collect_locals(fn->a);
     int frame = ((nlocals * 8 + 15) / 16) * 16;
@@ -829,6 +856,8 @@ int main(int argc, char **argv)
     /* register function names first (so calls resolve, incl. recursion) */
     for (int i=0;i<prog->nkids;i++)
         if (prog->kids[i]->type == N_FN) {
+            if (nfuncs >= (int)(sizeof(fnames) / sizeof(fnames[0])))
+                backend_limit("function");
             strncpy(fnames[nfuncs], prog->kids[i]->text, MAX_TEXT-1);
             fnames[nfuncs][MAX_TEXT-1]='\0'; nfuncs++;
         }

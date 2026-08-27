@@ -7,138 +7,118 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
-## 2026-08-27 — docs: fix a dangling link and refresh the checks capsule (b49158f)
+## 2026-08-27 — docs: record pull request status fix (a27cd74)
 
-`design/presswork` · 3 files changed, 67 insertions(+), 1 deletion(-)
+`main` · 1 file changed, 23 insertions(+)
 
 | | |
 |---|---|
 | EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
+| pinned engine divergences | 4 |
 | baselined doc rot | 0 |
 | docs vs tree | agree |
 
-<details><summary>3 file(s)</summary>
+<details><summary>1 file(s)</summary>
 
 - `docs/JOURNAL.md`
-- `docs/design/desktop-deciding.md`
-- `kernel/tools/checks/README.md`
 
 </details>
 
-## 2026-08-27 — fix(zlc): NAMESET_MAX silently dropped names; the kernel built clean and halted (3b8692b)
+## 2026-08-27 — fix: preserve unverified pull request status (ed210af)
 
-`design/presswork` · 19 files changed, 4013 insertions(+), 158 deletions(-)
+`codex/full-program` · 7 files changed, 35 insertions(+), 21 deletions(-)
 
 | | |
 |---|---|
 | EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
+| pinned engine divergences | 4 |
 | baselined doc rot | 0 |
-| docs vs tree | STALE |
+| docs vs tree | agree |
 
-<details><summary>19 file(s)</summary>
+<details><summary>7 file(s)</summary>
 
+- `.github/workflows/docs.yml`
 - `TODO.md`
-- `docs/evidence/presswork-boot-depth.png`
-- `docs/evidence/presswork-first-boot.md`
-- `freestanding/runtime_kernel.c`
-- `kernel/app_manifest_embed.zl`
-- `kernel/build_identity_embed.zl`
-- `kernel/metadata/app-manifest.json`
-- `kernel/metadata/build-identity.json`
-- `kernel/src/graphics/ui/design.h`
-- `kernel/src/graphics/ui/ui.c`
-- `kernel/src/graphics/ui/ui.h`
-- `kernel/src/graphics/ui/uikit.c`
-- _…and 7 more_
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `kernel/metadata/evidence-registry.json`
+- `kernel/metadata/wrapper-registry.json`
+- `tools/todo.sh`
 
 </details>
 
-## 2026-08-27 — feat(desktop): bring the shell to prototype parity, and wire the chrome to it (74eb0d8)
+## 2026-08-27 — docs: record whole-tree audit closure (2d7ea8a)
 
-`design/presswork` · 20 files changed, 2346 insertions(+), 249 deletions(-)
+`main` · 1 file changed, 29 insertions(+)
 
 | | |
 |---|---|
 | EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
+| pinned engine divergences | 4 |
 | baselined doc rot | 0 |
-| docs vs tree | STALE |
+| docs vs tree | agree |
 
-<details><summary>20 file(s)</summary>
+<details><summary>1 file(s)</summary>
 
-- `docs/evidence/presswork-boot-1920x1200.png`
-- `docs/evidence/presswork-boot-focused.png`
-- `docs/evidence/presswork-boot-parity.png`
-- `docs/evidence/presswork-first-boot.md`
-- `docs/evidence/presswork-real-vs-prototype.png`
-- `freestanding/runtime_kernel.c`
-- `kernel/app_manifest_embed.zl`
-- `kernel/build_identity_embed.zl`
-- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
-- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
-- `kernel/metadata/app-manifest.json`
-- `kernel/metadata/boot-media-ids.json`
-- _…and 8 more_
-
-</details>
-
-## 2026-08-27 — feat(desktop): implement the PRESSWORK design language (07fbf1d)
-
-`design/presswork` · 22 files changed, 13978 insertions(+), 7146 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 0 |
-| docs vs tree | STALE |
-
-<details><summary>22 file(s)</summary>
-
-- `TODO.md`
-- `docs/design/desktop-deciding.md`
-- `docs/design/presswork-prototype.html`
-- `kernel/app_manifest_embed.zl`
-- `kernel/apps/apps_registry.zl`
-- `kernel/build_identity_embed.zl`
-- `kernel/metadata/app-manifest.json`
-- `kernel/metadata/build-identity.json`
-- `kernel/src/graphics/icons/icons.c`
-- `kernel/src/graphics/ui/design.h`
-- `kernel/src/graphics/ui/ui.c`
-- `kernel/src/graphics/ui/ui.h`
-- _…and 10 more_
-
-</details>
-
-## 2026-08-26 — feat(desktop): implement the PRESSWORK design language (f616c8a)
-
-`design/presswork` · 23 files changed, 14007 insertions(+), 7146 deletions(-)
-
-| | |
-|---|---|
-| EFI truncation sites | 0 |
-| pinned engine divergences | 2 |
-| baselined doc rot | 0 |
-| docs vs tree | STALE |
-
-<details><summary>23 file(s)</summary>
-
-- `TODO.md`
 - `docs/JOURNAL.md`
-- `docs/design/desktop-deciding.md`
-- `docs/design/presswork-prototype.html`
+
+</details>
+
+## 2026-08-27 — fix: close whole-tree audit findings (6ebb2d8)
+
+`codex/full-program` · 105 files changed, 2543 insertions(+), 1758 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>105 file(s)</summary>
+
+- `TODO.md`
+- `docs/PROJECT-STATUS.md`
+- `docs/evidence/status-audits/README.md`
+- `docs/evidence/status-audits/WHOLE-TREE-CODEX-AUDIT-2026-08-26.md`
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `docs/program/PARTIAL-CLOSURE.md`
+- `docs/program/README.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/README.md`
 - `kernel/app_manifest_embed.zl`
-- `kernel/apps/apps_registry.zl`
+- `kernel/boot/boot64.S`
+- _…and 93 more_
+
+</details>
+
+## 2026-08-26 — fix: reconcile evidence build identities (7686f86)
+
+`codex/full-program` · 34 files changed, 5434 insertions(+), 5187 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>34 file(s)</summary>
+
+- `.ultra/TENSIONS.md`
+- `docs/program/FEATURE-STATUS.json`
 - `kernel/build_identity_embed.zl`
-- `kernel/metadata/app-manifest.json`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/accessibility-registry.json`
+- `kernel/metadata/build-graph.json`
 - `kernel/metadata/build-identity.json`
-- `kernel/src/graphics/icons/icons.c`
-- `kernel/src/graphics/ui/design.h`
-- `kernel/src/graphics/ui/ui.c`
-- _…and 11 more_
+- `kernel/metadata/decision-ledger.json`
+- `kernel/metadata/dependency-lock.json`
+- _…and 22 more_
 
 </details>
 

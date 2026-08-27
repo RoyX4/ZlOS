@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # render-desktop.sh <label> [repo-root]
 #
-# Build wmshot and render the compositor at two resolutions into ./shots/.
+# Build wmshot and render the host compositor harness at two resolutions into
+# ./shots/. The image is not kernel.zl's shell and labels that boundary.
 # Used by .github/workflows/desktop-shot.yml, and useful by hand:
 #
 #     bash .github/scripts/render-desktop.sh mine && xdg-open shots/mine-1024x768.png
@@ -16,9 +17,13 @@ root="$(cd "$root" && pwd)"
 cd "$root"
 mkdir -p shots
 
-# Same source set as kernel/tests/host/build.sh uses for wmshot.
-includes=$(find kernel/src -type d -printf ' -I%s' | sort)
-gcc -O2 -w $includes -o /tmp/wmshot-"$label" \
+# Same source set as kernel/tests/host/build.sh uses for wmshot. GNU find's
+# `%s` is file size, not path; keep these as an array so every directory is one
+# compiler argument regardless of whitespace.
+mapfile -t include_dirs < <(find kernel/src -type d -print | sort)
+includes=()
+for dir in "${include_dirs[@]}"; do includes+=("-I$dir"); done
+gcc -O2 -w "${includes[@]}" -o /tmp/wmshot-"$label" \
     kernel/tests/host/wmshot.c \
     kernel/src/graphics/windowing/wm.c \
     kernel/src/graphics/ui/ease.c \
@@ -38,7 +43,9 @@ gcc -O2 -w $includes -o /tmp/wmshot-"$label" \
 
 for size in 1024x768 1920x1200; do
     w="${size%x*}"; h="${size#*x}"
-    /tmp/wmshot-"$label" "shots/$label-$size.ppm" "$w" "$h"
+    rendered=$(/tmp/wmshot-"$label" "shots/$label-$size.ppm" "$w" "$h")
+    printf '%s\n' "$rendered"
+    grep -Fq 'host compositor harness; zl shell not included' <<< "$rendered"
     if command -v magick >/dev/null 2>&1; then
         magick "shots/$label-$size.ppm" "shots/$label-$size.png"
     else

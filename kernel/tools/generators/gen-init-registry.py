@@ -22,37 +22,41 @@ OUTPUT = METADATA / "init-registry.json"
 BOOT_MARKER = "# ---- boot"
 
 STAGE_SPECS = (
-    ("INIT-001", "keyboard-state", "kbd_init()", (), "input", "required-attempt",
-     "Initializes shared keyboard translation/state; hardware providers are admitted later."),
-    ("INIT-002", "filesystem-state", "fs_init()", (), "storage", "required-attempt",
-     "Initializes filesystem state without forcing a disk write or mount."),
-    ("INIT-003", "settings-load", "set_load()", ("INIT-002",), "settings", "optional-data",
-     "Missing or invalid persisted settings retain defaults and report why."),
-    ("INIT-004", "display-layout", "if px_w() > 0 { layout() }", ("INIT-003",), "display", "conditional",
-     "Framebuffer routes negotiate a mode and layout; text-only routes retain VGA geometry."),
-    ("INIT-005", "compositor-bootstrap", "wm_boot = wm_boot_start()", ("INIT-004",), "window-system", "conditional",
-     "Framebuffer routes require a compositor; no-framebuffer routes keep the text shell fallback."),
-    ("INIT-006", "gdt", "setup_gdt()", ("INIT-005",), "cpu", "required-success",
+    ("INIT-001", "gdt", "setup_gdt()", (), "cpu", "required-success",
      "Failure is fatal before protected execution can continue."),
-    ("INIT-007", "idt-pic-pit-ps2", "setup_idt()", ("INIT-006",), "interrupts", "required-success",
+    ("INIT-002", "idt-pic-pit-ps2", "setup_idt()", ("INIT-001",), "interrupts", "required-success",
      "Installs the IDT, remaps PIC, starts PIT and baseline PS/2 handling."),
-    ("INIT-008", "apic-routing", "if apic_up() == 1 {", ("INIT-007",), "interrupts", "optional-provider",
+    ("INIT-003", "framebuffer-write-combining", "fb_wc()", ("INIT-002",), "display", "optional-provider",
+     "Applies the framebuffer cache policy when the current mapping supports it."),
+    ("INIT-004", "apic-routing", "boot_apic = apic_up()", ("INIT-002",), "interrupts", "optional-provider",
      "A failed APIC admission explicitly retains the legacy 8259 PIC path."),
-    ("INIT-009", "usb-bootstrap", "usb_boot()", ("INIT-007",), "usb", "required-attempt",
+    ("INIT-005", "usb-bootstrap", "boot_usb = usb_boot()", ("INIT-002",), "usb", "required-attempt",
      "Controller/class admission is bounded; unsupported hardware leaves fallback input paths."),
+    ("INIT-006", "persistent-observer", "diag_boot = diag_up()", ("INIT-005",), "storage", "optional-provider",
+     "Admits only the exact ZLLOG target; otherwise evidence remains RAM-only."),
+    ("INIT-007", "keyboard-state", "kbd_init()", ("INIT-002",), "input", "required-attempt",
+     "Initializes shared keyboard translation state after interrupt ownership is established."),
+    ("INIT-008", "settings-load", "set_load()", ("INIT-006", "INIT-007"), "settings", "optional-data",
+     "Missing or invalid persisted settings retain defaults and report why."),
+    ("INIT-009", "filesystem-mount", "fs_try()", ("INIT-006", "INIT-008"), "storage", "optional-data",
+     "Mounts an existing zlfs volume without formatting unknown media."),
     ("INIT-010", "program-arena", "arena_up()", ("INIT-009",), "memory", "required-attempt",
      "Publishes exact bounds and refuses program execution if the fixed arena is unavailable."),
     ("INIT-011", "kernel-heap", "heap_up()", ("INIT-010",), "memory", "required-attempt",
      "Publishes capacity and refuses allocations when the mapped heap is unavailable."),
     ("INIT-012", "virtual-memory-report", "vmm_up()", ("INIT-011",), "memory", "required-attempt",
      "Reports the paging window established by heap initialization."),
-    ("INIT-013", "ring3-smoke", "user_up()", ("INIT-007", "INIT-012"), "process", "required-proof",
+    ("INIT-013", "display-layout", "if px_w() > 0 { layout() }", ("INIT-012",), "display", "conditional",
+     "Framebuffer routes negotiate a mode and layout; text-only routes retain VGA geometry."),
+    ("INIT-014", "compositor-bootstrap", "wm_boot = wm_boot_start()", ("INIT-013",), "window-system", "conditional",
+     "Framebuffer routes require a compositor; no-framebuffer routes keep the text shell fallback."),
+    ("INIT-015", "ring3-smoke", "user_up()", ("INIT-002", "INIT-012", "INIT-014"), "process", "required-proof",
      "Runs the current ring-3 syscall smoke path; failure prevents the later ready marker."),
-    ("INIT-014", "application-manifest", "app_manifest_report()", ("INIT-013",), "product-identity", "required-proof",
-     "The running image must report the exact 62-surface manifest digest."),
-    ("INIT-015", "build-identity", "build_identity_report()", ("INIT-014",), "artifact-identity", "required-proof",
+    ("INIT-016", "application-manifest", "app_manifest_report()", ("INIT-015",), "product-identity", "required-proof",
+     "The running image must report the exact current application-manifest digest."),
+    ("INIT-017", "build-identity", "build_identity_report()", ("INIT-016",), "artifact-identity", "required-proof",
      "The running image must report the exact build-input identity and source state."),
-    ("INIT-016", "ready-publication", 'color(C_GREEN)  print("  ready.")', ("INIT-015",), "boot", "required-proof",
+    ("INIT-018", "ready-publication", 'color(C_GREEN)  print("  ready.")', ("INIT-017",), "boot", "required-proof",
      "Published only after every earlier required attempt/proof; all promoted QEMU routes require it."),
 )
 
@@ -79,7 +83,7 @@ def locate(lines: list[str], start: int, marker: str) -> int:
         stripped = lines[index].lstrip()
         if stripped.startswith("#"):
             continue
-        if marker in lines[index]:
+        if stripped == marker:
             matches.append(index + 1)
     if len(matches) != 1:
         raise ValueError(f"init marker {marker!r}: expected one source line, found {len(matches)}")
@@ -113,7 +117,7 @@ def validate(value: dict) -> None:
             raise ValueError(f"{stage_id}: route coverage drift")
         seen.add(stage_id)
     source = value.get("source", {})
-    if source.get("path") != "kernel/kernel.zl" or len(source.get("sha256", "")) != 64:
+    if source.get("path") != "kernel/src/kernel.zl" or len(source.get("sha256", "")) != 64:
         raise ValueError("missing init source identity")
     if len(value.get("generator", {}).get("sha256", "")) != 64:
         raise ValueError("missing init generator identity")
@@ -147,12 +151,12 @@ def build() -> dict:
         "result": "PASS",
         "build_identity": identity["identity_sha256"],
         "source": {
-            "path": "kernel/kernel.zl",
+            "path": "kernel/src/kernel.zl",
             "sha256": digest(SOURCE),
             "boot_marker_line": boot_start + 1,
         },
         "generator": {
-            "path": "kernel/gen-init-registry.py",
+            "path": "kernel/tools/generators/gen-init-registry.py",
             "sha256": digest(Path(__file__).resolve()),
         },
         "routes": routes,

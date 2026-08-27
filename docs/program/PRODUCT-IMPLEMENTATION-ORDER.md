@@ -99,7 +99,7 @@ Deliver the stable process ABI, AppKit/UI SDK, manifests, launcher, package
 lifecycle and shared Files/Settings/Clipboard/Notifications/Open/Save/Print/
 Share/Secrets portals. Add document models, undo/redo, autosave/recovery,
 MIME/thumbnail/search and isolated decoder workers. Then migrate every one of
-the 61 current named implementations, All Applications and all 24 games out of
+the 63 current named implementations, All Applications and all 24 games out of
 kernel ownership without deleting a proven fallback early.
 
 Product exit: every current app has a real install/launch/use/save/close/crash/

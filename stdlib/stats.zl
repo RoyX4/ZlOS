@@ -2,9 +2,11 @@
 # Uses the sum / sort / sqrt builtins.
 
 fn mean(xs) {
+    assert(len(xs) > 0, "mean: list must not be empty")
     return sum(xs) / len(xs)
 }
 fn minl(xs) {
+    assert(len(xs) > 0, "minl: list must not be empty")
     m = xs[0]
     for x in xs {
         if x < m {
@@ -14,6 +16,7 @@ fn minl(xs) {
     return m
 }
 fn maxl(xs) {
+    assert(len(xs) > 0, "maxl: list must not be empty")
     m = xs[0]
     for x in xs {
         if x > m {
@@ -23,6 +26,7 @@ fn maxl(xs) {
     return m
 }
 fn median(xs) {
+    assert(len(xs) > 0, "median: list must not be empty")
     s = sort(xs)
     n = len(s)
     mid = int(n / 2)
@@ -32,6 +36,7 @@ fn median(xs) {
     return (s[mid - 1] + s[mid]) / 2
 }
 fn variance(xs) {
+    assert(len(xs) > 0, "variance: list must not be empty")
     m = mean(xs)
     total = 0
     for x in xs {

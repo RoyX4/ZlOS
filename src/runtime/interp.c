@@ -391,7 +391,10 @@ static char *value_to_string_depth(Value v, int depth)
         case V_FN:   return zi_strdup("<function>");
         case V_NUM:
             /* whole numbers print without a trailing ".000000" */
-            if (v.num == (long long)v.num)
+            if (v.num == v.num &&
+                v.num >= -9223372036854775808.0 &&
+                v.num <   9223372036854775808.0 &&
+                v.num == trunc(v.num))
                 snprintf(buf, sizeof(buf), "%lld", (long long)v.num);
             else
                 snprintf(buf, sizeof(buf), "%g", v.num);

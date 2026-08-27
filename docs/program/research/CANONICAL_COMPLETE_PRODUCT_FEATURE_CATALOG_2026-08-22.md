@@ -1054,7 +1054,7 @@ A feature is complete only when its implementation, route, authority, lifecycle,
 
 ## Exact current zlOS named-implementation crosswalk
 
-This appendix preserves every current named implementation even when the canonical product catalogue merges it into a broader family. It contains **61 named implementations**, plus the separate **All Applications** catalogue surface. `Current` means source/current-route evidence recorded by the 2026-08-21 baseline; it does not erase the known registry defect or imply process isolation.
+This appendix preserves every current named implementation even when the canonical product catalogue merges it into a broader family. It contains **63 named implementations**, plus the separate **All Applications** catalogue surface. `Current` means source/current-route evidence recorded by the current generated manifest; it does not imply process isolation or complete internal workflows.
 
 ### Shell and core surfaces
 
@@ -1070,6 +1070,8 @@ This appendix preserves every current named implementation even when the canonic
 | Files | PD-001, AP-021, FS-038 through FS-040 | Keep current zlfs workflow; move to VFS/file handles and portals |
 | Text Editor | PD-005, AP-031, AP-032 | Keep; add document recovery, editing depth and process boundary |
 | All Applications | SH-011, AP-002 | Separate catalogue surface; current Maze/blank-ID gate is false green |
+| System | ST-001 through ST-035 | Keep the PRESSWORK system pane; replace direct kernel facts with typed providers |
+| Type | AX-001 through AX-040 | Keep the PRESSWORK typography pane; connect controls to persistent accessible settings |
 
 ### Creative, graphics, and inspection
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 from collections import Counter
@@ -20,6 +21,7 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "docs" / "program"
 RESEARCH = PROGRAM / "research"
+APP_MANIFEST = ROOT / "kernel" / "metadata" / "app-manifest.json"
 SOURCE = RESEARCH / "CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md"
 OUTPUT = PROGRAM / "FEATURE-MAP.md"
 CROSSWALK_OUTPUT = PROGRAM / "RESEARCH-CONTRACT-CROSSWALK.md"
@@ -36,6 +38,7 @@ REPOSITORY_SOURCES = {
 }
 
 EXPECTED_RESEARCH_DOCS = {
+    "AGENTS.md",
     "ADDITIONAL_EXECUTABLE_EVIDENCE_2026-08-21.md",
     "ALL_33_DRIVERS_AND_APPS_MATRIX_2026-08-21.md",
     "ALL_33_FEATURE_MATRIX_2026-08-21.md",
@@ -47,6 +50,7 @@ EXPECTED_RESEARCH_DOCS = {
     "CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md",
     "CANONICAL_FEATURE_IMPLEMENTATION_CATALOG_2026-08-21.md",
     "CHATGPT_VOICE_ON_LINUX_2026-08-21.md",
+    "CLAUDE.md",
     "CLEAN_ROOM_ZL_ZLOS_INTEGRATION_PLAN_2026-08-21.md",
     "CURRENT_GITHUB_REPOSITORY_PATTERNS_2026-08-21.md",
     "DRIVER_AND_APP_AUDIT_TAXONOMY_2026-08-21.md",
@@ -65,18 +69,30 @@ EXPECTED_RESEARCH_DOCS = {
     "OS_REPOSITORY_SURVEY_2026-08-20.md",
     "PROTOS_KERNEL_AUDIT_2026-08-21.md",
     "README.md",
+    "RULES.md",
     "RESPONSIVENESS_RENDERING_AND_VISUAL_POLISH_DEEP_DIVE_2026-08-22.md",
     "SOURCE_SNAPSHOT_MANIFEST_2026-08-21.md",
+    "SOP.md",
     "STARRED_REPOSITORY_MAP_2026-08-21.md",
+    "STATUS.md",
+    "TODO.md",
+    "VALUES.md",
     "VISUAL_BROWSER_AND_APP_EXPERIENCE_CONTRACT_BACKLOG_2026-08-21.md",
     "ZLOS_CURRENT_DRIVER_AND_APP_BASELINE_2026-08-21.md",
     "ZLOS_CURRENT_VISUAL_WEB_AND_APP_EXPERIENCE_BASELINE_2026-08-21.md",
     "ZLOS_VISUAL_BROWSER_AND_APP_EXPERIENCE_CLEAN_ROOM_PLAN_2026-08-21.md",
     "language/HANDOFF.md",
+    "language/AGENTS.md",
+    "language/CLAUDE.md",
     "language/MASTER_PLAN.md",
     "language/README.md",
     "language/ROADMAP.md",
+    "language/RULES.md",
+    "language/SOP.md",
+    "language/STATUS.md",
+    "language/TODO.md",
     "language/ULTIMATE_PLAN.md",
+    "language/VALUES.md",
 }
 
 EXPECTED_PREFIX_COUNTS = {
@@ -108,7 +124,7 @@ EXPECTED_PREFIX_COUNTS = {
 }
 
 EXPECTED_REGISTRY_COUNTS = {
-    "AGT": 24, "APP": 83, "BLK": 25, "BUS": 28, "CUR": 38, "DEV": 20,
+    "AGT": 24, "APP": 83, "BLK": 25, "BUS": 28, "CUR": 40, "DEV": 20,
     "FSP": 22, "FUT": 12, "GAME": 24, "GPU": 25, "INPUT": 14, "MEDIA": 8,
     "NIC": 16, "OPS": 28, "PERIPH": 4, "PLAT": 38, "PWR": 7, "RADIO": 5,
     "SENSOR": 4, "SVC": 116, "USB": 14, "VM": 12, "ZLP": 42,
@@ -255,8 +271,10 @@ def validate_markdown_files(paths: list[Path]) -> None:
 def validate_program_files() -> None:
     paths = sorted(PROGRAM.glob("*.md"))
     required = {
-        "README.md", "PHASES.md", "FEATURE-MAP.md", "DRIVERS.md", "SERVICES.md",
-        "APPLICATIONS.md", "LANGUAGE-AGENTS-OPERATIONS.md", "PROOF-GATES.md",
+        "AGENTS.md", "CLAUDE.md", "README.md", "RULES.md", "SOP.md",
+        "STATUS.md", "TODO.md", "VALUES.md", "PHASES.md", "FEATURE-MAP.md",
+        "DRIVERS.md", "SERVICES.md", "APPLICATIONS.md",
+        "LANGUAGE-AGENTS-OPERATIONS.md", "PROOF-GATES.md",
         "RESEARCH-CONTRACT-CROSSWALK.md", "VALIDATION-RECEIPT.md",
         "PRODUCT-IMPLEMENTATION-ORDER.md", "PARTIAL-CLOSURE.md",
     }
@@ -309,15 +327,24 @@ def extract_current_names(source_text: str) -> list[str]:
 def validate_apps(source_text: str) -> None:
     apps_text = read(PROGRAM / "APPLICATIONS.md")
     names = extract_current_names(source_text)
-    if len(names) != 62:
-        fail(f"current names including All Applications: {len(names)}, expected 62")
     if len(set(names)) != len(names):
         fail("duplicate names in canonical current-app/game appendix")
+    try:
+        manifest = json.loads(read(APP_MANIFEST))
+        manifest_names = [row["name"] for row in manifest["entries"]]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        fail(f"invalid generated application manifest: {error}")
+    if set(names) != set(manifest_names):
+        fail(
+            "canonical current-app/game appendix differs from generated manifest: "
+            f"missing={sorted(set(manifest_names) - set(names))!r}, "
+            f"unexpected={sorted(set(names) - set(manifest_names))!r}"
+        )
     missing = [name for name in names if name not in apps_text]
     if missing:
         fail(f"current apps/games missing from APPLICATIONS.md: {missing!r}")
     cur_ids = sorted({int(value) for value in re.findall(r"\| CUR-(\d{3}) \|", apps_text)})
-    if cur_ids != list(range(1, 39)):
+    if cur_ids != list(range(1, 41)):
         fail(f"CUR registry differs: {cur_ids!r}")
     game_ids = sorted({int(value) for value in re.findall(r"\| GAME-(\d{3}) \|", apps_text)})
     if game_ids != list(range(1, 25)):
@@ -588,7 +615,7 @@ def main() -> int:
         f"features={len(features)} prefixes={len(EXPECTED_PREFIX_COUNTS)} "
         f"phases=21 research_contracts={len(contracts)} registries={sum(registry_counts.values())} "
         f"research_docs={research_doc_count} repositories={repository_count} "
-        f"current_named=61 catalogue=1 games=24"
+        f"current_named={len(extract_current_names(source_text)) - 1} catalogue=1 games=24"
     )
     print("registry-counts: " + " ".join(f"{key}={value}" for key, value in registry_counts.items()))
     return 0

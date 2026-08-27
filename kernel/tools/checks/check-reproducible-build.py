@@ -39,6 +39,18 @@ ARTIFACTS = (
 )
 
 
+def repository_artifact_path(name):
+    if name == "boot-media-ids.json":
+        return os.path.join(KERNEL_ROOT, "metadata", name)
+    return os.path.join(KERNEL_ROOT, name)
+
+
+def receipt_artifact_path(name):
+    if name == "boot-media-ids.json":
+        return "kernel/metadata/" + name
+    return "kernel/" + name
+
+
 def digest(path):
     value = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -64,7 +76,7 @@ def compare(first, second):
 def artifact_records(directory):
     return {
         name: {
-            "path": "kernel/" + name,
+            "path": receipt_artifact_path(name),
             "sha256": digest(os.path.join(directory, name)),
             "bytes": os.path.getsize(os.path.join(directory, name)),
         }
@@ -166,7 +178,7 @@ def build(destination):
     for recipe in RECIPES:
         subprocess.run([recipe], cwd=KERNEL_ROOT, check=True)
     for name in ARTIFACTS:
-        source = os.path.join(KERNEL_ROOT, name)
+        source = repository_artifact_path(name)
         if not os.path.isfile(source):
             raise RuntimeError(f"mkiso.sh did not produce {name}")
         shutil.copyfile(source, os.path.join(destination, name))

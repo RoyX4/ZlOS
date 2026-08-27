@@ -59,11 +59,12 @@ The next loader slice must select and authenticate multiple images, persist an
 attempt/failure record independently of the selected kernel, and populate both
 identity fields before claiming exact selection.
 
-The pure selection policy for that next slice now exists in `boot_state.c` and
-`boot_state.h`. Its 64-byte checksummed record observes an unready pending boot,
+The pure selection policy for that next slice now exists in
+`src/core/boot/boot_state.c` and `src/core/boot/boot_state.h`. Its 64-byte
+checksummed record observes an unready pending boot,
 allows two attempts per generation, chooses current then previous then recovery,
 records a ready boundary, and explicitly degrades rather than bricking a device
-that contains only one image. `hosttest/boot_state_test.c` passes 91 checks.
+that contains only one image. `tests/host/boot_state_test.c` passes 91 checks.
 
 That policy is deliberately **not wired into UEFI stage zero yet**. Stage zero
 still loads only `EFI/ZLOS/ZLOS.EFI`; no firmware variable is read or written,

@@ -71,6 +71,7 @@ void input_set_accel(int on);
 #define KEY_PGUP      0x116
 #define KEY_PGDN      0x117
 #define KEY_DELETE    0x119
+#define KEY_SUPER     0x11A
 #define KEY_F1        0x120
 
 /* ---- the fake hardware -------------------------------------------------- */
@@ -91,6 +92,7 @@ static void send_scan(int sc) { scan_q[scan_tail] = sc; scan_tail = (scan_tail +
  * bit 16 press, bits 15:8 the HID modifier bitmap, bits 7:0 the usage ID. */
 static int hid_q[128], hid_head, hid_tail;
 static int hid_mods_live = 0;
+#define HID_MOD_EVENT (1 << 17)
 int xhci_key_event(void)
 {
     if (hid_head == hid_tail) return 0;
@@ -100,11 +102,23 @@ int xhci_key_event(void)
 }
 int xhci_kbd_mods(void) { return hid_mods_live; }
 
+static void push_hid(int ev)
+{
+    hid_q[hid_tail] = ev;
+    hid_tail = (hid_tail + 1) % 128;
+}
+
+static void send_hid_mods(int mods)
+{
+    if (mods == hid_mods_live) return;
+    hid_mods_live = mods;
+    push_hid(HID_MOD_EVENT | (mods << 8));
+}
+
 static void send_hid(int press, int mods, int usage)
 {
-    hid_mods_live = mods;
-    hid_q[hid_tail] = (press << 16) | (mods << 8) | usage;
-    hid_tail = (hid_tail + 1) % 128;
+    send_hid_mods(mods);
+    push_hid((press << 16) | (mods << 8) | usage);
 }
 
 /* ---- assertions --------------------------------------------------------- */
@@ -297,6 +311,49 @@ static void test_usb_chars(void)
     drain();
 }
 
+static void test_usb_super_tap(void)
+{
+    printf("USB HID Super tap\n");
+    send_hid_mods(0x00);                     /* release prior test's Shift */
+    input_poll();
+    drain();
+
+    /* Modifier-only HID reports have no usage ID. Both edges can arrive in
+     * one input_poll(), so the transport must preserve snapshots, not only
+     * expose the final zero bitmap. */
+    send_hid_mods(0x08);                     /* left GUI down */
+    send_hid_mods(0x00);                     /* left GUI up   */
+    input_poll();
+    ok("USB Super tap -> EV_KEY_DOWN KEY_SUPER",
+       saw(EV_KEY_DOWN, KEY_SUPER));
+    drain();
+
+    send_hid_mods(0x08);
+    send_hid(1, 0x08, 0x2B);                 /* Super+Tab down */
+    send_hid(0, 0x08, 0x2B);
+    send_hid_mods(0x00);
+    input_poll();
+    int saw_tab = 0, saw_super = 0;
+    for (int guard = 0; guard < 64; guard++) {
+        int type = input_next();
+        if (!type) break;
+        if (type == EV_KEY_DOWN && input_code() == KEY_TAB) saw_tab = 1;
+        if (type == EV_KEY_DOWN && input_code() == KEY_SUPER) saw_super = 1;
+    }
+    ok("USB Super+Tab keeps Tab", saw_tab);
+    ok("USB Super+Tab does not emit a Super tap", !saw_super);
+    drain();
+
+    send_hid_mods(0x08);
+    send_hid_mods(0x0A);                     /* add left Shift */
+    send_hid_mods(0x02);                     /* release Super  */
+    send_hid_mods(0x00);
+    input_poll();
+    ok("USB Super+Shift does not emit a Super tap",
+       !saw(EV_KEY_DOWN, KEY_SUPER));
+    drain();
+}
+
 /* ---- held state and repeat --------------------------------------------- */
 static void test_held_and_repeat(void)
 {
@@ -444,6 +501,7 @@ int main(void)
     test_usb_arrows();
     test_parity();
     test_usb_chars();
+    test_usb_super_tap();
     test_held_and_repeat();
     test_i2c_touch_bridge();
 

@@ -24,7 +24,7 @@ joined proof is:
 
 - 9 byte-reproducible artifacts;
 - 6 QEMU boot routes;
-- 62/62 shipped app identities with open-ready-close evidence;
+- 64/64 shipped application identities with open-ready-close evidence;
 - 16 ordered initialization stages;
 - 123 exact build inputs in a deterministic local archive, with 0 off-host
   copies and no signature;
@@ -51,7 +51,7 @@ joined proof is:
   records retained with their replacements.
 - 17 unreleased change candidates, 6 potentially user-visible candidates, 3
   migrations, 12 known issues and 3 recovery paths; published entries remain 0.
-- a self-contained read-only provenance projection of 9 artifacts, 62 apps, 17
+- a self-contained read-only provenance projection of 9 artifacts, 64 apps, 17
   security claims, 17 changes and 11 health areas, with 0 signatures and 0
   declared per-app permission grants.
 - 14 observability capabilities: 1 QEMU hash-only, 1 QEMU-proved control frame,

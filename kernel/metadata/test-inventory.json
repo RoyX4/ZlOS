@@ -1,5 +1,5 @@
 {
-  "build_script_sha256": "aaf6a246b7c05924062416eed10bf16173bfd3bdc50b0cd35da525e8245e1817",
+  "build_script_sha256": "fc1ee2f532d121fbe189d3bef0334141c8eeae5040cb6ef295bc900241094795",
   "counts": {
     "auto_run_commands": 64,
     "auto_run_targets": 62,
@@ -71,7 +71,7 @@
       "optional_build": false,
       "source": "boot_handover_test.c",
       "source_present": true,
-      "source_sha256": "5e9e908b2d533afdfed5a338515b72caafcfceae007f4d88f238528a0e651d89",
+      "source_sha256": "48c143fb34260e6ea05897719630a6342ed05f9dbd4bcbb0fe2e5294f62a5fac",
       "timeout_seconds": 180
     },
     {
@@ -92,7 +92,7 @@
       "optional_build": false,
       "source": "boot_state_test.c",
       "source_present": true,
-      "source_sha256": "f3d45f6b2b96b6b9f41566bf7416520ea1d083cbed9b2e82446703a2b4ce158e",
+      "source_sha256": "08a1e1e26957ee11f4a04cffd62f63d574ca580fb8ef85f0d356f3d4e1137357",
       "timeout_seconds": 180
     },
     {
@@ -176,7 +176,7 @@
       "optional_build": false,
       "source": "build.sh",
       "source_present": true,
-      "source_sha256": "aaf6a246b7c05924062416eed10bf16173bfd3bdc50b0cd35da525e8245e1817",
+      "source_sha256": "fc1ee2f532d121fbe189d3bef0334141c8eeae5040cb6ef295bc900241094795",
       "timeout_seconds": 180
     },
     {
@@ -197,7 +197,7 @@
       "optional_build": false,
       "source": "crashtest.c",
       "source_present": true,
-      "source_sha256": "9b093d1d7dc2f07b7c647dd9b884191a6cf88ce198238fee6c6e6169d3eccd90",
+      "source_sha256": "782ef678d72abf97688bb6b8ab94fe15fa67b36a027e1e89eff2074c0a79aa0e",
       "timeout_seconds": 180
     },
     {
@@ -218,7 +218,7 @@
       "optional_build": false,
       "source": "cryptotest.c",
       "source_present": true,
-      "source_sha256": "68d6d2bf5a152c8b07e4f5ce9a1dea516d32aeefbde049050d808ec847dc9418",
+      "source_sha256": "7116d25ef05fc5cbb399d520f798a3af0dc74a78b1e0f8284db9d183ebb5a400",
       "timeout_seconds": 180
     },
     {
@@ -582,7 +582,7 @@
       "optional_build": false,
       "source": "gpu_planes.c",
       "source_present": true,
-      "source_sha256": "43ad2f638794017eecd9a7e818faa43fe60b5e4b564e75ccd3668a27baf3efc7",
+      "source_sha256": "9edf991c8febf820e401943b0f14afcdfeb6d3f2f472404c6a92c066b24a4705",
       "timeout_seconds": 180
     },
     {
@@ -604,7 +604,7 @@
       "optional_build": false,
       "source": "gpu_ring.c",
       "source_present": true,
-      "source_sha256": "70c3c4b7ac2aa5cf442fe6c2ff5abd6583fd7b79bf4a002cb42dc669acfc1b0c",
+      "source_sha256": "9f9ea5c62c642a124a941936cd773f14a26740a9e46430f3f7b11aaf93d85601",
       "timeout_seconds": 180
     },
     {
@@ -625,7 +625,7 @@
       "optional_build": false,
       "source": "gputest.c",
       "source_present": true,
-      "source_sha256": "ac79cf45344bd1d6a4e94d28dea9aefda01662e0902bc7c068f829f2ff0ea031",
+      "source_sha256": "bc671246366032b0e0aef2e824766c38a0a01dbc8794ed89b6ca0ab816886aad",
       "timeout_seconds": 180
     },
     {
@@ -709,7 +709,7 @@
       "optional_build": false,
       "source": "i2c_touchtest.c",
       "source_present": true,
-      "source_sha256": "8b20a80172814764b25c5c71cb1d57a6142e6a1d9f32e615d86e4b57f9a6a563",
+      "source_sha256": "01d1bca536a0db9e733da2614725cce2841b87927933bd6db569c62568fed041",
       "timeout_seconds": 180
     },
     {
@@ -835,7 +835,7 @@
       "optional_build": false,
       "source": "iwlwifitest.c",
       "source_present": true,
-      "source_sha256": "af4021584da2dc88349668eda6e9fae45ef00daabbdb48f64a4d05453e96d360",
+      "source_sha256": "c3d320963520c22f07fe163045dd157d99afb7e343cd1b993908f6faf687ac28",
       "timeout_seconds": 180
     },
     {
@@ -961,7 +961,7 @@
       "optional_build": false,
       "source": "memmap-guard-test.sh",
       "source_present": true,
-      "source_sha256": "5f5c599da05322da46bcdca54e38c704af7c4e6fdc6fd2f0c3c7d45cc3013ed9",
+      "source_sha256": "6361084e634253dc130dbbb8edd672cc9ee0a7d2962e9bb51fdc77ef8cc7a39f",
       "timeout_seconds": 180
     },
     {
@@ -1024,7 +1024,7 @@
       "optional_build": false,
       "source": "modeset_test.c",
       "source_present": true,
-      "source_sha256": "629a962ecab738547b4ae5414c37b3df49de33bc9a6553ce160774923f4abdc9",
+      "source_sha256": "e073b5729d02c9da44c16147d99ff6149f89054b9b4ed580d7e503fc3c1eef13",
       "timeout_seconds": 180
     },
     {
@@ -1276,7 +1276,7 @@
       "optional_build": false,
       "source": "termwrap.c",
       "source_present": true,
-      "source_sha256": "0926c0be4c0aac05e51855aff0e258b1e31764f860f299af7e3108884e3c6093",
+      "source_sha256": "321e6fe50c28a59c81c5644195623f5df58c8161804dc5142025a5c41349e577",
       "timeout_seconds": 180
     },
     {
@@ -1402,7 +1402,7 @@
       "optional_build": false,
       "source": "walltest.c",
       "source_present": true,
-      "source_sha256": "9086cdbc4fa32f5753b650a0ba8d445ae2fb04a8b0aad6e6fdb7c99f7d30e9fa",
+      "source_sha256": "c26fd3fd67c8c5f8604c7d9bcac791d942ec5b708bc467e5b15893878f4f18a5",
       "timeout_seconds": 180
     },
     {
@@ -1444,7 +1444,7 @@
       "optional_build": false,
       "source": "wmshot.c",
       "source_present": true,
-      "source_sha256": "702fbc2740f6f35058a27f0a5bef3860731e945b024a2ef6bb2d26b4586c44cd",
+      "source_sha256": "4b418bd1c964124ecc2a2ef0695969133887c3f3b573b93fefe07a5d5b4fc2a5",
       "timeout_seconds": 180
     },
     {

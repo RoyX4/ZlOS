@@ -5,7 +5,10 @@
 # all in zl. It reads "input.zl", and writes "out.c" (which the
 # real C compiler then turns into a native .exe).
 #
-# When this file can compile ITSELF, the language is self-hosting.
+# This is a bounded self-hosting subset: integer/string/list literals, names,
+# calls, indexing, assignment, fn/if/else/while/for/return, and the twelve
+# keywords in is_keyword(). Unsupported production-language syntax is refused;
+# this file proves closure of the subset, not full production-language parity.
 #
 # An AST node is a list tagged by its first item, e.g.
 #   ["num","5"]  ["bin","+",L,R]  ["call","print",[args]]
@@ -19,6 +22,7 @@ toks = []     # the token list
 pos = 0       # parser position
 g_funcs = []  # names of user functions
 g_globals = []# names of global variables
+g_err = false # any parse error suppresses out.c
 
 # ============================================================
 # LEXER
@@ -160,6 +164,7 @@ fn expect(s) {
         advance()
     } else {
         print("PARSE ERROR: expected", s, "got", text())
+        g_err = true
     }
 }
 
@@ -200,6 +205,8 @@ fn parse_primary() {
         return ["list", elems]
     }
     print("PARSE ERROR at:", text())
+    g_err = true
+    advance()
     return ["num", "0"]
 }
 
@@ -327,9 +334,18 @@ fn parse_while() {
 
 fn parse_for() {
     advance()
+    if kind() != "NAME" {
+        print("PARSE ERROR: expected loop variable got", text())
+        g_err = true
+    }
     v = text()
     advance()
-    advance()
+    if is_kw("in") {
+        advance()
+    } else {
+        print("PARSE ERROR: expected in got", text())
+        g_err = true
+    }
     seq = parse_expr()
     body = parse_block()
     return ["for", v, seq, body]
@@ -484,6 +500,12 @@ fn emit_expr(node) {
         return s + ")"
     }
     if tag == "bin" {
+        if node[1] == "and" {
+            return "zl_bool(zl_truthy(" + emit_expr(node[2]) + ") && zl_truthy(" + emit_expr(node[3]) + "))"
+        }
+        if node[1] == "or" {
+            return "zl_bool(zl_truthy(" + emit_expr(node[2]) + ") || zl_truthy(" + emit_expr(node[3]) + "))"
+        }
         return "zl_binop(" + cstr(node[1]) + ", " + emit_expr(node[2]) + ", " + emit_expr(node[3]) + ")"
     }
     if tag == "un" {
@@ -711,6 +733,10 @@ fn compile_program(prog) {
 
 input = read("input.zl")
 prog = parse_program(input)
-result = compile_program(prog)
-write("out.c", result)
-print("compiler.zl: wrote out.c")
+if g_err {
+    print("compiler.zl: refused input after parse errors")
+} else {
+    result = compile_program(prog)
+    write("out.c", result)
+    print("compiler.zl: wrote out.c")
+}

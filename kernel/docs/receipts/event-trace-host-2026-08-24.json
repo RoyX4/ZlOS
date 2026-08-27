@@ -1,11 +1,11 @@
 {
   "schema": "zlos.event-trace-host-receipt.v1",
   "result": "PASS_HOST_CORE_TARGET_UNINTEGRATED",
-  "build_identity": "85027b159c9a594045c2f900e5971bb3408dd418dd61a373625425fba9030d13",
+  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "source_identities": {
-    "hosttest/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
-    "hosttest/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
-    "hosttest/eventtracetest.c": "f19f3ad5f584d9b2563b5ab545583b72fdaa2df3304f0940d1d34f6549dfbc62"
+    "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
+    "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
+    "tests/host/eventtracetest.c": "f19f3ad5f584d9b2563b5ab545583b72fdaa2df3304f0940d1d34f6549dfbc62"
   },
   "tools": {
     "gcc": {
@@ -17,8 +17,8 @@
     "clang": {
       "invoked": "clang",
       "resolved": "/usr/lib/llvm-21/bin/clang",
-      "binary_sha256": "3a0f9481c3c29fce75adcb7f6c989e0db14b422c431659cf346bb9efdfcb1f04",
-      "version_first_line": "Debian clang version 21.1.8 (7+b3)"
+      "binary_sha256": "bcc14c05505b873adb12af5d84fc3b4b92054f2713d0141e8257b051d6e88e37",
+      "version_first_line": "Debian clang version 21.1.8 (10)"
     }
   },
   "proof": {
@@ -33,7 +33,7 @@
       {
         "id": "host-asan-ubsan",
         "exit_code": 0,
-        "artifact_sha256": "5e8ed0f7cb292fadb933931f14307a8e160bcb61778248491556417a105f4a94"
+        "artifact_sha256": "719aaea3d0af8acc2171e3592dea07e1d2964e6770508dc16dda6694c390a53a"
       },
       {
         "id": "bios-raw-ilp32",
@@ -43,7 +43,7 @@
       {
         "id": "uefi-llp64",
         "exit_code": 0,
-        "artifact_sha256": "8b17964b94a33f1ca7ccb6bc981b266f0378b3a2687945a9c0df95a4390a547f"
+        "artifact_sha256": "60d5d72c8eeac6a16bae5dd49c8147e52b9559428863d9478692f35180a6be7a"
       }
     ]
   },

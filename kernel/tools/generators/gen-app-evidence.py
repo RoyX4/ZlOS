@@ -19,6 +19,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.dirname(os.path.dirname(HERE))
+REPO_ROOT = os.path.dirname(KERNEL_ROOT)
 METADATA = os.path.join(KERNEL_ROOT, "metadata")
 MANIFEST = os.path.join(METADATA, "app-manifest.json")
 BUILD_IDENTITY = os.path.join(METADATA, "build-identity.json")
@@ -56,12 +57,35 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def manifest_contract(manifest):
+    entries = manifest.get("entries")
+    schema = manifest.get("schema", "")
+    prefix = "zlos.application-identity-manifest.v"
+    if not schema.startswith(prefix) or not schema[len(prefix):].isdigit():
+        fail(f"application manifest has invalid schema {schema!r}")
+    if not isinstance(entries, list):
+        fail("application manifest entries are not a list")
+    named = manifest.get("named_implementation_count")
+    catalogue = manifest.get("catalogue_surface_count")
+    if not isinstance(named, int) or not isinstance(catalogue, int):
+        fail("application manifest counts are missing")
+    if named + catalogue != len(entries):
+        fail("application manifest counts do not add up to its entries")
+    return int(schema[len(prefix):]), len(entries), named, catalogue
+
+
+def repo_path(relative, label):
+    if os.path.isabs(relative) or relative == ".." or relative.startswith("../"):
+        fail(f"{label} path escapes repository: {relative}")
+    return os.path.join(REPO_ROOT, relative)
+
+
 def check_source_hashes(receipt_name, receipt):
     hashes = receipt.get("source_files_sha256")
     if not isinstance(hashes, dict) or not hashes:
         fail(f"{receipt_name}: missing source hashes")
     for relative, expected in hashes.items():
-        path = os.path.join(HERE, relative)
+        path = repo_path(relative, f"{receipt_name}: source")
         if not os.path.isfile(path):
             fail(f"{receipt_name}: source disappeared: {relative}")
         actual = sha256(path)
@@ -122,9 +146,10 @@ def add_record(evidence, known, item, route, require_close=True):
 def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=False):
     entries = manifest.get("entries", [])
     known = {entry.get("id"): entry for entry in entries}
-    if len(entries) != 62 or len(known) != 62:
-        fail(f"manifest must contain 61 named apps plus catalogue; got {len(entries)}")
-    if len({entry.get("name") for entry in entries}) != 62:
+    manifest_schema, manifest_entries, named_count, catalogue_count = manifest_contract(manifest)
+    if len(known) != manifest_entries:
+        fail("manifest contains duplicate application ids")
+    if len({entry.get("name") for entry in entries}) != manifest_entries:
         fail("manifest contains duplicate application names")
 
     artifact_hashes = []
@@ -132,6 +157,8 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
     shipped_digests = []
     expected_manifest_digest = sha256(MANIFEST)
     expected_build = load(BUILD_IDENTITY)
+    if receipts.get("routes", {}).get("schema") != "zlos.application-route-qemu-receipt.v2":
+        fail("routes: wrong receipt schema")
     for name, receipt in receipts.items():
         artifact = receipt.get("artifact", {})
         digest = artifact.get("sha256")
@@ -142,7 +169,7 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
         shipped = receipt.get("shipped_manifest", {})
         shipped_value = (shipped.get("schema"), shipped.get("entries"),
                          shipped.get("sha256"))
-        if shipped_value != (1, 62, expected_manifest_digest):
+        if shipped_value != (manifest_schema, manifest_entries, expected_manifest_digest):
             fail(f"{name}: shipped manifest mismatch: {shipped_value!r}")
         shipped_digests.append(shipped.get("sha256"))
         shipped_build = receipt.get("shipped_build_identity", {})
@@ -180,7 +207,7 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
             fail(f"{route}: boot origin mismatch")
         shipped = receipt.get("shipped_manifest", {})
         if (shipped.get("schema"), shipped.get("entries"), shipped.get("sha256")) != (
-                1, 62, expected_manifest_digest):
+                manifest_schema, manifest_entries, expected_manifest_digest):
             fail(f"{route}: booted artifact reported the wrong manifest")
         shipped_build = receipt.get("shipped_build_identity", {})
         if (shipped_build.get("schema"), shipped_build.get("id"),
@@ -194,7 +221,7 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
         if not artifact.get("sha256") or not artifact.get("path"):
             fail(f"{route}: missing artifact identity")
         if verify_artifact:
-            artifact_path = os.path.join(os.path.dirname(HERE), artifact["path"])
+            artifact_path = repo_path(artifact["path"], f"{route}: artifact")
             if sha256(artifact_path) != artifact["sha256"]:
                 fail(f"{route}: current artifact does not match its runtime receipt")
         runtime_boot_routes.append({
@@ -207,10 +234,16 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
 
     evidence = {app: [] for app in known}
     route_result = receipts["routes"].get("result", {})
+    if "dock" in route_result:
+        fail("routes: legacy dock evidence is not valid for the current rail shell")
+    if len(route_result.get("register", [])) != 11:
+        fail("routes: register receipt does not cover all 11 fixed launch rows")
+    if len(route_result.get("surface", [])) != 4:
+        fail("routes: surface receipt does not cover Menu, System, Type, and All Applications")
     for item in route_result.get("boot", []):
         add_record(evidence, known, item, "boot", require_close=False)
-    for item in route_result.get("dock", []):
-        add_record(evidence, known, item, f"dock:{item.get('slot')}")
+    for item in route_result.get("register", []):
+        add_record(evidence, known, item, f"register:{item.get('slot')}")
     for item in route_result.get("shell_word", []):
         add_record(evidence, known, item, f"shell:{item.get('word')}")
     for item in route_result.get("surface", []):
@@ -273,8 +306,8 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
         "source_head": source_heads[0],
         "evidence_ceiling": "source/build plus boot-embedded manifest and QEMU route, first draw and teardown; no complete-workflow or physical proof",
         "shipped_manifest": {
-            "schema": 1,
-            "entries": 62,
+            "schema": manifest_schema,
+            "entries": manifest_entries,
             "sha256": shipped_digests[0],
         },
         "shipped_build_identity": {
@@ -286,8 +319,8 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
         "runtime_manifest_boot_routes": runtime_boot_routes,
         "counts": {
             "identities": len(output_entries),
-            "named_implementations": 61,
-            "catalogue_surfaces": 1,
+            "named_implementations": named_count,
+            "catalogue_surfaces": catalogue_count,
             "games": sum(entry["kind"] == "game" for entry in output_entries),
             "with_qemu_open_ready_close": len(output_entries),
             "runtime_manifest_boot_routes": len(runtime_boot_routes),
@@ -301,6 +334,12 @@ def serialized(value):
 
 
 def selftest(manifest, receipts, boot_receipts):
+    try:
+        check_source_hashes("escape", {"source_files_sha256": {"../escape": "0" * 64}})
+    except ValueError:
+        print("app-evidence source selftest: caught path-escape")
+    else:
+        fail("selftest mutation escaped: path-escape")
     mutations = []
     mismatched = copy.deepcopy(receipts)
     mismatched["run"]["artifact"]["sha256"] = "0" * 64
@@ -312,7 +351,7 @@ def selftest(manifest, receipts, boot_receipts):
     missing_identity["catalogue"]["result"]["cycles"].pop()
     mutations.append(("unproved-identity", missing_identity))
     wrong_name = copy.deepcopy(receipts)
-    wrong_name["routes"]["result"]["dock"][0]["name"] = "Not Terminal"
+    wrong_name["routes"]["result"]["register"][0]["name"] = "Not Terminal"
     mutations.append(("identity-drift", wrong_name))
     duplicate_run = copy.deepcopy(receipts)
     duplicate_run["run"]["result"]["duplicate_open_events"]["after"] += 1
@@ -382,7 +421,9 @@ def main(argv):
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"app-evidence: FAIL: {error}", file=sys.stderr)
         return 1
-    print("app-evidence: PASS: 62/62 identities have fresh QEMU open-ready-close evidence")
+    identities = value["counts"]["identities"]
+    print(f"app-evidence: PASS: {identities}/{identities} identities have fresh "
+          "QEMU open-ready-close evidence")
     return 0
 
 

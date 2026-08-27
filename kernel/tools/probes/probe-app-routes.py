@@ -2,8 +2,8 @@
 """Exercise every current non-catalogue application launch surface in QEMU.
 
 The registry-app sweep owns IDs 15..69. This probe owns boot-open identities,
-all nine dock slots, every shell-word application, Menu, and All Applications.
-Run/exec has its own deeper probe and remains a named external prerequisite.
+all eleven register slots, every shell-word application, Menu, System, Type,
+and All Applications. Run/exec also has its own deeper workflow probe.
 """
 
 from __future__ import annotations
@@ -39,16 +39,18 @@ DEFAULT_RECEIPT = os.path.join(
     KERNEL_ROOT, "tests", "oracle", "out", "app-routes-qemu.json")
 W, H = 1280, 800
 
-DOCK = [
+REGISTER = [
     (0, 0, "Terminal"),
-    (1, 5, "Browser"),
-    (2, 12, "Text Editor"),
-    (3, 8, "Paint"),
-    (4, 3, "Snake"),
-    (5, 9, "3D"),
-    (6, 1, "System Monitor"),
-    (7, 2, "About"),
-    (8, 6, "Settings"),
+    (1, 13, "Files"),
+    (2, 1, "System Monitor"),
+    (3, 5, "Browser"),
+    (4, 12, "Text Editor"),
+    (5, 8, "Paint"),
+    (6, 3, "Snake"),
+    (7, 9, "3D"),
+    (8, 2, "About"),
+    (9, 6, "Settings"),
+    (10, 7, "Run"),
 ]
 WORDS = [
     ("snake", 3, "Snake"),
@@ -60,6 +62,7 @@ WORDS = [
     ("files", 13, "Files"),
 ]
 BOOT_OPEN = [(0, "Terminal"), (13, "Files"), (1, "System Monitor")]
+TITLE_REPORT = re.compile(r"wm: win \d+ title (\d+),(\d+) (\d+)x(\d+)")
 
 
 def fail(message):
@@ -98,7 +101,15 @@ def close_after_focus(machine, app, timeout):
     return lc.await_event(machine.ser, start, "close", app, timeout)
 
 
-def dock_cycle(machine, point, app, timeout):
+def focus_reported_window(machine, start):
+    reports = TITLE_REPORT.findall(machine.ser.all[start:])
+    if not reports:
+        fail("opened window emitted no pointer-addressable title rectangle")
+    tx, ty, tw, th = (int(value) for value in reports[-1])
+    click(machine, (tx + max(8, tw // 3), ty + max(4, th // 2)))
+
+
+def register_cycle(machine, point, app, timeout):
     if is_open(machine.ser, app):
         click(machine, point)
         close_after_focus(machine, app, timeout)
@@ -107,9 +118,14 @@ def dock_cycle(machine, point, app, timeout):
     click(machine, point)
     opened = lc.await_event(machine.ser, start, "open", app, timeout)
     ready = lc.await_event(machine.ser, start, "ready", app, timeout)
-    # Some shell-backed dock launchers restore Terminal focus. A second dock
-    # click must raise/focus the already-open app without creating a duplicate.
-    click(machine, point)
+    # Some shell-backed launchers restore Terminal focus. A second register
+    # click normally raises/focuses the existing app without a duplicate. Run
+    # deliberately restores Terminal focus even on that path, so its title is
+    # the only honest focus target before the unified Ctrl+W teardown.
+    if app == 7:
+        focus_reported_window(machine, start)
+    else:
+        click(machine, point)
     closed = close_after_focus(machine, app, timeout)
     errors = lc.validate_cycle(opened, ready, closed, app, baseline)
     if errors:
@@ -164,6 +180,42 @@ def simple_pointer_cycle(machine, point, app, timeout, close_with_pointer=False)
     return {"open": opened, "ready": ready, "close": closed}
 
 
+def super_cycle(machine, app, timeout):
+    baseline = current_live(machine.ser)
+    start = len(machine.ser.all)
+    zb.tap_key(machine.qmp, "meta_l", machine.ser.drain)
+    opened = lc.await_event(machine.ser, start, "open", app, timeout)
+    ready = lc.await_event(machine.ser, start, "ready", app, timeout)
+    close_start = len(machine.ser.all)
+    zb.tap_key(machine.qmp, "meta_l", machine.ser.drain)
+    closed = lc.await_event(machine.ser, close_start, "close", app, timeout)
+    errors = lc.validate_cycle(opened, ready, closed, app, baseline)
+    if errors:
+        fail("; ".join(errors))
+    return {"open": opened, "ready": ready, "close": closed}
+
+
+def menu_row_cycle(machine, row, app, timeout):
+    baseline = current_live(machine.ser)
+    start = len(machine.ser.all)
+    zb.tap_key(machine.qmp, "meta_l", machine.ser.drain)
+    lc.await_event(machine.ser, start, "open", 4, timeout)
+    lc.await_event(machine.ser, start, "ready", 4, timeout)
+    rows = zb.WIN_REPORT.findall(machine.ser.all[start:])
+    if not rows:
+        fail("menu opened but wm_report emitted no client rectangle")
+    point = zb.menu_row_point(tuple(int(value) for value in rows[-1]), row, machine.w)
+    click(machine, point)
+    lc.await_event(machine.ser, start, "close", 4, timeout)
+    opened = lc.await_event(machine.ser, start, "open", app, timeout)
+    ready = lc.await_event(machine.ser, start, "ready", app, timeout)
+    closed = close_after_focus(machine, app, timeout)
+    errors = lc.validate_cycle(opened, ready, closed, app, baseline)
+    if errors:
+        fail("; ".join(errors))
+    return {"menu_row": row, "open": opened, "ready": ready, "close": closed}
+
+
 def write_receipt(path, value):
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     temp = path + ".tmp"
@@ -173,42 +225,47 @@ def write_receipt(path, value):
     os.replace(temp, path)
 
 
-def source_dock_routes():
+def source_register_routes():
     kernel_path = os.path.join(KERNEL_ROOT, "src", "kernel.zl")
     kernel = gen.read(kernel_path)
     paths = [kernel_path] + gen.imported_app_paths(kernel_path, kernel)
     sources = {path: gen.read(path) for path in paths}
     constants = gen.constants(sources)
-    body = gen.function_body(kernel, "dock_app")
+    body = gen.function_body(kernel, "rail_app")
     routes = []
     for slot, token in re.findall(r"if slot == (\d+)\s*\{\s*return (\w+)", body):
         app = int(token) if token.isdigit() else constants.get(token)
         if app is None:
-            fail(f"dock_app has unresolved token {token}")
+            fail(f"rail_app has unresolved token {token}")
         routes.append((int(slot), app))
-    if len(routes) != 9 or len({slot for slot, _ in routes}) != 9:
-        fail(f"dock_app defines {len(routes)} non-unique routes, expected 9")
+    if len(routes) != 11 or len({slot for slot, _ in routes}) != 11:
+        fail(f"rail_app defines {len(routes)} non-unique routes, expected 11")
     return routes
 
 
 def run(receipt_path, no_build, timeout):
     manifest = json.load(open(MANIFEST, encoding="utf-8"))
     identities = {entry["id"]: entry["name"] for entry in manifest["entries"]}
-    source_routes = source_dock_routes()
-    expected_routes = [(slot, app) for slot, app, _ in DOCK]
+    source_routes = source_register_routes()
+    expected_routes = [(slot, app) for slot, app, _ in REGISTER]
     if source_routes != expected_routes:
-        fail(f"dock route/source drift: source={source_routes} probe={expected_routes}")
-    for _, app, name in DOCK:
+        fail(f"register route/source drift: source={source_routes} probe={expected_routes}")
+    for _, app, name in REGISTER:
         if identities.get(app) != name:
-            fail(f"dock route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
+            fail(f"register route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
     for _, app, name in WORDS:
         if identities.get(app) != name:
             fail(f"word route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
 
-    result = {"boot": [], "dock": [], "shell_word": [], "surface": []}
+    for app, name in ((4, "Menu"), (70, "All Applications"),
+                      (71, "System"), (72, "Type")):
+        if identities.get(app) != name:
+            fail(f"surface route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
+
+    result = {"boot": [], "register": [], "shell_word": [], "surface": []}
     with zb.Machine(W, H, do_build=not no_build, boot_timeout=timeout,
                     how="native") as machine:
-        geometry = zb.dock_geometry(machine.w, machine.h)
+        geometry = zb.rail_geometry(machine.w, machine.h)
         boot_events = lc.events(machine.ser.all)
         for app, name in BOOT_OPEN:
             opened = [event for event in boot_events if event["event"] == "open" and event["app"] == app]
@@ -225,10 +282,10 @@ def run(receipt_path, no_build, timeout):
             result["boot"].append({"id": app, "name": name, "open": opened[0], "ready": ready})
             print(f"[boot] {name:<20} open-ready PASS")
 
-        for slot, app, name in DOCK:
-            cycle = dock_cycle(machine, geometry["slots"][slot], app, timeout)
-            result["dock"].append({"slot": slot, "id": app, "name": name, **cycle})
-            print(f"[dock {slot}] {name:<20} open-ready-close PASS")
+        for slot, app, name in REGISTER:
+            cycle = register_cycle(machine, geometry["slots"][slot], app, timeout)
+            result["register"].append({"slot": slot, "id": app, "name": name, **cycle})
+            print(f"[register {slot:02d}] {name:<20} open-ready-close PASS")
             if app == 0:
                 # Keep a Terminal alive for the shell-word routes below.
                 start = len(machine.ser.all)
@@ -241,17 +298,22 @@ def run(receipt_path, no_build, timeout):
             result["shell_word"].append({"word": word, "id": app, "name": name, **cycle})
             print(f"[word {word:<5}] {name:<20} open-ready-close PASS")
 
-        menu = simple_pointer_cycle(machine, geometry["topbar_corner"], 4, timeout,
-                                    close_with_pointer=True)
-        result["surface"].append({"route": "topbar", "id": 4, "name": "Menu", **menu})
-        print("[topbar] Menu                 open-ready-close PASS")
-        catalogue = simple_pointer_cycle(machine, geometry["grid"], 70, timeout)
-        result["surface"].append({"route": "grid", "id": 70, "name": "All Applications", **catalogue})
-        print("[grid] All Applications     open-ready-close PASS")
+        menu = super_cycle(machine, 4, timeout)
+        result["surface"].append({"route": "super", "id": 4, "name": "Menu", **menu})
+        print("[super] Menu                 open-ready-close PASS")
+        for row, app, name in ((8, 71, "System"), (9, 72, "Type")):
+            cycle = menu_row_cycle(machine, row, app, timeout)
+            result["surface"].append({"route": f"menu:{row}", "id": app,
+                                      "name": name, **cycle})
+            print(f"[menu {row:02d}] {name:<20} open-ready-close PASS")
+        catalogue = simple_pointer_cycle(machine, geometry["catalogue"], 70, timeout)
+        result["surface"].append({"route": "rail:all-apps", "id": 70,
+                                  "name": "All Applications", **catalogue})
+        print("[rail 11] All Applications  open-ready-close PASS")
 
     iso = os.path.join(KERNEL_ROOT, "zlOS.iso")
     receipt = {
-        "schema": "zlos.application-route-qemu-receipt.v1",
+        "schema": "zlos.application-route-qemu-receipt.v2",
         "evidence": "QEMU input/compositor routes; not workflow or physical proof",
         "source_head": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip(),
@@ -277,7 +339,7 @@ def run(receipt_path, no_build, timeout):
         },
         "result": result,
         "counts": {key: len(value) for key, value in result.items()},
-        "external_prerequisite": "APP_RUN id 7 is exercised by probe-run.py, not this route sweep",
+        "external_prerequisite": "APP_RUN id 7 route is covered here; probe-run.py owns its deeper execution workflow",
         "weakest_link": "route and first draw are not complete workflows; native physical input is unproven here",
     }
     write_receipt(receipt_path, receipt)

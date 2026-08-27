@@ -8,7 +8,7 @@
  *     1. build 4-level page tables and identity-map memory
  *     2. point CR3 at them
  *     3. enable PAE            (CR4.PAE)      - 64-bit paging is PAE-based
- *     4. set the long mode bit (EFER.LME)     - via an MSR
+ *     4. set long mode and NX (EFER.LME|NXE)  - via an MSR
  *     5. enable paging         (CR0.PG)       - THIS is what enters long mode
  *     6. far jump into a 64-bit code segment  - the CPU is only really in
  *                                               64-bit code after CS is reloaded
@@ -96,10 +96,10 @@ _start:
     or  $(1 << 5), %eax
     mov %eax, %cr4
 
-    /* ---- EFER.LME: arm long mode (MSR 0xC0000080, bit 8) ------------------ */
+    /* ---- EFER.LME|NXE: arm long mode and NX page-table entries ------------ */
     mov $0xC0000080, %ecx
     rdmsr
-    or  $(1 << 8), %eax
+    or  $((1 << 8) | (1 << 11)), %eax
     wrmsr
 
     /* ---- CR0.PG: enabling paging is what actually enters long mode -------- */

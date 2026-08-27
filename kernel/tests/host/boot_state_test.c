@@ -1,6 +1,6 @@
 /* boot_state_test.c - deterministic reset/failure/recovery policy proof. */
 #include <stdio.h>
-#include "../../boot_state.h"
+#include "../../src/core/boot/boot_state.h"
 
 static int checks, failures;
 static void ok(int condition, const char *name)

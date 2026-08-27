@@ -417,7 +417,8 @@ echo "built ./boot_handover_test (run: ./boot_handover_test)"
 # Two unready resets move current -> previous -> recovery, a ready mark clears
 # only the successful generation, and absent optional images cannot brick boot.
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -o boot_state_test \
-    boot_state_test.c ../../boot_state.c ../../src/core/boot/boot_handover.c
+    boot_state_test.c ../../src/core/boot/boot_state.c \
+    ../../src/core/boot/boot_handover.c
 echo "built ./boot_state_test (run: ./boot_state_test)"
 
 # The general allocator, and this one is built with the WARNINGS ON rather than

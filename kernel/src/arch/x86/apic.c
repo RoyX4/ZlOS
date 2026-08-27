@@ -427,12 +427,12 @@ int apic_init(void)
 
 /* ---- diagnostics, so the shell can show what was found ------------------ */
 int apic_active(void)      { return apic_on; }
-u32 apic_lapic_base(void)  { return (u32)lapic_base; }
-u32 apic_ioapic_base(void) { return (u32)ioapic_base; }
+u64 apic_lapic_base(void)  { return (u64)lapic_base; }
+u64 apic_ioapic_base(void) { return (u64)ioapic_base; }
 int apic_ioapic_pins(void) { return ioapic_pins; }
 int apic_madt_ok(void)     { return madt_found; }
 int apic_cpus(void)        { return cpu_count; }
-u32 apic_rsdp(void)        { return (u32)acpi_find_rsdp(); }
+u64 apic_rsdp(void)        { return acpi_find_rsdp(); }
 int apic_cpu_id(int i)     { return (i >= 0 && i < cpu_count && i < 16) ? (int)cpu_apic_ids[i] : -1; }
 
 /* Send an interprocessor interrupt. The ICR is two registers: the high half

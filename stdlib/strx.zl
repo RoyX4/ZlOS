@@ -1,7 +1,12 @@
 # strx.zl - string utilities built on the string builtins.
 
 fn word_count(s) {
-    return len(split(trim(s), " "))
+    words = split(trim(s), " ")
+    count = 0
+    for word in words {
+        if len(word) > 0 { count = count + 1 }
+    }
+    return count
 }
 fn reverse_words(s) {
     words = split(s, " ")

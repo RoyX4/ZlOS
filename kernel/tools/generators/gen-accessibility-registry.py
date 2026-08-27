@@ -24,7 +24,7 @@ CAPABILITIES = (
     ("visible-focus", "HOST_PASSED", ("uitest",), "widget focus treatment asserted in host renderer"),
     ("non-stealing-notifications", "HOST_PASSED", ("toasttest",), "toast structurally cannot take window focus"),
     ("density-scaling", "PARTIAL_HOST_PASSED", ("uitest", "fbtext"), "1x/2x metrics and glyph density only; no user a11y workflow"),
-    ("keyboard-only-app-workflows", "MISSING", (), "no all-62 keyboard-only open/use/close receipt"),
+    ("keyboard-only-app-workflows", "MISSING", (), "no all-application keyboard-only open/use/close receipt"),
     ("semantic-tree", "MISSING", (), "no roles/names/states/relations tree transport"),
     ("screen-reader-speech-braille", "MISSING", (), "no assistive provider or privacy/lifecycle proof"),
     ("magnifier-large-text-cursor", "MISSING", (), "no magnifier provider or user settings route"),

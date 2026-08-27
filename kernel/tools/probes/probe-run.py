@@ -58,10 +58,12 @@ import time
 PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.abspath(os.path.join(PROBE_DIR, "..", ".."))
 HERE = KERNEL_ROOT
+REPO_ROOT = os.path.dirname(KERNEL_ROOT)
+ORACLE_DIR = os.path.join(KERNEL_ROOT, "tests", "oracle")
 sys.path.insert(0, PROBE_DIR)
 
 from exercise import Serial, Qmp, qemu_argv, build, PROMPT  # noqa: E402
-sys.path.insert(0, os.path.join(HERE, "oracle"))
+sys.path.insert(0, ORACLE_DIR)
 import zlosboot as zb  # noqa: E402
 
 # Transcript and qtype are probe-term.py's, and they are borrowed rather than
@@ -80,13 +82,27 @@ _spec.loader.exec_module(_pt)
 Transcript, qtype = _pt.Transcript, _pt.qtype
 
 _lc_spec = _ilu.spec_from_file_location(
-    "app_lifecycle", os.path.join(HERE, "probe-app-lifecycle.py"))
+    "app_lifecycle", os.path.join(PROBE_DIR, "probe-app-lifecycle.py"))
 _lc = _ilu.module_from_spec(_lc_spec)
 _lc_spec.loader.exec_module(_lc)
 
-SHOTS = os.path.join(HERE, "shots")
+SHOTS = os.path.join(ORACLE_DIR, "shots")
 COMPOSITOR = "compositor:"
-DEFAULT_RECEIPT = os.path.join(HERE, "oracle", "out", "run-qemu.json")
+DEFAULT_RECEIPT = os.path.join(ORACLE_DIR, "out", "run-qemu.json")
+SOURCE_FILES = (
+    ("kernel.zl", os.path.join(KERNEL_ROOT, "src", "kernel.zl")),
+    ("wm.c", os.path.join(KERNEL_ROOT, "src", "graphics", "windowing", "wm.c")),
+    ("exec.c", os.path.join(KERNEL_ROOT, "src", "core", "exec.c")),
+    ("term.c", os.path.join(KERNEL_ROOT, "src", "graphics", "windowing", "term.c")),
+    ("app-manifest.json", os.path.join(KERNEL_ROOT, "metadata", "app-manifest.json")),
+    ("build-identity.json", os.path.join(KERNEL_ROOT, "metadata", "build-identity.json")),
+    ("build_identity_embed.zl", os.path.join(KERNEL_ROOT, "build_identity_embed.zl")),
+    ("probe-run.py", os.path.join(PROBE_DIR, "probe-run.py")),
+    ("probe-app-lifecycle.py", os.path.join(PROBE_DIR, "probe-app-lifecycle.py")),
+    ("probe-term.py", os.path.join(PROBE_DIR, "probe-term.py")),
+    ("exercise.py", os.path.join(PROBE_DIR, "exercise.py")),
+    ("oracle/zlosboot.py", os.path.join(ORACLE_DIR, "zlosboot.py")),
+)
 
 
 def stream(transcript):
@@ -157,7 +173,16 @@ def main():
     ap.add_argument("--keep-shots", action="store_true")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--receipt", default=DEFAULT_RECEIPT)
+    ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
+
+    if args.selftest:
+        missing = [label for label, path in SOURCE_FILES if not os.path.isfile(path)]
+        if missing:
+            print("probe-run selftest: FAIL: missing " + ", ".join(missing))
+            return 1
+        print(f"probe-run selftest: PASS: {len(SOURCE_FILES)} source paths")
+        return 0
 
     if not args.no_build:
         build(False)
@@ -397,14 +422,10 @@ def main():
         "schema": "zlos.run-route-qemu-receipt.v1",
         "evidence": "QEMU keyboard, filesystem error ladder, window lifecycle; not successful executable loading or physical proof",
         "source_head": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=os.path.dirname(HERE), text=True).strip(),
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip(),
         "source_files_sha256": {
-            name: sha256(os.path.join(HERE, name))
-            for name in ("kernel.zl", "wm.c", "exec.c", "term.c",
-                         "app-manifest.json", "build-identity.json",
-                         "build_identity_embed.zl", "probe-run.py",
-                         "probe-app-lifecycle.py", "probe-term.py",
-                         "exercise.py", "oracle/zlosboot.py")
+            os.path.relpath(path, REPO_ROOT): sha256(path)
+            for _, path in SOURCE_FILES
         },
         "artifact": {
             "path": "kernel/zlOS.iso",

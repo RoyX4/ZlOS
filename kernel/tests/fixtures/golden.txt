@@ -19,8 +19,8 @@
   network driver: Intel e1000e/I219 device 0x100E
   network: link ready, DHCP started
   [  OK  ] zl runtime, kernel subset
-  [ INFO ] no heap, zlfs mounts on demand, no scheduler
-  app-manifest: schema=1 entries=62 sha256=<CURRENT>
+  [ INFO ] heap online, zlfs mounts on demand, scheduler opt-in
+  app-manifest: schema=<CURRENT> entries=<CURRENT> sha256=<CURRENT>
   build-identity: schema=1 id=<CURRENT>
   build-source: head=<CURRENT>
 

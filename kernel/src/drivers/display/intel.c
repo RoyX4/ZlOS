@@ -3943,11 +3943,10 @@ u32 intel_backlight_duty_wanted(void);
  *     programmed for this exact panel. The sequence is the only genuinely
  *     untested thing left.
  *
- * It is still gated behind lt_armed, and NOTHING IN THE KERNEL ARMS IT. This
- * runs today only from the host harness with i915 detached. That is deliberate:
- * the first execution of a 30-step hardware sequence should be somewhere with
- * a recovery path, not on a machine whose only console is the panel being
- * reprogrammed.
+ * It is gated behind lt_armed. The host harness arms it with i915 detached;
+ * kernel panel_up/panel_console and panel_down arm only around their bounded
+ * bring-up or teardown call, then disarm immediately. Keeping that narrow gate
+ * is the recovery boundary for the machine whose only console is this panel.
  */
 #define MS_MAX_STEPS 40
 
@@ -4380,8 +4379,9 @@ int intel_modeset_teardown(int port)
 /* ==== one call to light the panel, for a kernel with no allocator ========
  *
  * The harness does this in fifty lines of C because it can: it has mmap, it can
- * pick addresses, it can print. zlOS has no heap at all - `pci.c` says so
- * plainly - so the framebuffer cannot be allocated, only decided.
+ * pick addresses, it can print. zlOS has a general heap, but a scanout still
+ * needs device-addressable physical pages, so this framebuffer is placed in
+ * firmware-reserved stolen memory instead of ordinary heap storage.
  *
  * Stolen memory is what makes that acceptable rather than a hack. Firmware
  * reserves it, no operating system manages it, and it is present on every boot
@@ -4398,7 +4398,7 @@ int intel_modeset_teardown(int port)
  * keeps whatever framebuffer the loader gave it. A driver that cannot bring the
  * panel up must not also take away the screen that was working.
  */
-u32 intel_bringup_panel(void)
+uptr intel_bringup_panel(void)
 {
     zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
               4u /* panel bringup */, 0u /* start */, (unsigned)gpu_devid);
@@ -4413,7 +4413,7 @@ u32 intel_bringup_panel(void)
 
     u32 stolen = intel_stolen_base();
     u32 ssize  = intel_stolen_size();
-    u32 aper   = (u32)aperture;
+    uptr aper  = aperture;
     if (!stolen || !ssize || !aper) {
         zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
                   4u, 3u /* memory geometry */, ssize);
@@ -4433,13 +4433,16 @@ u32 intel_bringup_panel(void)
     u32 w = (u32)intel_hactive(), h = (u32)intel_vactive();
     if (w < 640 || h < 480) return 0;
 
-    u32 stride = (w * 4u + 63u) & ~63u;          /* linear: 64-byte multiples */
-    u32 bytes  = stride * h;
+    u64 stride64 = ((u64)w * 4u + 63u) & ~63ULL; /* linear: 64-byte multiples */
+    u64 bytes64  = stride64 * h;
+    if (stride64 > 0xffffffffULL || bytes64 > 0xffffffffULL) return 0;
+    u32 stride = (u32)stride64;
+    u32 bytes  = (u32)bytes64;
     u32 gfx    = 1u << 20;                       /* 1 MiB into the GGTT       */
     u32 skip   = 1u << 20;                       /* firmware's own structures */
 
     /* Refuse rather than run off the end of stolen memory. */
-    if (bytes + skip > ssize) return 0;
+    if (bytes64 + skip > ssize) return 0;
 
     u32 pages = (bytes + 4095u) / 4096u;
     if (!intel_ggtt_map_range(gfx >> 12, stolen + skip, (int)pages)) return 0;
@@ -4448,12 +4451,14 @@ u32 intel_bringup_panel(void)
 
     intel_link_train_arm(1);
     int ok = intel_modeset_run(0);
-    intel_link_train_arm(0);
     if (!ok) {
         zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
                   4u, 4u /* modeset */, (unsigned)intel_modeset_failed_at());
+        (void)intel_modeset_teardown(0);
+        intel_link_train_arm(0);
         return 0;
     }
+    intel_link_train_arm(0);
 
     zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_INFO,
               4u, 1u /* ready */, aper + gfx);
@@ -4501,11 +4506,13 @@ void console_init_fb(unsigned long long addr, u32 pitch, u32 width, u32 height, 
 
 int intel_panel_takeover(void)
 {
-    u32 fb = intel_bringup_panel();
+    uptr fb = intel_bringup_panel();
     if (!fb) return 0;
 
     u32 w = (u32)intel_hactive(), h = (u32)intel_vactive();
-    u32 stride = (w * 4u + 63u) & ~63u;
+    u64 stride64 = ((u64)w * 4u + 63u) & ~63ULL;
+    if (stride64 > 0xffffffffULL || stride64 * h > 0xffffffffULL) return 0;
+    u32 stride = (u32)stride64;
 
     /* Clear it before the console arrives. Stolen memory holds whatever
      * firmware left, and a console scrolling over that looks like corruption. */
@@ -4570,7 +4577,7 @@ int intel_vbt_attach(uptr base, u32 len)
      * checksum and a reserved byte, and reading it there lands in the middle of
      * the copyright string with a plausible-looking small number. */
     u32 bdb = vbt_u32(0x1C);
-    if (bdb + 22u >= len) return 0;
+    if (bdb > len || len - bdb <= 22u) return 0;
 
     /* "BIOS_DATA_BLOCK " - indices 0, 5 and 11. Index 10 is the second 'B',
      * not the 'L'; checking there rejects a perfectly good VBT. */
@@ -4579,7 +4586,7 @@ int intel_vbt_attach(uptr base, u32 len)
 
     bdb_base = bdb;
     bdb_size = vbt_u16(bdb + 0x14);
-    if (!bdb_size || bdb + bdb_size > len) bdb_size = len - bdb;
+    if (!bdb_size || bdb_size > len - bdb) bdb_size = len - bdb;
     vbt_ok = 1;
     return 1;
 }

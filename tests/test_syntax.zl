@@ -39,6 +39,12 @@ fn report() {
 # a side-effect counter, used to prove what does and does not get evaluated
 hits = 0
 fn bump(p_v) { hits += 1 return p_v }
+fn next_hit() { hits += 1 return hits }
+
+# Every backend must evaluate ordinary binary operands left to right. C leaves
+# function-argument order unspecified, so this specifically guards compile.c.
+hits = 0
+check("binary operands evaluate left to right", next_hit() - next_hit(), -1)
 
 # =====================================================================
 # if / elif / else

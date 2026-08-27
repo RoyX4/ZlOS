@@ -47,7 +47,7 @@ inverse question “does every dense catalogue ID name a real reference app?”
   13 and All Applications; it delegates registry IDs to `reg_name()`.
 - `gen-app-manifest.py` generates/checks `app-manifest.json` from `app_name`,
   `reg_name`, every slice name table, `reg_exists` and the reference categories.
-  The manifest contains all 61 current named implementations, the separate
+  The manifest contains all 63 current named implementations, the separate
   catalogue surface and exactly 24 games. Its evidence ceiling explicitly says
   static source/build identity, not runtime or physical proof.
 - the generator derives the app-module set from `kernel.zl`'s actual imports,
@@ -75,11 +75,11 @@ inverse question “does every dense catalogue ID name a real reference app?”
 - `wm.c` emits a serial-only, versioned lifecycle event for open, first draw
   (`ready`) and close. The tuple `(slot, app, generation)` must stay stable and
   the live-window count must return to its pre-open value.
-- the terminal dock path now recreates a closed boot terminal. The old path
-  retained a dead slot and only tried to raise it; QEMU reproduced the dock
-  click timing out after Ctrl+W before the shared create/reopen path was added.
-- `dock_app(slot)` is the single source mapping for all nine dock identities;
-  both the UI and the route probe consume it.
+- the terminal rail path recreates a closed boot terminal. The retired dock
+  path retained a dead slot and only tried to raise it; QEMU reproduced the
+  route timing out after Ctrl+W before the shared create/reopen path was added.
+- `rail_app(slot)` is the single source mapping for all 11 register identities;
+  both the PRESSWORK shell and the route probe consume it.
 - the graphical terminal now maps both `.` and `mount` to the kernel's existing
   zlfs/NVMe command 46. The help and kernel dispatch already advertised `.`,
   but the terminal word table omitted it, making the path unreachable after
@@ -116,9 +116,9 @@ all 53 reference apps have complete static registry fields; catalog has no blank
 $ ./kernel/tools/checks/check-zlcalls.py
 check-zlcalls: 861 zl functions, 643 builtins, every call site resolves
 
-$ cd kernel && python3 gen-app-manifest.py --check --selftest
+$ cd kernel && python3 tools/generators/gen-app-manifest.py --check --selftest
 app-manifest selftest: caught missing-entry, duplicate-id, duplicate-name, missing-field, missing-source, identity-conflict
-app-manifest: PASS: 61 named implementations + 1 catalogue surface, 24 games
+app-manifest: PASS: 63 named implementations + 1 catalogue surface, 24 games
 
 $ cd kernel && python3 check-reproducible-build.py --check --selftest
 reproducible-build selftest: caught byte drift in all 9 artifacts, a missing artifact, and stale resume snapshots
@@ -166,16 +166,17 @@ Three independently generated receipts all name that exact artifact:
   completed open -> first compositor draw -> close; every cycle preserved its
   slot/generation identity and returned live windows from 5 to 4.
 - `docs/receipts/app-routes-qemu-2026-08-22.json`: three boot-open identities,
-  all nine dock routes, all seven shell-word routes, Menu and All Applications
-  passed their applicable open/ready/close contracts.
+  all 11 PRESSWORK register routes, all seven shell-word routes, the Super-key
+  Menu route, the System and Type menu rows, and the rail's All Applications
+  route passed their applicable open/ready/close contracts.
 - `docs/receipts/run-qemu-2026-08-22.json`: Run ID 7 distinguished no filename,
   no filesystem and no-such-file states; `.` formatted/mounted a fresh zlfs
   volume; the second Run reused the existing window; Terminal stayed live; and
   Run closed without leaking a window.
 
-Together these receipts give route plus first-draw evidence for all 61 current
+Together these receipts give route plus first-draw evidence for all 63 current
 named implementations and the separate All Applications surface. The 24 games
-are included in those 61. This is not a claim that every internal workflow was
+are included in those 63. This is not a claim that every internal workflow was
 completed: `ready` means the compositor actually invoked the app's draw hook,
 not that every control, persistence path or failure mode works.
 
@@ -183,7 +184,7 @@ not that every control, persistence path or failure mode works.
 receipts into `app-evidence.json`. It verifies current source hashes, a single
 artifact hash, exact ID/name agreement, lifecycle identity, teardown counts,
 47/47 catalogue results, duplicate-Run rejection and the boot-reported manifest
-digest. All 62 identities now carry shipped-manifest membership for this exact
+digest. All 64 identities now carry shipped-manifest membership for this exact
 tested image. It also requires the boot-reported whole-build ID on all six
 named boot routes. Its mutation tests prove that artifact mismatch, missing
 readiness, an unproved identity, identity drift, a duplicate Run window and a

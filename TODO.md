@@ -7,26 +7,27 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
-## Engine divergence — 2 pinned
+## Engine expectations — 4 pinned
 
-`./interp` is ground truth. These engines disagree with it today:
+`./interp` is ground truth. These pins record either an output divergence
+or a deliberately unsupported native subset case:
 
-- [ ] `global_writethrough` — `compilel` differs
-- [ ] `global_writethrough` — `nativegen` differs
+- [ ] `global_writethrough` — `compilel` output differs
+- [ ] `global_writethrough` — `nativegen` output differs
+- [ ] `loop_var_scope` — `nativegen` deliberately rejects this subset case
+- [ ] `integer_division` — `nativegen` deliberately rejects this subset case
 
-Both unboxed backends sit on the far side of the scoping decision in
+The unboxed backends sit on the far side of the scoping decision in
 `docs/design/design_scoping_decision.md`. Delete these pins when it lands;
-`tools/engine-parity.sh` fails if a pin stops being true.
+`tools/engine-parity.sh` fails if a pin stops being true or an unpinned case appears.
 
 ## Documented but not in git
 
-- [ ] `kernel/_genefi.c`
-- [ ] `kernel/out.c`
+_none — every file the docs describe is tracked._
 
 ## Open tensions (.ultra/TENSIONS.md)
 
-- [ ] **T-8** — Generated evidence manifests disagree on build identity.
-- [ ] **T-9** — Boot recovery policy remains at the kernel root.
+_none open._
 
 ## Open pull requests
 

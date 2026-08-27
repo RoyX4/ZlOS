@@ -119,6 +119,34 @@ def relative(path):
     return os.path.relpath(path, ROOT)
 
 
+def identity_payload(value):
+    """Return the route-neutral fields covered by identity_sha256.
+
+    Git context is retained for provenance, but cannot be part of a checked-in
+    identity: committing the generated file necessarily changes HEAD, and the
+    generated files themselves necessarily change whole-worktree dirty state.
+    """
+    return {key: item for key, item in value.items()
+            if key not in ("git", "identity_sha256")}
+
+
+def source_git_context(paths):
+    relative_paths = [relative(path) for path in paths]
+    status = command([
+        "git", "status", "--porcelain=v1", "--untracked-files=all", "--",
+        *relative_paths,
+    ])
+    return {
+        "head": command(["git", "rev-parse", "HEAD"]),
+        "branch": command(["git", "branch", "--show-current"]),
+        "dirty": bool(status),
+        "evidence_ceiling": (
+            "generator-observed context for the declared build-input closure; "
+            "not part of identity_sha256 and not an artifact commit attestation"
+        ),
+    }
+
+
 def build_identity():
     paths = input_paths()
     file_hashes = {relative(path): sha_bytes(read_bytes(path)) for path in paths}
@@ -134,21 +162,16 @@ def build_identity():
         "nasm": command(["nasm", "-v"]).splitlines()[0],
         "grub-mkrescue": command(["grub-mkrescue", "--version"]).splitlines()[0],
     }
-    status = command(["git", "status", "--porcelain=v1", "--untracked-files=all"])
     value = {
         "schema": "zlos.build-input-identity.v1",
-        "git": {
-            "head": command(["git", "rev-parse", "HEAD"]),
-            "branch": command(["git", "branch", "--show-current"]),
-            "dirty": bool(status),
-        },
+        "git": source_git_context(paths),
         "source_scope": "active zl import closure, declared C SOURCES, kernel/freestanding headers and all route scripts/entries/linkers/packaging helpers; conservative header superset",
         "source_files_sha256": file_hashes,
         "toolchain": toolchain,
         "routes": ["BIOS-multiboot32", "multiboot64", "native-UEFI64", "raw-BIOS-loader32"],
         "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
     }
-    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"),
+    canonical = json.dumps(identity_payload(value), sort_keys=True, separators=(",", ":"),
                            ensure_ascii=False).encode("utf-8")
     value["identity_sha256"] = sha_bytes(canonical)
     validate(value)
@@ -174,9 +197,7 @@ def validate(value):
         if not tools.get(name):
             fail(f"toolchain identity misses {name}")
     identity = value.get("identity_sha256")
-    without = dict(value)
-    without.pop("identity_sha256", None)
-    expected = sha_bytes(json.dumps(without, sort_keys=True, separators=(",", ":"),
+    expected = sha_bytes(json.dumps(identity_payload(value), sort_keys=True, separators=(",", ":"),
                                      ensure_ascii=False).encode("utf-8"))
     if identity != expected:
         fail("build identity digest does not cover its canonical fields")
@@ -216,6 +237,15 @@ def selftest(value):
         else:
             fail(f"selftest mutation escaped: {name}")
     print("build-identity selftest: caught " + ", ".join(mutations))
+    context = json.loads(json.dumps(value))
+    context["git"] = {
+        "head": "0" * 40, "branch": "other", "dirty": not value["git"]["dirty"],
+        "evidence_ceiling": value["git"]["evidence_ceiling"],
+    }
+    validate(context)
+    if context["identity_sha256"] != value["identity_sha256"]:
+        fail("Git generation context changed build-input identity")
+    print("build-identity selftest: Git generation context is identity-neutral")
 
 
 def main(argv):
@@ -236,9 +266,12 @@ def main(argv):
                     handle.write(content)
                 os.replace(temp, path)
         else:
-            if read_bytes(OUTPUT).decode() != expected:
+            current = json.loads(read_bytes(OUTPUT).decode())
+            validate(current)
+            if identity_payload(current) != identity_payload(value) \
+                    or current.get("identity_sha256") != value.get("identity_sha256"):
                 fail("build-identity.json is stale; regenerate and inspect the diff")
-            if read_bytes(EMBED).decode() != expected_embed:
+            if read_bytes(EMBED).decode() != embedded(current):
                 fail("build_identity_embed.zl is stale; regenerate and inspect the diff")
         if args.selftest:
             selftest(value)

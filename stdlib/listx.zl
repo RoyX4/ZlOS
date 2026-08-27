@@ -50,6 +50,7 @@ fn flatten(xss) {
     return out
 }
 fn chunk(xs, size) {
+    assert(size > 0, "chunk: size must be greater than zero")
     out = []
     cur = []
     for x in xs {

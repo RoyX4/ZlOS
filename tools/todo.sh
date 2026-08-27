@@ -81,21 +81,26 @@ if command -v clang >/dev/null 2>&1; then
     fi
 fi
 
-# ---- 2. engine divergences --------------------------------------------------
+# ---- 2. engine expectations -------------------------------------------------
 if [ -f tools/engine-parity-expected.txt ]; then
     pins=$(grep -vE '^\s*#|^\s*$' tools/engine-parity-expected.txt | wc -l)
     if [ "$pins" -gt 0 ]; then
-        echo "## Engine divergence — $pins pinned"
+        echo "## Engine expectations — $pins pinned"
         echo
-        echo "\`./interp\` is ground truth. These engines disagree with it today:"
+        echo "\`./interp\` is ground truth. These pins record either an output divergence"
+        echo "or a deliberately unsupported native subset case:"
         echo
-        grep -vE '^\s*#|^\s*$' tools/engine-parity-expected.txt | while read -r case eng; do
-            echo "- [ ] \`$case\` — \`$eng\` differs"
+        grep -vE '^\s*#|^\s*$' tools/engine-parity-expected.txt | while read -r case eng kind; do
+            if [ "${kind:-diff}" = "reject" ]; then
+                echo "- [ ] \`$case\` — \`$eng\` deliberately rejects this subset case"
+            else
+                echo "- [ ] \`$case\` — \`$eng\` output differs"
+            fi
         done
         echo
-        echo "Both unboxed backends sit on the far side of the scoping decision in"
+        echo "The unboxed backends sit on the far side of the scoping decision in"
         echo "\`docs/design/design_scoping_decision.md\`. Delete these pins when it lands;"
-        echo "\`tools/engine-parity.sh\` fails if a pin stops being true."
+        echo "\`tools/engine-parity.sh\` fails if a pin stops being true or an unpinned case appears."
         echo
     fi
 fi
@@ -149,20 +154,25 @@ fi
 # ---- 6. open PRs ------------------------------------------------------------
 if command -v gh >/dev/null 2>&1; then
     prs=""
-    while IFS=$'\t' read -r number title head oid; do
-        [ -z "$number" ] && continue
-        if [ -n "$oid" ] && git merge-base --is-ancestor "$oid" origin/main 2>/dev/null; then
-            line="- [ ] close #$number administratively — its \`$head\` head is already an ancestor of \`origin/main\`"
-        else
-            line="- [ ] #$number $title  \`$head\`"
-        fi
-        prs="${prs}${prs:+$'\n'}${line}"
-    done < <(timeout 20 gh pr list --limit 20 \
+    if pr_rows=$(timeout 20 gh pr list --limit 20 \
         --json number,title,headRefName,headRefOid \
         --jq '.[] | [.number, .title, .headRefName, .headRefOid] | @tsv' \
-        2>/dev/null || true)
-    if [ -n "$prs" ]; then
-        echo "## Open pull requests"; echo; echo "$prs"; echo
+        2>/dev/null); then
+        while IFS=$'\t' read -r number title head oid; do
+            [ -z "$number" ] && continue
+            if [ -n "$oid" ] && git merge-base --is-ancestor "$oid" origin/main 2>/dev/null; then
+                line="- [ ] close #$number administratively — its \`$head\` head is already an ancestor of \`origin/main\`"
+            else
+                line="- [ ] #$number $title  \`$head\`"
+            fi
+            prs="${prs}${prs:+$'\n'}${line}"
+        done <<< "$pr_rows"
+        if [ -n "$prs" ]; then
+            echo "## Open pull requests"; echo; echo "$prs"; echo
+        fi
+    else
+        echo "## Open pull requests"; echo
+        echo "_unverified — the GitHub query failed; do not infer that no pull requests are open._"; echo
     fi
 fi
 

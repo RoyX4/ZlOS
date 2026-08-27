@@ -13,7 +13,7 @@
 [`../metadata/provenance-viewer.json`](../metadata/provenance-viewer.json) and the self-contained
 [`provenance-viewer.html`](provenance-viewer.html) implement the first EV-028
 read-only provenance viewer. The static projection includes the exact build and
-source origin, licensing and signature state, 9 artifacts, 62 applications, 17
+source origin, licensing and signature state, 9 artifacts, 64 applications, 17
 security/permission claims, host/QEMU test counts, 11 health areas and 17
 unreleased changes.
 

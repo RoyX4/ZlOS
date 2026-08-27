@@ -51,12 +51,12 @@ if [ ! -f "$GOLDEN" ]; then
     cp "$OUT" "$GOLDEN"; echo "wrote $GOLDEN (first run - review, then commit)"; exit 0
 fi
 
-MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+MANIFEST_MARKER=$(python3 ./tools/generators/gen-app-manifest.py --marker)
 BUILD_ID=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
 BUILD_HEAD=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
 BUILD_DIRTY=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
 for marker in \
-    "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" \
+    "$MANIFEST_MARKER" \
     "build-identity: schema=1 id=$BUILD_ID" \
     "build-source: head=$BUILD_HEAD dirty=$BUILD_DIRTY"; do
     [ "$(grep -Fc "$marker" "$OUT")" -eq 1 ] || {
@@ -66,7 +66,7 @@ for marker in \
 done
 
 sed -E \
-    -e 's/(app-manifest: schema=1 entries=62 sha256=)[0-9a-f]{64}/\1<CURRENT>/' \
+    -e 's/app-manifest: schema=[0-9]+ entries=[0-9]+ sha256=[0-9a-f]{64}/app-manifest: schema=<CURRENT> entries=<CURRENT> sha256=<CURRENT>/' \
     -e 's/(build-identity: schema=1 id=)[0-9a-f]{64}/\1<CURRENT>/' \
     -e 's/(build-source: head=)[0-9a-f]{40} dirty=[01]/\1<CURRENT>/' \
     "$OUT" > "$NORMALIZED"

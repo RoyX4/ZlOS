@@ -1,9 +1,10 @@
 name: desktop
 
-# A picture of the operating system, on every pull request.
+# A host rendering of the C compositor and widget stack, on every pull request.
 #
 # kernel/tests/host/wmshot.c renders one frame of the compositor to a PPM from
-# Linux - no boot, no GPU, no display, milliseconds. That is only possible
+# Linux - no boot, no GPU, no display, milliseconds. It does not contain the
+# kernel.zl shell, and both the frame and its log say so. That is only possible
 # because fb.c / wm.c / ui.c are freestanding C against memory.
 #
 # Why bother when wmtest already asserts 47 properties: assertions catch a click
@@ -20,7 +21,7 @@ on:
 
 jobs:
   shot:
-    name: render the desktop
+    name: render the host compositor harness
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,11 +67,11 @@ jobs:
       - name: upload the frames
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-frames
+          name: host-compositor-frames
           path: shots/*.png
           if-no-files-found: error
 
       - name: note the result on the PR
         if: env.changed == '1'
         run: |
-          echo "::notice::the rendered desktop changed - open the 'desktop-frames' artifact and look at diff-*.png"
+          echo "::notice::the host compositor render changed - open the 'host-compositor-frames' artifact and look at diff-*.png"
