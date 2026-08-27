@@ -111,6 +111,8 @@ run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --
 run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
 run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
 run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
+run "memory-map mirrors" "$WT/kernel" python3 tools/checks/check-memmap-mirror.py
+run "memory-map mirror canary" "$WT/kernel" bash tools/checks/check-memmap-mirror-selftest.sh
 run "UI scale contract" "$WT/kernel" bash -c \
     'grep -Eq "^fn ui\(\) \{ return ui_scale\(\) \}$" src/kernel.zl'
 run "memmap guards" "$WT/kernel/tests/host" ./memmap-guard-test.sh

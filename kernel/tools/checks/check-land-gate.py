@@ -36,6 +36,8 @@ REQUIRED_SNIPPETS = (
     'run "zl call sites"',
     'run "memory map"',
     'run "memory map mutation"',
+    'run "memory-map mirrors"',
+    'run "memory-map mirror canary"',
     'run "UI scale contract"',
     'run "unique app ids"',
     'run "app registry coverage"',

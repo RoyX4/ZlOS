@@ -155,6 +155,45 @@ runs it beside the guard on every preflight:
 Every check in `GUARDS-THAT-DID-NOT-GUARD.md` was green at the moment it stopped
 working. "It passed" is not evidence that it looked.
 
+## The hazard that was written down and left there
+
+`docs/evidence/presswork-first-boot.md` recorded this, in its own words, before
+any of the above was found:
+
+> `RULER_DMA` / `RULER_DMA_END` in `kernel.zl` restate `HI_IMG` / `HI_HEAP` from
+> `memmap.h`. Verified equal today, enforced by nothing - zl cannot include a C
+> header. That is the same drift class as the window-manager reserves that said
+> 48/72 while the shell said 30/46/170, which is exactly how that bug survived.
+
+It names the class, names the instance, names the precedent, and then stops. The
+reserves it compares itself to went on to be found in eleven places with no two
+agreeing. **A hazard someone wrote down and nobody wired up is a guess with a
+citation.**
+
+`kernel/tools/checks/check-memmap-mirror.py` closes it. zl cannot include a C
+header, so the mirror can only ever be a convention - but the convention is
+already written in the source:
+
+```
+RULER_DMA     = 0x03000000         # memmap.h HI_IMG  - the first driver region
+```
+
+That comment *is* the declaration. The guard reads it as a promise and checks
+it, so anything written that way in future is covered the day it is written.
+
+**It found two more that nobody had declared.** `SNAKE_X` equals `ZL_LOW_BASE`
+and `PAINT_BUF` equals `ZL_LOW_END` - the second being a real dependency, not a
+coincidence: `PAINT_BUF` starts exactly where the zl low block ends, so moving
+`ZL_LOW_END` without moving it puts the paint buffer *inside* that block. Both
+are declared and enforced now, taking the count from **two mirrors documented
+and unenforced to four declared and checked**.
+
+It reports undeclared coincidences rather than failing on them, because a note
+that can never be silenced is a note people learn to skip - and validating it
+mattered: the selftest catches a drifted mirror *and* a citation to a symbol
+that no longer exists, which is the same shape as `wm.c` citing a `dock_y()`
+that had been deleted.
+
 ## The rule worth keeping
 
 **A number that describes the system belongs in one place, and a test that
