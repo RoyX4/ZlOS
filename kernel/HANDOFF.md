@@ -20,13 +20,13 @@ before bisecting anything:
 source it and it REPORTS rather than deciding, because a teardown crash after
 the markers landed does not unprove the boot.
 
-**The 64-bit BIOS+GRUB boot route is BROKEN and no gate watches it.** It stalls
-after "keyboard on IRQ1" and never reaches "ready."; its sibling grub-uefi64
-passes with the same kernel64.elf. Confirmed pre-existing by an A/B against
-`7d1a11b` in a detached worktree - byte-identical failure signature.
-`tools/preflight.sh` runs bios32, raw, iso and efi, and NOT verify-64, which is
-why `grub-bios64`'s boot receipt still carries a PASS dated from `b8a00ec`.
-Details, and why you must not simply add the gate to preflight, are in
+**The previously unwatched 64-bit BIOS+GRUB route is green and mandatory now.**
+The failure reproduced at `7d1a11b`, but a later build reached `ready.` and
+returned `fib(20)=6765`; its current receipt records that QEMU-only pass.
+`verify-64.sh` is in the contained landing gate and the landing-authority
+selftest rejects deleting it. The original report also placed the stop in a
+C-to-zl handoff, but the last visible markers were already printed by
+`kernel.zl`; that location claim was wrong. The corrected history is in
 [`../docs/evidence/grub-bios64-unwatched-2026-08-27.md`](../docs/evidence/grub-bios64-unwatched-2026-08-27.md).
 
 The desktop's three edge reserves were written down ELEVEN times across wm.c,

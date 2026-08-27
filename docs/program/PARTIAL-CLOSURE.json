@@ -1,7 +1,7 @@
 {
   "schema": "zlos.partial-closure.v1",
   "result": "PASS_WITH_EXTERNAL_GATES",
-  "feature_status_sha256": "a8e4b94f7bcbae435400d349ccd2bd9d6e137492df3584bf34c41d8ebb172369",
+  "feature_status_sha256": "1eb2e8b2ac22cabb60be5681bf1aef2263a51504c1af9a2a38a48d043cc99b91",
   "counts": {
     "total": 23,
     "proved_current": 1,
@@ -292,7 +292,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/wrapper-registry.json",
-          "sha256": "c1b15101d7fa5795fe80e6be902e1fdd01d1465bcfaa81e35b2119ae77c7c821",
+          "sha256": "2c5ff403557b509acc7ba68ad5e287f9401ea4dc428e725bb104d77d89faade4",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },

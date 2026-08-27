@@ -1,13 +1,13 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-  "landing_gate_sha256": "325923a0ba8945d79e23a86d24967f44a946cf42b8ca6d6e068f9f456c79d4ba",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "landing_gate_sha256": "753efb410b5a83f62cd098654d34ac722afe793ddf13ad600af531cad7dcf321",
   "wrappers": [
     {
       "path": ".github/scripts/render-desktop.sh",
-      "sha256": "abf7e20a9172c978edc1957a0c85681ff87f786c2686cbcb0515b510df1a3f02",
-      "bytes": 1729,
+      "sha256": "5b734d45766838a37b7c72858aa639f73fb4e47f8b8e81a6f8c610569c6ce7f2",
+      "bytes": 2152,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -94,8 +94,8 @@
     },
     {
       "path": "gates/land-gate.sh",
-      "sha256": "325923a0ba8945d79e23a86d24967f44a946cf42b8ca6d6e068f9f456c79d4ba",
-      "bytes": 14031,
+      "sha256": "753efb410b5a83f62cd098654d34ac722afe793ddf13ad600af531cad7dcf321",
+      "bytes": 14860,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -269,6 +269,17 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tests/host/run-all.sh",
+      "sha256": "eb84d060e7e124032ea48bbc86afcf94e6bff9cb12398123189540b99c09ba2a",
+      "bytes": 4175,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "SHELL_ERREXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tests/host/zladdrs.sh",
       "sha256": "11d600fd9f1442c998eb2088e76e467a263c9dc400b2753ace47cec9f336bac0",
       "bytes": 4367,
@@ -358,8 +369,8 @@
     },
     {
       "path": "kernel/tests/oracle/zlosboot.py",
-      "sha256": "929b7c68ebe5f76a5015deee24cfbedb706755a7e4bc525a02c423661a8eb901",
-      "bytes": 27128,
+      "sha256": "258e856c0e1ad472d8bc09968542da1894928a4b29d38bc4738f7741ede6b6ad",
+      "bytes": 28394,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -391,8 +402,8 @@
     },
     {
       "path": "kernel/tools/checks/check-appids.py",
-      "sha256": "b4895373d8eb7a44d0848eecfbb1122017c20feba1a741ff000a7c73af5ce97c",
-      "bytes": 5835,
+      "sha256": "f44340740b658d7d95b42c21c64c81d57185642bbe32121e828661e86ce752e4",
+      "bytes": 5831,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -457,13 +468,35 @@
     },
     {
       "path": "kernel/tools/checks/check-land-gate.py",
-      "sha256": "6ec7efb079b9608905d53cabcf33b6c666326e900d36c09ba4bdf4496153367a",
-      "bytes": 6164,
+      "sha256": "666fbf0ce6f7af90202cacc956144be32fb81ed6f815ced868e6e29298a99319",
+      "bytes": 6311,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "VERIFIER",
       "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/check-memmap-mirror-selftest.sh",
+      "sha256": "248a7a43683713c82d29fa194fe54f45970d0f8c8cb6150f3a463edf4886241f",
+      "bytes": 1749,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "VERIFIER",
+      "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/check-memmap-mirror.py",
+      "sha256": "1c8237467befa54654cc908fe61056fb243e6ac7bf97637642b0b9aff4c456bb",
+      "bytes": 4009,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
       "named_by_landing_gate": true
     },
     {
@@ -500,6 +533,39 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/tools/checks/check-shell-layout.py",
+      "sha256": "b43454527958cc5391cce1d4f3fdbea34e97f9f33eb9e6df81739f2a642bf44b",
+      "bytes": 11197,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/check-version-selftest.py",
+      "sha256": "d96944b09da028bf26a62941dc523c9ddfca2ee59137632032e280ac9b26ba54",
+      "bytes": 3659,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/check-version.py",
+      "sha256": "92bf83b9780f2f5cbb216f7e8e8f78a0466e461fc6f6115b714d2d5e267d926c",
+      "bytes": 4168,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/checks/check-zl-calls.sh",
       "sha256": "623341e266c720ddd0a597af88cf3a99cacd59e34383bf21e998c5e9c9e0f8c9",
       "bytes": 3839,
@@ -508,6 +574,17 @@
       "language": "shell",
       "role": "VERIFIER",
       "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/check-zl-dispatch.py",
+      "sha256": "950b67845b3f44e97197e6f50adcbed9617b0154923319392c859afb3e403cc6",
+      "bytes": 2324,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
       "named_by_landing_gate": true
     },
     {
@@ -522,6 +599,17 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/checks/qemu-crash-selftest.sh",
+      "sha256": "c84fd9449911c9f1f3bb608241fb9fec34da98eeb4913dd03e1cd8fb5736b958",
+      "bytes": 1090,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "UTILITY_OR_LEGACY",
+      "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "named_by_landing_gate": true
+    },
+    {
       "path": "kernel/tools/checks/test-real-xhci.sh",
       "sha256": "ce5e1fe4b26ab2c0da30763b17e6167668358243fb69c22e4c73c76810db2b98",
       "bytes": 2711,
@@ -534,9 +622,9 @@
     },
     {
       "path": "kernel/tools/checks/verify-64.sh",
-      "sha256": "b56164b3f0af6fe2a9e969572059d950cc1bd69fc18b5c430c0ef5478c5be430",
-      "bytes": 5350,
-      "executable": true,
+      "sha256": "fa520cb6d1040efae7a004afcc27b191d842f5f2008facb0310f64af14c20f6c",
+      "bytes": 5502,
+      "executable": false,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "VERIFIER",
@@ -545,8 +633,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-clock.sh",
-      "sha256": "50d6728862185ce691ceef3242d27d5679f9e27c12c6963784971f579254bf95",
-      "bytes": 2965,
+      "sha256": "403f02fb0a51b53f7137612b5516d769e3117e42c87d33ea6b0aa06e12be16f1",
+      "bytes": 3049,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -567,8 +655,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-disk.sh",
-      "sha256": "4cbf5dce85e8671b646ea673dd72fdb8be6cb7fbd37b8a556d8832134e1e7be0",
-      "bytes": 4932,
+      "sha256": "ce4eef89701dee544a6b62a0571bef7a66d72da931ec0f82d363d718a258afb9",
+      "bytes": 5015,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -578,9 +666,9 @@
     },
     {
       "path": "kernel/tools/checks/verify-efi.sh",
-      "sha256": "3afd5ffac9c1d5a2c6fb5d5ce515b4d5e2e0654d32f8f64fbddf3eac8ed1089b",
-      "bytes": 11430,
-      "executable": true,
+      "sha256": "e598865b05408e54251d314577066f219ef5e045b7ea44c01b267697520e42de",
+      "bytes": 11467,
+      "executable": false,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "VERIFIER",
@@ -600,9 +688,9 @@
     },
     {
       "path": "kernel/tools/checks/verify-iso.sh",
-      "sha256": "4a2c81a06301f75275e23d02a9e83a1c99c2ecb074cc1dc01ac8f8d8b09679bc",
-      "bytes": 6952,
-      "executable": true,
+      "sha256": "edaea893a3153010e0c7d0ff572e82c111bb3e1aa592a5bceeb464c6c44b6b50",
+      "bytes": 7115,
+      "executable": false,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "VERIFIER",
@@ -611,8 +699,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-net.sh",
-      "sha256": "b9787b0acb14178d454329fa58f0b6efbfd997c38e683ae843c66f7a1d998410",
-      "bytes": 1350,
+      "sha256": "276f3a2e13f0ff488edd0e1b5bf34b581287ce44da1ad8b3bbb10d3b9538b886",
+      "bytes": 1423,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -622,9 +710,9 @@
     },
     {
       "path": "kernel/tools/checks/verify-raw.sh",
-      "sha256": "91050802f6b763aa1f996e771bb6bd516469b9177d7097f406352373c1710148",
-      "bytes": 3690,
-      "executable": true,
+      "sha256": "406fe4c9926b3a89f48abf4fe14864bd3da7015b7528a595e119ee53b348e949",
+      "bytes": 3728,
+      "executable": false,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "VERIFIER",
@@ -655,8 +743,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-accessibility-registry.py",
-      "sha256": "e0b6789c6b4f8f86f24f2b8c71b40477c0071b9d2bb17d9f8489fe8b43dfdb97",
-      "bytes": 8821,
+      "sha256": "b5dfb536b1715cf67eecf368978fe6cbbdc44981e93be4b66f8ae89d93864f6a",
+      "bytes": 8830,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -666,8 +754,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-adversarial-registry.py",
-      "sha256": "bbf3859a3c1b1c38cd2a3c02c7c9d539779ad7f47fe6234e43050d7b38390224",
-      "bytes": 13184,
+      "sha256": "94c7b00635bbdb7ba27ad02fdf5dfcdcef5f7439ac18ff67e39c6f6bb5cb222e",
+      "bytes": 13201,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -677,8 +765,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-app-evidence.py",
-      "sha256": "ba42673947250e2952b10f8debd6ddc4ddcff203e9247f321ef7b9f60acc9f3f",
-      "bytes": 18111,
+      "sha256": "d1dfb57f883fe5cc2bf16fa50d8ceff8814230e1540aacdaf91a7cdc09d0a193",
+      "bytes": 19747,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -688,9 +776,9 @@
     },
     {
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "sha256": "9b41d56391f2d5a4a6ba2f942e99699cc74b870aa6c0d678cbe0e9856967a5b2",
-      "bytes": 15047,
-      "executable": true,
+      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04",
+      "bytes": 16208,
+      "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "BUILD_OR_GENERATOR",
@@ -776,8 +864,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-evidence-registry.py",
-      "sha256": "943b3847d8d91a1595045c8c97fa7c860f3ff31a761fe1bc92c9549b40cd3711",
-      "bytes": 40152,
+      "sha256": "5f0001c7c2dd271368f55044b7765410de5434630969bdcd3cc0f7f9c41f68a5",
+      "bytes": 40935,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -787,8 +875,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-init-registry.py",
-      "sha256": "69951d7db8b64376ddde0a387447179d2f850c939fc634c530804b220eeed974",
-      "bytes": 10688,
+      "sha256": "383886f381d88280da4ab1be806aefbd918dffc1b0afb0955e344a541443650a",
+      "bytes": 10697,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -820,8 +908,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-provenance-viewer.py",
-      "sha256": "44ccf7ac9cecedd51a8b85bac3be1993b31e91ea6d30622e671004e535f58ff7",
-      "bytes": 40879,
+      "sha256": "3e5f1817908e1b9fa257550883c4d261ffd493a65cca78c699721fb07a5dee94",
+      "bytes": 41065,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -985,13 +1073,13 @@
     },
     {
       "path": "kernel/tools/generators/gen_icons.py",
-      "sha256": "6f6e84a3d0ccbacf92b28fff271b9b214c81faf3168202810ac34fd3df780ade",
-      "bytes": 40773,
+      "sha256": "f99230fce7f14fdbb3fbbf1798f15eb5e266924597556fe5e39f6f6d2588287d",
+      "bytes": 49600,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "UTILITY_OR_LEGACY",
-      "exit_policy": "PYTHON_UNPROVED_TOP_LEVEL",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
       "named_by_landing_gate": false
     },
     {
@@ -1040,8 +1128,8 @@
     },
     {
       "path": "kernel/tools/generators/write-app-manifest-boot-receipt.py",
-      "sha256": "fed7f284b6d74e6d75fd112b9b550117b048159b1145db89818c87e71bf8ee90",
-      "bytes": 6056,
+      "sha256": "8fd46a74b51a6eac0c438f1dbe6e96729f13cd339456cd02be06cb387577852c",
+      "bytes": 8080,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1128,8 +1216,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-app-lifecycle.py",
-      "sha256": "dca56fd2c6f11e14006a85e1fdae18ac72210adbebc43486d7b45b8faa557292",
-      "bytes": 12570,
+      "sha256": "615832a6ced66c3641bc4a3707ec449b4b58338c6315d0b21b1b6cc273e466e6",
+      "bytes": 13236,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1139,8 +1227,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-app-routes.py",
-      "sha256": "c23f4adbe478b30484b46b521200a2d57b15b0f0ce539cacac1abf61c4453aaf",
-      "bytes": 12883,
+      "sha256": "e24857ac43bd82c6b6657479e814ebf47d67ac355b4f495fd5e57d841baacd60",
+      "bytes": 15831,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1161,8 +1249,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-catalog.py",
-      "sha256": "d2781e2b89a41651a28507965678049c802f90e8f852306731e164ebca744dd8",
-      "bytes": 7454,
+      "sha256": "4a30324a6790e535c38ebba8b1588cef2d0441aaa397c858f02045f6758dae8a",
+      "bytes": 6420,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1502,9 +1590,9 @@
     },
     {
       "path": "kernel/verify.sh",
-      "sha256": "06054655e57017aaa76c9d848b735b92f6fe7aad50f62c7c19e3682b8a4d1432",
-      "bytes": 3441,
-      "executable": true,
+      "sha256": "7ab61499795537676dcaabc5ef9faa5e7ae37486a790a99f45bf2c3393043619",
+      "bytes": 3540,
+      "executable": false,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "UTILITY_OR_LEGACY",
@@ -1568,8 +1656,8 @@
     },
     {
       "path": "tools/gen_feature_status.py",
-      "sha256": "e6add1ed7d9c35074a4c4c4462f17daf5080db0f904a2097dc20bc48c134b99c",
-      "bytes": 38279,
+      "sha256": "447a34e48e04397d2ab65f8ebf6c687c61bd603f8c27a83a91ee5260ad955bea",
+      "bytes": 38499,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1590,9 +1678,9 @@
     },
     {
       "path": "tools/hazard-scan.sh",
-      "sha256": "67eb7b661636205cf56b1069b0f93fb2f8401b62e34bc2cf5e760dfb83079f5e",
-      "bytes": 9833,
-      "executable": true,
+      "sha256": "97bbfa91af02b74f55e7dacfd1008cef6457f2aac3811c596ea2e8380b808076",
+      "bytes": 12734,
+      "executable": false,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "UTILITY_OR_LEGACY",
@@ -1667,8 +1755,8 @@
     },
     {
       "path": "tools/validate_master_program.py",
-      "sha256": "f4f281a021f46d57f9c9fe8166a8d474a5d52b410cce2d7c88433271dc7b38ec",
-      "bytes": 25389,
+      "sha256": "e34d07ec6d7a0162fe92780ef95e3f2376a4051eb4f6a88150fa63e2ca8a295a",
+      "bytes": 25950,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1722,10 +1810,10 @@
     }
   ],
   "counts": {
-    "wrappers": 156,
+    "wrappers": 164,
     "executable": 156,
-    "named_by_landing_gate": 58,
-    "no_static_failure_policy": 19
+    "named_by_landing_gate": 63,
+    "no_static_failure_policy": 18
   },
   "authority_contract": {
     "only_supported_landing_entry": "gates/run-land-gate-contained.sh start",

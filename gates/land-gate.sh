@@ -109,6 +109,8 @@ run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --
 # and check-memmap proves no two fixed addresses overlap - which is how
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
 run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
+run "zl generated dispatch" "$WT/kernel" \
+    python3 tools/checks/check-zl-dispatch.py --selftest
 run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
 run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
 run "memory-map mirrors" "$WT/kernel" python3 tools/checks/check-memmap-mirror.py

@@ -10,12 +10,12 @@
   "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "implementation_tree": {
     "path": ".",
-    "build_identity": "3bb959e7aada0a9da4e7d18a919c3c6b488723beed90e51035eef236bf3fdf28",
+    "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "generation_git_context": {
       "branch": "codex/presswork-close",
-      "dirty": false,
+      "dirty": true,
       "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-      "head": "3262ef9b8028bfadf3ae8890b8a25a425ed111ed"
+      "head": "d21b9982e11842f4f47f33c934c9f315a54941c7"
     },
     "evidence_ceiling": "build-input generation context, not current checkout or artifact commit attestation"
   },
@@ -388,7 +388,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/wrapper-registry.json",
-          "sha256": "c1b15101d7fa5795fe80e6be902e1fdd01d1465bcfaa81e35b2119ae77c7c821",
+          "sha256": "2c5ff403557b509acc7ba68ad5e287f9401ea4dc428e725bb104d77d89faade4",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },

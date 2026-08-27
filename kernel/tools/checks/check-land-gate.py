@@ -34,6 +34,7 @@ REQUIRED_SNIPPETS = (
     'run "host tests execute"',
     'run "host benchmark receipt"',
     'run "zl call sites"',
+    'run "zl generated dispatch"',
     'run "memory map"',
     'run "memory map mutation"',
     'run "memory-map mirrors"',

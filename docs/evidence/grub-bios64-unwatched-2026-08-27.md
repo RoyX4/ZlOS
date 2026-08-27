@@ -1,8 +1,24 @@
-# The 64-bit BIOS boot route is broken, and nothing was watching it
+# The 64-bit BIOS boot route was broken and unwatched
 
 Found while regenerating the application-manifest boot receipts on 2026-08-27.
 Not caused by that work — measured, not argued. Recorded because the *reason*
 nobody knew is more useful than the symptom.
+
+## Resolution recorded later that day
+
+This is now historical failure evidence, not current status. After the C
+backend's silent `NAMESET_MAX` overflow was made a hard error and the PRESSWORK
+tree was reconciled, the BIOS route reached `ready.` and returned
+`fib(20)=6765`. The tracked `grub-bios64` receipt records a passing QEMU boot,
+and `verify-64.sh` is now mandatory in `gates/land-gate.sh`; the landing-gate
+selftest rejects removing it.
+
+The original location claim below was also wrong. The boot lines through
+"keyboard on IRQ1" are printed from `kernel.zl`, so the route had already
+crossed the C-to-zl boundary. The next work includes USB and diagnostic retry
+before the persistent-observer line. No exact stopped symbol was captured in
+the failing build, so this record does not promote the later compiler repair
+from a strong causal candidate to a proved per-symbol root cause.
 
 ## The symptom
 
@@ -25,9 +41,10 @@ passes and one does not:
   ok    UEFI - exact kernel64.elf entered long mode, opened the compositor, fib(20)=6765
 ```
 
-The boot dies **after the C-side init finishes and before the zl program speaks**.
-The next marker in a healthy boot is `kernel.zl:9883`'s "persistent boot observer",
-so the stall is in the handover into the zl kernel program, not in early bring-up.
+At the time this was first written, the stop was incorrectly placed after the
+C-side init and before the zl program spoke. Source inspection later disproved
+that: these markers are already emitted by `kernel.zl`. The next visible marker
+in a healthy boot is the persistent observer, after USB and diagnostic retry.
 
 **The same `kernel64.elf` passes by UEFI.** Long mode, paging, the compositor and
 `fib(20)=6765` all work. So this is not the 64-bit kernel being broken; it is
@@ -77,15 +94,14 @@ boot receipt was regenerated at `7d1a11b` against manifest `d6c31620…`:
 its stale `PASS` has been sitting in the tree ever since — a receipt that says
 the route works, dated from the last time it did.
 
-## What has NOT been done
+## What had NOT been done at discovery time
 
-The cause is not diagnosed and no fix is attempted here; this run was about the
+The cause was not diagnosed and no fix was attempted in that run; it was about the
 manifest receipts and the desktop, and a 64-bit multiboot hand-off hang is a
 different subsystem. What is established is: it is real, it is reproducible, it
 is not new, and it is invisible to every gate that runs.
 
-**Do not simply add `verify-64.sh` to `preflight.sh` to fix the visibility.**
-That would make every push fail until the boot itself is fixed. The honest
-sequence is: diagnose the hand-off, fix it, confirm both routes green, and only
-then put it in the gate — with the receipt regenerated so the table above stops
-lying.
+The required sequence was to repair the route, confirm both paths green, then
+make the verifier mandatory and regenerate its receipt. That sequence has now
+been completed in the contained landing path. Physical BIOS firmware remains
+unverified; this evidence is QEMU only.
