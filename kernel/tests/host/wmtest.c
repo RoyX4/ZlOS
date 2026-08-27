@@ -1237,7 +1237,16 @@ int main(void)
         frame(); frame();
 
         int tx, ty, tw, thh;
-        notify_rect(W, H, 72 * th->scale, th->scale, &tx, &ty, &tw, &thh);
+        /* THE SAME RESERVE wm.c's toast_rect() USES, asked for rather than
+         * retyped. This was `72 * th->scale`, which was the dock's height back
+         * when there was a dock; the shell has a 46 dp ZD_FOOT_H foot now, so
+         * this located the toast 26 dp above where it is actually drawn and the
+         * body probe landed on the wallpaper. The fade check then compared two
+         * pixels neither of which was the toast.
+         *
+         * Sixth copy of this number in the tree, and the third that had to be
+         * found by watching a test fail rather than by reading it. */
+        notify_rect(W, H, ui_metric(UI_METRIC_FOOT_H), th->scale, &tx, &ty, &tw, &thh);
         int probe_x = tx + tw / 2;
         int scan0 = ty - 40, scan1 = ty + thh;
 
@@ -1436,14 +1445,41 @@ int main(void)
         ok("fragmented visibility hits the bounded full-damage fallback",
            wm_region_fragmentation_probe());
 
+        /* THIS ASSERTION HAD TO BE NARROWED, and the narrowing is the point.
+         *
+         * PRESSWORK gives a plate two ring colours: ZD_CUT normally and
+         * ZD_EDGE_OVER where it sits ON another window, because a darker edge
+         * tops out at 1.4723:1 on the plate and cannot carry "which one is on
+         * top". So a window's ring colour is a function of whether anything
+         * VISIBLE BELOW IT intersects, and wm.c's shell_state_key now carries
+         * that bit.
+         *
+         * `under` is (120,140,360,260) and `over` is (240,220,360,260) - they
+         * overlap. The old single move went straight to (620,300), which ENDS
+         * the overlap, so `over`'s ring genuinely changes and its cached shell
+         * genuinely must be rebuilt. The assertion was asserting that a
+         * correct rebuild does not happen.
+         *
+         * It is now two moves, which between them pin the mechanism from both
+         * sides: a move that preserves the overlap must rebuild NOTHING, and a
+         * move that ends it MUST rebuild - otherwise a stale ZD_EDGE_OVER ring
+         * survives on a window that is no longer over anything, which is a
+         * defect no test would catch and which looks very nearly right. */
         unsigned int shell_builds = wm_retained_shell_builds();
         draw_calls[1] = draw_calls[2] = 0;
-        wm_move(over, 620, 300);
+        wm_move(over, 300, 260);           /* still overlapping `under` */
         frame();
         ok("moving an unchanged window causes zero app redraws",
            draw_calls[1] == 0 && draw_calls[2] == 0);
-        ok("moving unchanged windows causes zero shell/shadow rebuilds",
+        ok("a move that keeps the overlap causes zero shell/shadow rebuilds",
            wm_retained_shell_builds() == shell_builds);
+        draw_calls[1] = draw_calls[2] = 0;
+        wm_move(over, 620, 300);           /* ...and now it ends */
+        frame();
+        ok("control: a move that ENDS the overlap does rebuild the shell",
+           wm_retained_shell_builds() > shell_builds);
+        ok("...and still redraws no app",
+           draw_calls[1] == 0 && draw_calls[2] == 0);
         int ux, uy, uw, uh;
         wm_client(under, &ux, &uy, &uw, &uh);
         ok("the exposed retained client remains pixel-correct",
@@ -1563,6 +1599,61 @@ int main(void)
         frame();
         ok("the following repaint does not claim the old input again",
            frame_log_input_sequence == 0);
+    }
+
+
+    /* ---- a window shorter than its own title bar must not paint outside it --
+     *
+     * REGRESSION, found by an out-of-family reviewer on the PRESSWORK chrome.
+     * chrome_header() took theme.title_h unconditionally, which is only the
+     * header's real height while the window is at least that tall. wm_open()
+     * stores the caller's h verbatim - min_h is a RESIZE floor applied later,
+     * not an open-time clamp - so a caller can open a chrome window shorter
+     * than the title bar, and the knockout band and its foot rule both landed
+     * below W->y + W->h. fb_fill_px and fb_rrect_grad_top do not clip on their
+     * own, and neither enclosing path stops it: the retained-shell path sets
+     * the scissor to the whole shell surface, and the direct path clips to
+     * frame-plus-shadow.
+     *
+     * THE PROBE IS THE HEADER'S OWN COLOUR, NOT "was anything written here".
+     * The first version of this test painted a magenta sentinel in the rows
+     * below the window and asserted it survived - and it failed with the fix
+     * in, because those rows are exactly where the window's SHADOW paints. A
+     * presence probe cannot tell an escaped header from a legitimate shadow.
+     * theme.ko_edge is written by nothing else in that band, so finding it
+     * below the frame is unambiguous, and NOT finding it is the fix holding. */
+    {
+        int th = ui_metric(UI_METRIC_TITLE_H);
+        int sh = th / 2;                     /* half a title bar tall */
+        if (sh < 2) sh = 2;
+        int sx = 120, sy = 620, sw = 260;
+        unsigned int koe = ui_color(UI_COLOR_KO_EDGE);
+
+        int win = wm_open(41, "short", sx, sy, sw, sh);
+        wm_focus(win);
+        frame();
+
+        /* every row from the window's real foot down to where a full-height
+         * header would have reached, plus two for slop */
+        int escaped = 0;
+        for (int y = sy + sh; y < sy + th + 2 && !escaped; y++)
+            for (int x = sx + 1; x < sx + sw - 1; x++)
+                if (fb_get_px(x, y) == koe) { escaped = 1; break; }
+
+        ok("a window shorter than title_h keeps its chrome inside the frame",
+           !escaped);
+
+        /* and the control, so this assertion cannot pass by measuring nothing:
+         * the same colour MUST be present inside the frame, on the header's
+         * own foot row. If it is absent there the probe is blind and the line
+         * above is worthless. */
+        int present = 0;
+        for (int x = sx + 1; x < sx + sw - 1; x++)
+            if (fb_get_px(x, sy + sh - 1) == koe) { present = 1; break; }
+        ok("control: the header foot rule IS drawn, inside the frame", present);
+
+        wm_close(win);
+        frame();
     }
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);

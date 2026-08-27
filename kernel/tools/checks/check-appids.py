@@ -9,8 +9,8 @@ have each carried this sentence in their header since they were written:
 ...and nobody wrote the check. It then happened, in the worst possible place:
 apps_registry.zl gave the app catalog id 13, kernel.zl later gave APP_FILES the
 same 13, and reg_open(APP_CATALOG) found the Files window the desktop opens at
-boot, raised it, and returned success. The catalog - the only route to 47 of
-zlOS's 53 apps - could not be opened by anyone, by any route, and there was no
+boot, raised it, and returned success. The catalog - the only route to 47
+registry apps - could not be opened by anyone, by any route, and there was no
 error anywhere because nothing had failed. It also silently routed every event
 aimed at the Files window into the catalog's event handler.
 

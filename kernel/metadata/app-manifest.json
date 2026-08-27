@@ -874,6 +874,34 @@
       "name": "All Applications",
       "source_family": "catalogue",
       "static_route": "catalogue-surface-static"
+    },
+    {
+      "catalog_index": null,
+      "evidence": [
+        "S",
+        "R-build"
+      ],
+      "id": 71,
+      "identity_source": "kernel.zl::app_name",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "System",
+      "source_family": "legacy",
+      "static_route": "legacy-static"
+    },
+    {
+      "catalog_index": null,
+      "evidence": [
+        "S",
+        "R-build"
+      ],
+      "id": 72,
+      "identity_source": "kernel.zl::app_name",
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "Type",
+      "source_family": "legacy",
+      "static_route": "legacy-static"
     }
   ],
   "evidence_ceiling": "static source and build inclusion only; not launch, runtime, QEMU, or physical proof",
@@ -882,7 +910,7 @@
     "app_manifest_embed.zl"
   ],
   "manifest_delivery": "host JSON plus generated boot-embedded schema/count/digest receipt; runtime proof is recorded separately",
-  "named_implementation_count": 61,
+  "named_implementation_count": 63,
   "schema": "zlos.application-identity-manifest.v1",
   "source_files": [
     "kernel.zl",
@@ -898,5 +926,5 @@
     "apps_games4.zl",
     "docs/design/ds-reference.html"
   ],
-  "source_sha256": "bdd9677c1ded314a9f1f7c90144f11f4c88427f4bccba645e75e64742e00b68a"
+  "source_sha256": "bdc171fea05d6c9d78854811008c7207c79b3125332bc6962ab167048999dd7e"
 }

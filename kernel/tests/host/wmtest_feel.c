@@ -788,17 +788,32 @@ int main(void)
     pointer(dx0 + 60, tby, 1);
     pointer(dx0 + 60, tby, 0);
     int mx, my, mw, mh;
-    int work_y = UI_DP(th, 48);
-    int work_h = H - work_y - UI_DP(th, 72);
+    /* THE WORK AREA, FROM THE THEME. These were UI_DP(th, 48) and
+     * UI_DP(th, 72) - the top bar and the dock, two pieces of furniture the
+     * shell no longer has. It has a 30 dp raster strip, a 46 dp foot, and a
+     * 170 dp REGISTER RAIL down the left that nothing here accounted for at
+     * all: every expectation below said gx == 0 and gw == W, so a window
+     * correctly snapped beside the rail read as a failure.
+     *
+     * Nine checks, in two clusters that look unrelated - double-click maximise
+     * and Super+arrow snapping - and one cause under both. */
+    int work_x = ui_metric(UI_METRIC_RAIL_W);
+    int work_y = ui_metric(UI_METRIC_STRIP_H);
+    int work_w = W - work_x;
+    int work_h = H - work_y - ui_metric(UI_METRIC_FOOT_H);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("double-clicking the title bar MAXIMISES",
-       mx == 0 && my == work_y && mw == W && mh == work_h);
+       mx == work_x && my == work_y && mw == work_w && mh == work_h);
 
     /* ...and again restores the exact rect it had */
-    pointer(60, work_y + th->title_h / 2, 1);
-    pointer(60, work_y + th->title_h / 2, 0);
-    pointer(60, work_y + th->title_h / 2, 1);
-    pointer(60, work_y + th->title_h / 2, 0);
+    /* x = work_x + 60, NOT x = 60. A MAXIMISED window starts at the rail's
+     * right edge now, so a click 60 px from the SCREEN's left edge lands on the
+     * register rail and never reaches the title bar at all. Every one of these
+     * pairs is meant to hit the title bar of an already-maximised window. */
+    pointer(work_x + 60, work_y + th->title_h / 2, 1);
+    pointer(work_x + 60, work_y + th->title_h / 2, 0);
+    pointer(work_x + 60, work_y + th->title_h / 2, 1);
+    pointer(work_x + 60, work_y + th->title_h / 2, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("...and doing it again RESTORES the exact rect",
        mx == dx0 && my == dy0 && mw == dw0 && mh == dh0);
@@ -815,10 +830,20 @@ int main(void)
 
     /* a pair far apart in SPACE is not a double either - and this one also
      * proves the detector is not simply counting presses */
+    /* dx0 + 300 USED TO BE THE SECOND POINT AND IS NOW THE MAXIMISE BUTTON.
+     * The window is 380 wide; PRESSWORK's control cluster is three ZD_WINCTL
+     * cells butted flush right with no gaps, 3 x 22dp == 66dp == 132 px at ui
+     * 2, so it starts at 248. The predecessor's cluster was 26dp squares with
+     * 6dp gaps and 300 landed on MINIMISE, which does not change w/h - so this
+     * assertion passed for a reason unrelated to double-click detection. It
+     * was measuring the old chrome's spacing.
+     *
+     * 200 is on the title bar under either chrome, and 160 px from the first
+     * point, which is ten times dbl_slop() (UI_S2, 8dp == 16 px at ui 2). */
     pointer(dx0 + 40, tby, 1);
     pointer(dx0 + 40, tby, 0);
-    pointer(dx0 + 300, tby, 1);
-    pointer(dx0 + 300, tby, 0);
+    pointer(dx0 + 200, tby, 1);
+    pointer(dx0 + 200, tby, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("two clicks far apart are not a double", mw == dw0 && mh == dh0);
 
@@ -832,9 +857,9 @@ int main(void)
     pointer(dx0 + 60, tby, 1); pointer(dx0 + 60, tby, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("a TRIPLE click maximises once, it does not toggle twice",
-       mx == 0 && my == work_y && mw == W && mh == work_h);
-    pointer(60, work_y + th->title_h / 2, 1); pointer(60, work_y + th->title_h / 2, 0);
-    pointer(60, work_y + th->title_h / 2, 1); pointer(60, work_y + th->title_h / 2, 0);
+       mx == work_x && my == work_y && mw == work_w && mh == work_h);
+    pointer(work_x + 60, work_y + th->title_h / 2, 1); pointer(work_x + 60, work_y + th->title_h / 2, 0);
+    pointer(work_x + 60, work_y + th->title_h / 2, 1); pointer(work_x + 60, work_y + th->title_h / 2, 0);
 
     /* the app is told, as a bit in the button mask */
     wm_geometry(dw, &dx0, &dy0, &dw0, &dh0);
@@ -970,20 +995,20 @@ int main(void)
     int gx, gy, gw, gh;
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("Super+Left snaps to the left half",
-       gx == 0 && gy == work_y && gw == W / 2 && gh == work_h);
+       gx == work_x && gy == work_y && gw == work_w / 2 && gh == work_h);
 
     send_key(0x111, MOD_SUPER);                       /* Super+Right */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("Super+Right from the left half passes through maximised",
-       gx == 0 && gy == work_y && gw == W && gh == work_h);
+       gx == work_x && gy == work_y && gw == work_w && gh == work_h);
     send_key(0x111, MOD_SUPER);                       /* Super+Right again */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("...and the next Right reaches the right half",
-       gx == W / 2 && gy == work_y && gw == W - W / 2 && gh == work_h);
+       gx == work_x + work_w / 2 && gy == work_y && gw == work_w - work_w / 2 && gh == work_h);
 
     send_key(0x112, MOD_SUPER);                       /* Super+Up */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
-    ok("Super+Up maximises", gx == 0 && gy == work_y && gw == W && gh == work_h);
+    ok("Super+Up maximises", gx == work_x && gy == work_y && gw == work_w && gh == work_h);
 
     /* THE SAVED RECT MUST SURVIVE THREE SNAPS. Capturing it on every snap
      * instead of only the first is the bug every naive version has: restore
@@ -1097,25 +1122,28 @@ int main(void)
     frame();
 
     /* ------------------------------------------------------------- shadow */
-    /* THE ELEVATION SCHEME MUST REACH THE SCREEN.
+    /* PRESSWORK DELETED THE SHADOW AT REST, so these three assertions are
+     * inverted rather than relaxed, and the pair that replaces them pins the
+     * new rule from both sides.
      *
-     * Found by the Item 5 bug hunt. wm_repaint intersects the damage rect with
-     * the window's FRAME first, and only falls back to the reach-expanded rect
-     * when the frame misses entirely - then hands the frame-only result to
-     * fb_clip under a comment reading "clip 1: the frame + shadow". chrome()
-     * calls fb_shadow, which paints from x+off-soft to x+off+w+soft, so at
-     * ui scale 2 (off 16, soft 12) the entire visible band lies outside that
-     * scissor and every shadow pixel is computed and then discarded.
+     * What they used to assert - that a settled window darkens the wallpaper
+     * 10 px outside its frame - was the predecessor's elevation ladder, and it
+     * was worth asserting then: wm_repaint's scissor was clipping every shadow
+     * pixel away and the bug looked exactly like "the shadows were never
+     * designed". The scissor logic is unchanged and still covered, because the
+     * lifted case below reaches the same code through the same clip.
      *
-     * Nothing catches it by eye, because it only LOOKS like the shadows were
-     * never designed. It survives transiently during the 4-frame open
-     * animation - anim_rect shrinks the drawn frame far enough inside the
-     * settled one that the band briefly fits - and is then erased by the
-     * wallpaper pass and never comes back.
+     * PRESSWORK separates a plate from its ground with the ladder and two 1px
+     * runs. A shadow means OFF THE PLANE, and exactly four things are: a
+     * dragged plate, a menu, a modal and a toast. A settled window that casts
+     * one is claiming to float, and the fastest way to make this design look
+     * like every other one is to let it. So: nothing at rest, something while
+     * lifted, and the negative half is the one that would silently come back.
      *
      * The probe sits 10 px right of the frame's right edge, vertically
-     * centred. fb_shadow offsets the footprint by +off, so that pixel has
-     * chebyshev distance 0 and takes the full 62% darkening. */
+     * centred - the same pixel the old assertions used, so a shadow that
+     * reappeared at rest would be caught at the exact coordinate that used to
+     * demand it. */
     for (int i = 0; i < WM_MAX; i++) wm_close(i);
     pointer(20, 20, 0);                 /* cursor sprite well clear of the probe */
     wm_damage(0, 0, W, H);
@@ -1124,14 +1152,32 @@ int main(void)
     for (int i = 0; i < ANIM_SETTLE; i++) frame();   /* let the open animation settle */
     wm_damage(0, 0, W, H);
     frame();
-    ok("a SETTLED window draws its drop shadow at all",
-       fb_get_px(710, 425) != WALL);
-    /* WALL 0x203040 at 38% brightness: 0x20*38/100=0x0C, 0x30->0x12, 0x40->0x18 */
-    ok("...at full strength, 10 px outside the frame",
-       fb_get_px(710, 425) == 0x000C1218u);
-    /* ...and it must still stop at the rim rather than darkening the desktop */
-    ok("...and stops at the shadow's outer rim",
+    ok("a SETTLED window casts NO shadow - depth is the ladder and the runs",
+       fb_get_px(710, 425) == WALL);
+    ok("...and the desk beside it is untouched too",
        fb_get_px(300 + 400 + 40, 425) == WALL);
+
+    /* LIFTED: press on the title bar and hold. A plate under the pointer is
+     * genuinely off the plane, and that is the one state a window shadow
+     * exists for. Without this half, "no shadow at rest" is also satisfied by
+     * a chrome_shadow() that never draws anything at all. */
+    {
+        const struct ui_theme *sht = ui_theme();
+        pointer(300 + 60, 300 + sht->title_h / 2, 1);   /* press and HOLD   */
+        pointer(300 + 62, 300 + sht->title_h / 2, 1);   /* ...and drag 2 px */
+        wm_damage(0, 0, W, H);
+        frame();
+        int gx, gy, gw2, gh2;
+        wm_geometry(sh, &gx, &gy, &gw2, &gh2);
+        ok("...but a LIFTED plate does cast one",
+           fb_get_px(gx + gw2 + 10, gy + gh2 / 2) != WALL);
+        pointer(300 + 62, 300 + sht->title_h / 2, 0);   /* release          */
+        wm_damage(0, 0, W, H);
+        frame();
+        wm_geometry(sh, &gx, &gy, &gw2, &gh2);
+        ok("...and setting it down takes the shadow away again",
+           fb_get_px(gx + gw2 + 10, gy + gh2 / 2) == WALL);
+    }
     wm_close(sh);
     frame();
 

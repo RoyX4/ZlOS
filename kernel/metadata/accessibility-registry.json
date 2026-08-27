@@ -1,20 +1,20 @@
 {
   "schema": "zlos.accessibility-proof-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-  "host_test_receipt_sha256": "cbdf04b522526da240aa763999121eae1f97bd74f02a71cc948e0ed0e1059cc3",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "host_test_receipt_sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
   "source_identities": {
-    "src/drivers/input/input.c": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0",
-    "src/graphics/ui/ui.c": "1d9a00f73eb8a5f735de053e5d9b6e19dfdbcaec845b1a142c797826830b757d",
-    "src/graphics/windowing/wm.c": "ee96dca48bec8e59199a01e567a3a77cfd6a5d291bae7b383c17db746561a019",
-    "tests/host/inputtest_hid.c": "ea5689899fdf9404e693a3bf34c8e4c5f7565ffe37f2566693ffaff57fc97c58",
-    "tests/host/uitest.c": "16e0bd80cf420feb1e8b4185acee3ddf0d2d87beb6ea00f3f58d507f7f4d3b3b",
-    "tests/host/wmtest.c": "182614fbd495f4191d197d544c6815f5fd0af5c785403a55e186731ba9114596",
-    "tests/host/toasttest.c": "a64a6e4e41f042050b33b265050f799238c36ed2990562ab5264b16b8fa13bb2"
+    "src/drivers/input/input.c": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0",
+    "src/graphics/ui/ui.c": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",
+    "src/graphics/windowing/wm.c": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
+    "tests/host/inputtest_hid.c": "98fba1e6381779a9017675aba7d44dfc82604239096d7163e1f4243b66b37f38",
+    "tests/host/uitest.c": "0d5d866cd4be9c9d34776ab928c5f01cf2dcef4a0a4ad250ce3798b60ad0f7a2",
+    "tests/host/wmtest.c": "2c5b4aebd083af3dd73355758c026eeb29ca4f9970a836b0c9c894ae26ed4bfd",
+    "tests/host/toasttest.c": "237ac94a09778e314fba46d227ebe04167cb1ceec064e47c5b62cec2890f2d43"
   },
   "visual_registry": {
     "path": "kernel/metadata/visual-registry.json",
-    "sha256": "799e41a7184128be873545b66c43e2d3e9a0a5362337da77535687147a72ab6f",
+    "sha256": "ba7778d588677a54645ce6c32432bef972016be8220494e8618ebde31468a2c3",
     "current_build_bound": 0
   },
   "capabilities": [
@@ -69,7 +69,7 @@
       "id": "keyboard-only-app-workflows",
       "status": "MISSING",
       "passed_host_targets": [],
-      "detail": "no all-62 keyboard-only open/use/close receipt",
+      "detail": "no all-application keyboard-only open/use/close receipt",
       "evidence_ceiling": "no current evidence"
     },
     {
@@ -163,6 +163,6 @@
   "weakest_link": "semantic tree and assistive providers do not exist; no all-app keyboard, QEMU or native a11y workflow receipt",
   "generator": {
     "path": "kernel/tools/generators/gen-accessibility-registry.py",
-    "sha256": "e0b6789c6b4f8f86f24f2b8c71b40477c0071b9d2bb17d9f8489fe8b43dfdb97"
+    "sha256": "b5dfb536b1715cf67eecf368978fe6cbbdc44981e93be4b66f8ae89d93864f6a"
   }
 }

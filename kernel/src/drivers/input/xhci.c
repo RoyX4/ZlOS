@@ -1906,11 +1906,17 @@ static int keyq_pop(void)
  * two keyboards drift apart until "it works on the laptop but not the external
  * one". The transport reports what the hardware said and stops there.
  *
- *     bits  7:0   HID usage ID   (never 0 for a real key, so 0 = queue empty)
+ *     bits  7:0   HID usage ID   (never 0 for a real key)
  *     bits 15:8   HID modifier bitmap from the same report
  *     bit  16     1 = press, 0 = release
+ *     bit  17     modifier snapshot; usage and press are ignored
+ *
+ * Modifier snapshots are queued rather than exposed only as final state. A
+ * Super press and release can both complete in one compositor frame; storing
+ * only the last bitmap turns that real tap into 0 -> 0 and loses it forever.
  */
 #define KEV(press, mods, usage) (((press) << 16) | ((mods) << 8) | (usage))
+#define KEV_MOD(mods)           ((1 << 17) | ((mods) << 8))
 
 static int kevq[32];
 static u32 kevq_tsc[32], kevq_current_tsc, kevq_last_tsc;
@@ -2272,9 +2278,11 @@ static void hid_decode(void)
         if (now[i] == 1) rollover = 1;
     }
 
-    /* Publish the modifier bitmap even when nothing else in the report moved:
+    /* Publish and queue the modifier bitmap even when nothing else moved:
      * pressing shift ALONE sends a report with no usage IDs at all, so this is
-     * the only moment anyone learns shift went down. */
+     * the only moment anyone learns shift went down. The queue preserves both
+     * edges when a tap's press and release complete in one input_poll(). */
+    if (mods != (int)kbd_mods) kevq_push(KEV_MOD(mods));
     kbd_mods = (u8)mods;
 
     /* Do not record a rollover report as the new key state, and do not decode

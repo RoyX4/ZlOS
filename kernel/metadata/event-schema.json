@@ -2,7 +2,7 @@
   "schema": "zlos.event-schema-registry.v1",
   "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED",
   "feature_id": "EV-018",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "contract": {
     "wire": {
       "endianness": "little",
@@ -230,11 +230,11 @@
   },
   "proof": {
     "receipt_path": "kernel/docs/receipts/event-trace-host-2026-08-24.json",
-    "receipt_sha256": "bdd52b600603f7c7180541e45087a08f24628d0da6877133f083c18d8d5c0d8b",
+    "receipt_sha256": "0874dbad4a9f94276ffcae33f8fdf49397b450d54095f52c195f32ddd105bb86",
     "host_checks": 37,
     "host_failures": 0,
     "compile_lanes": 3,
-    "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+    "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "current_build_bound": true,
     "evidence_ceiling": "current-build host execution and ABI compile receipt; target remains unintegrated"
   },

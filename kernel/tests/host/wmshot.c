@@ -1,10 +1,11 @@
-/* wmshot.c - render one frame of the compositor to a PPM, from Linux.
+/* wmshot.c - render one host compositor-harness frame to a PPM, from Linux.
  *
  * wmtest asserts 47 properties and nobody has LOOKED at any of them. Both
  * matter and they catch different things: assertions catch a click landing on
  * the wrong window, eyes catch a title bar that is four pixels too tall. This
  * is the second kind, and it costs no boot - the whole stack is C against
- * memory, so it renders here in milliseconds.
+ * memory, so it renders here in milliseconds. It does not compile or render
+ * kernel.zl's shell; the frame labels that boundary visibly.
  *
  * The apps below are written the way a real app must be: through ui_* calls
  * only, position-pure, no loop. They are also therefore a worked example of
@@ -19,6 +20,7 @@
 #include <sys/mman.h>
 
 #include "../../src/graphics/ui/ui.h"
+#include "../../src/graphics/ui/design.h"
 #include "../../../src/runtime/runtime.h"
 
 void fb_setup(unsigned long addr, unsigned int pitch, unsigned int width,
@@ -30,6 +32,7 @@ void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
 int  fb_text_prop_h(void);
+int  fb_ui_scale_q8(void);
 void fb_icon24(int px, int py, int n, unsigned int fg);
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_present(void);
@@ -89,6 +92,9 @@ void zl_putc_pub(char c) { (void)c; }
 Value zl_num(double n) { Value v; memset(&v, 0, sizeof v); v.type = V_NUM; v.num = n; return v; }
 
 static int W = 1920, H = 1200;
+
+static int scene_x(int px) { return (int)((long long)px * W / 1920); }
+static int scene_y(int px) { return (int)((long long)px * H / 1200); }
 
 #define APP_SHELL   0
 #define APP_MONITOR 1
@@ -164,33 +170,93 @@ static void desk_draw(int x, int y, int w, int h)
 {
     const struct ui_theme *t = ui_theme();
     (void)x; (void)y; (void)w; (void)h;
-    fb_gradient(0, 0, W, H, 0x141A2E, 0x2A3350);
 
-    int hb = t->title_h + UI_S1(t);
-    fb_gradient(0, 0, W, hb, 0x1B2340, 0x141A2E);
-    fb_fill_px(0, hb, W, 1, t->border);
-    fb_rrect(UI_S3(t), (hb - UI_S3(t)) / 2, UI_S3(t), UI_S3(t), UI_S1(t) / 2, t->accent);
+    /* THIS DESK WAS SIX HARD-CODED NAVY LITERALS - 0x141A2E, 0x2A3350,
+     * 0x1B2340, 0x282E42, 0x1B2236, 0xC8D4EC - and they were the single most
+     * misleading thing in the whole harness. wmshot exists so somebody LOOKS
+     * at the compositor, and roughly half of every frame it produced was a
+     * colour from a design that no longer exists. Worse, it was a colour from
+     * a COOL palette wrapped around a warm one, so every judgement about
+     * warmth, about the ladder, about whether the plates read as plates, was
+     * being made against the wrong ground. A harness that lies about the
+     * ground is a harness you cannot use to check a design.
+     *
+     * It is now theme roles only, which also makes this file agree with the
+     * rule the rest of the tree follows: a colour literal lives in design.h
+     * and nowhere else.
+     *
+     * WHAT IT IS NOT is a copy of kernel.zl's shell. The real shell has a
+     * 170dp register rail, a raster strip and a memory foot, all written in
+     * zl, and none of that compiles into this harness. This draws the same
+     * FURNITURE THIS HARNESS ALREADY HAD - a top bar, a dock - in PRESSWORK's
+     * grammar, so the compositor is judged against the right ground without
+     * this file pretending to be the shell. */
+
+    /* the desk: one raking light entering off-screen upper left and falling
+     * to ZD_VOID at the lower right, flattened to a gradient's two ends */
+    fb_gradient(0, 0, W, H, t->wallpaper_top, t->wallpaper_bot);
+
+    /* THE RULED MODULE GRID, 12 x 8 in ZD_GRID - 1.65:1 on the desk, which is
+     * a ruling and not a pattern. Drawn here at the same token the shell uses
+     * so the desk is a drawing board rather than an empty gradient. */
+    {
+        int mar = UI_DP(t, ZD_GRID_MARGIN), gut = UI_DP(t, ZD_GRID_GUTTER);
+        int iw = W - 2 * mar, ih = H - 2 * mar;
+        if (iw > 0 && ih > 0) {
+            for (int c = 0; c <= ZD_GRID_COLS; c++) {
+                int gx = mar + (int)((long long)iw * c / ZD_GRID_COLS);
+                if (c) gx -= gut / 2;
+                fb_fill_px(gx, mar, 1, ih, t->grid);
+            }
+            for (int r = 0; r <= ZD_GRID_ROWS; r++) {
+                int gy = mar + (int)((long long)ih * r / ZD_GRID_ROWS);
+                if (r) gy -= gut / 2;
+                fb_fill_px(mar, gy, iw, 1, t->grid);
+            }
+        }
+    }
+
+    /* the top strip: a pit in ZD_CUT with the system's 2dp struck rule under
+     * it. Bands are separated by a rule, never by a fill - see design.h. */
+    int hb = t->strip_h;
+    fb_fill_px(0, 0, W, hb, t->cut);
+    fb_fill_px(0, hb, W, UI_DP(t, ZD_RULE_H), t->bar_hi);
+    fb_fill_px(UI_S3(t), (hb - UI_S3(t)) / 2, UI_S3(t), UI_S3(t), t->accent);
     fb_text_prop(UI_S3(t) * 3, (hb - fb_text_prop_h()) / 2, "zlOS", t->text);
-    fb_text_prop(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_text_prop_h()) / 2, "Activities", t->text_dim);
+    fb_text_prop(UI_S3(t) * 3 + UI_S6(t) * 3, (hb - fb_text_prop_h()) / 2,
+                 "Activities", t->text_dim);
     /* Report the size actually rendered. This was the literal "1920 x 1200",
      * which made every render at another size a screenshot of a lie - and the
      * resolution cliff is exactly the class this harness is meant to catch. */
     char res[32];
     snprintf(res, sizeof res, "%d x %d", W, H);
     fb_text_prop(W - UI_S6(t) * 8, (hb - fb_text_prop_h()) / 2, res, t->text_dim);
+    {
+        const char *boundary = "HOST HARNESS / NO zl SHELL";
+        int bw = fb_text_prop_w(boundary);
+        int bx = (W - bw) / 2;
+        if (bx > UI_S6(t) * 8 && bx + bw < W - UI_S6(t) * 8)
+            fb_text_prop(bx, (hb - fb_text_prop_h()) / 2, boundary, t->accent);
+    }
 
+    /* the foot: the same pit, with the rule OVER it rather than under */
     int dh = UI_S6(t) * 3;
     int dy = H - dh;
-    fb_gradient(0, dy, W, dh, 0x282E42, 0x121420);
-    fb_fill_px(0, dy, W, 1, t->border);
+    fb_fill_px(0, dy - UI_DP(t, ZD_RULE_H), W, UI_DP(t, ZD_RULE_H), t->bar_hi);
+    fb_fill_px(0, dy, W, dh, t->cut);
     int tile = UI_S6(t) * 3, ix = UI_S6(t);
-    fb_rrect(ix, dy + UI_S2(t), tile * 2, dh - 2 * UI_S2(t), UI_S1(t), t->title);
-    fb_rrect(ix + UI_S3(t), dy + dh / 2 - UI_S2(t), UI_S4(t), UI_S4(t), UI_S1(t) / 2, t->accent);
+    /* the identity block is a raised plate on the strip, seated the way every
+     * raised object in this design is: ring, then the one struck top run */
+    ui_seat_raised(ix, dy + UI_S2(t), tile * 2, dh - 2 * UI_S2(t),
+                   UI_DP(t, ZD_R_CHIP), t->panel_hi, t->cut, 1);
+    fb_fill_px(ix + UI_S3(t), dy + dh / 2 - UI_S2(t), UI_S4(t), UI_S4(t), t->accent);
     fb_text_prop(ix + UI_S6(t) * 2, dy + (dh - fb_text_prop_h()) / 2, "zlOS", t->text);
     ix += tile * 2 + UI_S6(t);
     for (int i = 0; i < 7; i++) {
-        fb_rrect(ix, dy + UI_S2(t), tile, dh - 2 * UI_S2(t), UI_S1(t), 0x1B2236);
-        fb_icon24(ix + (tile - 48) / 2, dy + (dh - 48) / 2, i, 0xC8D4EC);
+        /* NO FACE AT REST. The dock tiles were rounded chips with their own
+         * fill; PRESSWORK's control cluster is bare glyphs, so the tile is the
+         * pit it stands on and the icon is the only mark. */
+        fb_icon24(ix + (tile - 48) / 2, dy + (dh - 48) / 2, i, t->text_dim);
         ix += tile + UI_S2(t);
     }
     /* the tray text starts AFTER the last tile, never on top of it - the
@@ -213,6 +279,20 @@ int main(int argc, char **argv)
 {
     const char *out = argc > 1 ? argv[1] : "wmshot.ppm";
     if (argc > 3) { W = atoi(argv[2]); H = atoi(argv[3]); }
+    fake_x = scene_x(1290);
+    fake_y = scene_y(342);
+    /* WHICH WINDOW HAS FOCUS, optionally. The default scene focuses the tabbed
+     * About window, and a tabbed window draws a TAB STRIP INSTEAD OF A TITLE -
+     * so the knockout's headline move, the title reversed out in
+     * theme.knock_ink, was the one thing in this design that the design's own
+     * screenshot could not photograph. A pixel census of the default frame
+     * finds knock_ink only in the System Monitor's switch knob.
+     *
+     * `./wmshot out.ppm W H 0` focuses the untabbed shell window instead, and
+     * that frame is what proves the reversed-out title. It is an argument
+     * rather than a change of default because the tab strip on a knocked-out
+     * header is also worth looking at, and both cost one run. */
+    int want_focus = argc > 4 ? atoi(argv[4]) : -1;
 
     /* ONE buffer now. C4 deleted the drag background and sprite, and the back
      * buffer moved down into the space they freed - see fb.c's high-RAM map.
@@ -230,27 +310,44 @@ int main(int argc, char **argv)
                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     fb_setup((unsigned long)vram, (unsigned)W * 4, (unsigned)W, (unsigned)H, 32);
 
-    ui_theme_init(2);
+    ui_theme_init_q8(fb_ui_scale_q8());
     wm_init();
     wm_hooks(app_draw, app_event, app_tick, desk_draw);
 
     const struct ui_theme *t = ui_theme();
     int hb = t->title_h + UI_S1(t);
-    wm_open(APP_SHELL,   "zl shell   ~",    UI_S6(t), hb + UI_S6(t), 1180, 720);
-    wm_open(APP_FILES,   "Files",           1260, hb + UI_S6(t), 560, 420);
-    wm_open(APP_MONITOR, "System Monitor",  1260, hb + UI_S6(t) + 450, 560, 380);
-    int wabout = wm_open(APP_ABOUT, "About", 700, 700, 520, 300);
+    wm_open(APP_SHELL, "zl shell   ~", scene_x(28), hb + scene_y(30),
+            scene_x(1180), scene_y(720));
+    wm_open(APP_FILES, "Files", scene_x(1260), hb + scene_y(30),
+            scene_x(560), scene_y(420));
+    wm_open(APP_MONITOR, "System Monitor", scene_x(1260), hb + scene_y(480),
+            scene_x(560), scene_y(380));
+    int wabout = wm_open(APP_ABOUT, "About", scene_x(700), scene_y(700),
+                         scene_x(520), scene_y(300));
+    /* THE THREE CELLS wm.c CANNOT DERIVE. The register slot, the mono
+     * qualifier after the title and the foot band's left readout are policy -
+     * in the real system kernel.zl owns them - so a harness that did not
+     * supply them would photograph a header and a band with their policy cells
+     * blank, and the shot could not show what the change actually built. The
+     * module code, the app cost and the workspace are NOT set here: those wm.c
+     * derives, and setting them would be photographing the harness. */
+    wm_set_label(0, 1, "zlsh");     wm_set_status(0, "tty1 - 80x24");
+    wm_set_label(1, 2, "rd0");      wm_set_status(1, "rd0 - 6 entries");
+    wm_set_label(2, 3, "1 Hz");     wm_set_status(2, "sampler 1 Hz");
+    wm_set_label(wabout, 9, "0.3"); wm_set_status(wabout, "static");
     /* H2: several apps in one frame, grouped by task - the Essence idea. The
      * About window becomes a tabbed one so the strip is visible in the shot. */
     wm_add_tab(wabout, APP_MONITOR, "Stats");
     wm_add_tab(wabout, APP_FILES, "Files");
+
+    if (want_focus >= 0 && wm_is_open(want_focus)) { wm_raise(want_focus); wm_focus(want_focus); }
 
     /* let the open animation settle, then take the picture */
     for (int i = 0; i < 7; i++) { fake_ticks++; wm_frame(); }
 
     FILE *f = fopen(out, "wb");
     if (!f) { perror("open"); return 1; }
-    fprintf(f, "P6\n%d %d\n255\n", W, H);
+    fprintf(f, "P6\n# host compositor harness; zl shell not included\n%d %d\n255\n", W, H);
     for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++) {
             unsigned c = fb_get_px(x, y);
@@ -260,7 +357,8 @@ int main(int argc, char **argv)
             fwrite(px, 1, 3, f);
         }
     fclose(f);
-    printf("wrote %s  %dx%d   (%d windows, focus %d)\n",
+    printf("wrote %s  %dx%d   (%d windows, focus %d); "
+           "host compositor harness; zl shell not included\n",
            out, W, H, wm_count(), wm_focused());
     return 0;
 }

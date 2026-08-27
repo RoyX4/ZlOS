@@ -90,7 +90,8 @@
       "modeset-run.sh"
     ],
     "builder": [
-      "build.sh"
+      "build.sh",
+      "run-all.sh"
     ]
   },
   "commands": {

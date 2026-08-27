@@ -35,7 +35,24 @@
  * that was fine at the old scale and silently wrong at the new one. 1024 is
  * headroom, not a guess - the kernel is nowhere near it either way, and
  * set_add()'s bound stops it from ever overflowing the array again. */
-#define NAMESET_MAX 1024
+#define NAMESET_MAX 4096
+
+/* ...AND IT IS NOW LOUD, WHICH MATTERS MORE THAN THE NUMBER.
+ *
+ * The comment above says "1024 is headroom, not a guess - the kernel is
+ * nowhere near it either way". The kernel reached 1083 functions and this
+ * dropped 59 of them on the floor, exactly as it had at 256. A call to a
+ * dropped name does not fail to compile: set_has() says the name is unknown,
+ * so the call is emitted as a dynamic zl_calln(), which falls off the end of
+ * the runtime's builtin table and calls kfatal(). The kernel built clean, with
+ * zero undefined symbols, and then halted on boot with "builtin not available
+ * in the kernel subset". Nothing in the build said why.
+ *
+ * Raising the cap a second time only buys another scale. The defect is that
+ * set_add() had no failure path at all - a silent drop inside a compiler
+ * surfaces as a runtime halt in code that never changed, which is the single
+ * most expensive shape a bug can have here. It is a hard error now, and it
+ * names the function it could not fit. */
 
 typedef struct {
     char names[NAMESET_MAX][MAX_TEXT];
@@ -46,11 +63,21 @@ static void set_add(NameSet *s, const char *name)
 {
     for (int i = 0; i < s->count; i++)
         if (strcmp(s->names[i], name) == 0) return;   /* already there */
-    if (s->count < NAMESET_MAX) {
-        strncpy(s->names[s->count], name, MAX_TEXT - 1);
-        s->names[s->count][MAX_TEXT - 1] = '\0';
-        s->count++;
+    if (s->count >= NAMESET_MAX) {
+        fprintf(stderr,
+                "zl: too many names for the C backend: '%s' is number %d and "
+                "NAMESET_MAX is %d.\n"
+                "    Dropping it would compile every call to it as a dynamic\n"
+                "    zl_calln(), which the kernel runtime answers with\n"
+                "    kfatal(\"builtin not available in the kernel subset\").\n"
+                "    The build would succeed and the kernel would halt on boot.\n"
+                "    Raise NAMESET_MAX in src/backends/c/compile.c.\n",
+                name, s->count + 1, NAMESET_MAX);
+        exit(1);
     }
+    strncpy(s->names[s->count], name, MAX_TEXT - 1);
+    s->names[s->count][MAX_TEXT - 1] = '\0';
+    s->count++;
 }
 
 static int set_has(NameSet *s, const char *name)

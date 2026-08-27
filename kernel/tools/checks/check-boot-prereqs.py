@@ -29,32 +29,65 @@ REQUIRED_FILES = (
     Path("/usr/share/OVMF/OVMF_VARS_4M.fd"),
 )
 
+KERNEL_ROOT = Path(__file__).resolve().parents[2]
+REQUIRED_SCRIPTS = (
+    Path("tools/images/mkiso.sh"),
+    Path("verify.sh"),
+    Path("tools/checks/verify-iso.sh"),
+    Path("tools/checks/verify-64.sh"),
+    Path("tools/checks/verify-efi.sh"),
+    Path("tools/checks/verify-raw.sh"),
+    Path("tools/checks/verify-disk.sh"),
+    Path("tools/checks/verify-clock.sh"),
+    Path("tools/checks/verify-net.sh"),
+)
 
-def missing_prereqs(commands: dict[str, bool], files: dict[str, bool]) -> list[str]:
+
+def missing_prereqs(
+    commands: dict[str, bool],
+    files: dict[str, bool],
+    scripts: dict[str, bool],
+) -> list[str]:
     missing = [f"command:{name}" for name, present in commands.items() if not present]
     missing.extend(f"file:{name}" for name, present in files.items() if not present)
+    missing.extend(
+        f"executable-script:{name}" for name, executable in scripts.items() if not executable
+    )
     return missing
 
 
-def live_state() -> tuple[dict[str, bool], dict[str, bool]]:
+def live_state() -> tuple[dict[str, bool], dict[str, bool], dict[str, bool]]:
     commands = {name: shutil.which(name) is not None for name in REQUIRED_COMMANDS}
     files = {str(path): path.is_file() for path in REQUIRED_FILES}
-    return commands, files
+    scripts = {
+        str(path): (KERNEL_ROOT / path).is_file() and (KERNEL_ROOT / path).stat().st_mode & 0o111 != 0
+        for path in REQUIRED_SCRIPTS
+    }
+    return commands, files, scripts
 
 
 def selftest() -> None:
     commands = {name: True for name in REQUIRED_COMMANDS}
     files = {str(path): True for path in REQUIRED_FILES}
-    assert not missing_prereqs(commands, files)
+    scripts = {str(path): True for path in REQUIRED_SCRIPTS}
+    assert not missing_prereqs(commands, files, scripts)
 
     commands["qemu-system-x86_64"] = False
-    assert missing_prereqs(commands, files) == ["command:qemu-system-x86_64"]
+    assert missing_prereqs(commands, files, scripts) == ["command:qemu-system-x86_64"]
     commands["qemu-system-x86_64"] = True
 
     ovmf = str(REQUIRED_FILES[0])
     files[ovmf] = False
-    assert missing_prereqs(commands, files) == [f"file:{ovmf}"]
-    print("boot-prereqs selftest: caught missing-command and missing-firmware")
+    assert missing_prereqs(commands, files, scripts) == [f"file:{ovmf}"]
+    files[ovmf] = True
+
+    script = str(REQUIRED_SCRIPTS[0])
+    scripts[script] = False
+    assert missing_prereqs(commands, files, scripts) == [f"executable-script:{script}"]
+    print(
+        "boot-prereqs selftest: caught missing-command, missing-firmware, "
+        "and non-executable-script"
+    )
 
 
 def main() -> int:
@@ -64,8 +97,8 @@ def main() -> int:
     if args.selftest:
         selftest()
 
-    commands, files = live_state()
-    missing = missing_prereqs(commands, files)
+    commands, files, scripts = live_state()
+    missing = missing_prereqs(commands, files, scripts)
     if missing:
         print("boot-prereqs: FAIL")
         for item in missing:
@@ -73,7 +106,8 @@ def main() -> int:
         return 1
     print(
         "boot-prereqs: PASS: "
-        f"{len(commands)} commands and {len(files)} firmware files"
+        f"{len(commands)} commands, {len(files)} firmware files, and "
+        f"{len(scripts)} executable scripts"
     )
     return 0
 

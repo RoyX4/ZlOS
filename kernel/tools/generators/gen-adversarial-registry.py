@@ -49,7 +49,7 @@ FAILURE_SEAMS = (
     ("provider", "MISSING", (), "no start/admit/resource-reservation rollback injector"),
     ("service", "MISSING", (), "no service dependency-loss/crash/reconnect injector"),
     ("package", "MISSING", (), "no staged install/uninstall failure-at-every-step injector"),
-    ("lifecycle", "PARTIAL", (), "62 app open-ready-close routes pass, but lifecycle failure is not injected"),
+    ("lifecycle", "PARTIAL", (), "all current application open-ready-close routes pass, but lifecycle failure is not injected"),
 )
 
 HOSTILE_FAMILIES = (

@@ -14,6 +14,7 @@ REQUIRED_SNIPPETS = (
     'run "mandatory boot prerequisites"',
     'run "contained gate launcher contract"',
     'python3 tools/checks/check-land-gate.py --selftest',
+    'run "QEMU crash classifier"',
     'run "wrapper inventory write"',
     'run "wrapper inventory check"',
     'python3 tools/checks/check-build-contract.py --selftest',
@@ -33,16 +34,20 @@ REQUIRED_SNIPPETS = (
     'run "host tests execute"',
     'run "host benchmark receipt"',
     'run "zl call sites"',
+    'run "zl generated dispatch"',
     'run "memory map"',
     'run "memory map mutation"',
+    'run "memory-map mirrors"',
+    'run "memory-map mirror canary"',
     'run "UI scale contract"',
     'run "unique app ids"',
     'run "app registry coverage"',
-    'run "61-app manifest"',
+    'run "application manifest"',
     'run "app lifecycle verifier"',
     'run "reproducible artifact verifier"',
     'run "high-RAM map"',
     'FAIL (reverse SOURCES: kernel/SOURCES is missing)',
+    'src/graphics/fonts/font_big.c|src/graphics/icons/icons_rgb.c)',
     'run "reproducible kernel and ISO"',
     'tools/images/mkiso.sh verify.sh tools/checks/verify-iso.sh',
     'tools/checks/verify-64.sh tools/checks/verify-efi.sh',
@@ -53,10 +58,13 @@ REQUIRED_SNIPPETS = (
     'run "app routes QEMU"',
     'run "47-app lifecycle QEMU"',
     'run "Run route QEMU"',
-    'run "62-surface evidence registry write"',
-    'run "62-surface evidence registry check"',
+    'python3 tools/probes/probe-run.py --no-build',
+    'run "application evidence registry write"',
+    'run "application evidence registry check"',
     'run "artifact and boot-route registry write"',
     'run "artifact and boot-route registry check"',
+    'run "final build graph artifact rebind write"',
+    'run "final build graph artifact rebind check"',
     'run "initialization registry write"',
     'run "initialization registry check"',
     'run "adversarial registry write"',
@@ -138,11 +146,27 @@ def selftest(source: str) -> None:
     )
     expect_failure(
         source.replace(
+            'src/graphics/fonts/font_big.c|src/graphics/icons/icons_rgb.c)',
+            'src/graphics/fonts/font_big.c)',
+            1,
+        ),
+        "deleted-generated-data-classification",
+    )
+    expect_failure(
+        source.replace(
             'tools/checks/verify-64.sh tools/checks/verify-efi.sh',
             'tools/checks/verify-efi.sh',
             1,
         ),
         "deleted-boot-route",
+    )
+    expect_failure(
+        source.replace(
+            'run "final build graph artifact rebind check"',
+            '# removed final graph rebind check',
+            1,
+        ),
+        "deleted-final-graph-rebind",
     )
     expect_failure(source.replace("exit $FAIL", "exit 0", 1), "masked-final-exit")
     expect_failure(
@@ -155,7 +179,8 @@ def selftest(source: str) -> None:
     )
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
-        "missing-SOURCES, deleted-boot-route, masked-final-exit and masked-child-failure"
+        "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
+        "deleted-final-graph-rebind, masked-final-exit and masked-child-failure"
     )
 
 

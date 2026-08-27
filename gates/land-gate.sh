@@ -61,6 +61,8 @@ run "contained gate launcher contract" "$WT/gates" \
     python3 check-contained-gate.py --selftest
 run "landing authority closure" "$WT/kernel" \
     python3 tools/checks/check-land-gate.py --selftest
+run "QEMU crash classifier" "$WT/kernel" \
+    bash tools/checks/qemu-crash-selftest.sh
 run "wrapper inventory write" "$WT/kernel" \
     python3 tools/generators/gen-wrapper-registry.py --write --selftest
 run "wrapper inventory check" "$WT/kernel" \
@@ -107,14 +109,25 @@ run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --
 # and check-memmap proves no two fixed addresses overlap - which is how
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
 run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
+run "zl generated dispatch" "$WT/kernel" \
+    python3 tools/checks/check-zl-dispatch.py --selftest
 run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
 run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
+run "memory-map mirrors" "$WT/kernel" python3 tools/checks/check-memmap-mirror.py
+run "memory-map mirror canary" "$WT/kernel" bash tools/checks/check-memmap-mirror-selftest.sh
 run "UI scale contract" "$WT/kernel" bash -c \
     'grep -Eq "^fn ui\(\) \{ return ui_scale\(\) \}$" src/kernel.zl'
 run "memmap guards" "$WT/kernel/tests/host" ./memmap-guard-test.sh
+
+# The shell's own geometry: the rail, the raster strip and the foot have to
+# TILE the panel exactly at every UI scale, and the register has to fit its
+# rows. This guard shipped with the PRESSWORK repaint and was wired into
+# nothing at all - a real check that fires on three planted defects and would
+# never have run again. Exactly the shape GUARDS-THAT-DID-NOT-GUARD.md is for.
+run "shell layout" "$WT/kernel" python3 tools/checks/check-shell-layout.py
 run "unique app ids" "$WT/kernel" ./tools/checks/check-appids.py --selftest
 run "app registry coverage" "$WT" python3 kernel/tests/host/apps53.py --selftest
-run "61-app manifest" "$WT/kernel" python3 tools/generators/gen-app-manifest.py --check --selftest
+run "application manifest" "$WT/kernel" python3 tools/generators/gen-app-manifest.py --check --selftest
 run "app lifecycle verifier" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --selftest
 run "reproducible artifact verifier" "$WT/kernel" python3 tools/checks/check-reproducible-build.py --selftest
 # check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
@@ -129,13 +142,23 @@ if [ -f "$WT/kernel/SOURCES" ]; then
   # SOURCES proves every listed file is compiled. This proves the reverse: that
   # a .c sitting in kernel/src is not silently absent from the build. Three
   # outcomes, and only one of them is a failure.
-  miss=0; hostonly=0; dead=0
+  miss=0; hostonly=0; generated_data=0; dead=0
   while IFS= read -r f; do
     b=$(basename "$f")
     rel=${f#"$WT/kernel/"}
     # compiled outside the SOURCES loop by every target, deliberately
     case "$rel" in src/runtime/interp_kernel.c) continue;; esac
     grep -qx "$rel" "$WT/kernel/SOURCES" && continue
+    case "$rel" in
+      src/graphics/fonts/font_big.c|src/graphics/icons/icons_rgb.c)
+        # Generated const-data products, not translation units. font_big is
+        # deliberately excluded from the raw image's 640 KiB loader budget;
+        # icons_rgb is retained generator output for a future renderer.
+        echo "generated data (intentionally not linked): $b"
+        generated_data=$((generated_data+1))
+        continue
+        ;;
+    esac
     if grep -q "$rel\|$b" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
       # host-only: a harness compiles it, the kernel does not. Correct.
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
@@ -152,7 +175,7 @@ if [ -f "$WT/kernel/SOURCES" ]; then
   if [ $miss -gt 0 ]; then
     FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: $miss silently uncompiled)"
   else
-    echo ">>> ok (reverse SOURCES; $hostonly host-only, $dead dead)"
+    echo ">>> ok (reverse SOURCES; $hostonly host-only, $generated_data generated data, $dead dead)"
   fi
 else
   FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: kernel/SOURCES is missing)"
@@ -185,16 +208,23 @@ until guard; do sleep 30; done
 run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --no-build \
     --receipt docs/receipts/app-lifecycle-qemu-2026-08-22.json
 until guard; do sleep 30; done
-run "Run route QEMU" "$WT/kernel" python3 probe-run.py --no-build \
+run "Run route QEMU" "$WT/kernel" python3 tools/probes/probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
-run "62-surface evidence registry write" "$WT/kernel" \
+run "application evidence registry write" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --write --verify-artifact
-run "62-surface evidence registry check" "$WT/kernel" \
+run "application evidence registry check" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --check --selftest --verify-artifact
 run "artifact and boot-route registry write" "$WT/kernel" \
     python3 tools/generators/gen-artifact-registry.py --write --selftest
 run "artifact and boot-route registry check" "$WT/kernel" \
     python3 tools/generators/gen-artifact-registry.py --check --selftest
+# The early build graph proves recipe/source closure before compilation. Rebind
+# it after the final artifact registry exists so downstream release/provenance
+# joins see the exact current outputs rather than the previous artifact batch.
+run "final build graph artifact rebind write" "$WT/kernel" \
+    python3 tools/generators/gen-build-graph.py --write --selftest
+run "final build graph artifact rebind check" "$WT/kernel" \
+    python3 tools/generators/gen-build-graph.py --check --selftest
 run "initialization registry write" "$WT/kernel" \
     python3 tools/generators/gen-init-registry.py --write --selftest
 run "initialization registry check" "$WT/kernel" \

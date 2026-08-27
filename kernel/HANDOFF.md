@@ -9,6 +9,46 @@
 > and reversals. T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) records
 > the metadata chain that cannot currently regenerate as one build identity.
 
+**QEMU segfaults on this box, and until 2026-08-27 every gate blamed the
+kernel for it.** Four crashes that day, all at the same binary offset
+(`6ee234`, reading `0x10`), only in `verify-efi.sh` - the one gate driving
+qemu-xhci + usb-storage + usb-kbd + usb-mouse under OVMF. If a boot gate fails
+with "the kernel never started", check for `CRASH QEMU ITSELF crashed` above it
+before bisecting anything:
+[`../docs/evidence/qemu-segfaults-2026-08-27.md`](../docs/evidence/qemu-segfaults-2026-08-27.md).
+`kernel/tools/checks/qemu-crash.sh` is the single detector; all eight landing boot gates
+source it and it REPORTS rather than deciding, because a teardown crash after
+the markers landed does not unprove the boot.
+
+**The previously unwatched 64-bit BIOS+GRUB route is green and mandatory now.**
+The failure reproduced at `7d1a11b`, but a later build reached `ready.` and
+returned `fib(20)=6765`; its current receipt records that QEMU-only pass.
+`verify-64.sh` is in the contained landing gate and the landing-authority
+selftest rejects deleting it. The original report also placed the stop in a
+C-to-zl handoff, but the last visible markers were already printed by
+`kernel.zl`; that location claim was wrong. The corrected history is in
+[`../docs/evidence/grub-bios64-unwatched-2026-08-27.md`](../docs/evidence/grub-bios64-unwatched-2026-08-27.md).
+
+The desktop's three edge reserves were written down ELEVEN times across wm.c,
+snap.c, four host tests, four boot gates and the receipt writer, and by
+2026-08-27 no two sets agreed - including a `72 * t->scale` in wm.c whose
+comment cited a `dock_y()` that had been deleted. The full table, why every
+gate was blind to it (several of the gates WERE copies), and what replaced it
+are in
+[`../docs/evidence/one-fact-many-copies-2026-08-27.md`](../docs/evidence/one-fact-many-copies-2026-08-27.md).
+Read it before writing a number that describes the shell.
+
+**`kernel/tests/host/run-all.sh` is how you run the host suite** - not
+`build.sh` followed by running binaries by name. `build.sh` has `set -e` and
+stops at the first link error, and the previous run's binaries stay on disk, so
+that habit reports "all passed" from code that predates your change. It happened
+in this session. run-all.sh deletes first and treats NOT BUILT as a failure.
+
+About 125 tracked files were truncated to zero bytes on 2026-08-27 and committed
+via `git add -A`; the recovery, and the fact that two simultaneous registered-claim
+failures were the only thing that noticed, are in
+[`../docs/evidence/truncation-incident-2026-08-27.md`](../docs/evidence/truncation-incident-2026-08-27.md).
+
 The 2026-08-24 host freeze, the evidence that survived it, and the mandatory
 resource-contained landing-gate procedure are recorded in
 [`docs/host-freeze-and-gate-containment-2026-08-24.md`](docs/host-freeze-and-gate-containment-2026-08-24.md).

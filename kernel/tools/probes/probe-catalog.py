@@ -1,32 +1,22 @@
 #!/usr/bin/env python3
-"""probe-catalog.py - is "All Applications" reachable with the POINTER?
+"""probe-catalog.py - are the register, menu, and catalogue reachable?
 
-47 of zlOS's 53 apps exist only behind this window, so "can a person open it"
-is not a detail - it is whether five sixths of the desktop is software or
-decoration. A screenshot cannot tell a working catalog from a picture of one,
-so this drives the real pointer through the real chrome and asks the COMPOSITOR
-what happened, not the pixels alone.
+The 47 registry apps exist behind this window, so "can a person open it" is not
+a detail. A screenshot cannot tell a working catalogue from a picture of one,
+so this drives the real input paths and asks the compositor what happened.
 
-  1 TERMINAL  the dock's first tile is a launcher, not the start button
-  2 MENU      the topbar's Activities corner still opens the menu
-  3 GRID      the dock's grid button opens "All Applications"
+  1 TERMINAL  the register's first row raises Terminal, not Menu
+  2 MENU      a clean Super tap opens and closes Menu
+  3 ALL APPS  the register's final fixed row opens "All Applications"
   4 MAZE      the formerly excluded Maze tile opens THAT app after scrolling
 
-WHY 1 IS FIRST, and why it is a test at all. desk_click() carried a guard from
-the full-width bar - `if cx >= dock_start_x() { if cx < dock_start_x() + 42u {
-open_menu() } }` - and dock_start_x() returns dock_x0(), the left edge of TILE
-0. 42 design units is wider than a tile plus its gap, so the Terminal tile and
-the first four units of the Browser opened the start menu and never reached
-dock_launch(). Nothing caught it because the menu opening looks like something
-working.
-
-EVERY COORDINATE HERE IS PARSED OUT OF kernel.zl, not transcribed. The previous
-version of this file hardcoded `DOCK_H = 64` against a 52-unit dock and
-`ui = 2 if W >= 1400 else 1` against fb.c's real formula, and clicked a start
-button that had been replaced by a floating island - three independent ways to
-land on the wallpaper and report a broken feature that worked.
+Every shell coordinate here comes from zlosboot.py's parser of kernel.zl. The
+catalogue tile coordinates come from the compositor's reported client rectangle.
+The probe follows the current input contract: pointer for the rail, keyboard for
+Menu, and pointer again inside All Applications.
 """
 import os
+import re
 import sys
 
 PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,9 +35,11 @@ SHOTS = os.path.join(HERE, "shots")
 W, H = 1280, 800
 
 
-def differs(a, b, box):
-    x0, y0, x1, y1 = box
-    return int((a[y0:y1:2, x0:x1:2] != b[y0:y1:2, x0:x1:2]).any(axis=2).sum())
+def lifecycle(log, event, app):
+    return re.findall(
+        rf"wm:lifecycle v=1 event={event} slot=\d+ app={app} generation=\d+ live=\d+",
+        log,
+    )
 
 
 def main():
@@ -55,67 +47,57 @@ def main():
     fails = []
     with zb.Machine(W, H, how="native") as m:
         u = zb.guest_ui(m.w)
-        g = zb.dock_geometry(m.w, m.h)
-        g["tile0"] = g["slots"][0]
+        g = zb.rail_geometry(m.w, m.h)
         settle = m.ser.drain
-        print(f"ui {u}x  dock top {g['dock_y']}  tile0 {g['tile0']}  "
-              f"grid {g['grid']}")
+        print(f"ui {u}x  rail {g['rail_w']}px  row0 {g['slots'][0]}  "
+              f"all-apps {g['catalogue']}")
 
-        # The start menu is a window at (10u, dock_y - mh - 8u), 210u wide.
-        # Its exact height needs ui_metric(), which lives in C - so the box is
-        # the whole strip it can occupy. Anything opening there is the menu.
-        menu_box = (10 * u, max(0, g["dock_y"] - 420 * u),
-                    min(m.w, 220 * u), g["dock_y"] - 8 * u)
-
-        base = zb.grab(m.qmp, m.tmp, "base")
-
-        # ---- 1. the dock's first tile is a LAUNCHER ------------------------
-        zb.click(m.qmp, g["tile0"][0], g["tile0"][1], m.w, m.h, settle)
-        settle(1.2)
-        after = zb.grab(m.qmp, m.tmp, "tile0")
-        n = differs(base, after, menu_box)
-        ok = n < 500
-        print(f"  1 the Terminal tile does NOT open the menu  {n:6d} px  "
+        # ---- 1. the first register row is Terminal -------------------------
+        start = len(m.ser.all)
+        zb.click(m.qmp, g["slots"][0][0], g["slots"][0][1], m.w, m.h, settle)
+        ok = not lifecycle(m.ser.all[start:], "open", 4)
+        print(f"  1 register row 01 does NOT open Menu          "
               f"{'ok' if ok else 'FAIL'}")
         if not ok:
-            fails.append("terminal-tile-opens-menu")
+            fails.append("terminal-row-opens-menu")
 
-        # ---- 2. ...and the menu is still reachable -------------------------
-        zb.click(m.qmp, g["topbar_corner"][0], g["topbar_corner"][1],
-                 m.w, m.h, settle)
-        settle(1.2)
+        # ---- 2. Menu is a Super-key surface --------------------------------
+        start = len(m.ser.all)
+        zb.tap_key(m.qmp, "meta_l", settle)
         menu = zb.grab(m.qmp, m.tmp, "menu")
-        n = differs(after, menu, menu_box)
-        ok = n > 2000
-        print(f"  2 the topbar corner opens the menu         {n:6d} px  "
+        opened = lifecycle(m.ser.all[start:], "open", 4)
+        ready = lifecycle(m.ser.all[start:], "ready", 4)
+        ok = len(opened) == 1 and len(ready) == 1
+        print(f"  2 a Super tap opens and draws Menu             "
               f"{'ok' if ok else 'FAIL'}")
         if not ok:
             fails.append("menu")
-        # open_menu() toggles, so this closes it again and leaves a clean
-        # desktop for the catalog test rather than a modal over it.
-        zb.click(m.qmp, g["topbar_corner"][0], g["topbar_corner"][1],
-                 m.w, m.h, settle)
-        settle(1.2)
+        close_start = len(m.ser.all)
+        zb.tap_key(m.qmp, "meta_l", settle)
+        if len(lifecycle(m.ser.all[close_start:], "close", 4)) != 1:
+            fails.append("menu-close")
 
-        # ---- 3. the grid button opens the catalog --------------------------
+        # ---- 3. the final fixed rail row opens the catalogue ----------------
         # THE COMPOSITOR'S OWN REPORT, not a pixel delta: a delta cannot tell
         # "the catalog opened" from "a tooltip appeared", and reg_open() prints
         # `wm: win N title ... client ...` through wm_report on every window it
         # actually opens. It stays silent on the raise-and-focus path, which is
         # precisely the failure this probe exists to catch.
         before = zb.win_count(m.ser.all)
-        zb.click(m.qmp, g["grid"][0], g["grid"][1], m.w, m.h, settle)
+        start = len(m.ser.all)
+        zb.click(m.qmp, g["catalogue"][0], g["catalogue"][1], m.w, m.h, settle)
         settle(2.0)
         cat = zb.grab(m.qmp, m.tmp, "catalog")
-        rows = zb.WIN_REPORT.findall(m.ser.all)
-        ok = zb.win_count(m.ser.all) > before
-        print(f"  3 the dock's grid button opens the catalog  "
+        rows = zb.WIN_REPORT.findall(m.ser.all[start:])
+        ok = (zb.win_count(m.ser.all) > before
+              and len(lifecycle(m.ser.all[start:], "ready", 70)) == 1)
+        print(f"  3 register row 12 opens the catalogue       "
               f"{zb.win_count(m.ser.all) - before:5d} win  "
               f"{'ok' if ok else 'FAIL'}")
         if not ok:
-            fails.append("grid-button")
+            fails.append("all-apps-row")
             print("      reg_open(APP_CATALOG) reported no window. Either the "
-                  "click missed the button, or the id it opens is already on "
+                  "click missed the row, or the id it opens is already on "
                   "screen under another app - which is a raise, not an open.")
 
         # ---- 4. the formerly excluded Maze tile launches Maze --------------

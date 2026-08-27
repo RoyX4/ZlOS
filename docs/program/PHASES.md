@@ -302,7 +302,7 @@ Dependencies: MP-11 and the providers each app consumes.
 
 Deliver:
 
-- all 61 current named implementations plus All Applications as explicit
+- all 63 current named implementations plus All Applications as explicit
   registry entries/routes;
 - all 24 named games as deterministic input/audio/render/persistence/runtime
   probes;

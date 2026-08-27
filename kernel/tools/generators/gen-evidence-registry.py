@@ -95,39 +95,44 @@ def validate(value: dict) -> None:
         if len(row.get("sha256", "")) != 64 or not row.get("schema"):
             raise ValueError(f"{row.get('path')}: missing receipt identity")
     counts = value.get("counts", {})
+    manifest = load("app-manifest.json")
+    app = load("app-evidence.json")
+    provenance = load("provenance-viewer.json")
+    application_count = len(manifest.get("entries", []))
+    build_input_count = len(load("build-identity.json").get("source_files_sha256", {}))
     expected_counts = {
         "reproducible_artifacts": 9,
-        "source_snapshot_inputs": 148,
+        "source_snapshot_inputs": build_input_count,
         "source_snapshot_off_host_copies": 0,
         "qemu_boot_routes": 6,
-        "app_identities": 62,
-        "app_lifecycle_proved": 62,
+        "app_identities": application_count,
+        "app_lifecycle_proved": app.get("counts", {}).get("with_qemu_open_ready_close"),
         "init_stages": 18,
         "dependency_commands": 15,
         "dependency_firmware_blobs": 2,
         "dependency_runtime_files": 91,
         "dependency_transitive_packages": 145,
         "dependency_source_archives_retained": 0,
-        "wrapper_inventory": 156,
-        "wrapper_named_by_landing_gate": 58,
-        "wrapper_legacy_policy_gaps": 19,
+        "wrapper_inventory": 164,
+        "wrapper_named_by_landing_gate": 63,
+        "wrapper_legacy_policy_gaps": 18,
         "toolchain_tools": 7,
         "toolchain_target_lanes": 4,
         "toolchain_external_headers": 82,
         "toolchain_hermetic_builds": 0,
-        "build_graph_source_inputs": 148,
+        "build_graph_source_inputs": build_input_count,
         "build_graph_target_lanes": 4,
         "build_graph_artifacts": 9,
         "build_graph_orphan_inputs": 0,
-        "build_graph_scope_only_inputs": 8,
-        "license_build_inputs": 148,
+        "build_graph_scope_only_inputs": 9,
+        "license_build_inputs": build_input_count,
         "license_files": 0,
-        "host_targets": 73,
+        "host_targets": 74,
         "host_commands_executed": 64,
         "host_passed": 59,
         "host_failed": 0,
         "host_hardware_skips": 3,
-        "host_not_run": 11,
+        "host_not_run": 12,
         "physical_exact_hash_proofs": 0,
         "verifier_canaries_caught": 19,
         "landing_gate_mandatory_seams": counts.get("landing_gate_mandatory_seams"),
@@ -167,7 +172,7 @@ def validate(value: dict) -> None:
         "provenance_inputs": 17,
         "provenance_health_areas": 11,
         "provenance_artifacts": 9,
-        "provenance_applications": 62,
+        "provenance_applications": provenance.get("counts", {}).get("applications"),
         "provenance_app_permission_grants": 0,
         "provenance_security_claims": 17,
         "provenance_change_candidates": 17,
@@ -191,7 +196,7 @@ def validate(value: dict) -> None:
         "historical_artifacts": 0,
         "current_build_bound_qemu_routes": 6,
         "historical_qemu_routes": 0,
-        "current_build_bound_host_receipts": 1,
+        "current_build_bound_host_receipts": 2,
     }
     if counts != expected_counts:
         raise ValueError("evidence count drift")
@@ -199,8 +204,8 @@ def validate(value: dict) -> None:
     expected_gaps = {
         "physical_exact_hash_artifacts": 9,
         "host_hardware_skips": 3,
-        "host_non_runs": 11,
-        "inputs_without_redistribution_grant": 148,
+        "host_non_runs": 12,
+        "inputs_without_redistribution_grant": build_input_count,
         "public_release_blocked": True,
         "source_snapshot_off_host_missing": True,
         "source_snapshot_signature_missing": True,
@@ -211,13 +216,13 @@ def validate(value: dict) -> None:
         "dependency_offline_rebuild_missing": True,
         "dependency_source_archives_missing": 145,
         "per_object_provenance_receipts_missing": True,
-        "build_graph_scope_only_inputs": 8,
-        "future_build_graph_outputs_missing": True,
+        "build_graph_scope_only_inputs": 9,
+        "future_build_graph_outputs_missing": False,
         "failure_injection_open_families": 7,
         "hostile_corpus_open_families": 4,
         "performance_over_budget": counts.get("benchmark_over_budget"),
         "native_target_benchmark_missing": True,
-        "benchmark_percentiles_missing": True,
+        "benchmark_percentiles_missing": False,
         "visual_unbound_assets": 41,
         "visual_variant_dimensions_open": 6,
         "accessibility_missing_capabilities": 9,
@@ -247,7 +252,7 @@ def validate(value: dict) -> None:
         "current_artifact_snapshot_missing": False,
         "current_qemu_evidence_missing": False,
         "current_host_test_receipt_missing": True,
-        "current_host_benchmark_missing": True,
+        "current_host_benchmark_missing": False,
     }
     if gaps != expected_gaps:
         raise ValueError("open evidence gaps were hidden or drifted")
@@ -263,7 +268,7 @@ def validate(value: dict) -> None:
     if len(value.get("generator", {}).get("sha256", "")) != 64:
         raise ValueError("missing evidence generator identity")
     bindings = value.get("evidence_bindings", [])
-    if len(bindings) != 8 or sum(row.get("current_build_bound") is True for row in bindings) != 7 \
+    if len(bindings) != 8 or sum(row.get("current_build_bound") is True for row in bindings) != 8 \
             or any(len(row.get("subject_build_identity", "")) != 64 for row in bindings):
         raise ValueError("evidence bindings were promoted or lost")
     if value.get("historical_host_test_receipt", {}).get("current_build_bound") is not False:
@@ -274,6 +279,7 @@ def build() -> dict:
     documents = {path: load(path) for path in INPUTS}
     identity = documents["build-identity.json"]["identity_sha256"]
     source_snapshot = documents["docs/receipts/source-snapshot-2026-08-24.json"]
+    manifest = documents["app-manifest.json"]
     artifact = documents["artifact-registry.json"]
     app = documents["app-evidence.json"]
     init = documents["init-registry.json"]
@@ -296,6 +302,7 @@ def build() -> dict:
     event_receipt = documents["docs/receipts/event-trace-host-2026-08-24.json"]
     event_schema = documents["event-schema.json"]
     observability = documents["observability-registry.json"]
+    build_input_count = len(documents["build-identity.json"].get("source_files_sha256", {}))
 
     current_identities = (
         source_snapshot.get("build_identity"),
@@ -326,32 +333,33 @@ def build() -> dict:
         "kernel/docs/receipts/event-trace-host-2026-08-24.json": event_receipt.get("build_identity"),
     }
     if any(len(item or "") != 64 for item in evidence_inputs.values()) \
-            or any(subject != identity for path, subject in evidence_inputs.items()
-                   if path != "kernel/docs/receipts/benchmark-host-2026-08-23.json") \
-            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] == identity:
+            or any(subject != identity for subject in evidence_inputs.values()):
         raise ValueError("evidence identity boundary is invalid")
     if source_snapshot.get("result") != "PASS_WITH_OPEN_CUSTODY_GAP" \
-            or source_snapshot.get("counts", {}).get("archived_inputs") != 148 \
+            or source_snapshot.get("counts", {}).get("archived_inputs") != build_input_count \
             or source_snapshot.get("open_gaps", {}).get("off_host_copies") != 0:
         raise ValueError("source snapshot is missing or overpromoted")
-    if artifact.get("result") != "PASS" or app.get("counts", {}).get("with_qemu_open_ready_close") != 62:
-        raise ValueError("historical artifact/app evidence is not passing")
+    application_count = len(manifest.get("entries", []))
+    if artifact.get("result") != "PASS" \
+            or app.get("counts", {}).get("identities") != application_count \
+            or app.get("counts", {}).get("with_qemu_open_ready_close") != application_count:
+        raise ValueError("current artifact/app evidence is not passing")
     if init.get("result") != "PASS" \
             or dependency.get("result") != "PASS_WITH_OPEN_SUPPLY_GAPS" \
             or dependency.get("closure", {}).get("all_package_dependencies_resolved") is not True \
             or dependency.get("closure", {}).get("all_source_archives_retained") is not False:
         raise ValueError("init/dependency evidence is not passing")
     if wrappers.get("result") != "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS" \
-            or wrappers.get("counts", {}).get("wrappers") != 156 \
+            or wrappers.get("counts", {}).get("wrappers") != 164 \
             or wrappers.get("authority_contract", {}).get("legacy_policy_gaps_are_not_landing_authority") is not True:
         raise ValueError("wrapper inventory is missing or overpromoted")
     if toolchain.get("result") != "PASS_WITH_OPEN_PORTABILITY_GAPS" \
             or toolchain.get("counts") != {"tools": 7, "target_lanes": 4, "external_headers": 82}:
         raise ValueError("toolchain manifest is missing or overpromoted")
     if build_graph.get("result") != "PASS_CURRENT_ARTIFACTS" \
-            or build_graph.get("counts", {}).get("source_inputs") != 148 \
+            or build_graph.get("counts", {}).get("source_inputs") != build_input_count \
             or build_graph.get("counts", {}).get("orphan_source_inputs") != 0 \
-            or build_graph.get("counts", {}).get("scope_only_inputs") != 8 \
+            or build_graph.get("counts", {}).get("scope_only_inputs") != 9 \
             or build_graph.get("artifact_snapshot", {}).get("current_build_bound") is not True:
         raise ValueError("build graph is missing or overpromoted")
     if license_registry.get("result") != "PASS_WITH_RELEASE_BLOCK" \
@@ -393,7 +401,7 @@ def build() -> dict:
         raise ValueError("release notes are missing, stale or overpromoted")
     if provenance.get("result") != "PASS_STATIC_VIEWER_WITH_OPEN_GAPS" \
             or provenance.get("viewer", {}).get("external_requests") != 0 \
-            or provenance.get("counts", {}).get("applications") != 62 \
+            or provenance.get("counts", {}).get("applications") != application_count \
             or provenance.get("counts", {}).get("applications_with_declared_permission_grants") != 0 \
             or provenance.get("counts", {}).get("cryptographic_signatures") != 0:
         raise ValueError("provenance viewer is missing, stale or overpromoted")
@@ -522,7 +530,7 @@ def build() -> dict:
         "historical_artifacts": 0,
         "current_build_bound_qemu_routes": len(artifact["boot_routes"]),
         "historical_qemu_routes": 0,
-        "current_build_bound_host_receipts": 1,
+        "current_build_bound_host_receipts": 2,
     }
     value = {
         "schema": "zlos.evidence-registry.v1",
@@ -565,7 +573,7 @@ def build() -> dict:
             ),
             "per_object_provenance_receipts_missing": True,
             "build_graph_scope_only_inputs": build_graph["counts"]["scope_only_inputs"],
-            "future_build_graph_outputs_missing": True,
+            "future_build_graph_outputs_missing": False,
             "failure_injection_open_families": len(adversarial["open_gaps"]["failure_injection"]),
             "hostile_corpus_open_families": len(adversarial["open_gaps"]["hostile_corpus"]),
             "performance_over_budget": benchmark["counts"]["over_budget"],
@@ -600,14 +608,14 @@ def build() -> dict:
             "current_artifact_snapshot_missing": False,
             "current_qemu_evidence_missing": False,
             "current_host_test_receipt_missing": True,
-            "current_host_benchmark_missing": True,
+            "current_host_benchmark_missing": False,
         },
         "generator": {
             "path": "kernel/tools/generators/gen-evidence-registry.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": (
-            "current source/tooling index joined to current artifacts, QEMU routes and event host proof plus historical host/benchmark evidence; "
+            "current source/tooling index joined to current artifacts, QEMU routes, host benchmark and event host proof plus a dirty-tree host-test receipt; "
             "no physical-artifact, full-workflow or public-release promotion"
         ),
         "weakest_link": (
@@ -681,6 +689,9 @@ def selftest(value: dict) -> None:
     binding = copy.deepcopy(value)
     binding["evidence_bindings"][0]["current_build_bound"] = False
     mutations["lost-current-artifact-proof"] = binding
+    benchmark = copy.deepcopy(value)
+    benchmark["evidence_bindings"][5]["current_build_bound"] = False
+    mutations["lost-current-benchmark-proof"] = benchmark
     caught = []
     for name, mutated in mutations.items():
         try:

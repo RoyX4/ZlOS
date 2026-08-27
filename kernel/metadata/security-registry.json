@@ -1,25 +1,25 @@
 {
   "schema": "zlos.security-claim-registry.v1",
   "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "input_bindings": {
     "artifact_registry": {
-      "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
       "current_build_bound": true
     },
     "init_registry": {
-      "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
       "current_build_bound": true
     },
     "host_test_receipt": {
-      "subject_head": "528a21f5f7fe8061b9e86c377d075529a433a558",
+      "subject_head": "ba5a344742dad707b4b47800b6160468728deb0b",
       "current_build_bound": false
     }
   },
   "input_receipts": {
-    "kernel/metadata/artifact-registry.json": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
-    "kernel/metadata/init-registry.json": "9bda15002df55cc1f208003659917598416e29e45138c34502846aa1ad239d59",
-    "kernel/tests/host/test-run-receipt.json": "cbdf04b522526da240aa763999121eae1f97bd74f02a71cc948e0ed0e1059cc3"
+    "kernel/metadata/artifact-registry.json": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+    "kernel/metadata/init-registry.json": "963afe648efb025f358d080f77c6385437bf925ea97ad180a2e44456d09d4c7d",
+    "kernel/tests/host/test-run-receipt.json": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8"
   },
   "claims": [
     {

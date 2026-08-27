@@ -1,32 +1,32 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "git": {
-    "head": "528a21f5f7fe8061b9e86c377d075529a433a558",
-    "branch": "codex/full-program",
-    "dirty": true,
-    "canonical_status_sha256": "38baa22089c75f971718611ecd554d8e0154e2a8f894712bda0c4c325cad255a",
+    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
+    "branch": "codex/presswork-close",
+    "dirty": false,
+    "canonical_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "submodule_status": []
   },
   "scope": "active zl import closure, declared C SOURCES, kernel/freestanding headers and all route scripts/entries/linkers/packaging helpers; conservative header superset",
   "archive": {
     "path": "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar",
     "format": "deterministic POSIX ustar; sorted paths; uid/gid/mtime zero",
-    "bytes": 7424000,
-    "sha256": "0b766f4a289f05b5fc9be53075d57131c34b9ed737c69760a1f9c22fb14dcfcc",
-    "members": 148
+    "bytes": 7854080,
+    "sha256": "7790954315f7783e56985e7776ae500dfa75bb44534493cc633516b7ed71ed66",
+    "members": 149
   },
   "counts": {
-    "build_inputs": 148,
-    "archived_inputs": 148
+    "build_inputs": 149,
+    "archived_inputs": 149
   },
   "source_files": [
     {
       "path": "freestanding/runtime_kernel.c",
-      "bytes": 138983,
+      "bytes": 151154,
       "mode": 436,
-      "sha256": "02d7b39e463e2bd3c02ed18faa816eab3cf5af6557927e1fc54748e92af41d47"
+      "sha256": "09480f71df8576a9bde15d903ecd7936699c3cf199e0f360a91dcaf0d6996e1c"
     },
     {
       "path": "freestanding/zl_freestanding.h",
@@ -44,7 +44,7 @@
       "path": "kernel/app_manifest_embed.zl",
       "bytes": 270,
       "mode": 436,
-      "sha256": "0fa3e5b84411e569398e7a00e48522f7507205825e875375b11b0592913fd0f3"
+      "sha256": "23fb728c6767f8615ef6c6907de64235ce51cb95e6a1d627eba5349b87c155df"
     },
     {
       "path": "kernel/apps/apps_common.zl",
@@ -78,9 +78,9 @@
     },
     {
       "path": "kernel/apps/apps_registry.zl",
-      "bytes": 31267,
+      "bytes": 31085,
       "mode": 436,
-      "sha256": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a"
+      "sha256": "632ac333ca4bef2da712d9507b5614dc9fc951904d78b557ec738597976a94c7"
     },
     {
       "path": "kernel/apps/apps_sys2.zl",
@@ -198,9 +198,9 @@
     },
     {
       "path": "kernel/metadata/app-manifest.json",
-      "bytes": 21280,
+      "bytes": 21926,
       "mode": 436,
-      "sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     },
     {
       "path": "kernel/src/arch/x86/apic.c",
@@ -347,6 +347,12 @@
       "sha256": "e0d88ab2a45944681a0ed13625980d753496329966e875561d5b072bf3930e90"
     },
     {
+      "path": "kernel/src/core/version.h",
+      "bytes": 1206,
+      "mode": 436,
+      "sha256": "0c621712a817f2c75a5ffd76a485fac332f3ba81320942e0783751704a644626"
+    },
+    {
       "path": "kernel/src/core/zllog.c",
       "bytes": 51109,
       "mode": 436,
@@ -456,9 +462,9 @@
     },
     {
       "path": "kernel/src/drivers/input/input.c",
-      "bytes": 42912,
+      "bytes": 44211,
       "mode": 436,
-      "sha256": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0"
+      "sha256": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0"
     },
     {
       "path": "kernel/src/drivers/input/keycodes.h",
@@ -468,9 +474,9 @@
     },
     {
       "path": "kernel/src/drivers/input/xhci.c",
-      "bytes": 169207,
+      "bytes": 169700,
       "mode": 436,
-      "sha256": "6c1985ca01d6c2b12c9ddfcc8017c940ee600a10a780f4fc15f65451d0ef4e7e"
+      "sha256": "79863802b82f352794ea15943ba239ea319fd6a8673dbbae0a833540589dd62d"
     },
     {
       "path": "kernel/src/drivers/network/e1000.c",
@@ -576,9 +582,9 @@
     },
     {
       "path": "kernel/src/graphics/icons/icons.c",
-      "bytes": 1076730,
+      "bytes": 1077109,
       "mode": 436,
-      "sha256": "290a1449bddae89cd7e368e7254435c474566b3e766cea70a7a6fdda307d5919"
+      "sha256": "2d7d07beca39fb0db12fc990a4545ee5334d496cc75b124153d6aa97a9d4d910"
     },
     {
       "path": "kernel/src/graphics/image/png.c",
@@ -594,9 +600,9 @@
     },
     {
       "path": "kernel/src/graphics/ui/design.h",
-      "bytes": 22758,
+      "bytes": 45200,
       "mode": 436,
-      "sha256": "f7f41d856f24c3acd4465545775247ad4131136009b3fe60d5eeacfb423d304c"
+      "sha256": "8bd34fdb56acb467ca586d6ac69106bfc44617d8141f334f0b02d8a01cdbe4ed"
     },
     {
       "path": "kernel/src/graphics/ui/ease.c",
@@ -618,33 +624,33 @@
     },
     {
       "path": "kernel/src/graphics/ui/settings.c",
-      "bytes": 46909,
+      "bytes": 47464,
       "mode": 436,
-      "sha256": "34953c6d92b31233397c4b576d5182ab2708f9068dea37e3b793e66f9b8b42bb"
+      "sha256": "bec8d5eee5d2525e108e592d528b5ecba7024ea46c18f59c2479b59e89da3397"
     },
     {
       "path": "kernel/src/graphics/ui/snap.c",
-      "bytes": 8056,
+      "bytes": 9744,
       "mode": 436,
-      "sha256": "77bb9397c504b1a59ae35d67befb96586ec2b7ff33705241ac2b0ac6531ecc9c"
+      "sha256": "58cd52f8fa7271dc4544927fb8d3379b4aa677b61f671f1069da7ba6b7969c88"
     },
     {
       "path": "kernel/src/graphics/ui/ui.c",
-      "bytes": 33259,
+      "bytes": 65449,
       "mode": 436,
-      "sha256": "1d9a00f73eb8a5f735de053e5d9b6e19dfdbcaec845b1a142c797826830b757d"
+      "sha256": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba"
     },
     {
       "path": "kernel/src/graphics/ui/ui.h",
-      "bytes": 27394,
+      "bytes": 41357,
       "mode": 436,
-      "sha256": "004c669a87915915ee560aded670dd94cdd5c9f02842f823031d8663203ff002"
+      "sha256": "2cf1b0f0e09088dc7f62cad99179a97b991bb5d60285cf25d3b6cee548a362b8"
     },
     {
       "path": "kernel/src/graphics/ui/uikit.c",
-      "bytes": 47068,
+      "bytes": 111392,
       "mode": 436,
-      "sha256": "91b93e196897b60cfae7d2895704ce1d84442cacc0696c149db1d8d50ff2eca5"
+      "sha256": "7cd585e1655cee456aff151d911abff93ce31efc2869a91711a1f83841531389"
     },
     {
       "path": "kernel/src/graphics/windowing/clip.c",
@@ -654,9 +660,9 @@
     },
     {
       "path": "kernel/src/graphics/windowing/term.c",
-      "bytes": 29063,
+      "bytes": 32414,
       "mode": 436,
-      "sha256": "689c524cbdce81c9ce9d16651c30df40a2b0272fcf8da4eac007858110825425"
+      "sha256": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8"
     },
     {
       "path": "kernel/src/graphics/windowing/userwin.c",
@@ -666,21 +672,21 @@
     },
     {
       "path": "kernel/src/graphics/windowing/wm.c",
-      "bytes": 147772,
+      "bytes": 204407,
       "mode": 436,
-      "sha256": "ee96dca48bec8e59199a01e567a3a77cfd6a5d291bae7b383c17db746561a019"
+      "sha256": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e"
     },
     {
       "path": "kernel/src/graphics/windowing/wmglue.c",
-      "bytes": 6899,
+      "bytes": 8006,
       "mode": 436,
-      "sha256": "5429294c4351cbe46b5b6eefb52eb9ffb25d992fb4fc0ef124fd074c11861e76"
+      "sha256": "0dbea309de2b1fbc2847d23c8ba6b8d9ebceb27f536c67007eeabf28527db578"
     },
     {
       "path": "kernel/src/kernel.zl",
-      "bytes": 268048,
+      "bytes": 484959,
       "mode": 436,
-      "sha256": "71c3b3ce79d356b03c16c27f6919d8646e20561fb1ac3d031df19cc0c9490869"
+      "sha256": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6"
     },
     {
       "path": "kernel/src/net/crypto.c",
@@ -864,9 +870,9 @@
     },
     {
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "bytes": 15047,
-      "mode": 509,
-      "sha256": "9b41d56391f2d5a4a6ba2f942e99699cc74b870aa6c0d678cbe0e9856967a5b2"
+      "bytes": 16208,
+      "mode": 436,
+      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04"
     },
     {
       "path": "kernel/tools/generators/gen-boot-media-ids.py",

@@ -35,6 +35,7 @@
 
 #include "ui.h"
 #include "design.h"
+#include "version.h"
 
 /* ---- what this file drives ------------------------------------------------
  * Six sinks, all of which already existed. Only wm_set_anim is new, because
@@ -77,11 +78,15 @@ static const struct { const char *name; unsigned rgb; } ACCENTS[] = {
      *
      * This table previously led with "Ice" #60D2EB, the blue-slate accent.
      * That colour is retired along with the rest of the old palette. */
-    { "Lime",    ZD_ACCENT },    /* == ui_theme_init's accent. Keep them equal. */
-    { "Mint",    ZD_ACCENT_ALT_1 },
-    { "Azure",   ZD_ACCENT_ALT_2 },
-    { "Violet",  ZD_ACCENT_ALT_3 },
-    { "Magenta", ZD_ACCENT_ALT_4 },
+    /* The names describe the ink that is actually there. They used to read
+     * Lime / Mint / Azure / Violet / Magenta, which were the previous palette's
+     * colours - after the repaint none of those five words named anything on
+     * screen, and two of the swatches were the same hex. */
+    { "Vermilion", ZD_ACCENT },  /* == ui_theme_init's accent. Keep them equal. */
+    { "Steel",     ZD_ACCENT_ALT_1 },
+    { "Steel pale",ZD_ACCENT_ALT_2 },
+    { "Vermilion pale", ZD_ACCENT_ALT_3 },
+    { "Coral",     ZD_ACCENT_ALT_4 },
 };
 #define N_ACCENT ((int)(sizeof ACCENTS / sizeof ACCENTS[0]))
 
@@ -301,9 +306,12 @@ static const struct page_def PAGES[N_PAGE] = {
 /* The about card's static rows. The row COUNT is in two places - here and in
  * PAGES above - so the two are asserted equal rather than trusted. */
 static const struct { const char *k, *v; } ABOUT_SYS[] = {
-    { "OS",             "zl 0.1"         },
+    /* Both of these were literals and both were WRONG on the build that
+     * actually boots - "zl 0.1" against a rail reading 0.3, and "i386" in a
+     * file compiled into the 64-bit kernel too. See version.h. */
+    { "OS",             "zlOS " ZLOS_VERSION_STR },
     { "Window manager", "wm.c"           },
-    { "Kernel",         "i386 - ring 0"  },
+    { "Kernel",         ZLOS_KERNEL_STR  },
     { "Toolkit",        "ui.c + uikit.c" },
     { "Settings block", "LBA 64"         },
     { "Store",          "nvme, 512 B"    },

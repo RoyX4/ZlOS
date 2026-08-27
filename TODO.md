@@ -23,7 +23,9 @@ The unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-_none — every file the docs describe is tracked._
+- [ ] `kernel/_gen64.c`
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
 
 ## Open tensions (.ultra/TENSIONS.md)
 
@@ -40,5 +42,76 @@ _none open._
 ## Hand-written
 
 _Items here survive regeneration. Everything above does not._
+
+### PRESSWORK desktop integration (2026-08-27)
+
+The PRESSWORK implementation, depth pass, shell parity, tracked typography,
+clipped-row repair, version authority, USB modifier repair, and memory-map
+mirror guard are all committed in the reconciliation branch. The host harness
+labels that it does not include the zl shell and now derives its UI scale from
+the framebuffer, while QEMU framebuffer evidence covers the complete shell.
+
+The C backend's former silent `NAMESET_MAX` overflow now fails at compile time.
+`check-zl-dispatch.py` also scans generated `kernel/out.c` and rejects any zl
+source function that was downgraded to dynamic `zl_calln()` dispatch. The
+whole-tree audit was completed and triaged in
+`docs/evidence/status-audits/WHOLE-TREE-CODEX-AUDIT-2026-08-26.md`.
+
+Dark PRESSWORK is the selected design. Light mode remains an explicit design
+exclusion, not unfinished implementation: its surface ladder cannot carry the
+contrast event that defines PRESSWORK. Current visual and boot proof is host
+and QEMU evidence only; the 2560x1440 ThinkPad panel still needs a physical
+review of the one-pixel depth runs and subpixel rendering.
+
+### GPU driver — where it stands, 2026-08-19
+
+CLOSED, each with the command that established it:
+
+- [x] **A sole owner can drive the Gen9.5 blitter ring.** The question the whole
+      driver was gated on. i915 unbound on the target machine: `START=0x400000`,
+      `CTL=1`, HEAD chased TAIL, **16384/16384 pixels filled**. No execlists
+      needed — `RING_START`/`CTL`/`TAIL` is the path. `docs/gpu-driver.md`.
+- [x] **The compositor calls the driver.** `wm.c` tries the display plane before
+      compositing a sprite; `fb_fill_px` offers large fills to the blitter. Both
+      fall back and both were proven to switch (a `wmshot` render diff of 927
+      bytes), not assumed.
+- [x] **The render engine's two blockers.** The Gen9 pixel shader (80 bytes,
+      lifted out of Mesa, colour patchable) and the 77-packet blended-draw
+      pipeline (3240 dwords, captured from the vendor driver). `gpu_shader.inc`,
+      `gpu_batch.inc`, `docs/gen9-blend-pipeline.md`.
+- [x] **`check-himap.sh`** — the C side of the memory map finally has a checker,
+      validated by watching it reject `edid_buf` put back where it was.
+
+OPEN:
+
+- [ ] **Boot the USB and run `blit` on the ThinkPad.** The one thing left for
+      milestone 2. The sequence is proven on this silicon *from Linux*, and the
+      command is proven to dispatch and print *in QEMU* — but never both at once,
+      and that is exactly what a USB boot is for. Step 7 is the win; 1–6 each
+      name where it stopped.
+- [ ] **`RENDER_SURFACE_STATE`'s bit layout** — the last piece for RCS. Not on
+      this box: no genxml, no ISL headers, no i915 files in `libdrm-dev`, nothing
+      decompressible out of `iris_dri.so`, and twelve `INTEL_DEBUG` flags tried.
+      Needs Intel's public Gen9 PRM. The binding table beside it is one dword.
+- [ ] **The cursor ignition.** `gpucursor.c` is complete and gated;
+      `gpu_cursor_arm(1)` is called by nothing, deliberately, until a hardware run
+      shows the display survives a takeover. It now has — so this is a decision,
+      not a blocker.
+- [ ] **SMP band rendering** — 1.78x on the desktop redraw, code already in the
+      tree, switched off because `smp_go()` is reachable only from the old text
+      shell. Bigger and cheaper than anything the blitter offers. Untouched
+      because another session held `kernel.zl` all day.
+
+Two corrections worth keeping, both cost real time:
+
+- **`G` is the wrong key on the desktop.** The shell is a *window* and takes
+  words plus Enter, so a single keypress sits in the line buffer and does
+  nothing. `blit` (or `ring`). This is the trap in
+  `docs/typing-into-the-compositor.md`, and I handed out the wrong instruction
+  after reading that file the same day.
+- **The command output never reaches serial on the desktop path**, because the
+  shell is a window. The ThinkPad has no serial port anyway. Every number has to
+  land on the screen, which is why the command prints `RING_CTL`, `HEAD`, `TAIL`
+  and the pixel count rather than a verdict.
 
 <!-- END HAND-WRITTEN -->

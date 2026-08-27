@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 from collections import Counter
@@ -20,6 +21,7 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "docs" / "program"
 RESEARCH = PROGRAM / "research"
+APP_MANIFEST = ROOT / "kernel" / "metadata" / "app-manifest.json"
 SOURCE = RESEARCH / "CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md"
 OUTPUT = PROGRAM / "FEATURE-MAP.md"
 CROSSWALK_OUTPUT = PROGRAM / "RESEARCH-CONTRACT-CROSSWALK.md"
@@ -122,7 +124,7 @@ EXPECTED_PREFIX_COUNTS = {
 }
 
 EXPECTED_REGISTRY_COUNTS = {
-    "AGT": 24, "APP": 83, "BLK": 25, "BUS": 28, "CUR": 38, "DEV": 20,
+    "AGT": 24, "APP": 83, "BLK": 25, "BUS": 28, "CUR": 40, "DEV": 20,
     "FSP": 22, "FUT": 12, "GAME": 24, "GPU": 25, "INPUT": 14, "MEDIA": 8,
     "NIC": 16, "OPS": 28, "PERIPH": 4, "PLAT": 38, "PWR": 7, "RADIO": 5,
     "SENSOR": 4, "SVC": 116, "USB": 14, "VM": 12, "ZLP": 42,
@@ -325,15 +327,24 @@ def extract_current_names(source_text: str) -> list[str]:
 def validate_apps(source_text: str) -> None:
     apps_text = read(PROGRAM / "APPLICATIONS.md")
     names = extract_current_names(source_text)
-    if len(names) != 62:
-        fail(f"current names including All Applications: {len(names)}, expected 62")
     if len(set(names)) != len(names):
         fail("duplicate names in canonical current-app/game appendix")
+    try:
+        manifest = json.loads(read(APP_MANIFEST))
+        manifest_names = [row["name"] for row in manifest["entries"]]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        fail(f"invalid generated application manifest: {error}")
+    if set(names) != set(manifest_names):
+        fail(
+            "canonical current-app/game appendix differs from generated manifest: "
+            f"missing={sorted(set(manifest_names) - set(names))!r}, "
+            f"unexpected={sorted(set(names) - set(manifest_names))!r}"
+        )
     missing = [name for name in names if name not in apps_text]
     if missing:
         fail(f"current apps/games missing from APPLICATIONS.md: {missing!r}")
     cur_ids = sorted({int(value) for value in re.findall(r"\| CUR-(\d{3}) \|", apps_text)})
-    if cur_ids != list(range(1, 39)):
+    if cur_ids != list(range(1, 41)):
         fail(f"CUR registry differs: {cur_ids!r}")
     game_ids = sorted({int(value) for value in re.findall(r"\| GAME-(\d{3}) \|", apps_text)})
     if game_ids != list(range(1, 25)):
@@ -604,7 +615,7 @@ def main() -> int:
         f"features={len(features)} prefixes={len(EXPECTED_PREFIX_COUNTS)} "
         f"phases=21 research_contracts={len(contracts)} registries={sum(registry_counts.values())} "
         f"research_docs={research_doc_count} repositories={repository_count} "
-        f"current_named=61 catalogue=1 games=24"
+        f"current_named={len(extract_current_names(source_text)) - 1} catalogue=1 games=24"
     )
     print("registry-counts: " + " ".join(f"{key}={value}" for key, value in registry_counts.items()))
     return 0

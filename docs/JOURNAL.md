@@ -7,6 +7,431 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — test: record green presswork landing gate (1c9a8a8)
+
+`codex/presswork-close` · 34 files changed, 466 insertions(+), 456 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>34 file(s)</summary>
+
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- _…and 22 more_
+
+</details>
+
+## 2026-08-28 — fix(evidence): bind final artifacts before release joins (26b912b)
+
+`codex/presswork-close` · 37 files changed, 737 insertions(+), 673 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>37 file(s)</summary>
+
+- `gates/land-gate.sh`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- _…and 25 more_
+
+</details>
+
+## 2026-08-28 — fix(gates): repair executable and inventory closure (3edcae4)
+
+`codex/presswork-close` · 41 files changed, 853 insertions(+), 601 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>41 file(s)</summary>
+
+- `gates/land-gate.sh`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- `kernel/docs/receipts/benchmark-host-2026-08-23.json`
+- `kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json`
+- _…and 29 more_
+
+</details>
+
+## 2026-08-27 — fix(gates): close presswork integration gaps (c0a94fa)
+
+`codex/presswork-close` · 10 files changed, 294 insertions(+), 222 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | ? |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>10 file(s)</summary>
+
+- `TODO.md`
+- `docs/evidence/grub-bios64-unwatched-2026-08-27.md`
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `gates/land-gate.sh`
+- `kernel/HANDOFF.md`
+- `kernel/metadata/wrapper-registry.json`
+- `kernel/src/core/README.md`
+- `kernel/tools/checks/check-land-gate.py`
+- `kernel/tools/checks/check-zl-dispatch.py`
+
+</details>
+
+## 2026-08-27 — chore: boot receipts and build identity from the verified gate runs (d6c860d)
+
+`design/presswork` · 6 files changed, 53 insertions(+), 26 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/metadata/boot-media-ids.json`
+- `kernel/metadata/build-identity.json`
+
+</details>
+
+## 2026-08-27 — fix(gates): a crashed emulator was reported as a failed kernel, by all five (144941c)
+
+`design/presswork` · 11 files changed, 254 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/qemu-segfaults-2026-08-27.md`
+- `kernel/HANDOFF.md`
+- `kernel/tools/checks/qemu-crash-selftest.sh`
+- `kernel/tools/checks/qemu-crash.sh`
+- `kernel/tools/checks/verify-64.sh`
+- `kernel/tools/checks/verify-efi.sh`
+- `kernel/tools/checks/verify-iso.sh`
+- `kernel/tools/checks/verify-raw.sh`
+- `kernel/verify.sh`
+- `tools/hazard-scan.sh`
+
+</details>
+
+## 2026-08-27 — fix(gates): normalise the app count in the golden transcript, not just the sha (f469db8)
+
+`design/presswork` · 4 files changed, 78 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>4 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/one-fact-many-copies-2026-08-27.md`
+- `kernel/tests/fixtures/golden.txt`
+- `kernel/verify.sh`
+
+</details>
+
+## 2026-08-27 — fix(gates): the kernel printed a hardcoded app count, so every gate hardcoded one too (b71cf81)
+
+`design/presswork` · 7 files changed, 95 insertions(+), 14 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>7 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/truncation-incident-2026-08-27.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/boot-media-ids.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/tools/generators/gen-app-manifest.py`
+- `kernel/verify.sh`
+
+</details>
+
+## 2026-08-27 — docs: journal for 2c09b16 (2bf82c0)
+
+`design/presswork` · 1 file changed, 19 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
+## 2026-08-27 — docs: the 64-bit BIOS boot route is broken and no gate watches it (2c09b16)
+
+`design/presswork` · 3 files changed, 119 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/grub-bios64-unwatched-2026-08-27.md`
+- `kernel/HANDOFF.md`
+
+</details>
+
+## 2026-08-27 — docs: register check-version.py and its selftest in the checks capsule (dbfa270)
+
+`design/presswork` · 3 files changed, 32 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/tools/checks/README.md`
+
+</details>
+
+## 2026-08-27 — fix(identity): the OS reported three different versions, two of them on screen at once (b088f2c)
+
+`design/presswork` · 24 files changed, 542 insertions(+), 105 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>24 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/one-fact-many-copies-2026-08-27.md`
+- `kernel/HANDOFF.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/boot-media-ids.json`
+- _…and 12 more_
+
+</details>
+
+## 2026-08-27 — feat(desktop): integrate presswork shell with current main (5fc72be)
+
+`codex/presswork-close` · 152 files changed, 8805 insertions(+), 6956 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>64 file(s)</summary>
+
+- `.github/scripts/render-desktop.sh`
+- `.github/workflows/desktop-shot.yml`
+- `.ultra/TENSIONS.md`
+- `TODO.md`
+- `docs/PROJECT-STATUS.md`
+- `docs/evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md`
+- `docs/program/APPLICATIONS.md`
+- `docs/program/FEATURE-MAP.md`
+- `docs/program/PHASES.md`
+- `docs/program/PRODUCT-IMPLEMENTATION-ORDER.md`
+- `docs/program/README.md`
+- `docs/program/VALIDATION-RECEIPT.md`
+- _…and 52 more_
+
+</details>
+
+## 2026-08-27 — docs: register run-all.sh in the tests/host capsule, and the journal for 116b88a (c5ed985)
+
+`design/presswork` · 2 files changed, 26 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/tests/host/README.md`
+
+</details>
+
+## 2026-08-27 — fix(gates): a host test that stopped LINKING stopped RUNNING, and nothing said so (116b88a)
+
+`design/presswork` · 9 files changed, 300 insertions(+), 46 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>9 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/tests/host/run-all.sh`
+- `kernel/tests/host/settingstest.c`
+- `kernel/tests/host/toasttest.c`
+- `kernel/tests/host/wmtest.c`
+- `kernel/tests/host/wmtest_feel.c`
+
+</details>
+
+## 2026-08-27 — fix(term): break the shell's wrap on words, and hang the continuation (7f42013)
+
+`design/presswork` · 8 files changed, 311 insertions(+), 51 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `docs/evidence/truncation-incident-2026-08-27.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/kernel.zl`
+- `kernel/tests/host/termwrap.c`
+
+</details>
+
+## 2026-08-27 — fix(files): stop drawing the window's own name, and design the empty state (d1586a3)
+
+`design/presswork` · 5 files changed, 36 insertions(+), 13 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>5 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-27 — docs: fix a dangling link and refresh the checks capsule (b49158f)
+
+`design/presswork` · 3 files changed, 67 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/design/desktop-deciding.md`
+- `kernel/tools/checks/README.md`
+
+</details>
+
 ## 2026-08-27 — docs: record pull request status fix (a27cd74)
 
 `main` · 1 file changed, 23 insertions(+)

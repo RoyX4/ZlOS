@@ -53,7 +53,7 @@ STAGE_SPECS = (
     ("INIT-015", "ring3-smoke", "user_up()", ("INIT-002", "INIT-012", "INIT-014"), "process", "required-proof",
      "Runs the current ring-3 syscall smoke path; failure prevents the later ready marker."),
     ("INIT-016", "application-manifest", "app_manifest_report()", ("INIT-015",), "product-identity", "required-proof",
-     "The running image must report the exact 62-surface manifest digest."),
+     "The running image must report the exact current application-manifest digest."),
     ("INIT-017", "build-identity", "build_identity_report()", ("INIT-016",), "artifact-identity", "required-proof",
      "The running image must report the exact build-input identity and source state."),
     ("INIT-018", "ready-publication", 'color(C_GREEN)  print("  ready.")', ("INIT-017",), "boot", "required-proof",

@@ -5,6 +5,7 @@
 set -uo pipefail
 KERNEL_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$KERNEL_ROOT"
+. tools/checks/qemu-crash.sh
 
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 
@@ -27,7 +28,8 @@ for _ in $(seq $((CEILING * 2))); do
     kill -0 "$QPID" 2>/dev/null || break
     sleep 0.5
 done
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
+qemu_crashed "$QSTATUS" || true
 
 if grep -q "fetched and rendered" "$OUT" 2>/dev/null; then
     echo "ok    virtio_net fetched http://example.com/ and the browser laid it out"

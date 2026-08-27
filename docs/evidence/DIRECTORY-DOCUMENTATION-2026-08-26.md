@@ -145,7 +145,7 @@ real index was never changed by the mutation.
 The first pre-push run was correctly blocked before any remote update. It found
 that the tracked application manifest predated four source changes in the local
 43-commit series. Regeneration changed only the source digest and embedded
-manifest digest; the 62 application identities and all other manifest fields
+manifest digest; the then-current 62 application identities and all other manifest fields
 remained unchanged.
 
 The same run exposed a false-positive hazard report: the EFI scanner compiled
@@ -172,7 +172,7 @@ seconds under concurrent machine load. Its nine reported stages all passed:
 - native UEFI64 QEMU boot.
 
 The boot routes generated current tracked receipts for the exact artifacts,
-logs, 62-entry application manifest, source head, and route-neutral build
+logs, the then-current 62-entry application manifest, source head, and route-neutral build
 identity used by that run. These are QEMU results only. No physical boot,
 display, input, storage, network, USB flash, or hardware test was performed.
 

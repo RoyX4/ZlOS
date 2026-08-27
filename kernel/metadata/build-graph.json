@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
   "result": "PASS_CURRENT_ARTIFACTS",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "artifact_snapshot": {
-    "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+    "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "current_build_bound": true,
     "evidence_ceiling": "exact current artifact/QEMU registry bound to this build identity"
   },
-  "artifact_registry_sha256": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
-  "toolchain_manifest_sha256": "75767929710d73de3f10b16da06c7fb6f5c07b472b9fe00ae9ca058857220659",
+  "artifact_registry_sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+  "toolchain_manifest_sha256": "e192dbdc1ad28d0ba338837a99044f15435e96ae1640228c37c5b9f62b112c4c",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -64,6 +64,7 @@
     "kernel/src/core/heap.c",
     "kernel/src/core/sched.c",
     "kernel/src/core/telemetry.h",
+    "kernel/src/core/version.h",
     "kernel/src/core/zllog.c",
     "kernel/src/core/zllog.h",
     "kernel/src/drivers/display/assets/cursor.inc",
@@ -198,7 +199,7 @@
       "id": "artifact:boot-media-ids.json",
       "kind": "artifact",
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "31485f161218a04280db9fffc813542b2e79df2402636002e2c231bb4aa9e701",
+      "sha256": "29956c845b74435ebfbeef9a12b7ab090012c4f3fe7690562ab136951e032320",
       "bytes": 484,
       "current_build_bound": true
     },
@@ -206,31 +207,31 @@
       "id": "artifact:kernel.elf",
       "kind": "artifact",
       "path": "kernel/kernel.elf",
-      "sha256": "715e7da1f3dd5a7899ed934048513d247880fdfac5f9d2c9503a61864a7d9a20",
-      "bytes": 5594240,
+      "sha256": "07108633eba499c522b78ced4d5fdccefadb9c76d7a13721eebe3c413423ec7c",
+      "bytes": 6396228,
       "current_build_bound": true
     },
     {
       "id": "artifact:kernel64.elf",
       "kind": "artifact",
       "path": "kernel/kernel64.elf",
-      "sha256": "afcd4996cb688ebe5a95bb510cd851515e3f48af10337d4a89636cf49aa78b9b",
-      "bytes": 3031456,
+      "sha256": "14f3edd97712b08073acffe724d630c2ad3981339a3f66930bbbbda9fcf82aa2",
+      "bytes": 3305128,
       "current_build_bound": true
     },
     {
       "id": "artifact:kernel_raw.elf",
       "kind": "artifact",
       "path": "kernel/kernel_raw.elf",
-      "sha256": "f08946e28d262fb687eed1a46b13b01a41ca16eaf47c2239a2b83d6d119f1cb8",
-      "bytes": 5594084,
+      "sha256": "723c2c7b69e181c9f7784b5073a7b3a2422593e6f7d09d63f8e3765954f50935",
+      "bytes": 6396136,
       "current_build_bound": true
     },
     {
       "id": "artifact:zlOS-usb.img",
       "kind": "artifact",
       "path": "kernel/zlOS-usb.img",
-      "sha256": "9951b2a04259f923929ebce8c75221b6a2e4050449fb9049505f48ce6c4a99b8",
+      "sha256": "c79fd1ed720b91f89c13806c7fa8689196f118b4d843e8661138b91ea1d671ac",
       "bytes": 138412032,
       "current_build_bound": true
     },
@@ -238,7 +239,7 @@
       "id": "artifact:zlOS.img",
       "kind": "artifact",
       "path": "kernel/zlOS.img",
-      "sha256": "d2acd9ffde79af69830929e0ee6242259900aae3e617fb615735174a4d440d0c",
+      "sha256": "987798d9f1aa7d493bf0f4533980b5a6eff9b8d04f76361210788f098bd7530c",
       "bytes": 6291968,
       "current_build_bound": true
     },
@@ -246,16 +247,16 @@
       "id": "artifact:zlOS.iso",
       "kind": "artifact",
       "path": "kernel/zlOS.iso",
-      "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273",
-      "bytes": 30736384,
+      "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d",
+      "bytes": 31539200,
       "current_build_bound": true
     },
     {
       "id": "artifact:zlOS64.iso",
       "kind": "artifact",
       "path": "kernel/zlOS64.iso",
-      "sha256": "7c84021c510008cdd48b27564ad27db8f909d4a3d06d3a7eb97583a84396d163",
-      "bytes": 28174336,
+      "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee",
+      "bytes": 28446720,
       "current_build_bound": true
     },
     {
@@ -2154,7 +2155,7 @@
       "id": "source:freestanding/runtime_kernel.c",
       "kind": "source-input",
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "02d7b39e463e2bd3c02ed18faa816eab3cf5af6557927e1fc54748e92af41d47",
+      "sha256": "09480f71df8576a9bde15d903ecd7936699c3cf199e0f360a91dcaf0d6996e1c",
       "suffix": ".c"
     },
     {
@@ -2175,7 +2176,7 @@
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "0fa3e5b84411e569398e7a00e48522f7507205825e875375b11b0592913fd0f3",
+      "sha256": "23fb728c6767f8615ef6c6907de64235ce51cb95e6a1d627eba5349b87c155df",
       "suffix": ".zl"
     },
     {
@@ -2217,7 +2218,7 @@
       "id": "source:kernel/apps/apps_registry.zl",
       "kind": "source-input",
       "path": "kernel/apps/apps_registry.zl",
-      "sha256": "d9df7132a84c6eb0e1daf4d71c50dbc789f82a54ef8b59865f1b49f3008d204a",
+      "sha256": "632ac333ca4bef2da712d9507b5614dc9fc951904d78b557ec738597976a94c7",
       "suffix": ".zl"
     },
     {
@@ -2357,7 +2358,7 @@
       "id": "source:kernel/metadata/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d",
+      "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447",
       "suffix": ".json"
     },
     {
@@ -2529,6 +2530,13 @@
       "suffix": ".h"
     },
     {
+      "id": "source:kernel/src/core/version.h",
+      "kind": "source-input",
+      "path": "kernel/src/core/version.h",
+      "sha256": "0c621712a817f2c75a5ffd76a485fac332f3ba81320942e0783751704a644626",
+      "suffix": ".h"
+    },
+    {
       "id": "source:kernel/src/core/zllog.c",
       "kind": "source-input",
       "path": "kernel/src/core/zllog.c",
@@ -2658,7 +2666,7 @@
       "id": "source:kernel/src/drivers/input/input.c",
       "kind": "source-input",
       "path": "kernel/src/drivers/input/input.c",
-      "sha256": "6586256d1456a546b88a2eec965508276fa8751f5d3c6d01f2e4abaf21962ab0",
+      "sha256": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0",
       "suffix": ".c"
     },
     {
@@ -2672,7 +2680,7 @@
       "id": "source:kernel/src/drivers/input/xhci.c",
       "kind": "source-input",
       "path": "kernel/src/drivers/input/xhci.c",
-      "sha256": "6c1985ca01d6c2b12c9ddfcc8017c940ee600a10a780f4fc15f65451d0ef4e7e",
+      "sha256": "79863802b82f352794ea15943ba239ea319fd6a8673dbbae0a833540589dd62d",
       "suffix": ".c"
     },
     {
@@ -2798,7 +2806,7 @@
       "id": "source:kernel/src/graphics/icons/icons.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/icons/icons.c",
-      "sha256": "290a1449bddae89cd7e368e7254435c474566b3e766cea70a7a6fdda307d5919",
+      "sha256": "2d7d07beca39fb0db12fc990a4545ee5334d496cc75b124153d6aa97a9d4d910",
       "suffix": ".c"
     },
     {
@@ -2819,7 +2827,7 @@
       "id": "source:kernel/src/graphics/ui/design.h",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/design.h",
-      "sha256": "f7f41d856f24c3acd4465545775247ad4131136009b3fe60d5eeacfb423d304c",
+      "sha256": "8bd34fdb56acb467ca586d6ac69106bfc44617d8141f334f0b02d8a01cdbe4ed",
       "suffix": ".h"
     },
     {
@@ -2847,35 +2855,35 @@
       "id": "source:kernel/src/graphics/ui/settings.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/settings.c",
-      "sha256": "34953c6d92b31233397c4b576d5182ab2708f9068dea37e3b793e66f9b8b42bb",
+      "sha256": "bec8d5eee5d2525e108e592d528b5ecba7024ea46c18f59c2479b59e89da3397",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/graphics/ui/snap.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/snap.c",
-      "sha256": "77bb9397c504b1a59ae35d67befb96586ec2b7ff33705241ac2b0ac6531ecc9c",
+      "sha256": "58cd52f8fa7271dc4544927fb8d3379b4aa677b61f671f1069da7ba6b7969c88",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/graphics/ui/ui.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/ui.c",
-      "sha256": "1d9a00f73eb8a5f735de053e5d9b6e19dfdbcaec845b1a142c797826830b757d",
+      "sha256": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/graphics/ui/ui.h",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/ui.h",
-      "sha256": "004c669a87915915ee560aded670dd94cdd5c9f02842f823031d8663203ff002",
+      "sha256": "2cf1b0f0e09088dc7f62cad99179a97b991bb5d60285cf25d3b6cee548a362b8",
       "suffix": ".h"
     },
     {
       "id": "source:kernel/src/graphics/ui/uikit.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/ui/uikit.c",
-      "sha256": "91b93e196897b60cfae7d2895704ce1d84442cacc0696c149db1d8d50ff2eca5",
+      "sha256": "7cd585e1655cee456aff151d911abff93ce31efc2869a91711a1f83841531389",
       "suffix": ".c"
     },
     {
@@ -2889,7 +2897,7 @@
       "id": "source:kernel/src/graphics/windowing/term.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/term.c",
-      "sha256": "689c524cbdce81c9ce9d16651c30df40a2b0272fcf8da4eac007858110825425",
+      "sha256": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8",
       "suffix": ".c"
     },
     {
@@ -2903,21 +2911,21 @@
       "id": "source:kernel/src/graphics/windowing/wm.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/wm.c",
-      "sha256": "ee96dca48bec8e59199a01e567a3a77cfd6a5d291bae7b383c17db746561a019",
+      "sha256": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/graphics/windowing/wmglue.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/wmglue.c",
-      "sha256": "5429294c4351cbe46b5b6eefb52eb9ffb25d992fb4fc0ef124fd074c11861e76",
+      "sha256": "0dbea309de2b1fbc2847d23c8ba6b8d9ebceb27f536c67007eeabf28527db578",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/kernel.zl",
       "kind": "source-input",
       "path": "kernel/src/kernel.zl",
-      "sha256": "71c3b3ce79d356b03c16c27f6919d8646e20561fb1ac3d031df19cc0c9490869",
+      "sha256": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
       "suffix": ".zl"
     },
     {
@@ -3134,7 +3142,7 @@
       "id": "source:kernel/tools/generators/gen-app-manifest.py",
       "kind": "source-input",
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "sha256": "9b41d56391f2d5a4a6ba2f942e99699cc74b870aa6c0d678cbe0e9856967a5b2",
+      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04",
       "suffix": ".py"
     },
     {
@@ -5464,6 +5472,11 @@
       "relation": "included-by"
     },
     {
+      "from": "source:kernel/src/core/version.h",
+      "to": "scope:declared-build-input",
+      "relation": "declared-scope-only"
+    },
+    {
       "from": "source:kernel/src/core/zllog.c",
       "to": "object:bios-multiboot32:src/core/zllog.c",
       "relation": "compiled-to"
@@ -6915,20 +6928,21 @@
     }
   ],
   "counts": {
-    "source_inputs": 148,
+    "source_inputs": 149,
     "declared_c_units": 73,
     "target_lanes": 4,
     "artifacts": 9,
     "current_artifacts": 9,
     "historical_artifacts": 0,
-    "nodes": 473,
-    "edges": 745,
+    "nodes": 474,
+    "edges": 746,
     "orphan_source_inputs": 0,
-    "scope_only_inputs": 8
+    "scope_only_inputs": 9
   },
   "scope_only_inputs": [
     "freestanding/zl_freestanding.h",
     "kernel/src/arch/x86/dma.h",
+    "kernel/src/core/version.h",
     "kernel/src/drivers/display/assets/cursor.inc",
     "kernel/src/drivers/display/assets/gpu_batch.inc",
     "kernel/src/drivers/display/assets/gpu_shader.inc",

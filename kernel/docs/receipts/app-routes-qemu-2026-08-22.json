@@ -1,13 +1,13 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273"
+    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
   },
   "counts": {
     "boot": 3,
-    "dock": 9,
+    "register": 11,
     "shell_word": 7,
-    "surface": 2
+    "surface": 4
   },
   "environment": {
     "display": [
@@ -17,7 +17,7 @@
     "qemu": "QEMU emulator version 11.0.3 (Debian 1:11.0.3+ds-2)"
   },
   "evidence": "QEMU input/compositor routes; not workflow or physical proof",
-  "external_prerequisite": "APP_RUN id 7 is exercised by probe-run.py, not this route sweep",
+  "external_prerequisite": "APP_RUN id 7 route is covered here; probe-run.py owns its deeper execution workflow",
   "result": {
     "boot": [
       {
@@ -75,7 +75,7 @@
         }
       }
     ],
-    "dock": [
+    "register": [
       {
         "close": {
           "app": 0,
@@ -104,376 +104,10 @@
       },
       {
         "close": {
-          "app": 5,
-          "event": "close",
-          "generation": 1,
-          "live": 3,
-          "slot": 3
-        },
-        "id": 5,
-        "name": "Browser",
-        "open": {
-          "app": 5,
-          "event": "open",
-          "generation": 1,
-          "live": 4,
-          "slot": 3
-        },
-        "ready": {
-          "app": 5,
-          "event": "ready",
-          "generation": 1,
-          "live": 4,
-          "slot": 3
-        },
-        "slot": 1
-      },
-      {
-        "close": {
-          "app": 12,
-          "event": "close",
-          "generation": 2,
-          "live": 3,
-          "slot": 3
-        },
-        "id": 12,
-        "name": "Text Editor",
-        "open": {
-          "app": 12,
-          "event": "open",
-          "generation": 2,
-          "live": 4,
-          "slot": 3
-        },
-        "ready": {
-          "app": 12,
-          "event": "ready",
-          "generation": 2,
-          "live": 4,
-          "slot": 3
-        },
-        "slot": 2
-      },
-      {
-        "close": {
-          "app": 8,
-          "event": "close",
-          "generation": 3,
-          "live": 3,
-          "slot": 3
-        },
-        "id": 8,
-        "name": "Paint",
-        "open": {
-          "app": 8,
-          "event": "open",
-          "generation": 3,
-          "live": 4,
-          "slot": 3
-        },
-        "ready": {
-          "app": 8,
-          "event": "ready",
-          "generation": 3,
-          "live": 4,
-          "slot": 3
-        },
-        "slot": 3
-      },
-      {
-        "close": {
-          "app": 3,
-          "event": "close",
-          "generation": 4,
-          "live": 3,
-          "slot": 3
-        },
-        "id": 3,
-        "name": "Snake",
-        "open": {
-          "app": 3,
-          "event": "open",
-          "generation": 4,
-          "live": 4,
-          "slot": 3
-        },
-        "ready": {
-          "app": 3,
-          "event": "ready",
-          "generation": 4,
-          "live": 4,
-          "slot": 3
-        },
-        "slot": 4
-      },
-      {
-        "close": {
-          "app": 9,
-          "event": "close",
-          "generation": 5,
-          "live": 3,
-          "slot": 3
-        },
-        "id": 9,
-        "name": "3D",
-        "open": {
-          "app": 9,
-          "event": "open",
-          "generation": 5,
-          "live": 4,
-          "slot": 3
-        },
-        "ready": {
-          "app": 9,
-          "event": "ready",
-          "generation": 5,
-          "live": 4,
-          "slot": 3
-        },
-        "slot": 5
-      },
-      {
-        "close": {
-          "app": 1,
-          "event": "close",
-          "generation": 2,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 1,
-        "name": "System Monitor",
-        "open": {
-          "app": 1,
-          "event": "open",
-          "generation": 2,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 1,
-          "event": "ready",
-          "generation": 2,
-          "live": 3,
-          "slot": 2
-        },
-        "slot": 6
-      },
-      {
-        "close": {
-          "app": 2,
-          "event": "close",
-          "generation": 3,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 2,
-        "name": "About",
-        "open": {
-          "app": 2,
-          "event": "open",
-          "generation": 3,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 2,
-          "event": "ready",
-          "generation": 3,
-          "live": 3,
-          "slot": 2
-        },
-        "slot": 7
-      },
-      {
-        "close": {
-          "app": 6,
-          "event": "close",
-          "generation": 4,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 6,
-        "name": "Settings",
-        "open": {
-          "app": 6,
-          "event": "open",
-          "generation": 4,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 6,
-          "event": "ready",
-          "generation": 4,
-          "live": 3,
-          "slot": 2
-        },
-        "slot": 8
-      }
-    ],
-    "shell_word": [
-      {
-        "close": {
-          "app": 3,
-          "event": "close",
-          "generation": 5,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 3,
-        "name": "Snake",
-        "open": {
-          "app": 3,
-          "event": "open",
-          "generation": 5,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 3,
-          "event": "ready",
-          "generation": 5,
-          "live": 3,
-          "slot": 2
-        },
-        "word": "snake"
-      },
-      {
-        "close": {
-          "app": 8,
-          "event": "close",
-          "generation": 6,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 8,
-        "name": "Paint",
-        "open": {
-          "app": 8,
-          "event": "open",
-          "generation": 6,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 8,
-          "event": "ready",
-          "generation": 6,
-          "live": 3,
-          "slot": 2
-        },
-        "word": "paint"
-      },
-      {
-        "close": {
-          "app": 9,
-          "event": "close",
-          "generation": 7,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 9,
-        "name": "3D",
-        "open": {
-          "app": 9,
-          "event": "open",
-          "generation": 7,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 9,
-          "event": "ready",
-          "generation": 7,
-          "live": 3,
-          "slot": 2
-        },
-        "word": "cube"
-      },
-      {
-        "close": {
-          "app": 10,
-          "event": "close",
-          "generation": 8,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 10,
-        "name": "zlOS animation",
-        "open": {
-          "app": 10,
-          "event": "open",
-          "generation": 8,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 10,
-          "event": "ready",
-          "generation": 8,
-          "live": 3,
-          "slot": 2
-        },
-        "word": "anim"
-      },
-      {
-        "close": {
-          "app": 11,
-          "event": "close",
-          "generation": 9,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 11,
-        "name": "Pointer",
-        "open": {
-          "app": 11,
-          "event": "open",
-          "generation": 9,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 11,
-          "event": "ready",
-          "generation": 9,
-          "live": 3,
-          "slot": 2
-        },
-        "word": "mouse"
-      },
-      {
-        "close": {
-          "app": 12,
-          "event": "close",
-          "generation": 10,
-          "live": 2,
-          "slot": 2
-        },
-        "id": 12,
-        "name": "Text Editor",
-        "open": {
-          "app": 12,
-          "event": "open",
-          "generation": 10,
-          "live": 3,
-          "slot": 2
-        },
-        "ready": {
-          "app": 12,
-          "event": "ready",
-          "generation": 10,
-          "live": 3,
-          "slot": 2
-        },
-        "word": "edit"
-      },
-      {
-        "close": {
           "app": 13,
           "event": "close",
           "generation": 2,
-          "live": 1,
+          "live": 2,
           "slot": 1
         },
         "id": 13,
@@ -482,13 +116,431 @@
           "app": 13,
           "event": "open",
           "generation": 2,
-          "live": 2,
+          "live": 3,
           "slot": 1
         },
         "ready": {
           "app": 13,
           "event": "ready",
           "generation": 2,
+          "live": 3,
+          "slot": 1
+        },
+        "slot": 1
+      },
+      {
+        "close": {
+          "app": 1,
+          "event": "close",
+          "generation": 3,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 1,
+        "name": "System Monitor",
+        "open": {
+          "app": 1,
+          "event": "open",
+          "generation": 3,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 1,
+          "event": "ready",
+          "generation": 3,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 2
+      },
+      {
+        "close": {
+          "app": 5,
+          "event": "close",
+          "generation": 4,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 5,
+        "name": "Browser",
+        "open": {
+          "app": 5,
+          "event": "open",
+          "generation": 4,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 5,
+          "event": "ready",
+          "generation": 4,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 3
+      },
+      {
+        "close": {
+          "app": 12,
+          "event": "close",
+          "generation": 5,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 12,
+        "name": "Text Editor",
+        "open": {
+          "app": 12,
+          "event": "open",
+          "generation": 5,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 12,
+          "event": "ready",
+          "generation": 5,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 4
+      },
+      {
+        "close": {
+          "app": 8,
+          "event": "close",
+          "generation": 6,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 8,
+        "name": "Paint",
+        "open": {
+          "app": 8,
+          "event": "open",
+          "generation": 6,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 8,
+          "event": "ready",
+          "generation": 6,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 5
+      },
+      {
+        "close": {
+          "app": 3,
+          "event": "close",
+          "generation": 7,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 3,
+        "name": "Snake",
+        "open": {
+          "app": 3,
+          "event": "open",
+          "generation": 7,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 3,
+          "event": "ready",
+          "generation": 7,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 6
+      },
+      {
+        "close": {
+          "app": 9,
+          "event": "close",
+          "generation": 8,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 9,
+        "name": "3D",
+        "open": {
+          "app": 9,
+          "event": "open",
+          "generation": 8,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 9,
+          "event": "ready",
+          "generation": 8,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 7
+      },
+      {
+        "close": {
+          "app": 2,
+          "event": "close",
+          "generation": 9,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 2,
+        "name": "About",
+        "open": {
+          "app": 2,
+          "event": "open",
+          "generation": 9,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 2,
+          "event": "ready",
+          "generation": 9,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 8
+      },
+      {
+        "close": {
+          "app": 6,
+          "event": "close",
+          "generation": 10,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 6,
+        "name": "Settings",
+        "open": {
+          "app": 6,
+          "event": "open",
+          "generation": 10,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 6,
+          "event": "ready",
+          "generation": 10,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 9
+      },
+      {
+        "close": {
+          "app": 7,
+          "event": "close",
+          "generation": 11,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 7,
+        "name": "Run",
+        "open": {
+          "app": 7,
+          "event": "open",
+          "generation": 11,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 7,
+          "event": "ready",
+          "generation": 11,
+          "live": 2,
+          "slot": 1
+        },
+        "slot": 10
+      }
+    ],
+    "shell_word": [
+      {
+        "close": {
+          "app": 3,
+          "event": "close",
+          "generation": 12,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 3,
+        "name": "Snake",
+        "open": {
+          "app": 3,
+          "event": "open",
+          "generation": 12,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 3,
+          "event": "ready",
+          "generation": 12,
+          "live": 2,
+          "slot": 1
+        },
+        "word": "snake"
+      },
+      {
+        "close": {
+          "app": 8,
+          "event": "close",
+          "generation": 13,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 8,
+        "name": "Paint",
+        "open": {
+          "app": 8,
+          "event": "open",
+          "generation": 13,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 8,
+          "event": "ready",
+          "generation": 13,
+          "live": 2,
+          "slot": 1
+        },
+        "word": "paint"
+      },
+      {
+        "close": {
+          "app": 9,
+          "event": "close",
+          "generation": 14,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 9,
+        "name": "3D",
+        "open": {
+          "app": 9,
+          "event": "open",
+          "generation": 14,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 9,
+          "event": "ready",
+          "generation": 14,
+          "live": 2,
+          "slot": 1
+        },
+        "word": "cube"
+      },
+      {
+        "close": {
+          "app": 10,
+          "event": "close",
+          "generation": 15,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 10,
+        "name": "zlOS animation",
+        "open": {
+          "app": 10,
+          "event": "open",
+          "generation": 15,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 10,
+          "event": "ready",
+          "generation": 15,
+          "live": 2,
+          "slot": 1
+        },
+        "word": "anim"
+      },
+      {
+        "close": {
+          "app": 11,
+          "event": "close",
+          "generation": 16,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 11,
+        "name": "Pointer",
+        "open": {
+          "app": 11,
+          "event": "open",
+          "generation": 16,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 11,
+          "event": "ready",
+          "generation": 16,
+          "live": 2,
+          "slot": 1
+        },
+        "word": "mouse"
+      },
+      {
+        "close": {
+          "app": 12,
+          "event": "close",
+          "generation": 17,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 12,
+        "name": "Text Editor",
+        "open": {
+          "app": 12,
+          "event": "open",
+          "generation": 17,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 12,
+          "event": "ready",
+          "generation": 17,
+          "live": 2,
+          "slot": 1
+        },
+        "word": "edit"
+      },
+      {
+        "close": {
+          "app": 13,
+          "event": "close",
+          "generation": 18,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 13,
+        "name": "Files",
+        "open": {
+          "app": 13,
+          "event": "open",
+          "generation": 18,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 13,
+          "event": "ready",
+          "generation": 18,
           "live": 2,
           "slot": 1
         },
@@ -500,7 +552,7 @@
         "close": {
           "app": 4,
           "event": "close",
-          "generation": 3,
+          "generation": 19,
           "live": 1,
           "slot": 1
         },
@@ -509,24 +561,78 @@
         "open": {
           "app": 4,
           "event": "open",
-          "generation": 3,
+          "generation": 19,
           "live": 2,
           "slot": 1
         },
         "ready": {
           "app": 4,
           "event": "ready",
-          "generation": 3,
+          "generation": 19,
           "live": 2,
           "slot": 1
         },
-        "route": "topbar"
+        "route": "super"
+      },
+      {
+        "close": {
+          "app": 71,
+          "event": "close",
+          "generation": 21,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 71,
+        "menu_row": 8,
+        "name": "System",
+        "open": {
+          "app": 71,
+          "event": "open",
+          "generation": 21,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 71,
+          "event": "ready",
+          "generation": 21,
+          "live": 2,
+          "slot": 1
+        },
+        "route": "menu:8"
+      },
+      {
+        "close": {
+          "app": 72,
+          "event": "close",
+          "generation": 23,
+          "live": 1,
+          "slot": 1
+        },
+        "id": 72,
+        "menu_row": 9,
+        "name": "Type",
+        "open": {
+          "app": 72,
+          "event": "open",
+          "generation": 23,
+          "live": 2,
+          "slot": 1
+        },
+        "ready": {
+          "app": 72,
+          "event": "ready",
+          "generation": 23,
+          "live": 2,
+          "slot": 1
+        },
+        "route": "menu:9"
       },
       {
         "close": {
           "app": 70,
           "event": "close",
-          "generation": 4,
+          "generation": 24,
           "live": 1,
           "slot": 1
         },
@@ -535,43 +641,43 @@
         "open": {
           "app": 70,
           "event": "open",
-          "generation": 4,
+          "generation": 24,
           "live": 2,
           "slot": 1
         },
         "ready": {
           "app": 70,
           "event": "ready",
-          "generation": 4,
+          "generation": 24,
           "live": 2,
           "slot": 1
         },
-        "route": "grid"
+        "route": "rail:all-apps"
       }
     ]
   },
-  "schema": "zlos.application-route-qemu-receipt.v1",
+  "schema": "zlos.application-route-qemu-receipt.v2",
   "shipped_build_identity": {
-    "dirty": true,
-    "head": "528a21f5f7fe8061b9e86c377d075529a433a558",
-    "id": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+    "dirty": false,
+    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
+    "id": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "schema": 1
   },
   "shipped_manifest": {
-    "entries": 62,
+    "entries": 64,
     "schema": 1,
-    "sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+    "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
   },
   "source_files_sha256": {
-    "kernel/build_identity_embed.zl": "262d05d8f3a87fc7d87b4405df5009d67723eeccfd5712fb0ab858321bbc296c",
-    "kernel/metadata/app-manifest.json": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d",
-    "kernel/metadata/build-identity.json": "fdd99c6adb94421c4b34082e0abb672ba18c588f2504537cff5e4e9830888a49",
-    "kernel/src/graphics/windowing/wm.c": "ee96dca48bec8e59199a01e567a3a77cfd6a5d291bae7b383c17db746561a019",
-    "kernel/src/kernel.zl": "71c3b3ce79d356b03c16c27f6919d8646e20561fb1ac3d031df19cc0c9490869",
-    "kernel/tests/oracle/zlosboot.py": "929b7c68ebe5f76a5015deee24cfbedb706755a7e4bc525a02c423661a8eb901",
-    "kernel/tools/probes/probe-app-lifecycle.py": "dca56fd2c6f11e14006a85e1fdae18ac72210adbebc43486d7b45b8faa557292",
-    "kernel/tools/probes/probe-app-routes.py": "c23f4adbe478b30484b46b521200a2d57b15b0f0ce539cacac1abf61c4453aaf"
+    "kernel/build_identity_embed.zl": "c6b28ea0a63792e0fbab71f27d073cbd684ca974dc3fbc8cb3bf09aa8221322f",
+    "kernel/metadata/app-manifest.json": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447",
+    "kernel/metadata/build-identity.json": "e9baaeb8e6a590fcd7d4736f3ff3373068a4b34e6a5f6c80136f0deb9a61a421",
+    "kernel/src/graphics/windowing/wm.c": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
+    "kernel/src/kernel.zl": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
+    "kernel/tests/oracle/zlosboot.py": "258e856c0e1ad472d8bc09968542da1894928a4b29d38bc4738f7741ede6b6ad",
+    "kernel/tools/probes/probe-app-lifecycle.py": "615832a6ced66c3641bc4a3707ec449b4b58338c6315d0b21b1b6cc273e466e6",
+    "kernel/tools/probes/probe-app-routes.py": "e24857ac43bd82c6b6657479e814ebf47d67ac355b4f495fd5e57d841baacd60"
   },
-  "source_head": "528a21f5f7fe8061b9e86c377d075529a433a558",
+  "source_head": "ba5a344742dad707b4b47800b6160468728deb0b",
   "weakest_link": "route and first draw are not complete workflows; native physical input is unproven here"
 }

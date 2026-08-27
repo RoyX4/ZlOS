@@ -1,15 +1,15 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273"
+    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
   },
   "counts": {
     "catalogue_surfaces": 1,
     "games": 24,
-    "identities": 62,
-    "named_implementations": 61,
+    "identities": 64,
+    "named_implementations": 63,
     "runtime_manifest_boot_routes": 6,
-    "with_qemu_open_ready_close": 62
+    "with_qemu_open_ready_close": 64
   },
   "entries": [
     {
@@ -68,7 +68,7 @@
             "live": 3,
             "slot": 0
           },
-          "route": "dock:0"
+          "route": "register:0"
         }
       ]
     },
@@ -110,25 +110,25 @@
           "close": {
             "app": 1,
             "event": "close",
-            "generation": 2,
-            "live": 2,
-            "slot": 2
+            "generation": 3,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 1,
             "event": "open",
-            "generation": 2,
-            "live": 3,
-            "slot": 2
+            "generation": 3,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 1,
             "event": "ready",
-            "generation": 2,
-            "live": 3,
-            "slot": 2
+            "generation": 3,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:6"
+          "route": "register:2"
         }
       ]
     },
@@ -152,25 +152,25 @@
           "close": {
             "app": 2,
             "event": "close",
-            "generation": 3,
-            "live": 2,
-            "slot": 2
+            "generation": 9,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 2,
             "event": "open",
-            "generation": 3,
-            "live": 3,
-            "slot": 2
+            "generation": 9,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 2,
             "event": "ready",
-            "generation": 3,
-            "live": 3,
-            "slot": 2
+            "generation": 9,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:7"
+          "route": "register:8"
         }
       ]
     },
@@ -194,47 +194,47 @@
           "close": {
             "app": 3,
             "event": "close",
-            "generation": 4,
-            "live": 3,
-            "slot": 3
+            "generation": 7,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 3,
             "event": "open",
-            "generation": 4,
-            "live": 4,
-            "slot": 3
+            "generation": 7,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 3,
             "event": "ready",
-            "generation": 4,
-            "live": 4,
-            "slot": 3
+            "generation": 7,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:4"
+          "route": "register:6"
         },
         {
           "close": {
             "app": 3,
             "event": "close",
-            "generation": 5,
-            "live": 2,
-            "slot": 2
+            "generation": 12,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 3,
             "event": "open",
-            "generation": 5,
-            "live": 3,
-            "slot": 2
+            "generation": 12,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 3,
             "event": "ready",
-            "generation": 5,
-            "live": 3,
-            "slot": 2
+            "generation": 12,
+            "live": 2,
+            "slot": 1
           },
           "route": "shell:snake"
         }
@@ -260,25 +260,25 @@
           "close": {
             "app": 4,
             "event": "close",
-            "generation": 3,
+            "generation": 19,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 4,
             "event": "open",
-            "generation": 3,
+            "generation": 19,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 4,
             "event": "ready",
-            "generation": 3,
+            "generation": 19,
             "live": 2,
             "slot": 1
           },
-          "route": "surface:topbar"
+          "route": "surface:super"
         }
       ]
     },
@@ -302,25 +302,25 @@
           "close": {
             "app": 5,
             "event": "close",
-            "generation": 1,
-            "live": 3,
-            "slot": 3
+            "generation": 4,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 5,
             "event": "open",
-            "generation": 1,
-            "live": 4,
-            "slot": 3
+            "generation": 4,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 5,
             "event": "ready",
-            "generation": 1,
-            "live": 4,
-            "slot": 3
+            "generation": 4,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:1"
+          "route": "register:3"
         }
       ]
     },
@@ -344,25 +344,25 @@
           "close": {
             "app": 6,
             "event": "close",
-            "generation": 4,
-            "live": 2,
-            "slot": 2
+            "generation": 10,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 6,
             "event": "open",
-            "generation": 4,
-            "live": 3,
-            "slot": 2
+            "generation": 10,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 6,
             "event": "ready",
-            "generation": 4,
-            "live": 3,
-            "slot": 2
+            "generation": 10,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:8"
+          "route": "register:9"
         }
       ]
     },
@@ -382,6 +382,30 @@
       "migration_phase": "MP-12",
       "name": "Run",
       "routes": [
+        {
+          "close": {
+            "app": 7,
+            "event": "close",
+            "generation": 11,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 7,
+            "event": "open",
+            "generation": 11,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 7,
+            "event": "ready",
+            "generation": 11,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:10"
+        },
         {
           "close": {
             "app": 7,
@@ -428,47 +452,47 @@
           "close": {
             "app": 8,
             "event": "close",
-            "generation": 3,
-            "live": 3,
-            "slot": 3
+            "generation": 6,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 8,
             "event": "open",
-            "generation": 3,
-            "live": 4,
-            "slot": 3
+            "generation": 6,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 8,
             "event": "ready",
-            "generation": 3,
-            "live": 4,
-            "slot": 3
+            "generation": 6,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:3"
+          "route": "register:5"
         },
         {
           "close": {
             "app": 8,
             "event": "close",
-            "generation": 6,
-            "live": 2,
-            "slot": 2
+            "generation": 13,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 8,
             "event": "open",
-            "generation": 6,
-            "live": 3,
-            "slot": 2
+            "generation": 13,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 8,
             "event": "ready",
-            "generation": 6,
-            "live": 3,
-            "slot": 2
+            "generation": 13,
+            "live": 2,
+            "slot": 1
           },
           "route": "shell:paint"
         }
@@ -494,47 +518,47 @@
           "close": {
             "app": 9,
             "event": "close",
-            "generation": 5,
-            "live": 3,
-            "slot": 3
+            "generation": 8,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 9,
             "event": "open",
-            "generation": 5,
-            "live": 4,
-            "slot": 3
+            "generation": 8,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 9,
             "event": "ready",
-            "generation": 5,
-            "live": 4,
-            "slot": 3
+            "generation": 8,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:5"
+          "route": "register:7"
         },
         {
           "close": {
             "app": 9,
             "event": "close",
-            "generation": 7,
-            "live": 2,
-            "slot": 2
+            "generation": 14,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 9,
             "event": "open",
-            "generation": 7,
-            "live": 3,
-            "slot": 2
+            "generation": 14,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 9,
             "event": "ready",
-            "generation": 7,
-            "live": 3,
-            "slot": 2
+            "generation": 14,
+            "live": 2,
+            "slot": 1
           },
           "route": "shell:cube"
         }
@@ -560,23 +584,23 @@
           "close": {
             "app": 10,
             "event": "close",
-            "generation": 8,
-            "live": 2,
-            "slot": 2
+            "generation": 15,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 10,
             "event": "open",
-            "generation": 8,
-            "live": 3,
-            "slot": 2
+            "generation": 15,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 10,
             "event": "ready",
-            "generation": 8,
-            "live": 3,
-            "slot": 2
+            "generation": 15,
+            "live": 2,
+            "slot": 1
           },
           "route": "shell:anim"
         }
@@ -602,23 +626,23 @@
           "close": {
             "app": 11,
             "event": "close",
-            "generation": 9,
-            "live": 2,
-            "slot": 2
+            "generation": 16,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 11,
             "event": "open",
-            "generation": 9,
-            "live": 3,
-            "slot": 2
+            "generation": 16,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 11,
             "event": "ready",
-            "generation": 9,
-            "live": 3,
-            "slot": 2
+            "generation": 16,
+            "live": 2,
+            "slot": 1
           },
           "route": "shell:mouse"
         }
@@ -644,47 +668,47 @@
           "close": {
             "app": 12,
             "event": "close",
-            "generation": 2,
-            "live": 3,
-            "slot": 3
+            "generation": 5,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 12,
             "event": "open",
-            "generation": 2,
-            "live": 4,
-            "slot": 3
+            "generation": 5,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 12,
             "event": "ready",
-            "generation": 2,
-            "live": 4,
-            "slot": 3
+            "generation": 5,
+            "live": 2,
+            "slot": 1
           },
-          "route": "dock:2"
+          "route": "register:4"
         },
         {
           "close": {
             "app": 12,
             "event": "close",
-            "generation": 10,
-            "live": 2,
-            "slot": 2
+            "generation": 17,
+            "live": 1,
+            "slot": 1
           },
           "open": {
             "app": 12,
             "event": "open",
-            "generation": 10,
-            "live": 3,
-            "slot": 2
+            "generation": 17,
+            "live": 2,
+            "slot": 1
           },
           "ready": {
             "app": 12,
             "event": "ready",
-            "generation": 10,
-            "live": 3,
-            "slot": 2
+            "generation": 17,
+            "live": 2,
+            "slot": 1
           },
           "route": "shell:edit"
         }
@@ -729,20 +753,44 @@
             "app": 13,
             "event": "close",
             "generation": 2,
-            "live": 1,
+            "live": 2,
             "slot": 1
           },
           "open": {
             "app": 13,
             "event": "open",
             "generation": 2,
-            "live": 2,
+            "live": 3,
             "slot": 1
           },
           "ready": {
             "app": 13,
             "event": "ready",
             "generation": 2,
+            "live": 3,
+            "slot": 1
+          },
+          "route": "register:1"
+        },
+        {
+          "close": {
+            "app": 13,
+            "event": "close",
+            "generation": 18,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 13,
+            "event": "open",
+            "generation": 18,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 13,
+            "event": "ready",
+            "generation": 18,
             "live": 2,
             "slot": 1
           },
@@ -2744,25 +2792,109 @@
           "close": {
             "app": 70,
             "event": "close",
-            "generation": 4,
+            "generation": 24,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 70,
             "event": "open",
-            "generation": 4,
+            "generation": 24,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 70,
             "event": "ready",
-            "generation": 4,
+            "generation": 24,
             "live": 2,
             "slot": 1
           },
-          "route": "surface:grid"
+          "route": "surface:rail:all-apps"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 71,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "System",
+      "routes": [
+        {
+          "close": {
+            "app": 71,
+            "event": "close",
+            "generation": 21,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 71,
+            "event": "open",
+            "generation": 21,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 71,
+            "event": "ready",
+            "generation": 21,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "surface:menu:8"
+        }
+      ]
+    },
+    {
+      "claims": {
+        "build_reachable": true,
+        "physical_hardware": false,
+        "qemu_close_no_window_leak": true,
+        "qemu_first_draw": true,
+        "qemu_open": true,
+        "shipped_manifest_member": true,
+        "source_identity": true,
+        "workflow_complete": false
+      },
+      "id": 72,
+      "kind": "application",
+      "migration_phase": "MP-12",
+      "name": "Type",
+      "routes": [
+        {
+          "close": {
+            "app": 72,
+            "event": "close",
+            "generation": 23,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 72,
+            "event": "open",
+            "generation": 23,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 72,
+            "event": "ready",
+            "generation": 23,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "surface:menu:9"
         }
       ]
     }
@@ -2773,80 +2905,80 @@
       "artifact": {
         "bytes": 6291968,
         "path": "kernel/zlOS.img",
-        "sha256": "d2acd9ffde79af69830929e0ee6242259900aae3e617fb615735174a4d440d0c"
+        "sha256": "987798d9f1aa7d493bf0f4533980b5a6eff9b8d04f76361210788f098bd7530c"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "raw-bios",
-      "shipped_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-      "shipped_manifest_sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     },
     {
       "artifact": {
         "bytes": 138412032,
         "path": "kernel/zlOS-usb.img",
-        "sha256": "9951b2a04259f923929ebce8c75221b6a2e4050449fb9049505f48ce6c4a99b8"
+        "sha256": "c79fd1ed720b91f89c13806c7fa8689196f118b4d843e8661138b91ea1d671ac"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "native-uefi64",
-      "shipped_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-      "shipped_manifest_sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     },
     {
       "artifact": {
-        "bytes": 30736384,
+        "bytes": 31539200,
         "path": "kernel/zlOS.iso",
-        "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273"
+        "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-bios32",
-      "shipped_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-      "shipped_manifest_sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     },
     {
       "artifact": {
-        "bytes": 30736384,
+        "bytes": 31539200,
         "path": "kernel/zlOS.iso",
-        "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273"
+        "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-uefi32",
-      "shipped_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-      "shipped_manifest_sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     },
     {
       "artifact": {
-        "bytes": 28174336,
+        "bytes": 28446720,
         "path": "kernel/zlOS64.iso",
-        "sha256": "7c84021c510008cdd48b27564ad27db8f909d4a3d06d3a7eb97583a84396d163"
+        "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-bios64",
-      "shipped_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-      "shipped_manifest_sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     },
     {
       "artifact": {
-        "bytes": 28174336,
+        "bytes": 28446720,
         "path": "kernel/zlOS64.iso",
-        "sha256": "7c84021c510008cdd48b27564ad27db8f909d4a3d06d3a7eb97583a84396d163"
+        "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-uefi64",
-      "shipped_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-      "shipped_manifest_sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
     }
   ],
   "schema": "zlos.application-evidence-registry.v1",
   "shipped_build_identity": {
-    "dirty": true,
-    "head": "528a21f5f7fe8061b9e86c377d075529a433a558",
-    "id": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+    "dirty": false,
+    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
+    "id": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "schema": 1
   },
   "shipped_manifest": {
-    "entries": 62,
+    "entries": 64,
     "schema": 1,
-    "sha256": "5dfd22ed4558b3e14ffb8cfdabdb4cabb6c7bfe54ba58beeb9a626de73054d9d"
+    "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
   },
-  "source_head": "528a21f5f7fe8061b9e86c377d075529a433a558"
+  "source_head": "ba5a344742dad707b4b47800b6160468728deb0b"
 }

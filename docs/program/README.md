@@ -17,7 +17,7 @@ The program covers:
 - all 906 stable product feature atoms in the canonical research catalogue;
 - every normalized firmware, platform, driver, filesystem and device target;
 - every system service and cross-process protocol;
-- all 61 current named zlOS implementations, the All Applications surface and
+- all 63 current named zlOS implementations, the All Applications surface and
   all 24 current games;
 - the selected browser, productivity, creative, communication, administration,
   development, compatibility and learning application families;

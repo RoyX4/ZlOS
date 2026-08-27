@@ -25,6 +25,7 @@
 # polls for its marker with a generous ceiling.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit
+. tools/checks/qemu-crash.sh
 
 IMG=${ZLOS_DISK_IMG:-/tmp/zlos-diskgate.img}
 CEILING=${CEILING:-240}
@@ -64,7 +65,8 @@ boot_once () {
         kill -0 "$qpid" 2>/dev/null || break
         sleep 0.5
     done
-    kill "$qpid" 2>/dev/null; wait "$qpid" 2>/dev/null
+    kill "$qpid" 2>/dev/null; wait "$qpid" 2>/dev/null; local qstatus=$?
+    qemu_crashed "$qstatus" || true
     grep -q "halting" "$log" 2>/dev/null || {
         echo "FAIL: boot $tag never halted - it hung"; return 1; }
     tr -d '\r' < "$log" > "$log.c" && mv "$log.c" "$log"

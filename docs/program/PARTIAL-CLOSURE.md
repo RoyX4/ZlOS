@@ -65,7 +65,7 @@ invalidating the exact historical receipt for an earlier build.
 
 ### EV-003 — license ledger
 
-- Current gaps: 0 license files<br>148 inputs lack an established redistribution grant.
+- Current gaps: 0 license files<br>149 inputs lack an established redistribution grant.
 - Deliverables: SPDX inventory for every first- and third-party file<br>repository license decision<br>redistribution notices and incompatible-license rejection.
 - Deterministic proof: every shipped byte resolves to a license and provenance record<br>missing, conflicting and unknown licenses block release.
 - QEMU proof: none.

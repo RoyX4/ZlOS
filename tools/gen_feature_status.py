@@ -18,6 +18,9 @@ import validate_master_program as master
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/program/FEATURE-STATUS.json"
 DEFAULT_EVIDENCE_ROOT = ROOT
+BUILD_INPUT_COUNT = len(json.loads(
+    (ROOT / "kernel/metadata/build-identity.json").read_text()
+).get("source_files_sha256", {}))
 
 OVERRIDES = {
     "EV-001": ("PROVED_CURRENT", (("plan", "docs/program/FEATURE-MAP.md"),),
@@ -31,11 +34,11 @@ OVERRIDES = {
                 "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar"),
                ("missing input", "archive hash drift", "archive byte corruption", "invented custody"),
                ("0 off-host copies", "unsigned receipt", "not a whole-repository snapshot"),
-               "all 148 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"),
+               f"all {BUILD_INPUT_COUNT} exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"),
     "EV-003": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/license-registry.json"),),
                ("python3 kernel/tools/generators/gen-license-registry.py --check --selftest",),
                ("kernel/metadata/license-registry.json",), ("invented grant", "false release green"),
-               ("0 license files", "148 inputs lack an established redistribution grant"),
+               ("0 license files", f"{BUILD_INPUT_COUNT} inputs lack an established redistribution grant"),
                "build-input inventory exists, but public redistribution authority is absent"),
     "EV-004": ("PARTIAL_CURRENT", (("implementation", "kernel/metadata/dependency-lock.json"),),
                ("python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest",),
@@ -64,7 +67,7 @@ OVERRIDES = {
                ("missing source", "missing lane", "orphan source", "missing artifact"),
                ("8 conservative scope-only inputs", "no per-object binary receipts",
                 "future package/service outputs absent"),
-               "all 148 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"),
+               f"all {BUILD_INPUT_COUNT} inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"),
     "EV-008": ("PROVED_CURRENT", (("implementation", "kernel/metadata/wrapper-registry.json"),
                                      ("implementation", "kernel/metadata/adversarial-registry.json")),
                ("python3 kernel/tools/generators/gen-wrapper-registry.py --check --selftest",
@@ -214,7 +217,7 @@ OVERRIDES = {
                ("no booted zlOS app route", "0 signatures",
                 "0 per-app permission grants", "no live health stream",
                 "no current screenshot or target accessibility receipt"),
-               "self-contained host viewer projects 9 artifacts, 62 apps, 17 security claims and 11 health areas; it remains static and untrusted as a release attestation"),
+               "self-contained host viewer projects the generated application manifest alongside 9 artifacts, 17 security claims and 11 health areas; it remains static and untrusted as a release attestation"),
     "KR-032": ("PARTIAL_CURRENT", (("implementation", "kernel/src/core/crash.c"),
                                      ("implementation", "kernel/src/arch/x86/idt.c"),
                                      ("implementation", "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json")),
@@ -333,7 +336,12 @@ def validate_feature_status_value(value: dict) -> None:
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("feature-status build identity missing")
     blockers = value.get("global_blockers", {})
-    closed = {"current_artifact_snapshot_missing", "current_qemu_evidence_missing"}
+    closed = {
+        "current_artifact_snapshot_missing",
+        "current_qemu_evidence_missing",
+        "current_host_benchmark_missing",
+        "future_build_graph_outputs_missing",
+    }
     for name, item in blockers.items():
         if isinstance(item, bool) and item is not (name not in closed):
             raise ValueError(f"feature-status blocker state drift: {name}")
@@ -341,8 +349,7 @@ def validate_feature_status_value(value: dict) -> None:
         if isinstance(item, int) and not isinstance(item, bool) \
                 and name != "decision_legacy_semantics_open" and item <= 0:
             raise ValueError(f"feature-status hid numeric blocker: {name}")
-    for name in ("public_release_blocked", "current_host_test_receipt_missing",
-                 "current_host_benchmark_missing"):
+    for name in ("public_release_blocked", "current_host_test_receipt_missing"):
         if blockers.get(name) is not True:
             raise ValueError(f"feature-status hid blocker: {name}")
 
@@ -497,6 +504,12 @@ def selftest(value: dict, evidence_root: Path) -> None:
     graph = copy.deepcopy(value)
     graph["global_blockers"]["build_graph_scope_only_inputs"] = 0
     mutations["hidden-build-graph-superset"] = graph
+    future_graph = copy.deepcopy(value)
+    future_graph["global_blockers"]["future_build_graph_outputs_missing"] = True
+    mutations["reopened-future-build-graph"] = future_graph
+    benchmark = copy.deepcopy(value)
+    benchmark["global_blockers"]["current_host_benchmark_missing"] = True
+    mutations["reopened-current-host-benchmark"] = benchmark
     identity = copy.deepcopy(value)
     identity["build_identity"] = "short"
     mutations["missing-build-identity"] = identity

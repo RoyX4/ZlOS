@@ -79,7 +79,7 @@ implementation status.
 The static validator currently passes for program inventory, repository
 identity, identifiers, dependencies and links in the isolated verification
 tree. All 17 generated registry/status checks now agree on the current
-148-input build identity. Historical artifact and runtime receipts retain their
+149-input build identity. Historical artifact and runtime receipts retain their
 original subject identities and are explicitly not current-build-bound. T-8
 and T-9 are closed in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md): the
 evidence chain regenerates without joining unlike builds, and the recovery
@@ -98,7 +98,7 @@ The codebase is substantial but the whole program is partial.
 | Branch/worktree integration discovered on 2026-08-24 | Complete and pushed. Historical refs/directories were not deleted. |
 | Existing local implementation batch | Implemented across many host and QEMU lanes; see the dated receipt under `kernel/docs/evidence/`. |
 | `program/FEATURE-STATUS.json` | Current identity-safe join: 877 planned/unproved, 17 partial-current, 5 partial-historical, 1 historical-only and 6 proved-current, for 906 total. Historical execution does not count as current proof. |
-| Post-restructure static and QEMU verification | Language/build gates, two-build reproducibility, raw BIOS, GRUB32 BIOS/UEFI, GRUB64 BIOS/UEFI and native UEFI64 passed for the current source identity. The complete app route sweep, 47 lifecycle cycles and 62 app open-ready-close checks also passed. No physical boot was run. |
+| Post-restructure static and QEMU verification | Language/build gates, two-build reproducibility, raw BIOS, GRUB32 BIOS/UEFI, GRUB64 BIOS/UEFI and native UEFI64 passed for the current source identity. The complete app route sweep, 47 lifecycle cycles and 64 application-identity open-ready-close checks also passed. No physical boot was run. |
 | Physical ThinkPad proof | Partial. QEMU and host evidence do not close panel, input feel, I219, USB power-cut, NVMe, suspend, or Intel promotion gates. |
 | Complete MP-00 through MP-20 product | Not complete. The product-first order begins with Wave 1 performance/dependability and proceeds through boot, processes, IPC, services, hardware breadth, apps, browser, tooling, and release. |
 

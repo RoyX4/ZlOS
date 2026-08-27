@@ -26,6 +26,7 @@
 # serial log looks healthy. kernel/tools/probes/probe-uefi.py measures which devices work.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
+. tools/checks/qemu-crash.sh
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -90,9 +91,10 @@ for _ in $(seq $((CEILING * 2))); do
     sleep 0.5
 done
 sleep 1                      # let the line after the prompt land
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
 tr -d '\r' < "$LOG" > "$LOG.c" && mv "$LOG.c" "$LOG"
 
+qemu_crashed "$QSTATUS" || true
 if ! grep -q "zlOS starting" "$LOG"; then
     echo "  FAIL  the kernel never started"; fail=1
 elif ! grep -q "ready\." "$LOG"; then
@@ -168,11 +170,11 @@ else
         grep -E "Ring-3 window|window/input ABI" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
-    MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
-    if grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$LOG"; then
-        echo "  ok    running UEFI image reports the current 62-app manifest"
+    MANIFEST_MARKER=$(python3 ./tools/generators/gen-app-manifest.py --marker)
+    if grep -Fq "$MANIFEST_MARKER" "$LOG"; then
+        echo "  ok    running UEFI image reports the generated app manifest"
     else
-        echo "  FAIL  running UEFI image did not report the current 62-app manifest"
+        echo "  FAIL  running UEFI image did not report the generated app manifest"
         fail=1
     fi
 fi

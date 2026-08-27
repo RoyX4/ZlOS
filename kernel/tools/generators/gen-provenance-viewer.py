@@ -53,7 +53,7 @@ OPEN_GAPS = {
     "current_artifact_snapshot_missing": False,
     "current_qemu_evidence_missing": False,
     "current_host_test_receipt_missing": True,
-    "current_host_benchmark_missing": True,
+    "current_host_benchmark_missing": False,
 }
 
 TOKENS = {
@@ -155,8 +155,8 @@ def health_rows(docs: dict[str, dict]) -> list[dict]:
          "detail": f"{license_counts['build_inputs']} build inputs lack an established redistribution grant."},
         {"area": "Host tests", "status": "HISTORICAL",
          "detail": f"Dated receipt: {tests['passed']} pass, {tests['skipped-hardware']} hardware skip, {tests['not-run']} not run; not current-build bound."},
-        {"area": "Performance", "status": "HISTORICAL_REGRESSION",
-         "detail": f"Dated receipt: {benchmark['over_budget']} of {benchmark['measurements']} host frame metrics exceed budget; not current-build bound."},
+        {"area": "Performance", "status": "CURRENT_HOST_REGRESSION",
+         "detail": f"Current build: {benchmark['over_budget']} of {benchmark['measurements']} host frame metrics exceed budget; no native-target distribution exists."},
         {"area": "Visual proof", "status": "GAP",
          "detail": f"{visual['assets']} assets inventoried; {visual['current_build_bound']} current-build screenshot receipts."},
         {"area": "Accessibility", "status": "GAP",
@@ -168,7 +168,7 @@ def health_rows(docs: dict[str, dict]) -> list[dict]:
         {"area": "Release", "status": "BLOCKED",
          "detail": "Unreleased development batch: no version, channel, signature or publication."},
         {"area": "Complete landing gate", "status": "UNVERIFIED",
-         "detail": "The latest attempt was interrupted; no post-incident aggregate green exists."},
+         "detail": "No completed aggregate-green receipt is an input to this self-generated viewer."},
     ]
 
 
@@ -208,7 +208,7 @@ def build_model() -> dict:
     if any(len(item) != 64 for item in evidence_inputs.values()) \
             or evidence_inputs["kernel/metadata/artifact-registry.json"] != identity \
             or evidence_inputs["kernel/metadata/app-evidence.json"] != identity \
-            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] == identity:
+            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] != identity:
         raise ValueError("provenance evidence boundary is invalid")
     apps = application_rows(app_manifest, app_evidence)
     artifacts = artifact_rows(artifact)
@@ -282,6 +282,7 @@ def build_model() -> dict:
             "app_lifecycle_qemu_proved": app_evidence["counts"]["with_qemu_open_ready_close"],
             "qemu_current_build_bound": True,
             "host_current_build_bound": False,
+            "benchmark_current_build_bound": True,
         },
         "health": health,
         "artifacts": artifacts,
@@ -309,7 +310,7 @@ def build_model() -> dict:
             "path": "kernel/tools/generators/gen-provenance-viewer.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
-        "evidence_ceiling": "current static provenance projection with current artifact/QEMU evidence and historical host metrics; not a booted zlOS provenance app, live monitor, authenticated remote service or signed release portal",
+        "evidence_ceiling": "current static provenance projection with current artifact/QEMU and host benchmark evidence plus a dirty-tree host-test receipt; not a booted zlOS provenance app, live monitor, authenticated remote service or signed release portal",
         "weakest_link": "permissions are security claim state rather than admitted per-app grants, signatures are absent, and the viewer has no current visual or target accessibility receipt",
     }
     validate_model(model, docs)
@@ -344,7 +345,7 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
         ("kernel/metadata/artifact-registry.json", docs["artifact-registry.json"]["build_identity"]["id"], True),
         ("kernel/metadata/app-evidence.json", docs["app-evidence.json"]["shipped_build_identity"]["id"], True),
         ("kernel/docs/receipts/benchmark-host-2026-08-23.json",
-         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"], False),
+         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"], True),
     ]
     if value.get("evidence_bindings") != [{
             "path": path, "subject_build_identity": subject,
@@ -365,7 +366,8 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
     if value.get("changes") != docs["release-notes.json"]["changes"]:
         raise ValueError("viewer change projection drift")
     if value.get("tests", {}).get("qemu_current_build_bound") is not True \
-            or value.get("tests", {}).get("host_current_build_bound") is not False:
+            or value.get("tests", {}).get("host_current_build_bound") is not False \
+            or value.get("tests", {}).get("benchmark_current_build_bound") is not True:
         raise ValueError("viewer test evidence binding drift")
     if value.get("licensing", {}).get("public_release_blocked") is not True:
         raise ValueError("viewer hid release licensing block")
@@ -376,9 +378,13 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
     }:
         raise ValueError("viewer invented cryptographic signatures")
     counts = value.get("counts", {})
+    expected_application_count = len(application_rows(
+        docs["app-manifest.json"], docs["app-evidence.json"]
+    ))
     if counts != {
         "inputs": 17, "health_areas": 11, "artifacts": 9,
-        "applications": 62, "applications_with_declared_permission_grants": 0,
+        "applications": expected_application_count,
+        "applications_with_declared_permission_grants": 0,
         "security_claims": 17, "change_candidates": 17,
         "current_decisions": 17, "cryptographic_signatures": 0,
     }:
@@ -410,6 +416,7 @@ def badge(status: str) -> str:
 
 def render_html(value: dict) -> str:
     identity = value["identity"]
+    tree_state = "DIRTY TREE" if identity["dirty"] else "CLEAN SOURCE TREE"
     origin = value["origin"]
     licensing = value["licensing"]
     tests = value["tests"]
@@ -547,7 +554,7 @@ def render_html(value: dict) -> str:
       <div class="identity">BUILD<br>{escape(value['build_identity'])}</div>
     </aside>
     <main id="main">
-      <div class="warning" role="status">UNRELEASED DEVELOPMENT BUILD · DIRTY TREE · PUBLIC RELEASE BLOCKED</div>
+      <div class="warning" role="status">UNRELEASED DEVELOPMENT BUILD · {tree_state} · PUBLIC RELEASE BLOCKED</div>
       <section id="overview" class="hero" aria-labelledby="overview-title">
         <div><div class="eyebrow">Exact identity / explicit gaps</div>
           <h2 id="overview-title">What these bytes actually prove.</h2>
@@ -580,7 +587,7 @@ def render_html(value: dict) -> str:
         <section id="artifacts" aria-labelledby="artifacts-title"><h2 id="artifacts-title">Artifacts</h2><p class="section-note">Byte identity and QEMU routes do not imply exact physical-hardware execution.</p>
           <div class="table-wrap"><table><caption>Nine current reproducible artifacts</caption><thead><tr><th>Name</th><th>SHA-256</th><th>Bytes</th><th>Proof</th><th>Physical</th></tr></thead><tbody>{artifact_html}</tbody></table></div>
         </section>
-        <section id="applications" aria-labelledby="apps-title"><h2 id="apps-title">Applications</h2><p class="section-note">All 62 identities have QEMU lifecycle evidence. Per-app permission grants are still absent and shown as missing.</p>
+        <section id="applications" aria-labelledby="apps-title"><h2 id="apps-title">Applications</h2><p class="section-note">All {value['counts']['applications']} identities have QEMU lifecycle evidence. Per-app permission grants are still absent and shown as missing.</p>
           <div class="table-wrap"><table><caption>Application identity, route and permission state</caption><thead><tr><th>ID</th><th>Name</th><th>Kind</th><th>Migration</th><th>Route proof</th><th>Permissions</th></tr></thead><tbody>{app_html}</tbody></table></div>
         </section>
         <section id="security" aria-labelledby="security-title"><h2 id="security-title">Permissions &amp; security</h2><p class="section-note">This is claim and residual-risk state, not an invented permissions dashboard.</p>
@@ -702,6 +709,9 @@ def selftest(value: dict, docs: dict[str, dict], html_text: str) -> None:
     binding = copy.deepcopy(value)
     binding["evidence_bindings"][0]["current_build_bound"] = False
     mutations["lost-current-artifact-proof"] = binding
+    benchmark = copy.deepcopy(value)
+    benchmark["evidence_bindings"][2]["current_build_bound"] = False
+    mutations["lost-current-benchmark-proof"] = benchmark
     caught = []
     for name, mutant in mutations.items():
         try:

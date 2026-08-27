@@ -29,6 +29,13 @@ RT=../freestanding/runtime_kernel.c
 # "unresolved" the moment kernel.zl called one, which is a false alarm this
 # script must not raise. Same resolution rule the parser uses: ./<name>.zl.
 ZLFILES="$ZL"
+# The build generates these modules and concatenates them into kernel.zl before
+# compilation.  They are part of the compiled program even though kernel.zl
+# does not import them itself.
+for generated in app_manifest_embed.zl build_identity_embed.zl; do
+    [ -f "$generated" ] || { echo "no $generated"; exit 2; }
+    ZLFILES="$ZLFILES $generated"
+done
 for m in $(grep -oP '^import\s+\K[a-zA-Z0-9_, ]+' "$ZL" | tr ',' '\n' | tr -d ' '); do
     [ -f "apps/$m.zl" ] && ZLFILES="$ZLFILES apps/$m.zl"
 done

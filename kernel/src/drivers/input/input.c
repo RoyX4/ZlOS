@@ -356,6 +356,7 @@ static int ext_pending = 0;
  * cleared by any other key arriving while it is held, so Super+Tab stays a
  * plain modifier and only a clean press-release emits KEY_SUPER. */
 static int super_alone = 0;
+static int usb_super_alone = 0;
 
 static void handle_scancode(int sc)
 {
@@ -365,6 +366,14 @@ static void handle_scancode(int sc)
     int code    = sc & 0x7F;
     int ext     = ext_pending;
     ext_pending = 0;
+
+    /* A key from either keyboard turns either Super latch into a chord. Keep
+     * the Super scancode itself out of this rule so its release can emit the
+     * tap event. Modifier keys count too: Super+Shift is not a Super tap. */
+    if (!(ext && (code == 0x5B || code == 0x5C))) {
+        super_alone = 0;
+        usb_super_alone = 0;
+    }
 
     /* modifiers first - they change how everything else is interpreted */
     if (!ext) {
@@ -403,9 +412,6 @@ static void handle_scancode(int sc)
             return;
         }
     }
-
-    /* anything else arriving means Super is being used AS a modifier */
-    super_alone = 0;
 
     u32 key = ext ? sc_extended(code) : sc_special(code);
     u32 ch  = ext ? 0 : to_char(code, mods);
@@ -739,11 +745,46 @@ static void pump_mouse(void)
  *
  * Caps and num lock are the exception - they are latched state shared by both
  * keyboards, so they live in the PS/2 `mods` word and both paths toggle it. */
+#define HID_MOD_EVENT (1 << 17)
+
+static void handle_hid_modifiers(int raw)
+{
+    int next = hid_mods_to_mods(raw);
+    int old_super = usb_mods & MOD_SUPER;
+    int new_super = next & MOD_SUPER;
+
+    if (!old_super && new_super) {
+        usb_super_alone = 1;
+    } else if (old_super && !new_super) {
+        if (usb_super_alone)
+            evq_push(EV_KEY_DOWN, KEY_SUPER,
+                     next | (mods & (MOD_CAPS | MOD_NUM)), 0, 0);
+        usb_super_alone = 0;
+    }
+
+    /* Another modifier changed while Super was held: this is a chord, just as
+     * an ordinary HID usage below is. It also cancels a PS/2 Super latch. */
+    if (((usb_mods ^ next) & ~MOD_SUPER) && (old_super || new_super)) {
+        usb_super_alone = 0;
+        super_alone = 0;
+    }
+    usb_mods = next;
+}
+
 static void handle_hid_event(int ev)
 {
+    if (ev & HID_MOD_EVENT) {
+        handle_hid_modifiers((ev >> 8) & 0xFF);
+        return;
+    }
+
     int usage = ev & 0xFF;
     int press = (ev & 0x10000) ? 1 : 0;
     int m     = hid_mods_to_mods((ev >> 8) & 0xFF) | (mods & (MOD_CAPS | MOD_NUM));
+
+    /* Any ordinary key from either keyboard makes a held Super a chord. */
+    super_alone = 0;
+    usb_super_alone = 0;
 
     if (usage == 0x39) { if (press) mods ^= MOD_CAPS; return; }   /* caps lock */
     if (usage == 0x53) { if (press) mods ^= MOD_NUM;  return; }   /* num lock  */

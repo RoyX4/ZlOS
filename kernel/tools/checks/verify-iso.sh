@@ -10,6 +10,7 @@
 # Kept out of run_tests.sh on purpose: it costs ~40s and needs OVMF.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit
+. tools/checks/qemu-crash.sh
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -45,12 +46,12 @@ check() {
     if ! grep -q "compositor: [1-9]" "$log" 2>/dev/null; then
         echo "  FAIL  $label - reached the prompt but the compositor never opened a window"; return 1
     fi
-    local manifest_sha build_id build_head build_dirty
-    manifest_sha=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+    local manifest_marker build_id build_head build_dirty
+    manifest_marker=$(python3 ./tools/generators/gen-app-manifest.py --marker)
     build_id=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
     build_head=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
     build_dirty=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
-    grep -q "app-manifest: schema=1 entries=62 sha256=$manifest_sha" "$log" || {
+    grep -Fq "$manifest_marker" "$log" || {
         echo "  FAIL  $label - running image reported the wrong app manifest"; return 1;
     }
     grep -q "build-identity: schema=1 id=$build_id" "$log" || {
@@ -86,7 +87,9 @@ boot_until() {           # $1 = log file, rest = qemu argv
         kill -0 "$pid" 2>/dev/null || break
         sleep 0.5
     done
-    kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; local qstatus=$?
+    qemu_crashed "$qstatus" || true
+    return 0
 }
 
 echo "== ISO: legacy BIOS boot =="
@@ -94,10 +97,11 @@ BLOG=$(mktemp)
 # -m 1G is HI_TOP (memmap.h). Both boots below passed no -m for their whole
 # lives and got qemu's 128 MiB default, so the high-RAM map above 128 MiB was
 # unbacked on the only gate that boots through GRUB.
+boot_ok=0
 boot_until "$BLOG" qemu-system-i386 -cdrom zlOS.iso -m 1G -display none \
-    -serial "file:$BLOG" -no-reboot
+    -serial "file:$BLOG" -no-reboot && boot_ok=1
 tr -d '\r' < "$BLOG" > "$BLOG.c" && mv "$BLOG.c" "$BLOG"
-if check "BIOS" "$BLOG"; then
+if [ "$boot_ok" -eq 1 ] && check "BIOS" "$BLOG"; then
     python3 ./tools/generators/write-app-manifest-boot-receipt.py \
         --route grub-bios32 --artifact zlOS.iso --log "$BLOG" \
         --harness tools/checks/verify-iso.sh \
@@ -117,13 +121,14 @@ if [ ! -f "$OVMF_CODE" ]; then
 else
     VARS=$(mktemp); cp "$OVMF_VARS" "$VARS"
     ULOG=$(mktemp)
+    boot_ok=0
     boot_until "$ULOG" qemu-system-x86_64 \
         -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,unit=1,file="$VARS" \
         -cdrom zlOS.iso -m 1G -display none \
-        -serial "file:$ULOG" -no-reboot
+        -serial "file:$ULOG" -no-reboot && boot_ok=1
     tr -d '\r' < "$ULOG" > "$ULOG.c" && mv "$ULOG.c" "$ULOG"
-    if check "UEFI" "$ULOG"; then
+    if [ "$boot_ok" -eq 1 ] && check "UEFI" "$ULOG"; then
         python3 ./tools/generators/write-app-manifest-boot-receipt.py \
             --route grub-uefi32 --artifact zlOS.iso --log "$ULOG" \
             --harness tools/checks/verify-iso.sh \

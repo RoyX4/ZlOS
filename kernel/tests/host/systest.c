@@ -54,6 +54,8 @@ void snap_reset(void);
 int  snap_state(int win);
 int  snap_zone_for_point(int px, int py, int sw, int sh);
 void snap_rect(int z, int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+void snap_rect_lr(int z, int sw, int sh, int rt, int rb, int rl, int rr,
+                  int *x, int *y, int *w, int *h);
 int  snap_apply(int win, int z, int cx, int cy, int cw, int ch,
                 int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
 int  snap_release(int win, int *x, int *y, int *w, int *h);
@@ -319,6 +321,46 @@ static void test_snap(void)
 
     /* a degenerate screen must not produce a negative height */
     snap_rect(SNAP_MAX, 320, 60, RT, RB, &x, &y, &w, &h);
+
+    /* ---- the side reserve: a maximised window must not cover the rail ------
+     *
+     * The shell moved its launcher to a 170dp REGISTER RAIL on the left edge,
+     * and wm.c reserved nothing there - so SNAP_MAX landed at x = 0 and drew
+     * straight over it. The old two-reserve snap_rect could not express a side
+     * at all; snap_rect_lr can, and this is the assertion that it does.
+     *
+     * The control matters as much as the check: the four-argument form must
+     * still put a maximised window at x = 0, because twenty-odd call sites in
+     * this file mean exactly that and would otherwise be silently re-aimed. */
+    {
+        const int L = 170, R = 0;
+        int mx, my, mw, mh;
+        snap_rect_lr(SNAP_MAX, SW, SH, RT, RB, L, R, &mx, &my, &mw, &mh);
+        ok("maximised starts to the RIGHT of the rail", mx == L);
+        ok("maximised is narrowed by the rail, not just moved",
+           mw == SW - L - R);
+        ok("maximised still reaches the right screen edge", mx + mw == SW - R);
+
+        int lx, ly, lw, lh;
+        snap_rect_lr(SNAP_LEFT, SW, SH, RT, RB, L, R, &lx, &ly, &lw, &lh);
+        ok("snap-left also clears the rail", lx == L);
+        ok("snap-left is half the REMAINING width, not half the screen",
+           lw == (SW - L - R) / 2);
+
+        int rx, ry, rw, rh;
+        snap_rect_lr(SNAP_RIGHT, SW, SH, RT, RB, L, R, &rx, &ry, &rw, &rh);
+        ok("left and right halves still meet exactly", lx + lw == rx);
+        ok("...and together fill the area beside the rail",
+           lw + rw == SW - L - R);
+
+        /* CONTROL: the old signature is unchanged for everyone else. */
+        int ox, oy, ow, oh;
+        snap_rect(SNAP_MAX, SW, SH, RT, RB, &ox, &oy, &ow, &oh);
+        ok("control: the four-reserve form still starts at x = 0", ox == 0);
+        ok("control: ...and is still the full screen width", ow == SW);
+    }
+
+
     ok("a screen shorter than its own furniture gives h=0, not a negative",
        h == 0);
 }

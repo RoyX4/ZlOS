@@ -52,26 +52,53 @@ struct ui_theme {
     unsigned text_hi;
     unsigned ok;
     /* NINE MORE, added because the twenty above could not say what the
-     * reference says. An app slice reported collapsing ZD_TEXT_5, ZD_TEXT_6
-     * and ZD_TEXT_2 onto two roles, ZD_WARN onto the accent, ZD_SURF_WELL onto
-     * the background and ZD_SURF_7 onto the border - six tokens rendering as
-     * three colours. A palette with no name for "warning" spends the accent on
-     * it, and then the accent no longer means "this is the one thing to look
-     * at". These are appended, so no existing ui_color() index moves. */
-    unsigned text_2;      /* ZD_TEXT_2   #c4c9cf                 */
-    unsigned text_5;      /* ZD_TEXT_5   #74797f  labels, heads  */
-    unsigned text_6;      /* ZD_TEXT_6   #5c6167  hints, units   */
-    unsigned warn;        /* ZD_WARN     #f5b93c  NOT the accent */
-    unsigned surf_1;      /* ZD_SURF_1   #090a0c  sunken wells   */
-    unsigned surf_5;      /* ZD_SURF_5   #1c2024  menus, modals  */
-    unsigned surf_7;      /* ZD_SURF_7   #474b50  dimmest ink    */
-    unsigned surf_well;   /* ZD_SURF_WELL #0d0f12               */
-    unsigned accent_br;   /* ZD_ACCENT_BR #cdf25a live values    */
-    /* Direct C-only role kept after the zl-visible contiguous colour array,
-     * so adding a second gradient stop cannot shift every ui_color() index. */
+     * design says. An app slice reported collapsing three text rungs onto two
+     * roles, "warning" onto the accent, the sunken well onto the background
+     * and the dimmest mark onto the border - six tokens rendering as three
+     * colours. A palette with no name for "warning" spends the accent on it,
+     * and then the accent no longer means "this is the one thing to act on".
+     * These are appended, so no existing ui_color() index moves. */
+    unsigned text_2;      /* ZD_TEXT_2   secondary               */
+    unsigned text_5;      /* labels, column heads                */
+    unsigned text_6;      /* hints, units - see ui.c on the ramp */
+    unsigned warn;        /* ZD_WARN     NOT the accent          */
+    unsigned surf_1;      /* ZD_WELL     sunken wells            */
+    unsigned surf_5;      /* ZD_FLOAT    menus, modals, toasts   */
+    unsigned surf_7;      /* ZD_LIT      the dimmest mark        */
+    unsigned surf_well;   /* ZD_WELL                             */
+    unsigned accent_br;   /* ZD_VERM_BR  the overprint, full     */
+    /* This used to be a C-only role parked after the zl-visible colour array.
+     * PRESSWORK appends thirteen roles behind it, so it is now inside the
+     * array and has an enum name of its own; the index it already occupied
+     * (29) did not move. */
     unsigned title_off_bot;
 
-    /* metrics, all already multiplied by the UI scale */
+    /* ---- PRESSWORK's own roles, appended at indices 30..41 -----------------
+     * FIELD ORDER IS THE ABI. ui_color() indexes this struct as a flat array
+     * of unsigned, so enum ui_color_role below and these declarations are the
+     * same list written twice and must stay in the same order. Everything new
+     * goes AFTER accent_br/title_off_bot, never between.
+     *
+     * These exist because PRESSWORK's depth grammar is not a set of fills: the
+     * boundary between two surfaces is a colour in its own right, and the
+     * focused header is a full value inversion rather than a tint. Neither can
+     * be expressed by "panel, panel_hi, border". */
+    unsigned cut;         /* 30  the 1px groove, and the pit ground          */
+    unsigned lit;         /* 31  the struck TOP run, from the one lamp       */
+    unsigned litsoft;     /* 32  the grazed LEFT run                         */
+    unsigned edge_over;   /* 33  the boundary UNDER OVERLAP. the occluder    */
+                          /*     draws it; it never appears unoccluded.      */
+    unsigned knock;       /* 34  THE KNOCKOUT - the focused header plate     */
+    unsigned knock_ink;   /* 35  the title, reversed out of the knockout     */
+    unsigned knock_ink2;  /* 36  secondary ink on the knockout               */
+    unsigned ko_edge;     /* 37  the knockout's own edge run, on its FOOT    */
+    unsigned grid;        /* 38  the ruled module grid on the desk           */
+    unsigned steel;       /* 39  INSTRUMENTS ONLY. never a control.          */
+    unsigned steel_br;    /* 40  the instrument's own highlight              */
+    unsigned ink_on;      /* 41  ink that goes ON the overprint              */
+
+    /* metrics, all already multiplied by the UI scale. These are NOT in the
+     * flat colour array - ui_metric() is a switch, so appending here is free. */
     int pad;              /* inside a panel, edge to content    */
     int gap;              /* between two widgets                */
     int row_h;            /* one line of controls               */
@@ -79,6 +106,14 @@ struct ui_theme {
     int title_h;          /* window title bar                   */
     int scale;            /* ui(): 1 at 8px cells, 2 at 16px    */
     int scale_q8;         /* continuous scale, 256 == 1 design unit */
+    /* PRESSWORK's fixed shell bands. The shell is printed furniture: it is
+     * ruled once and does not reflow, so each band is a metric rather than a
+     * fraction of the screen. */
+    int focus_bar;        /* the vermilion focus bar, 3dp        */
+    int rail_w;           /* the left tool column                */
+    int strip_h;          /* the raster readout across the top   */
+    int foot_h;           /* the status / ruler band at the foot */
+    int band_h;           /* a section band inside a plate       */
 };
 
 /* The scale everything snaps to. Use these, never a literal. */
@@ -99,12 +134,59 @@ enum ui_color_role {
     UI_COLOR_TEXT_2, UI_COLOR_TEXT_5, UI_COLOR_TEXT_6, UI_COLOR_WARN,
     UI_COLOR_SURF_1, UI_COLOR_SURF_5, UI_COLOR_SURF_7, UI_COLOR_SURF_WELL,
     UI_COLOR_ACCENT_BR,
+    /* 29. Was a C-only field; named now because PRESSWORK's roles sit behind
+     * it and the flat index has to stay contiguous to reach them. */
+    UI_COLOR_TITLE_OFF_BOT,
+    /* 30..41 - PRESSWORK. Same order as struct ui_theme, because ui_color()
+     * casts the struct to unsigned[] and the two lists ARE one list.
+     * kernel.zl's TH_* numbering must match these exactly. */
+    UI_COLOR_CUT, UI_COLOR_LIT, UI_COLOR_LITSOFT, UI_COLOR_EDGE_OVER,
+    UI_COLOR_KNOCK, UI_COLOR_KNOCK_INK, UI_COLOR_KNOCK_INK2, UI_COLOR_KO_EDGE,
+    UI_COLOR_GRID, UI_COLOR_STEEL, UI_COLOR_STEEL_BR, UI_COLOR_INK_ON,
     UI_COLOR_COUNT
 };
 enum ui_metric_role {
     UI_METRIC_PAD = 0, UI_METRIC_GAP, UI_METRIC_ROW_H, UI_METRIC_RADIUS,
-    UI_METRIC_TITLE_H, UI_METRIC_SCALE_Q8, UI_METRIC_COUNT
+    UI_METRIC_TITLE_H, UI_METRIC_SCALE_Q8,
+    /* PRESSWORK's shell bands. ui_metric() is a switch, not a flat index, so
+     * these are appended without an ABI consequence. */
+    UI_METRIC_FOCUS_BAR, UI_METRIC_RAIL_W, UI_METRIC_STRIP_H,
+    UI_METRIC_FOOT_H, UI_METRIC_BAND_H,
+    UI_METRIC_COUNT
 };
+
+/* THE GUARD FOR THAT ABI, and it is a real one rather than a comment asking to
+ * be careful. ui_color() does `((const unsigned *)&theme.bg)[role]`, so a field
+ * inserted in the middle of the colour block, or an enumerator added out of
+ * order, silently re-points every role after it - the failure mode is a screen
+ * that looks nearly right, which is the hardest kind to notice. These two
+ * anchor the far end and the start of the appended block, so either mistake is
+ * a compile error instead. Move a field, and this stops building. */
+_Static_assert(__builtin_offsetof(struct ui_theme, cut)
+                   == (unsigned)UI_COLOR_CUT * sizeof(unsigned),
+               "struct ui_theme and enum ui_color_role disagree at UI_COLOR_CUT");
+_Static_assert(__builtin_offsetof(struct ui_theme, ink_on)
+                   == (unsigned)UI_COLOR_INK_ON * sizeof(unsigned),
+               "struct ui_theme and enum ui_color_role disagree at the end of "
+               "the colour array; UI_COLOR_COUNT no longer describes it");
+
+/* ...and this third one, which is the only one that catches the OTHER
+ * direction. The two above anchor NAMED fields to NAMED enumerators, so they
+ * both stay green if you add an enumerator and no field: UI_COLOR_COUNT simply
+ * grows, every existing pair still agrees, and ui_color(COUNT-1) walks one
+ * slot PAST the colour block into theme.pad - an int metric read as a colour.
+ * Demonstrated rather than feared: inserting one enumerator before
+ * UI_COLOR_COUNT compiled clean and made ui_color(42) return 0x00000014, which
+ * is 20, which is theme.pad.
+ *
+ * Anchoring the first field AFTER the block closes it, because that offset is
+ * the block's true length and it cannot be satisfied by an enum that has grown
+ * without the struct. pad is the first metric and must stay first for this to
+ * mean anything. */
+_Static_assert(__builtin_offsetof(struct ui_theme, pad)
+                   == (unsigned)UI_COLOR_COUNT * sizeof(unsigned),
+               "enum ui_color_role has grown without struct ui_theme; "
+               "ui_color(UI_COLOR_COUNT-1) would read a metric as a colour");
 
 const struct ui_theme *ui_theme(void);
 void ui_theme_init(int scale);          /* build the default theme at a scale */
@@ -112,6 +194,63 @@ void ui_theme_init_q8(int scale_q8);    /* continuous scale; 256 == 1x */
 void ui_theme_set(const struct ui_theme *t);
 unsigned ui_color(int role);            /* shared C/zl source of colour truth */
 int ui_metric(int role);
+
+/* ---- WHAT TYPE IS IN THIS IMAGE --------------------------------------------
+ * What the TYPE app is built on. Exposed rather than kept private because it
+ * must be callable from kernel.zl, and because it is a MEASUREMENT of the
+ * linked font arrays - not a table of numbers a comment claims are true. See
+ * ui.c for the derivation, and for the one thing the prototype asserted that
+ * this image does not have.
+ *
+ * Contrast itself is NOT here - ui_ratio_q4() above already is it, at the same
+ * x10^4 fixed point, and a second copy of a WCAG table is exactly the kind of
+ * drift design.h's one-file rule exists to stop. */
+int ui_atlas_n(void);              /* atlases the TYPE pane knows about      */
+int ui_atlas_w(int i);             /* cell width, px - sizeof, not typed in  */
+int ui_atlas_h(int i);             /* cell height, px                        */
+int ui_atlas_glyphs(int i);        /* coverage                               */
+int ui_atlas_face(int i);          /* 0 mono, 1 sans, 2 sans bold            */
+int ui_atlas_in_image(int i);      /* 0 == declared by the design, not linked */
+int ui_atlas_for_role(int role, int weight); /* which one, at this scale, now */
+
+/* ---- what the settings pane needs, and nothing else needs ------------------
+ * ui_ratio_q4 and the two ceilings are WCAG contrast in integer fixed point,
+ * x10^4, computed from a 256-entry sRGB table rather than from a pow() that
+ * does not exist here. See ui.c for the accuracy measurement.
+ *
+ * ui_knockout_* and ui_focus_bar_* are the two live controls the settings
+ * pane's FOCUS tab owns. Both rebuild the theme and NEITHER repaints - the
+ * caller damages afterwards, because surfaces belong to wm.c and this layer
+ * must not know about them. */
+unsigned ui_ratio_q4(unsigned a, unsigned b);
+unsigned ui_ceil_dn_q4(unsigned rgb);   /* room downward: ratio to black    */
+unsigned ui_ceil_up_q4(unsigned rgb);   /* room upward:   ratio to white    */
+int ui_knockout_get(void);              /* 1 == the knockout is on          */
+int ui_knockout_set(int on);            /* returns the state it settled on  */
+/* the focus bar's width in DESIGN px, and the prototype's own slider range. */
+#define UI_FBAR_MIN 1
+#define UI_FBAR_MAX 6
+int ui_focus_bar_dp(void);
+int ui_focus_bar_set(int n);
+
+/* THE COMPARISON LADDER, by index. design.h's ZD_REF_* block - the PARENT
+ * designs' tokens, kept so the settings pane can COMPUTE the comparison rather
+ * than quote it. Nothing paints with them; they are arguments to ui_ratio_q4.
+ * Reached through a function so that the colour literals stay in design.h,
+ * which is the rule with no exceptions. */
+enum ui_ref_color_id {
+    UI_REF_LIT_RAKING = 0, UI_REF_BASE_RAKING,
+    UI_REF_KNOCK_PLATE, UI_REF_WASH_RAKING
+};
+unsigned ui_ref_color(int which);
+/* ...and the figures that are not colours: the reference plate, the header
+ * height in DESIGN px, and the three quantities no live token can produce. */
+enum ui_ref_num_id {
+    UI_REFN_PLATE_W = 0, UI_REFN_PLATE_H, UI_REFN_TITLE_H,
+    UI_REFN_RAKING_PX, UI_REFN_GRAPHITE_PX,
+    UI_REFN_WASH_Q4, UI_REFN_RAKING_Q4
+};
+int ui_ref_num(int which);
 
 /* ---- the app contract -----------------------------------------------------
  * Three functions, NO LOOP, EVER. If you are writing `while (...)` inside an
@@ -170,6 +309,29 @@ void wm_focus(int win);
 void wm_set_modal(int win, int on);
 int  wm_add_tab(int win, int app, const char *title);
 void wm_set_tab(int win, int tab);
+/* ---- what the title bar and the foot band read out -------------------------
+ * PRESSWORK's header is "01 TERMINAL  zlsh" and its foot band is
+ * "01  tty1 - 80x24   APP US 995 us                            ws 01". wm.c
+ * derives the module code, the app cost and the workspace itself; the register
+ * slot, the mono qualifier and the status line are POLICY and arrive here.
+ *
+ * None of the three has a default. A window never told stays blank in those
+ * cells rather than being given the app id or the title as a stand-in - the
+ * readout's whole value is that every figure in it is true.
+ *
+ *   reg    1..99, the shell's REGISTER rail slot; anything else clears it
+ *   sub    up to 15 chars, mono, after the title
+ *   status up to 23 chars, mono, the band's left readout
+ */
+void wm_set_label(int win, int reg, const char *sub);
+void wm_set_status(int win, const char *status);
+/* WHERE THE DESK'S FIELD IS, so the module code is read off the same grid the
+ * shell rules onto it. The grid's SHAPE is design.h's (ZD_GRID_COLS/ROWS/
+ * MARGIN/GUTTER); only its origin and extent are shell furniture. Until this
+ * is called wm.c derives the field from theme rail_w/strip_h/foot_h, which is
+ * the same grid to within the shell's own 1dp hairlines. w or h <= 0 returns
+ * to that derivation. */
+void wm_set_field(int x, int y, int w, int h);
 int  wm_tab(int win);
 int  wm_ntabs(int win);
 void wm_move(int win, int x, int y);
@@ -335,9 +497,33 @@ void ui_end_activate(void);     /* ...consumed after the app re-runs its UI  */
 void ui_row(void);              /* put the next widget beside this one       */
 void ui_endrow(void);
 
-/* The selection treatment, picked once for the whole toolkit. See ui.c for
- * WHICH of the reference's three it is and why. `zebra` stripes odd rows. */
+/* The NAVIGATION row's selection treatment - the register mark. See ui.c for
+ * why there are two row idioms and which rows get which. `zebra` is accepted
+ * and ignored; PRESSWORK rules rows with a groove, not a stripe. */
 void ui_row_select(int x, int y, int w, int h, int selected, int zebra);
+
+/* ---- PRESSWORK's depth recipe, shared -------------------------------------
+ * ONE raking light from the upper left that never moves, written once. Every
+ * raised or sunken object in the system is these calls and nothing else, so
+ * the direction the light comes from is a fact of the toolkit rather than a
+ * convention each widget re-implements. See ui.c for the full derivation.
+ *
+ *   ui_seat_face    the ring plus the object
+ *   ui_run_top      the 1px STRUCK run, inside the ring, stopping at the arcs
+ *   ui_run_bottom   the 1px cut/grazed run on the far edge
+ *   ui_seat_raised  face + ring + lit top run; `lit` 0 == disabled
+ *   ui_seat_sunken  the same recipe with the sign flipped - the `.well` pit
+ *
+ * `ring` is ZD_CUT at rest and ZD_EDGE_OVER under the pointer. Radius follows
+ * the design's rule that it encodes how much the object can move: ZD_R_BOLT
+ * for anything bolted down, ZD_R_CHIP for a control, ZD_R_INSET for a pane,
+ * ZD_R_PLATE for a window. */
+void ui_seat_face(int x, int y, int w, int h, int r, unsigned face, unsigned ring);
+void ui_run_top(int x, int y, int w, int r, unsigned edge);
+void ui_run_bottom(int x, int y, int w, int h, int r, unsigned edge);
+void ui_seat_raised(int x, int y, int w, int h, int r, unsigned face,
+                    unsigned ring, int lit);
+void ui_seat_sunken(int x, int y, int w, int h, int r, unsigned face);
 
 /* INK ON THE ACCENT, computed the way the reference computes it - a WCAG
  * relative luminance and one threshold, no floating point. Any widget painting
@@ -367,8 +553,13 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
  * zero items; a trailing '|' is an empty item, not a terminator.
  */
 
-/* sizes - these ARE fb.c's text roles, so a widget's size and its type size
- * cannot drift apart */
+/* THE TYPE SCALE. These used to BE fb.c's text roles and are now design.h's
+ * ZD_T_SM / ZD_T_MD / ZD_T_LG - 11 / 13 / 21 design px. The numbering is
+ * unchanged so no call site moves, but the resolution is not fb.c's any more:
+ * asking fb.c for a role gets 12 / 12 / 16 on a 1920-wide panel, because its
+ * role ladder is floored at 12 and the caption's base is 8. CAPTION and BODY
+ * came out the same size. See the long note over ui_text_h in uikit.c for the
+ * measurement and for what the change costs. */
 #define UI_SM 0
 #define UI_MD 1
 #define UI_LG 2
@@ -376,6 +567,8 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
 /* flags, OR-ed */
 #define UI_F_MONO (1 << 0)   /* Roboto Mono in the reference: numbers, paths */
 #define UI_F_BOLD (1 << 1)   /* the reference's fontWeight:700              */
+#define UI_F_CAPS (1 << 2)   /* text-transform: uppercase. ASCII only, which */
+                             /* is the whole of what the three atlases carry */
 
 /* button kinds */
 #define UI_BTN_NEUTRAL 0     /* rgba(255,255,255,.07) / body text           */
@@ -397,6 +590,39 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
 int  ui_text_w(const char *s, int size, int flags);
 int  ui_text_h(int size);
 void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
+
+/* ---- TRACKED TEXT, which is PRESSWORK's fourth type style ------------------
+ * Not a fourth SIZE - there are three baked atlases and no rasteriser, so a
+ * fourth size does not exist to be asked for. It is SM, uppercase, bold and
+ * LETTER-SPACED, and design.h has carried ZD_TR_LAB (1.4 design px) and
+ * ZD_TR_BIG (2.6) since PRESSWORK landed. ZD_TR_BIG had NO reader in the tree
+ * at all; ZD_TR_LAB had one, inside uikit.c, reachable by three widgets.
+ *
+ * fb_text_role draws a whole string in one call and has no track argument -
+ * and no flag word to put one in, which is the shape design.h predicts. It is
+ * not fb.c's job: tracking is one draw per glyph with the pen advanced by the
+ * glyph plus the track, and that is this layer. fb.c is not edited.
+ *
+ * THE MEASURE AND THE DRAW SHARE ONE LOOP, which design.h states in the same
+ * breath as the token: a label measured without the track and drawn with it
+ * clips at its right edge. `_w` and the draw are the same function with the
+ * ink switched off. The trailing track is cancelled - the prototype's own
+ * `margin-right: calc(-1 * var(--tr-lab))` - so a width is the glyphs plus
+ * (n-1) tracks, never n.
+ *
+ * `track_x10` is a design.h tracking token, i.e. design px times ten. 0 means
+ * untracked, which makes this pair the single text engine: the zl shell's
+ * `label` builtin is this with a track of 0.
+ *
+ * ui_caps and ui_display bake in one token each, so no call site spells a
+ * track and design.h stays the only place the number lives. */
+int  ui_text_tracked_w(const char *s, int size, int flags, int track_x10);
+void ui_text_tracked(int x, int y, const char *s, unsigned rgb,
+                     int size, int flags, int track_x10);
+int  ui_caps_w(const char *s, int size);      /* th / .t-lab / .sect / .kv .k */
+void ui_caps(int x, int y, const char *s, unsigned rgb, int size);
+int  ui_display_w(const char *s, int size);   /* .t-big - one reading a view  */
+void ui_display(int x, int y, const char *s, unsigned rgb, int size);
 
 /* ---- buttons - docs/reference/ui/widgets.md S13 -------------------------- */
 int  ui_pill_w(const char *s, int size, int flags);

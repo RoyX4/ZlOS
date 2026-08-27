@@ -39,8 +39,11 @@ cd "$(dirname "$0")/../.." || exit 2
 # applying to the whole map.
 SUITE_FLOOR=$((0x02200000))
 PAGE=$((0x1000))
-# virtio_net.c: NET_FLOOR. Nothing in this block may reach it.
-NET_FLOOR=$((0x03000000))
+# memmap.h: HI_IMG. ZL-owned buffers stop where the C-owned high-memory map
+# begins. The RULER_DMA markers mirror that map for the System Monitor and are
+# checked separately by check-memmap-mirror.py; they are boundaries, not
+# allocations.
+C_MAP_FLOOR=$((0x03000000))
 
 selftest=0
 [ "${1:-}" = "--selftest" ] && selftest=1
@@ -48,13 +51,16 @@ selftest=0
 scan() {
     # NAME:VALUE:FILE for every `NAME = 0xADDR` at the top level of any .zl
     grep -HnoP '^[A-Z_][A-Z_0-9]*\s*=\s*0x0[0-9A-Fa-f]{5,}' -- src/kernel.zl apps/*.zl 2>/dev/null \
-      | sed -E 's/^([^:]+):[0-9]+:([A-Z_0-9]+)[[:space:]]*=[[:space:]]*(0x[0-9A-Fa-f]+)$/\2:\3:\1/'
+      | sed -E 's/^([^:]+):[0-9]+:([A-Z_0-9]+)[[:space:]]*=[[:space:]]*(0x[0-9A-Fa-f]+)$/\2:\3:\1/' \
+      | grep -vE '^RULER_DMA(_END)?:'
     if [ "$selftest" = 1 ]; then
         # a planted collision: an address kernel.zl already claims, in a file
         # check-memmap.sh does not open. This is the exact shape of the bug.
         echo "PLANTED_DUPE:0x02200000:apps_games4.zl"
         # ...and a neighbour a quarter of a page away, inside the suite block
         echo "PLANTED_TIGHT:0x02280400:apps_games4.zl"
+        # ...and a ZL allocation crossing into the C-owned high-memory map.
+        echo "PLANTED_HIGH:0x03000000:apps_games4.zl"
     fi
 }
 
@@ -79,8 +85,8 @@ while IFS=: read -r name val file; do
             fail=1
         fi
     fi
-    if [ "$v" -ge "$NET_FLOOR" ]; then
-        printf 'FAIL: %s (%s) at %s is at or above virtio_net.c NET_FLOOR 0x03000000\n' \
+    if [ "$v" -ge "$C_MAP_FLOOR" ]; then
+        printf 'FAIL: %s (%s) at %s is at or above memmap.h HI_IMG 0x03000000\n' \
                "$name" "$file" "$val"
         fail=1
     fi
@@ -91,7 +97,7 @@ EOF
 
 if [ "$selftest" = 1 ]; then
     if [ "$fail" = 1 ]; then echo "  OK: --selftest went red, so the check can still fail"; exit 0; fi
-    echo "FAIL: --selftest planted a duplicate AND a tight neighbour and the check stayed green"
+    echo "FAIL: --selftest planted duplicate, tight, and high-map defects and the check stayed green"
     exit 1
 fi
 

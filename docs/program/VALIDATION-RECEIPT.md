@@ -17,8 +17,8 @@ Result:
 
 ```text
 master-program self-test: PASS: missing-feature, duplicate-feature, unknown-prefix, unknown-contract
-master-program: PASS: features=906 prefixes=25 phases=21 research_contracts=174 registries=609 current_named=61 catalogue=1 games=24
-registry-counts: AGT=24 APP=83 BLK=25 BUS=28 CUR=38 DEV=20 FSP=22 FUT=12 GAME=24 GPU=25 INPUT=14 MEDIA=8 NIC=16 OPS=28 PERIPH=4 PLAT=38 PWR=7 RADIO=5 SENSOR=4 SVC=116 USB=14 VM=12 ZLP=42
+master-program: PASS: features=906 prefixes=25 phases=21 research_contracts=174 registries=611 research_docs=55 repositories=33 current_named=63 catalogue=1 games=24
+registry-counts: AGT=24 APP=83 BLK=25 BUS=28 CUR=40 DEV=20 FSP=22 FUT=12 GAME=24 GPU=25 INPUT=14 MEDIA=8 NIC=16 OPS=28 PERIPH=4 PLAT=38 PWR=7 RADIO=5 SENSOR=4 SVC=116 USB=14 VM=12 ZLP=42
 ```
 
 The validator also checks:
@@ -29,7 +29,7 @@ The validator also checks:
 - all 64 core, 56 driver/app and 54 visual/browser/app research contracts;
 - exact specialized-registry family counts and unique IDs;
 - a valid primary phase on every driver/service/application row;
-- all 61 current named implementations, the separate All Applications surface,
+- all 63 current named implementations, the separate All Applications surface,
   and GAME-001 through GAME-024;
 - generated-file freshness, required suite files, final newlines, trailing
   whitespace and local Markdown links.

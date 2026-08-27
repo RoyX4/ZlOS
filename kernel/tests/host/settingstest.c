@@ -138,6 +138,10 @@ int  fb_text_role_w(const char*s,int role,int weight)
 { (void)weight; return stub_strlen(s) * prop_cell_stub(role) / 2; }
 void fb_text_role(int x,int y,const char*s,unsigned c,int role,int weight)
 {(void)x;(void)y;(void)s;(void)c;(void)role;(void)weight;}
+int fb_text_rich_w(const char*s,int len,int size,int style)
+{ (void)s;(void)style; return (len > 0 && size > 0) ? len * size / 2 : 0; }
+void fb_text_rich(int x,int y,const char*s,int len,unsigned c,int size,int style)
+{(void)x;(void)y;(void)s;(void)len;(void)c;(void)size;(void)style;}
 void fb_text_aa(int x,int y,const char*s,unsigned c){(void)x;(void)y;(void)s;(void)c;}
 
 void fb_fill_px(int x,int y,int w,int h,unsigned c){(void)x;(void)y;(void)w;(void)h;(void)c;}
@@ -155,6 +159,7 @@ int  fb_cell_h(void){ return (16 * ui_metric(UI_METRIC_SCALE_Q8) + 128) / 256; }
 void fb_clip(int x,int y,int w,int h){(void)x;(void)y;(void)w;(void)h;}
 void fb_clip_none(void){}
 void fb_clip_get(int*a,int*b,int*c,int*d){ if(a)*a=0; if(b)*b=0; if(c)*c=1280; if(d)*d=800; }
+
 void input_set_speed(int p){ (void)p; }
 void input_set_accel(int o){ (void)o; }
 void wm_set_anim(int o){ (void)o; }
@@ -647,4 +652,3 @@ int main(void)
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;
 }
-

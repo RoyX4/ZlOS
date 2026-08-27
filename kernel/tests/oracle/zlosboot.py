@@ -26,12 +26,6 @@ OUT = os.path.join(HERE, "out")
 # rather than re-derived, deliberately and for the reason probe-catalog.py
 # gives: a layout change THERE should be what breaks this, instead of
 # independent arithmetic here drifting quietly away from it.
-TITLE_H = 28
-MENU_ROWS = 10
-# The dock's TOP, measured from the bottom of the screen: kernel.zl's
-# DOCK_H (43) + DOCK_BOT (9). It was 64, from the 56px slab the reference's
-# 43px pill replaced - so every dock click landed 12px above the strip.
-DOCK_H = 52
 CAT_HEADER = 26
 CAT_TILE_W = 130
 CAT_TILE_H = 108
@@ -74,6 +68,12 @@ class LoggedSerial(Serial):
         return r
 
 
+def guest_scale_q8(width):
+    """The guest's exact fixed-point UI scale at this width."""
+    q8 = (width * 256 + 960) // 1920
+    return max(256, min(768, q8))
+
+
 def guest_ui(width):
     """What ui() returns in the guest at this width. fb.c:726-729, exactly.
 
@@ -82,43 +82,76 @@ def guest_ui(width):
     the mode zlOS actually boots into. Reproducing the real formula costs three
     lines and removes a whole class of clicks landing nowhere.
     """
-    q8 = (width * 256 + 960) // 1920
-    q8 = max(256, min(768, q8))
+    q8 = guest_scale_q8(width)
     return (q8 + 128) // 256
 
 
-def dock_geometry(width, height):
-    """The dock/app-grid/topbar pointer targets derived from kernel.zl."""
-    src = open(os.path.join(KERNEL, "src", "kernel.zl"), encoding="utf-8").read()
+def _source_constants(path, names):
+    src = open(path, encoding="utf-8").read()
     values = {}
-    for name in ("DOCK_PADX", "DOCK_PADY", "DOCK_GAP", "DOCK_TW", "DOCK_H",
-                 "DOCK_BOT", "DOCK_PITCH", "DOCK_N", "TOPBAR_H"):
+    for name in names:
         match = re.search(r"^%s\s*=\s*(\d+)" % name, src, re.M)
         if not match:
-            raise SystemExit(f"kernel.zl no longer defines {name}; pointer "
-                             "routes cannot be derived safely")
+            raise SystemExit(f"{os.path.relpath(path, KERNEL)} no longer defines "
+                             f"{name}; pointer routes cannot be derived safely")
         values[name] = int(match.group(1))
+    return values
+
+
+def _dp(value, q8):
+    return (value * q8 + 128) >> 8
+
+
+def rail_geometry(width, height):
+    """The fixed register and All Applications pointer targets from kernel.zl."""
+    del height
+    values = _source_constants(
+        os.path.join(KERNEL, "src", "kernel.zl"),
+        ("RAIL_W_D", "ROW_H_D", "RAIL_IDENT_H", "RULE_H", "RAIL_SECT_H",
+         "REG_N", "REG_CATALOG", "REG_ROWS"),
+    )
+    if values["REG_CATALOG"] != values["REG_N"]:
+        raise SystemExit("kernel.zl register no longer places All Applications "
+                         "immediately after the fixed launch rows")
+    if values["REG_ROWS"] != values["REG_N"] + 1:
+        raise SystemExit("kernel.zl fixed register row count no longer matches "
+                         "the launcher plus catalogue contract")
+    q8 = guest_scale_q8(width)
     u = guest_ui(width)
-    bar_w = (values["DOCK_PADX"] * 2 + values["DOCK_N"] * values["DOCK_TW"]
-             + (values["DOCK_N"] - 1) * values["DOCK_GAP"]
-             + values["DOCK_GAP"] * 2 + 1 + values["DOCK_TW"])
-    bar_x = (width - bar_w * u) // 2
-    x0 = bar_x + values["DOCK_PADX"] * u
-    y = height - (values["DOCK_H"] + values["DOCK_BOT"]) * u
-    middle_y = y + values["DOCK_PADY"] * u + values["DOCK_TW"] * u // 2
-    grid_x = (x0 + values["DOCK_N"] * values["DOCK_PITCH"] * u
-              + values["DOCK_GAP"] * u + 1)
+    rail_w = _dp(values["RAIL_W_D"], q8)
+    row_h = _dp(values["ROW_H_D"], q8)
+    reg_y = ((values["RAIL_IDENT_H"] + values["RULE_H"]
+              + values["RAIL_SECT_H"]) * u + 1)
+    middle_x = rail_w // 2
+    rows = [
+        (middle_x, reg_y + slot * row_h + row_h // 2)
+        for slot in range(values["REG_ROWS"])
+    ]
     return {
-        "slots": [
-            (x0 + slot * values["DOCK_PITCH"] * u
-             + values["DOCK_TW"] * u // 2, middle_y)
-            for slot in range(values["DOCK_N"])
-        ],
-        "grid": (grid_x + values["DOCK_TW"] * u // 2, middle_y),
-        "topbar_corner": (60 * u, values["TOPBAR_H"] * u // 2),
-        "dock_y": y,
+        "slots": rows[:values["REG_N"]],
+        "catalogue": rows[values["REG_CATALOG"]],
+        "reg_y": reg_y,
+        "rail_w": rail_w,
+        "row_h": row_h,
         "u": u,
+        "q8": q8,
     }
+
+
+def menu_row_point(client_rect, index, width):
+    """Pointer target for one source-defined menu row inside its client rect."""
+    values = _source_constants(
+        os.path.join(KERNEL, "src", "kernel.zl"),
+        ("MENU_ROWS", "ROW_H_D", "PAD_D", "GAP_D"),
+    )
+    if index < 0 or index >= values["MENU_ROWS"]:
+        raise SystemExit(f"menu row {index} is outside 0..{values['MENU_ROWS'] - 1}")
+    _, cx, cy, cw, _ = client_rect
+    q8 = guest_scale_q8(width)
+    pad = _dp(values["PAD_D"], q8)
+    row_h = _dp(values["ROW_H_D"], q8)
+    gap = _dp(values["GAP_D"], q8)
+    return cx + cw // 2, cy + pad + index * (row_h + gap) + row_h // 2
 
 
 def catalog_apps():
@@ -217,6 +250,20 @@ def click(qmp, x, y, w, h, settle):
     settle(0.3)
     at(qmp, x, y, w, h, btn=False)
     settle(0.4)
+
+
+def tap_key(qmp, qcode, settle):
+    """Press and release one QEMU qcode through the guest keyboard path."""
+    qmp.cmd("input-send-event", events=[{
+        "type": "key",
+        "data": {"down": True, "key": {"type": "qcode", "data": qcode}},
+    }])
+    settle(0.1)
+    qmp.cmd("input-send-event", events=[{
+        "type": "key",
+        "data": {"down": False, "key": {"type": "qcode", "data": qcode}},
+    }])
+    settle(0.2)
 
 
 # ---- screen -----------------------------------------------------------------
@@ -329,7 +376,7 @@ def variant_source(want_w, want_h, dest):
     ...and the DESKTOP does not follow it. The screenshot from that path shows
     windows still at their 1920x1200 positions (System Monitor half off the
     right edge, the Browser hanging off the bottom), the wallpaper repainted as
-    flat black, and no dock on screen at all. layout() recomputes the variables
+    flat black, and no rail on screen at all. layout() recomputes the variables
     the boot placement reads; it does not move windows the compositor has
     already opened. So a picture taken that way is a 1920x1200 desktop cropped
     to 1280x800, and scoring it against the mockup would blame the design for a
@@ -404,8 +451,8 @@ def open_by_catalog(ser, qmp, idx, W, H, name):
 
     # THE CATALOG IS OPENED BY A SHELL WORD, not by clicking chrome. A shell
     # word does not depend on the chrome's geometry being right, so a future
-    # change to the dock cannot silently break every per-app measurement. The
-    # dock's grid button reaches the same reg_open(APP_CATALOG) and is covered
+    # change to the rail cannot silently break every per-app measurement. The
+    # rail's All Applications row reaches the same reg_open(APP_CATALOG) and is covered
     # by probe-catalog.py instead.
     #
     # WAIT FOR THE CATALOG'S OWN REPORT, not for a wall clock. reg_open() calls

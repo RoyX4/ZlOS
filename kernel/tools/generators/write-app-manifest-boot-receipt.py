@@ -42,24 +42,72 @@ def repo_relative(path):
     return relative
 
 
+def expected_manifest_marker(embedded=None):
+    expected_digest = sha256(MANIFEST)
+    manifest = json.load(open(MANIFEST, encoding="utf-8"))
+    schema_match = re.fullmatch(
+        r"zlos\.application-identity-manifest\.v(\d+)",
+        manifest.get("schema", ""),
+    )
+    entries_value = manifest.get("entries")
+    if schema_match is None or not isinstance(entries_value, list):
+        raise ValueError("application manifest schema or entries are invalid")
+    expected_schema = schema_match.group(1)
+    expected_entries = str(len(entries_value))
+    if embedded is None:
+        embedded = open(EMBED, encoding="utf-8").read()
+    found = MARKER.findall(embedded)
+    if len(found) != 1:
+        raise ValueError(f"embedded manifest marker count is {len(found)}, expected 1")
+    schema, entries, digest = found[0]
+    if (schema, entries, digest) != (expected_schema, expected_entries, expected_digest):
+        raise ValueError(
+            "embedded manifest marker is "
+            f"{schema}/{entries}/{digest}, expected "
+            f"{expected_schema}/{expected_entries}/{expected_digest}"
+        )
+    return schema, entries, digest
+
+
+def run_selftest():
+    schema, entries, digest = expected_manifest_marker()
+    embedded = open(EMBED, encoding="utf-8").read()
+    altered = embedded.replace(
+        f"entries={entries}", f"entries={int(entries) + 1}", 1
+    )
+    try:
+        expected_manifest_marker(altered)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("manifest count mutation escaped")
+    print(f"app-manifest boot receipt selftest: caught count mutation at {entries} entries")
+
+
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--route", required=True,
+    selftest_only = "--selftest" in argv
+    parser.add_argument("--selftest", action="store_true")
+    parser.add_argument("--route", required=not selftest_only,
                         choices=("raw-bios", "native-uefi64", "grub-bios32", "grub-uefi32",
                                  "grub-bios64", "grub-uefi64"))
-    parser.add_argument("--artifact", required=True)
-    parser.add_argument("--log", required=True)
-    parser.add_argument("--output", required=True)
-    parser.add_argument("--boot-origin", required=True)
-    parser.add_argument("--harness", required=True)
+    parser.add_argument("--artifact", required=not selftest_only)
+    parser.add_argument("--log", required=not selftest_only)
+    parser.add_argument("--output", required=not selftest_only)
+    parser.add_argument("--boot-origin", required=not selftest_only)
+    parser.add_argument("--harness", required=not selftest_only)
     parser.add_argument("--source-file", action="append", default=[])
     args = parser.parse_args(argv)
     try:
+        if args.selftest:
+            run_selftest()
+            return 0
         log = open(args.log, encoding="latin-1").read().replace("\r", "")
         found = MARKER.findall(log)
-        expected = sha256(MANIFEST)
-        if found != [("1", "62", expected)]:
-            raise ValueError(f"manifest marker mismatch: {found!r}, expected 1/62/{expected}")
+        schema, entries, expected = expected_manifest_marker()
+        wanted = [(schema, entries, expected)]
+        if found != wanted:
+            raise ValueError(f"manifest marker mismatch: {found!r}, expected {wanted!r}")
         if args.boot_origin not in log:
             raise ValueError(f"boot-origin marker absent: {args.boot_origin!r}")
         build_identity = json.load(open(BUILD_IDENTITY, encoding="utf-8"))
@@ -108,7 +156,11 @@ def main(argv):
                 ["qemu-system-x86_64" if "uefi" in args.route or args.route.endswith("64")
                  else "qemu-system-i386",
                  "--version"], text=True).splitlines()[0],
-            "shipped_manifest": {"schema": 1, "entries": 62, "sha256": expected},
+            "shipped_manifest": {
+                "schema": int(schema),
+                "entries": int(entries),
+                "sha256": expected,
+            },
             "shipped_build_identity": {
                 "schema": 1,
                 "id": build_identity["identity_sha256"],
