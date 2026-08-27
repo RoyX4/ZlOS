@@ -5,6 +5,7 @@
 set -uo pipefail
 KERNEL_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$KERNEL_ROOT"
+. tools/checks/qemu-crash.sh
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -54,6 +55,8 @@ boot_until() { # $1 log, remaining arguments are qemu arguments
     local result=$?
     kill "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
+    local qstatus=$?
+    qemu_crashed "$qstatus" || true
     rm -f "$serial_socket"
     return "$result"
 }
@@ -87,9 +90,10 @@ check() { # $1 label, $2 log
 
 echo "== 64-bit multiboot: legacy BIOS + GRUB =="
 BLOG=$(mktemp)
+boot_ok=0
 boot_until "$BLOG" qemu-system-x86_64 -m 1G -smp 2 "${ACCEL[@]}" \
-    -cdrom zlOS64.iso
-if check "BIOS" "$BLOG"; then
+    -cdrom zlOS64.iso && boot_ok=1
+if [ "$boot_ok" -eq 1 ] && check "BIOS" "$BLOG"; then
     python3 ./tools/generators/write-app-manifest-boot-receipt.py \
         --route grub-bios64 --artifact zlOS64.iso --log "$BLOG" \
         --harness tools/checks/verify-64.sh --boot-origin "$ORIGIN" \
@@ -107,11 +111,12 @@ else
     VARS=$(mktemp)
     cp "$OVMF_VARS" "$VARS"
     ULOG=$(mktemp)
+    boot_ok=0
     boot_until "$ULOG" qemu-system-x86_64 -m 1G -smp 2 "${ACCEL[@]}" \
         -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
         -drive if=pflash,format=raw,unit=1,file="$VARS" \
-        -cdrom zlOS64.iso
-    if check "UEFI" "$ULOG"; then
+        -cdrom zlOS64.iso && boot_ok=1
+    if [ "$boot_ok" -eq 1 ] && check "UEFI" "$ULOG"; then
         python3 ./tools/generators/write-app-manifest-boot-receipt.py \
             --route grub-uefi64 --artifact zlOS64.iso --log "$ULOG" \
             --harness tools/checks/verify-64.sh --boot-origin "$ORIGIN" \

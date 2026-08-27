@@ -253,6 +253,17 @@ else
     skip "check-version.py not present"
 fi
 
+echo "== 7. boot gates must distinguish an emulator crash from a guest failure =="
+if [ -f kernel/tools/checks/qemu-crash-selftest.sh ]; then
+    if out=$(bash kernel/tools/checks/qemu-crash-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -i fail | head -3)"
+    fi
+else
+    skip "qemu-crash-selftest.sh not present"
+fi
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"

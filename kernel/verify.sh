@@ -5,6 +5,7 @@
 # the transcript, diff against golden.txt, always time out.
 set -uo pipefail
 cd "$(dirname "$0")" || exit
+. tools/checks/qemu-crash.sh
 
 GOLDEN=tests/fixtures/golden.txt
 OUT=$(mktemp)
@@ -41,7 +42,8 @@ for _ in $(seq $((CEILING * 2))); do
     kill -0 "$QPID" 2>/dev/null || break
     sleep 0.5
 done
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
+qemu_crashed "$QSTATUS" || true
 grep -q "halting" "$OUT" 2>/dev/null || { echo "FAIL: kernel never halted - it hung"; exit 1; }
 [ -s "$OUT" ]     || { echo "FAIL: no serial output - it did not boot"; exit 1; }
 

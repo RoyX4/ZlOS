@@ -20,6 +20,7 @@
 #                        "divisible by 4" calendar gets wrong
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit
+. tools/checks/qemu-crash.sh
 
 CEILING=${CEILING:-240}
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
@@ -44,8 +45,10 @@ check () {
         kill -0 "$qpid" 2>/dev/null || break
         sleep 0.5
     done
-    kill "$qpid" 2>/dev/null; wait "$qpid" 2>/dev/null
+    kill "$qpid" 2>/dev/null; wait "$qpid" 2>/dev/null; local qstatus=$?
     tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
+
+    qemu_crashed "$qstatus" || true
 
     local got_rtc got_epoch
     got_rtc=$(sed -n 's/.*RTC=\([0-9:-]* [0-9:]*\).*/\1/p' "$OUT" | tail -1)

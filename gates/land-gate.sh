@@ -61,6 +61,8 @@ run "contained gate launcher contract" "$WT/gates" \
     python3 check-contained-gate.py --selftest
 run "landing authority closure" "$WT/kernel" \
     python3 tools/checks/check-land-gate.py --selftest
+run "QEMU crash classifier" "$WT/kernel" \
+    bash tools/checks/qemu-crash-selftest.sh
 run "wrapper inventory write" "$WT/kernel" \
     python3 tools/generators/gen-wrapper-registry.py --write --selftest
 run "wrapper inventory check" "$WT/kernel" \

@@ -4,6 +4,7 @@
 # over correctly, independent of GRUB and multiboot entirely.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit
+. tools/checks/qemu-crash.sh
 
 command -v qemu-system-i386 >/dev/null || { echo "skip: no qemu"; exit 0; }
 command -v nasm >/dev/null || { echo "skip: no nasm"; exit 0; }
@@ -51,10 +52,11 @@ for _ in $(seq $((CEILING * 2))); do
     kill -0 "$QPID" 2>/dev/null || break      # qemu exited on its own
     sleep 0.5
 done
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null
+kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
 tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 
 fail=0
+qemu_crashed "$QSTATUS" || true
 MANIFEST_MARKER=$(python3 ./tools/generators/gen-app-manifest.py --marker)
 grep -q "our bootloader (raw_boot), no GRUB" "$OUT" || { echo "  FAIL  did not boot via our loader"; fail=1; }
 grep -q "ready\." "$OUT"  || { echo "  FAIL  never reached the prompt"; fail=1; }

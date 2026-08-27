@@ -14,6 +14,7 @@ REQUIRED_SNIPPETS = (
     'run "mandatory boot prerequisites"',
     'run "contained gate launcher contract"',
     'python3 tools/checks/check-land-gate.py --selftest',
+    'run "QEMU crash classifier"',
     'run "wrapper inventory write"',
     'run "wrapper inventory check"',
     'python3 tools/checks/check-build-contract.py --selftest',
