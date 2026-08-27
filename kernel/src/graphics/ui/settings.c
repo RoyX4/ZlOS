@@ -35,6 +35,7 @@
 
 #include "ui.h"
 #include "design.h"
+#include "version.h"
 
 /* ---- what this file drives ------------------------------------------------
  * Six sinks, all of which already existed. Only wm_set_anim is new, because
@@ -305,9 +306,12 @@ static const struct page_def PAGES[N_PAGE] = {
 /* The about card's static rows. The row COUNT is in two places - here and in
  * PAGES above - so the two are asserted equal rather than trusted. */
 static const struct { const char *k, *v; } ABOUT_SYS[] = {
-    { "OS",             "zl 0.1"         },
+    /* Both of these were literals and both were WRONG on the build that
+     * actually boots - "zl 0.1" against a rail reading 0.3, and "i386" in a
+     * file compiled into the 64-bit kernel too. See version.h. */
+    { "OS",             "zlOS " ZLOS_VERSION_STR },
     { "Window manager", "wm.c"           },
-    { "Kernel",         "i386 - ring 0"  },
+    { "Kernel",         ZLOS_KERNEL_STR  },
     { "Toolkit",        "ui.c + uikit.c" },
     { "Settings block", "LBA 64"         },
     { "Store",          "nvme, 512 B"    },

@@ -222,6 +222,37 @@ else
     skip "./interp or ./compile not built (run ./build.sh)"
 fi
 
+echo "== 6. every version string the OS shows must be the same version =="
+# "0.3" is written out six times in kernel.zl; settings.c said "zl 0.1" and the
+# shell's own boot banner said "zlOS 0.10". Three answers to one question, two
+# of them on screen at the same time. src/core/version.h is the single source
+# and check-version.py compares kernel.zl's literals against it.
+#
+# A guard nobody runs is not a guard - this is the line that makes it one.
+if [ -f kernel/tools/checks/check-version.py ]; then
+    if out=$(python3 kernel/tools/checks/check-version.py 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | tail -n +2 | head -3)"
+    fi
+    # ...AND THAT THE GUARD ABOVE CAN STILL GO RED. Every check in
+    # docs/GUARDS-THAT-DID-NOT-GUARD.md was green at the moment it stopped
+    # working, so "it passed" is not evidence that it looked. The selftest runs
+    # the real module against synthetic trees - it never touches the checkout,
+    # so it is safe alongside a boot gate.
+    if [ -f kernel/tools/checks/check-version-selftest.py ]; then
+        if out=$(python3 kernel/tools/checks/check-version-selftest.py 2>&1); then
+            ok "$(printf '%s' "$out" | tail -1)"
+        else
+            hit "$(printf '%s' "$out" | grep -i fail | head -3)"
+        fi
+    else
+        skip "check-version-selftest.py not present"
+    fi
+else
+    skip "check-version.py not present"
+fi
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"

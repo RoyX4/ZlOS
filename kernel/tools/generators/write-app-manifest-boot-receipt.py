@@ -51,8 +51,15 @@ def main(argv):
         log = open(args.log, encoding="latin-1").read().replace("\r", "")
         found = MARKER.findall(log)
         expected = sha256(MANIFEST)
-        if found != [("1", "62", expected)]:
-            raise ValueError(f"manifest marker mismatch: {found!r}, expected 1/62/{expected}")
+        # THE COUNT IS READ, NOT WRITTEN DOWN. This was the literal "62", beside
+        # a sha that was correctly computed from the same file - so adding two
+        # apps left the sha right and the count wrong, and every boot route
+        # failed with a message calling 62 the "current" number. Three gates and
+        # this writer all carried their own copy of it.
+        n_entries = str(len(json.load(open(MANIFEST))["entries"]))
+        if found != [("1", n_entries, expected)]:
+            raise ValueError(f"manifest marker mismatch: {found!r}, "
+                             f"expected 1/{n_entries}/{expected}")
         if args.boot_origin not in log:
             raise ValueError(f"boot-origin marker absent: {args.boot_origin!r}")
         build_identity = json.load(open(BUILD_IDENTITY, encoding="utf-8"))
@@ -100,7 +107,7 @@ def main(argv):
                 ["qemu-system-x86_64" if "uefi" in args.route or args.route.endswith("64")
                  else "qemu-system-i386",
                  "--version"], text=True).splitlines()[0],
-            "shipped_manifest": {"schema": 1, "entries": 62, "sha256": expected},
+            "shipped_manifest": {"schema": 1, "entries": int(n_entries), "sha256": expected},
             "shipped_build_identity": {
                 "schema": 1,
                 "id": build_identity["identity_sha256"],

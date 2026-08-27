@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — docs: register run-all.sh in the tests/host capsule, and the journal for 116b88a (c5ed985)
+
+`design/presswork` · 2 files changed, 26 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/tests/host/README.md`
+
+</details>
+
 ## 2026-08-27 — fix(gates): a host test that stopped LINKING stopped RUNNING, and nothing said so (116b88a)
 
 `design/presswork` · 9 files changed, 300 insertions(+), 46 deletions(-)

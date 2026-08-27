@@ -56,11 +56,12 @@ tr -d '\r' < "$OUT" > "$OUT.c" && mv "$OUT.c" "$OUT"
 
 fail=0
 MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+MANIFEST_N=$(python3 -c "import json,sys;print(len(json.load(open('metadata/app-manifest.json'))['entries']))")
 grep -q "our bootloader (raw_boot), no GRUB" "$OUT" || { echo "  FAIL  did not boot via our loader"; fail=1; }
 grep -q "ready\." "$OUT"  || { echo "  FAIL  never reached the prompt"; fail=1; }
 grep -q "6765" "$OUT"   || { echo "  FAIL  fib(20) wrong or shell unresponsive"; fail=1; }
-grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$OUT" || {
-    echo "  FAIL  running raw image did not report the current 62-app manifest"; fail=1;
+grep -q "app-manifest: schema=1 entries=$MANIFEST_N sha256=$MANIFEST_SHA" "$OUT" || {
+    echo "  FAIL  running raw image did not report the current $MANIFEST_N-app manifest"; fail=1;
 }
 
 if [ "$fail" -eq 0 ]; then

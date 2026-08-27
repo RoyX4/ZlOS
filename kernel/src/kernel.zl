@@ -9930,7 +9930,7 @@ beep(784, 8)  beep(1046, 12)
 # term_clear() clears only its scrollback tee; it cannot erase serial evidence.
 if wm_boot == 1 {
     term_clear()
-    print("zlOS 0.10")
+    print("zlOS 0.3")
     print("one system, one language")
     print("")
     print("system ready")

@@ -53,13 +53,14 @@ boot_until() { # $1 log, remaining arguments are qemu arguments
 
 check() { # $1 label, $2 log
     local label="$1" log="$2"
-    local manifest_sha build_id build_head build_dirty
+    local manifest_sha manifest_n build_id build_head build_dirty
     manifest_sha=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+    manifest_n=$(python3 -c 'import json; print(len(json.load(open("metadata/app-manifest.json"))["entries"]))')
     build_id=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
     build_head=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
     build_dirty=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
     for required in "zlOS starting" "$ORIGIN" "ready." "compositor:" "6765" \
-            "app-manifest: schema=1 entries=62 sha256=$manifest_sha" \
+            "app-manifest: schema=1 entries=$manifest_n sha256=$manifest_sha" \
             "build-identity: schema=1 id=$build_id" \
             "build-source: head=$build_head dirty=$build_dirty"; do
         if ! grep -Fq "$required" "$log" 2>/dev/null; then

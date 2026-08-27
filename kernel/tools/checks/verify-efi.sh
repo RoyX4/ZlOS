@@ -168,10 +168,11 @@ else
         fail=1
     fi
     MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
-    if grep -q "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" "$LOG"; then
-        echo "  ok    running UEFI image reports the current 62-app manifest"
+    MANIFEST_N=$(python3 -c 'import json; print(len(json.load(open("metadata/app-manifest.json"))["entries"]))')
+    if grep -q "app-manifest: schema=1 entries=$MANIFEST_N sha256=$MANIFEST_SHA" "$LOG"; then
+        echo "  ok    running UEFI image reports the current $MANIFEST_N-app manifest"
     else
-        echo "  FAIL  running UEFI image did not report the current 62-app manifest"
+        echo "  FAIL  running UEFI image did not report the current $MANIFEST_N-app manifest"
         fail=1
     fi
 fi
