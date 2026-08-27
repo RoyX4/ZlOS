@@ -3154,7 +3154,8 @@ fn anim_draw(ax, ay, aw, ah) {
 # The snake body is an array of grid cells - and the kernel subset has no
 # arrays, so it lives in raw memory: one byte per cell coordinate, walked
 # with poke8/peek8. This is what the raw-memory primitives were FOR.
-SNAKE_X = 0x02000000    # high memory - 0x30000 was inside the raw-loaded kernel
+SNAKE_X = 0x02000000    # memmap.h ZL_LOW_BASE - the zl low block, not a
+                        # coincidence: 0x30000 was inside the raw-loaded kernel
 SNAKE_Y = 0x02000200
 
 # ---- THE APP CONTRACT, applied ---------------------------------------------
@@ -3229,7 +3230,11 @@ s_died  = 0
 # y in 12, colour index in 8. 4096 is well past any client area this runs in.
 # The coordinates are CLIENT-RELATIVE, which is what makes the drawing follow
 # the window when you drag it instead of staying where the pixels were.
-PAINT_BUF = 0x02100000
+# It starts exactly where the zl low block ends, and that IS a dependency, not a
+# coincidence: move ZL_LOW_END and this has to move with it or it lands inside
+# the block. So it is declared as a mirror and check-memmap-mirror.py enforces
+# it. Beyond here, 15 MiB to HI_IMG 0x03000000 is undeclared spare.
+PAINT_BUF = 0x02100000  # memmap.h ZL_LOW_END - starts where the zl low block ends
 PAINT_MAX = 2000
 
 p_col  = 2

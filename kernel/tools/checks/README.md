@@ -40,6 +40,8 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-version.py`
 - `check-zl-calls.sh`
 - `check-zlcalls.py`
+- `qemu-crash-selftest.sh`
+- `qemu-crash.sh`
 - `test-real-xhci.sh`
 - `verify-64.sh`
 - `verify-clock.sh`

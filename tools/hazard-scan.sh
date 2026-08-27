@@ -269,6 +269,29 @@ else
     skip "qemu-crash-selftest.sh not present"
 fi
 
+echo "== 8. kernel.zl constants that mirror memmap.h must still equal it =="
+# zl cannot include a C header, so a constant like
+#   RULER_DMA = 0x03000000   # memmap.h HI_IMG
+# is a promise kept by hand. docs/evidence/presswork-first-boot.md recorded that
+# exact pair as "verified equal today, enforced by nothing" and left it there;
+# the reserves it compared itself to went on to be found in eleven places, none
+# agreeing. A hazard written down and not wired up is a guess with a citation.
+if [ -f kernel/tools/checks/check-memmap-mirror.py ]; then
+    if out=$(python3 kernel/tools/checks/check-memmap-mirror.py 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+        printf '%s' "$out" | grep '^  note' || true
+    else
+        hit "$(printf '%s' "$out" | grep -A3 FAIL | head -4)"
+    fi
+    if out=$(bash kernel/tools/checks/check-memmap-mirror-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -i fail | head -3)"
+    fi
+else
+    skip "check-memmap-mirror.py not present"
+fi
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"
