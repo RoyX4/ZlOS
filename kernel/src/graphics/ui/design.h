@@ -491,11 +491,37 @@
 #define ZD_STATUS_PX    10
 #define ZD_STATUS_GAP   12
 
-/* column header + list row */
+/* column header + list row.
+ *
+ * A DATA ROW IS NOT A ROW OF FURNITURE, AND THE PROTOTYPE SPENDS TWO
+ * DIFFERENT NUMBERS ON THEM. This said 26, annotated "== ZD_ROW_H", and the
+ * equality was the mistake: ZD_ROW_H is `--zd-row-h`, which the prototype
+ * applies to `.slot` (the rail's register slot) and `.wsb` (the workspace
+ * button) - objects you point at with a mouse. A table cell is `td`, which
+ * carries no height at all and is sized by its own contents:
+ *
+ *     td { font-size: var(--fs-sm); line-height: var(--lh-sm);
+ *          padding: calc(2px * var(--ui)) calc(6px * var(--ui));
+ *          border-bottom: 1px solid var(--zd-cut); }
+ *
+ * 15 of leading + 2 + 2 of padding + 1 of groove = 20, and the prototype
+ * rendered at 1920x1200 measures exactly that: consecutive ZD_CUT grooves in
+ * the Files table at y = 173, 193, 213, 233, 253, 273, 293. Twenty, seven
+ * times, no drift.
+ *
+ * So the data row is 20 and it is 23% shorter than it was. A 420px Files
+ * window shows 21 rows where it showed 16. That is the whole of what "the
+ * prototype's tables carry more rows" costs: one number, measured off the
+ * render rather than inherited from the furniture.
+ *
+ * ZD_ROW_H itself is NOT touched - the rail slot and the workspace button are
+ * still 26, which is what the prototype says they are. Two metrics, because
+ * there are two things. */
 #define ZD_COLHEAD_H    20
 #define ZD_COLHEAD_PR   15      /* the scrollbar gutter */
 #define ZD_COLHEAD_PL    4
-#define ZD_LISTROW_H    26      /* == ZD_ROW_H */
+#define ZD_LISTROW_H    20      /* `td`: 15 leading + 2+2 padding + 1 groove */
+#define ZD_CELL_PX       6      /* `td { padding: 0 6px }` - both sides      */
 #define ZD_LISTROW_R    ZD_R_BOLT
 #define ZD_SEL_TINT_A   15      /* percent - the selected row's overprint    */
 #define ZD_SEL_BAR_W     3      /* == ZD_FOCUS_BAR. vermilion, on the left.  */

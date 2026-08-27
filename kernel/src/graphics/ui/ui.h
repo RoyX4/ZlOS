@@ -252,6 +252,29 @@ void wm_focus(int win);
 void wm_set_modal(int win, int on);
 int  wm_add_tab(int win, int app, const char *title);
 void wm_set_tab(int win, int tab);
+/* ---- what the title bar and the foot band read out -------------------------
+ * PRESSWORK's header is "01 TERMINAL  zlsh" and its foot band is
+ * "01  tty1 - 80x24   APP US 995 us                            ws 01". wm.c
+ * derives the module code, the app cost and the workspace itself; the register
+ * slot, the mono qualifier and the status line are POLICY and arrive here.
+ *
+ * None of the three has a default. A window never told stays blank in those
+ * cells rather than being given the app id or the title as a stand-in - the
+ * readout's whole value is that every figure in it is true.
+ *
+ *   reg    1..99, the shell's REGISTER rail slot; anything else clears it
+ *   sub    up to 15 chars, mono, after the title
+ *   status up to 23 chars, mono, the band's left readout
+ */
+void wm_set_label(int win, int reg, const char *sub);
+void wm_set_status(int win, const char *status);
+/* WHERE THE DESK'S FIELD IS, so the module code is read off the same grid the
+ * shell rules onto it. The grid's SHAPE is design.h's (ZD_GRID_COLS/ROWS/
+ * MARGIN/GUTTER); only its origin and extent are shell furniture. Until this
+ * is called wm.c derives the field from theme rail_w/strip_h/foot_h, which is
+ * the same grid to within the shell's own 1dp hairlines. w or h <= 0 returns
+ * to that derivation. */
+void wm_set_field(int x, int y, int w, int h);
 int  wm_tab(int win);
 int  wm_ntabs(int win);
 void wm_move(int win, int x, int y);

@@ -980,9 +980,30 @@ int main(void)
         }
         ok(!wash, "control: no 15% accent wash - the overprint is a mark");
         ok(mark, "...the register mark is there instead, ZD_FOCUS_BAR wide");
+        /* THE LABEL STYLE, AND IT IS NOW FOUR THINGS RATHER THAN TWO.
+         *
+         * `th, .t-lab` is SM, bold, UPPERCASE and TRACKED by ZD_TR_LAB, and
+         * uikit.c carried only the first two - its own comments recorded
+         * uppercasing as "the caller's" and tracking as "NOT AVAILABLE AND IS
+         * NOT FAKED". ZD_TR_LAB had sat in design.h with nothing in the tree
+         * reading it. Tracking a string is one draw per glyph with the pen
+         * advanced by the glyph plus the track, which is the toolkit's job;
+         * fb.c is untouched.
+         *
+         * So this can no longer be find_text("DEVICES") - there is no such op,
+         * there are seven one-glyph ops. Asserting the geometry instead is
+         * strictly stronger: the argument goes in lowercase, so a widget that
+         * stopped uppercasing fails on the first glyph, and the SEVENTH glyph
+         * lands six advances along, so a widget that stopped tracking fails on
+         * the span. A per-glyph draw at the wrong pitch is exactly the bug
+         * that a "did the string appear" check cannot see. */
         begin_draw();
-        ui_heading(0, 0, 150, "DEVICES");
-        ok(find_text("DEVICES") != NULL, "a section heading draws its label");
+        ui_heading(0, 0, 150, "Devices");
+        const struct op *g0 = find_text("D");
+        const struct op *g6 = find_text("S");
+        int adv = fb_text_role_w("D", UI_SM, 1) + ZD_TR_LAB / 10;
+        ok(g0 && g6 && g0->x == ZD_CELL_PX && g6->x - g0->x == 6 * adv,
+           "a section heading draws its label uppercased and tracked");
         begin_draw();
         ui_card(0, 0, 300, 120);
         /* PRESSWORK: "RAISED, ONE NESTING LEVEL IN. Radius halves; value moves
@@ -1008,11 +1029,19 @@ int main(void)
         ok(find_text("CPU") && find_text("ok"),
            "a card header draws its title and its badge");
         begin_draw();
+        /* `.kv .k` is the same tracked-caps LABEL style as `th` and `.sect`,
+         * so the key is now seven one-glyph ops rather than one string op -
+         * see the ui_heading check above. Anchoring on the FIRST and LAST
+         * glyph of UPTIME keeps this one assertion and makes it say more than
+         * it did: the key is uppercased, it advances left to right, and the
+         * value still clears its true right edge rather than the edge of a
+         * width the widget no longer measures that way. */
         ui_kv(0, 0, 300, "Uptime", "4h 12m", ZD_TEXT_1, 1);
-        const struct op *k = find_text("Uptime");
-        const struct op *v = find_text("4h 12m");
-        ok(k && v && v->x > k->x + k->w,
-           "a key/value row right-aligns the value clear of the key");
+        const struct op *k0 = find_text("U");
+        const struct op *k5 = find_text("E");
+        const struct op *v  = find_text("4h 12m");
+        ok(k0 && k5 && v && k5->x > k0->x && v->x > k5->x + k5->w,
+           "a key/value row draws a tracked-caps key and clears the value of it");
         oknum(count_kind(OP_FILL) == 0,
               "control: the FIRST row draws no separator rule",
               count_kind(OP_FILL), 0);

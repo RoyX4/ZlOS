@@ -306,6 +306,17 @@ int main(int argc, char **argv)
     wm_open(APP_FILES,   "Files",           1260, hb + UI_S6(t), 560, 420);
     wm_open(APP_MONITOR, "System Monitor",  1260, hb + UI_S6(t) + 450, 560, 380);
     int wabout = wm_open(APP_ABOUT, "About", 700, 700, 520, 300);
+    /* THE THREE CELLS wm.c CANNOT DERIVE. The register slot, the mono
+     * qualifier after the title and the foot band's left readout are policy -
+     * in the real system kernel.zl owns them - so a harness that did not
+     * supply them would photograph a header and a band with their policy cells
+     * blank, and the shot could not show what the change actually built. The
+     * module code, the app cost and the workspace are NOT set here: those wm.c
+     * derives, and setting them would be photographing the harness. */
+    wm_set_label(0, 1, "zlsh");     wm_set_status(0, "tty1 - 80x24");
+    wm_set_label(1, 2, "rd0");      wm_set_status(1, "rd0 - 6 entries");
+    wm_set_label(2, 3, "1 Hz");     wm_set_status(2, "sampler 1 Hz");
+    wm_set_label(wabout, 9, "0.3"); wm_set_status(wabout, "static");
     /* H2: several apps in one frame, grouped by task - the Essence idea. The
      * About window becomes a tabbed one so the strip is visible in the shot. */
     wm_add_tab(wabout, APP_MONITOR, "Stats");

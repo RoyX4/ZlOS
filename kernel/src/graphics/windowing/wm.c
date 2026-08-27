@@ -59,6 +59,16 @@ void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 void fb_text_prop(int px, int py, const char *s, unsigned int fg);
 int  fb_text_prop_w(const char *s);
 int  fb_text_prop_h(void);
+/* The three-argument form, because PRESSWORK's title bar is TWO type styles
+ * rather than one: the name is the label style (MD, bold) and everything
+ * beside it is a mono readout. fb_text_prop is TEXT_BODY/regular and cannot
+ * say the second half of that. UI_SM/UI_MD/UI_LG in ui.h ARE fb.c's roles -
+ * uikit.c static-asserts it - so the role numbers below are not a second
+ * spelling of the type scale. */
+void fb_text_role(int px, int py, const char *s, unsigned int fg,
+                  int role, int weight);
+int  fb_text_role_w(const char *s, int role, int weight);
+int  fb_text_role_h(int role);
 void fb_present(void);
 void fb_pointer_show(int x, int y);
 void fb_pointer_hide(void);
@@ -341,6 +351,28 @@ struct win {
     char tab_title[WM_TABS][16];
     int  ntab;                 /* 1 for an ordinary window */
     int  tab;                  /* which one is showing     */
+    /* WHAT THE TITLE BAR AND THE FOOT BAND READ OUT, and none of it is a
+     * decoration. PRESSWORK's header is "01 TERMINAL  zlsh" and its foot is
+     * "01  tty1 - 80x24   APP US 995 us            ws 01": a register number,
+     * a name, a mono qualifier, a per-window cost and a workspace. wm.c can
+     * derive exactly two of those - the cost, because it makes the app_draw
+     * call, and the workspace, because it owns it. The other three are POLICY
+     * and belong to whoever opened the window, so they arrive through
+     * wm_set_label / wm_set_status rather than being guessed at here.
+     *
+     * A window that never gets told stays honest: reg 0 prints no register
+     * cell, an empty sub prints no qualifier, an empty status prints no
+     * readout, and the band still carries the two figures wm.c really did
+     * measure. Nothing in here is ever faked to fill a slot. */
+    int  reg;                  /* register slot 1..99; 0 = never told */
+    char sub[16];              /* the mono qualifier after the title  */
+    char status[24];           /* the foot band's left readout        */
+    /* app_us is written every time this window's app actually draws; band_us
+     * is the value the band is SHOWING. They are two fields because they have
+     * two different rates: app_us follows the app, and the band is a printed
+     * readout that must not re-set itself sixty times a second. See
+     * band_us_latch() for the cadence and why the shell cache needs it. */
+    unsigned app_us, band_us, band_us_tick;
     /* maximise/restore. The saved rect is only meaningful while maxed. */
     int  maxed;
     int  sav_x, sav_y, sav_w, sav_h;
@@ -438,12 +470,42 @@ static int app_drawable(int app)
     return hook_draw || (userwin_is_app && userwin_is_app(app));
 }
 
-static void app_draw_dispatch(int app, int x, int y, int w, int h, int focused)
+/* PER-WINDOW APP COST, and it is measured HERE because here is the only place
+ * an app draws. The prototype's own note on the status band prices this item
+ * honestly - "wm.c measures app_us in AGGREGATE only, so per-window
+ * attribution is new work" - and this is that work, all of it: two reads of
+ * the same 32-bit TSC the frame timer already uses, wrapped round the one call
+ * that enters app code. The three call sites in wm_repaint pass their window
+ * so the number lands in the right slot; before this they passed only the app,
+ * which is not the same thing once a tabbed frame exists.
+ *
+ * NOT GATED ON paint_trace. paint_begin/paint_end next door are a profiling
+ * instrument that is off by default; this is a value the chrome PRINTS, so a
+ * window whose band read "0 us" unless tracing was on would be a band that
+ * lies in the normal case. Two rdtsc against an app redraw - which is the most
+ * expensive thing in the frame and the reason the retained client exists - is
+ * not a cost worth an if.
+ *
+ * A zero or uncalibrated clock leaves app_us alone rather than storing a
+ * garbage duration, and the same wrap guard frame_delta_us uses rejects a
+ * sample that straddles a 32-bit wrap. */
+static void app_draw_dispatch(int win, int app, int x, int y, int w, int h,
+                              int focused)
 {
+    unsigned int khz = cpu_tsc_khz();
+    unsigned int t0 = khz ? cpu_tsc_lo() : 0u;
+
     if (userwin_is_app && userwin_draw_app && userwin_is_app(app))
         userwin_draw_app(app, x, y, w, h, focused);
     else if (hook_draw)
         hook_draw(app, x, y, w, h, focused);
+
+    if (!khz || win < 0 || win >= WM_MAX) return;
+    unsigned int cyc_us = khz / 1000u;
+    if (!cyc_us) cyc_us = 1;
+    unsigned int delta = cpu_tsc_lo() - t0;
+    if (delta >= 0x40000000u) return;        /* a wrapped/stale sample */
+    wins[win].app_us = delta / cyc_us;
 }
 /* A CLICK THAT HITS NO WINDOW WAS DROPPED, and the dock is not a window.
  * desk_draw has painted a dock, a start button and a tray since the compositor
@@ -1495,6 +1557,11 @@ int wm_set_win_ws(int win, int n)
     if (n < 1 || n > ws_n || !wm_is_open(win) || wins[win].ws == n) return 0;
     wm_damage_win(win);                      /* it vanishes from here... */
     wins[win].ws = n;
+    /* THE FOOT BAND PRINTS THE WORKSPACE, so the cached shell is now wrong -
+     * and damage alone would not fix it, because damage repaints from the
+     * cache. shell_state_key() deliberately does not carry ws (see the note
+     * there), so the invalidation belongs here, at the write. */
+    wins[win].shell_valid = 0;
     wm_damage_win(win);                      /* ...or appears, if n == ws_cur */
     if (!win_visible(win)) {
         wm_drop_grab(win);
@@ -1521,15 +1588,45 @@ void wm_geometry(int win, int *x, int *y, int *w, int *h)
     *x = wins[win].x; *y = wins[win].y; *w = wins[win].w; *h = wins[win].h;
 }
 
-/* The CLIENT area: inside the frame, below the title bar. This is the second,
- * narrower scissor in the repaint - the one that means an app physically
- * cannot draw over its own title bar no matter what it does. */
+/* HOW TALL THIS WINDOW'S FOOT BAND IS, and it is a function of the window
+ * rather than of the theme for exactly the reason chrome_header() clamps its
+ * own band: wm_open() stores the caller's h verbatim and min_h is a RESIZE
+ * floor applied afterwards, so nothing guarantees a chrome window is tall
+ * enough for its own furniture.
+ *
+ * ONE ANSWER, TWO READERS. client_of() subtracts this and chrome_band() draws
+ * it. If they could ever disagree the app would paint into the band or the
+ * band would paint over the app, and which of the two you got would depend on
+ * the window's height - the kind of bug that reproduces on one screen size.
+ * So it is a function, not two copies of the same arithmetic.
+ *
+ * ZD_STATUS_H plus one row for the 1px ZD_CUT rule along its top, which is
+ * .sband's `border-top` and is 1.4723:1 on the plate - a groove, not a line
+ * you read. THE BAND IS REFUSED RATHER THAN SQUEEZED when the window cannot
+ * also afford ZD_STATUS_H of client above it: a foot band with nothing over it
+ * is a window that has become a caption, and the prototype has no such state.
+ * The threshold is a clean step because the client rect is a retained surface
+ * and a band that faded in over four pixels would reallocate it four times. */
+static int band_h_of(int fh, int flags)
+{
+    const struct ui_theme *t = ui_theme();
+    if (flags & WF_NOCHROME) return 0;
+    int bh = UI_DP(t, ZD_STATUS_H) + 1;
+    if (fh - t->title_h - 2 - bh < UI_DP(t, ZD_STATUS_H)) return 0;
+    return bh;
+}
+
+/* The CLIENT area: inside the frame, below the title bar and ABOVE THE FOOT
+ * BAND. This is the second, narrower scissor in the repaint - the one that
+ * means an app physically cannot draw over its own title bar no matter what it
+ * does, and now the same for its status band. */
 static void client_of(int fx, int fy, int fw, int fh, int flags,
                       int *x, int *y, int *w, int *h)
 {
     const struct ui_theme *t = ui_theme();
     int b  = (flags & WF_NOCHROME) ? 0 : 2;
     int th = (flags & WF_NOCHROME) ? 0 : t->title_h;
+    int bh = band_h_of(fh, flags);
     /* THE LEFT INSET CLEARS THE VERMILION FOCUS BAR - the plate's 1px ring
      * plus the bar's own 3dp - AND IT DOES SO IN EVERY FOCUS STATE, not only
      * in the focused one. The prototype moves .wbody's padding when a window
@@ -1548,7 +1645,7 @@ static void client_of(int fx, int fy, int fw, int fh, int flags,
     *x = fx + bl;
     *y = fy + th;
     *w = fw - bl - b;
-    *h = fh - th - b;
+    *h = fh - th - b - bh;
     if (*w < 0) *w = 0;
     if (*h < 0) *h = 0;
 }
@@ -1633,6 +1730,60 @@ static void title_copy16(char *dst, const char *src)
     dst[i] = 0;
 }
 
+static void str_copy_n(char *dst, const char *src, int cap)
+{
+    int i = 0;
+    if (src) for (; src[i] && i < cap - 1; i++) dst[i] = src[i];
+    dst[i] = 0;
+}
+
+/* THE TWO THINGS THE HEADER AND THE BAND CANNOT DERIVE, handed over rather
+ * than invented. `reg` is the window's slot in the shell's REGISTER rail and
+ * `sub` is the mono qualifier that follows the title - "01 TERMINAL  zlsh".
+ * Both are policy: wm.c has an app id and a title and neither of them is a
+ * register number.
+ *
+ * reg <= 0 or > 99 clears the cell, which is also the state a window that was
+ * never told is in. There is no default and no fallback to the app id: an app
+ * id printed in a register slot would be a plausible-looking wrong number, and
+ * this whole readout exists to be trusted.
+ *
+ * Both invalidate the retained shell directly rather than being folded into
+ * shell_state_key(). They change at most once in a window's life, and a key
+ * bit spent on something that never changes is a bit the states that DO change
+ * every frame cannot have. */
+void wm_set_label(int win, int reg, const char *sub)
+{
+    if (!wm_is_open(win)) return;
+    int r = (reg > 0 && reg <= 99) ? reg : 0;
+    char buf[16];
+    str_copy_n(buf, sub, (int)sizeof buf);
+    int same = (wins[win].reg == r);
+    for (int i = 0; same && i < (int)sizeof buf; i++)
+        if (wins[win].sub[i] != buf[i]) same = 0;
+    if (same) return;
+    wins[win].reg = r;
+    str_copy_n(wins[win].sub, buf, (int)sizeof wins[win].sub);
+    wm_invalidate_shell(win);
+}
+
+/* The foot band's left readout - "tty1 - 80x24", "rd0 30 entries", whatever
+ * this app's one line of state is. Empty is a legitimate value and prints
+ * nothing; the band still carries the app cost and the workspace, which wm.c
+ * measured and owns. */
+void wm_set_status(int win, const char *status)
+{
+    if (!wm_is_open(win)) return;
+    char buf[24];
+    str_copy_n(buf, status, (int)sizeof buf);
+    int same = 1;
+    for (int i = 0; same && i < (int)sizeof buf; i++)
+        if (wins[win].status[i] != buf[i]) same = 0;
+    if (same) return;
+    str_copy_n(wins[win].status, buf, (int)sizeof wins[win].status);
+    wm_invalidate_shell(win);
+}
+
 /* Add another app to this window's frame. Returns the tab index, or -1 when
  * the frame is full - a refusal that says so, like wm_open's. */
 int wm_add_tab(int win, int app, const char *title)
@@ -1704,6 +1855,17 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         wins[i].min_h = 4 * fb_cell_h();
         wins[i].ntab = 1;
         wins[i].tab = 0;
+        /* A REUSED SLOT MUST NOT INHERIT THE PREVIOUS OCCUPANT'S READOUT. The
+         * register, the qualifier and the status line are all told to a window
+         * from outside, so a slot that is not cleared here would open the next
+         * window wearing the last one's register number - the exact failure
+         * `generation` exists further up to make impossible for observations. */
+        wins[i].reg = 0;
+        wins[i].sub[0] = 0;
+        wins[i].status[0] = 0;
+        wins[i].app_us = 0;
+        wins[i].band_us = 0;
+        wins[i].band_us_tick = 0;
         wins[i].tab_app[0] = app;
         title_copy16(wins[i].tab_title[0], title);
         title_copy(wins[i].title, title);
@@ -2059,6 +2221,139 @@ static int title_controls_w(const struct ui_theme *t)
     return 3 * UI_DP(t, ZD_WINCTL);
 }
 
+/* ---- THE MODULE READOUT ----------------------------------------------------
+ *
+ * "M0101 6x4" in the right of every title bar, and it is not decoration: it is
+ * WHERE THIS PLATE IS SITTING ON THE RULED MODULE GRID - column, row, and how
+ * many modules of each it covers. PRESSWORK rules a 12x8 grid onto the desk
+ * and then floats windows over it, so the grid EXPLAINS rather than tiles; the
+ * readout is what turns that explanation into something you can read off a
+ * window instead of by squinting at the rules behind it.
+ *
+ * WHO KNOWS WHAT. wm.c knows the geometry - it owns every window rectangle -
+ * and design.h knows the grid's shape (ZD_GRID_COLS/ROWS/MARGIN/GUTTER). The
+ * one thing neither knows is where the FIELD begins, because that is the
+ * shell's furniture: the register rail down the left, the raster strip across
+ * the top, the printer's slug along the foot. So the field is the one number
+ * that comes in from outside, through wm_set_field().
+ *
+ * AND WHEN NOBODY HAS SET IT, THE FALLBACK IS DERIVED, NOT INVENTED. The theme
+ * already carries rail_w / strip_h / foot_h - they are the same three metrics
+ * the shell lays its own bands out from - so the field is computed from them
+ * and the readout is a true statement about a grid ruled at those reserves. It
+ * differs from kernel.zl's own field by that shell's 1dp hairlines above and
+ * below the strip, which is under a pixel of a 120px module row and cannot
+ * change which module a window lands on except exactly on a boundary. It is
+ * still a derivation rather than a measurement, which is why the setter
+ * exists; the shell should call it. */
+static int mod_fx, mod_fy, mod_fw, mod_fh;
+static int mod_field_set;
+
+void wm_set_field(int x, int y, int w, int h)
+{
+    if (w <= 0 || h <= 0) { mod_field_set = 0; return; }
+    if (mod_field_set && mod_fx == x && mod_fy == y &&
+        mod_fw == w && mod_fh == h) return;
+    mod_fx = x; mod_fy = y; mod_fw = w; mod_fh = h;
+    mod_field_set = 1;
+    /* every window's code may have changed, and a retained shell that is not
+     * told keeps printing the old module */
+    for (int i = 0; i < WM_MAX; i++)
+        if (wins[i].flags & WF_OPEN) wm_invalidate_shell(i);
+}
+
+static void module_field(int *x, int *y, int *w, int *h)
+{
+    if (mod_field_set) { *x = mod_fx; *y = mod_fy; *w = mod_fw; *h = mod_fh; return; }
+    const struct ui_theme *t = ui_theme();
+    *x = t->rail_w;
+    *y = t->strip_h;
+    *w = (int)fb_pxw() - t->rail_w;
+    *h = (int)fb_pxh() - t->strip_h - t->foot_h;
+}
+
+/* Two digits, always - "M0101", never "M11". The code is a coordinate pair
+ * read at a glance and a variable-width one stops being scannable down a
+ * column of title bars. */
+static int mod_put2(char *b, int n)
+{
+    if (n < 0) n = 0;
+    if (n > 99) n = 99;
+    b[0] = (char)('0' + n / 10);
+    b[1] = (char)('0' + n % 10);
+    return 2;
+}
+
+/* THE SPAN'S RULE IS "HALF A MODULE COUNTS", and it is the prototype's own:
+ * a plate's far edge claims a module once it has crossed that module's
+ * midpoint. The near edge is the opposite - it belongs to a module from one
+ * gutter before that module starts - so a window nudged into the gutter still
+ * reads as being on the module it is next to rather than on the one behind it.
+ * Both are asymmetric on purpose; a symmetric rule makes every window that is
+ * a few pixels out read one module too wide.
+ *
+ * THE REMAINDER IS SPREAD, one pixel each onto the first `rem` columns, which
+ * is what kernel.zl's draw_grid() does and what its legend prints as "133/132".
+ * Walking the columns rather than dividing is how this stays in step with the
+ * rules that are actually drawn: a divide would put a window one module out at
+ * the right-hand end of every resolution whose width does not divide by 12.
+ * Integer throughout - `w/2` is the midpoint, and a half-pixel does not decide
+ * a module. */
+static void module_code(int win, char *buf, int cap)
+{
+    buf[0] = 0;
+    if (cap < 12) return;
+    int fx, fy, fw, fh;
+    module_field(&fx, &fy, &fw, &fh);
+    const struct ui_theme *t = ui_theme();
+    int mar = UI_DP(t, ZD_GRID_MARGIN), gut = UI_DP(t, ZD_GRID_GUTTER);
+    int inw = fw - 2 * mar, inh = fh - 2 * mar;
+    if (inw <= 0 || inh <= 0) return;
+    int cw  = (inw - gut * (ZD_GRID_COLS - 1)) / ZD_GRID_COLS;
+    int cwr = (inw - gut * (ZD_GRID_COLS - 1)) - cw * ZD_GRID_COLS;
+    int rh  = (inh - gut * (ZD_GRID_ROWS - 1)) / ZD_GRID_ROWS;
+    int rhr = (inh - gut * (ZD_GRID_ROWS - 1)) - rh * ZD_GRID_ROWS;
+    if (cw < 1 || rh < 1) return;
+
+    /* the plate, in FIELD space - the grid is ruled inside the field, not on
+     * the screen, and a window's rectangle is in screen coordinates */
+    int wx = wins[win].x - fx, wy = wins[win].y - fy;
+    int wx1 = wx + wins[win].w, wy1 = wy + wins[win].h;
+
+    int c0 = 0, c1 = 0, r0 = 0, r1 = 0;
+    int cx = mar;
+    for (int i = 0; i < ZD_GRID_COLS; i++) {
+        int w = cw + (i < cwr ? 1 : 0);
+        if (wx  >= cx - gut)    c0 = i;
+        if (wx1 >= cx + w / 2)  c1 = i;
+        cx += w + gut;
+    }
+    int ry = mar;
+    for (int i = 0; i < ZD_GRID_ROWS; i++) {
+        int h = rh + (i < rhr ? 1 : 0);
+        if (wy  >= ry - gut)    r0 = i;
+        if (wy1 >= ry + h / 2)  r1 = i;
+        ry += h + gut;
+    }
+    int cspan = c1 - c0 + 1, rspan = r1 - r0 + 1;
+    if (cspan < 1) cspan = 1;
+    if (rspan < 1) rspan = 1;
+    if (cspan > 99) cspan = 99;
+    if (rspan > 99) rspan = 99;
+
+    int n = 0;
+    buf[n++] = 'M';
+    n += mod_put2(buf + n, c0 + 1);
+    n += mod_put2(buf + n, r0 + 1);
+    buf[n++] = ' ';
+    if (cspan >= 10) buf[n++] = (char)('0' + cspan / 10);
+    buf[n++] = (char)('0' + cspan % 10);
+    buf[n++] = 'x';
+    if (rspan >= 10) buf[n++] = (char)('0' + rspan / 10);
+    buf[n++] = (char)('0' + rspan % 10);
+    buf[n] = 0;
+}
+
 /* THE CONTROL CLUSTER, AND IT HAS NO FACE AT REST. Three bare glyphs flush to
  * the right end of the header, each ZD_WINCTL wide and the full height of the
  * header band, each with a 1px groove down its left - the prototype's .ctl /
@@ -2286,6 +2581,300 @@ static void chrome_focus_bar(const struct win *W, int r, int focused)
     if (bw > 0 && bh > 0) fb_fill_px(W->x + 1, by, bw, bh, t->accent);
 }
 
+/* ---- THE TITLE LINE --------------------------------------------------------
+ *
+ * "01 TERMINAL  zlsh" flush LEFT, and a module code out to the right.
+ *
+ * IT WAS CENTRED, AND CENTRING IT WAS THE ONE DECISION THAT MADE THE HEADER
+ * DECORATIVE. A centred title has no fixed edge, so it cannot be scanned down
+ * a stack of windows, it cannot be followed by a second field, and its
+ * position encodes the length of the string rather than anything about the
+ * window. PRESSWORK's header is a printed document's running head: a fixed
+ * left margin, fields in a fixed order, and figures out at the right. Four
+ * cells, and each one answers a different question:
+ *
+ *   REG    which register slot this window is         mono, 2 digits, dim
+ *   TITLE  what it is                                 MD bold, UPPERCASED
+ *   SUB    which instance of it                       mono, dim
+ *   CRD    where it is on the module grid             mono, dim, out right
+ *
+ * TWO OF THE FOUR TYPE PROPERTIES ARE NOT AVAILABLE AND ARE NOT FAKED. The
+ * label style is SM/uppercase/bold/tracked; there are three baked atlases and
+ * no rasteriser, so there is no tracking, and uikit.c already priced that same
+ * item the same way rather than inserting spaces (which would break every
+ * width measurement). The name is drawn at MD rather than SM because at MD it
+ * is the header's one piece of running text and SM bold beside a mono figure
+ * of the same nominal size reads as a second figure. Uppercasing IS done, here
+ * rather than at the caller, because wm.c owns the copy and a shell that
+ * shouted its own strings would be shouting them in the taskbar too.
+ *
+ * WHERE THE CRD SITS IS MEASURED OFF THE PROTOTYPE'S PIXELS, NOT OFF ITS
+ * PROSE. The brief for this change says the code is right-aligned. It is not:
+ * `.crd` and `.ctl` BOTH carry `margin-left:auto`, so flexbox splits the free
+ * space equally between them and the code lands at the midpoint of the gap
+ * between the subtitle and the control cluster. Measured in the rendered
+ * reference at 1920x1200: window 02's subtitle ends at x=1157, its controls
+ * begin at x=1829, and its code's ink runs 1467..1525 - centre 1496 against a
+ * midpoint of 1493. Three pixels. That is a centred field, and it is what is
+ * built here.
+ *
+ * THE TITLE IS TRUNCATED RATHER THAN ELLIPSISED when the run will not fit.
+ * The prototype gets `text-overflow: ellipsis` free from the browser; here an
+ * ellipsis would have to be measured back out of the string, and a hard cut
+ * at a known x is both cheaper and unambiguous about where the field ends.
+ * Nothing may cross into the control cluster: the retained-shell path sets the
+ * scissor to the whole shell surface, so an overlong title is not clipped by
+ * anything and would be drawn straight over the close box.
+ *
+ * ONE FUNCTION, MEASURED OR DRAWN, AND `draw` IS THE ONLY DIFFERENCE. It
+ * returns the x just past the run, which is where the module code's field
+ * begins - and the code is NOT drawn from inside the retained shell (see
+ * chrome_module below), so something has to be able to ask for that x without
+ * painting. Two functions would be two copies of the same six advances, and
+ * the first time one of them gained a field the code would start landing in
+ * the wrong place on windows with a subtitle only. */
+static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
+{
+    const struct ui_theme *t = ui_theme();
+    /* the prototype's `.hdr` is 11dp of padding inside a 1px ring, which is
+     * 12dp from the plate's outer edge - one step of the spacing scale, and
+     * the same left margin the module grid's own columns use */
+    int x = W->x + UI_S3(t);
+    int gut = UI_DP(t, ZD_GAP);
+    /* the cluster's inside face, less one gutter, is the hard stop for
+     * everything on this line */
+    int stop = W->x + W->w - 1 - title_controls_w(t) - gut;
+
+    unsigned ink_dim = focused ? t->knock_ink2 : t->text_dim;
+    /* ZD_TITLE_INK. The name is ZD_TEXT_2 at rest - 7.8606:1 on the plate -
+     * and everything secondary beside it is ZD_TEXT_3 at 6.6809:1, which is
+     * the whole reason the name reads as the name. This drew the title at
+     * text_dim, i.e. at the same value as its own qualifiers. */
+    unsigned ink_ttl = focused ? t->knock_ink : t->text_2;
+
+    int cy_mono = W->y + (hh - fb_cell_h()) / 2;
+    int cy_ttl  = W->y + (hh - fb_text_role_h(UI_MD)) / 2;
+    int cw = fb_cell_w();
+
+    if (W->reg > 0) {
+        char r[3];
+        r[0] = (char)('0' + W->reg / 10);
+        r[1] = (char)('0' + W->reg % 10);
+        r[2] = 0;
+        if (draw && x + 2 * cw <= stop) fb_text_aa(x, cy_mono, r, ink_dim);
+        x += 2 * cw + gut;
+    }
+
+    /* UPPERCASED INTO A LOCAL COPY. wins[].title is what the taskbar, the
+     * overview and the lifecycle log all read, and none of them shouts. */
+    char up[32];
+    int n = 0;
+    for (; W->title[n] && n < (int)sizeof up - 1; n++) {
+        char c = W->title[n];
+        up[n] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+    }
+    up[n] = 0;
+    /* the hard cut. Drop whole characters until the run fits - measure and
+     * draw share fb_text_role_w, so what is measured is what is drawn. */
+    while (n > 0 && x + fb_text_role_w(up, UI_MD, 1) > stop) up[--n] = 0;
+    if (n > 0) {
+        if (draw) fb_text_role(x, cy_ttl, up, ink_ttl, UI_MD, 1);
+        x += fb_text_role_w(up, UI_MD, 1) + gut;
+    }
+
+    if (W->sub[0]) {
+        int sw = 0;
+        while (W->sub[sw]) sw++;
+        if (x + sw * cw <= stop) {
+            if (draw) fb_text_aa(x, cy_mono, W->sub, ink_dim);
+            x += sw * cw + gut;
+        }
+    }
+    return x;
+}
+
+/* THE MODULE CODE, AND IT IS THE ONE PIECE OF CHROME THAT CANNOT LIVE IN THE
+ * RETAINED SHELL SURFACE.
+ *
+ * Everything else a window frame draws is a function of the window's SIZE and
+ * its state; the cached shell layer is therefore position-independent and a
+ * move is a blit at a new offset with no chrome primitive rerun at all. wmtest
+ * asserts exactly that - "a move that keeps the overlap causes zero
+ * shell/shadow rebuilds" - and the assertion is protecting the most expensive
+ * call in a window redraw, fb_shadow, which is inside that same surface.
+ *
+ * The module code is the first thing in the frame that is a function of WHERE
+ * THE WINDOW IS. Folding it into shell_state_key() makes it correct and makes
+ * every frame of every drag rebuild the whole shell plus its shadow - a
+ * position readout paid for with the compositor's headline optimisation.
+ *
+ * So it is drawn in the direct pass instead, immediately after the shell is
+ * composited, under the same scissor. It costs one mono run per repaint of a
+ * window whose header is in the damage, it follows the window with no cache to
+ * invalidate, and the two paths through wm_repaint - cached and direct - stay
+ * identical because neither of them draws it inside chrome_shell.
+ *
+ * IT IS CENTRED IN WHAT THE TITLE RUN LEFT OVER, which for a TABBED window is
+ * the space after the last tab rather than after a title: a tab strip replaces
+ * the title, and the code is a property of the window rather than of the tab,
+ * so it stays. */
+static void chrome_module(int win, int focused)
+{
+    const struct ui_theme *t = ui_theme();
+    struct win Wa = wins[win];
+    struct win *W = &Wa;
+    if (W->flags & WF_NOCHROME) return;
+    anim_rect(win, &W->x, &W->y, &W->w, &W->h);
+    int hh = t->title_h;
+    if (hh > W->h) hh = W->h;
+    if (hh < 2) return;
+
+    int gut = UI_DP(t, ZD_GAP);
+    int x;
+    if (W->ntab > 1) {
+        int tx, ty, tw, th;
+        tab_rect(win, W->ntab - 1, &tx, &ty, &tw, &th);
+        x = tx + (W->x - wins[win].x) + tw + gut;
+    } else {
+        x = chrome_title_run(W, focused, hh, 0);
+    }
+    int stop = W->x + W->w - 1 - title_controls_w(t) - gut;
+
+    char code[16];
+    module_code(win, code, (int)sizeof code);
+    if (!code[0]) return;
+    int kn = 0;
+    while (code[kn]) kn++;
+    int kw = kn * fb_cell_w();
+    int room = stop - x;
+    if (kw > room) return;                 /* no honest place to put it */
+    fb_text_aa(x + (room - kw) / 2, W->y + (hh - fb_cell_h()) / 2, code,
+               focused ? t->knock_ink2 : t->text_dim);
+}
+
+/* ---- THE FOOT BAND ---------------------------------------------------------
+ *
+ * "01  tty1 - 80x24   APP US 995 us                            ws 01", the
+ * band across the bottom of every window. Real zlOS windows had none at all.
+ *
+ * IT IS CHROME, NOT CONTENT, AND THAT IS WHY IT IS DRAWN HERE. The prototype
+ * builds it inside each app's renderer, which is fine in a document where
+ * every window is written by the same hand; here it would mean 53 apps each
+ * remembering to draw a band, drawing it slightly differently, and being able
+ * to draw anything they liked in it. Drawn as chrome it is uniform by
+ * construction, and client_of() takes the space away from the app so an app
+ * physically cannot paint over it - the same guarantee the title bar already
+ * had, extended to the other end of the window.
+ *
+ * FOUR CELLS, AND ONLY TWO OF THEM ARE FIGURES wm.c MEASURED:
+ *   reg      the register slot   from wm_set_label, dim
+ *   status   the app's own line  from wm_set_status, dim
+ *   APP US   what the last app_draw for this window actually cost, in
+ *            microseconds off the same TSC the frame timer uses. The label is
+ *            dim and the VALUE is theme.text_hi, because a measured figure is
+ *            the one thing on this band that changes.
+ *   ws NN    the workspace, flush right. wm.c owns workspaces outright.
+ *
+ * THE BAND IS THE BODY'S COLUMN, RULE AND ALL. In the prototype `.sband` is a
+ * child of `.wbody`, so its border-top and its first character both begin at
+ * the BODY's content edge rather than at the plate's, and end at it on the
+ * right. Measured in the reference at 1920x1200: window 01's plate ring is at
+ * x=182 and both its band rule and its first glyph's ink start at x=192; at
+ * the other end window 05's plate ring is at x=1905 and its "ws 01" ink ends
+ * at x=1893. Ten pixels in on the left, twelve on the right for a five-glyph
+ * mono run whose last advance box is wider than its ink - one 9dp body inset
+ * on each side, plus the vermilion bar on the left when there is one.
+ *
+ * So the band's own left edge is client_of()'s left inset plus ZD_PAD, which
+ * puts its first character in the app's own first column, and the bar stays
+ * unbroken down the left because the rule starts to the right of it.
+ *
+ * THE TEXT STOPS SHORT OF THE RESIZE GRIP; THE RULE DOES NOT. The grip is
+ * UI_S3 square in the bottom-right corner and the band is taller than that, so
+ * the two occupy the same rows - the workspace figure would be drawn through
+ * three diagonal rules. The prototype has the same overlap and resolves it the
+ * same way: the border runs the full width and the grip is drawn on top of it,
+ * because a 1px groove crossed by a grip still reads as a groove and a digit
+ * crossed by one does not.
+ *
+ * A 1px ZD_CUT rule along the top, `.sband`'s `border-top`, at 1.4723:1 on the
+ * plate - a groove you feel rather than a line you read, which is the same
+ * weight everything else in this system separates two bands with. */
+static void chrome_band(const struct win *W, int focused, int bh)
+{
+    const struct ui_theme *t = ui_theme();
+    (void)focused;                 /* the band is on the PLATE in both states */
+    if (bh <= 1) return;
+    int ry = W->y + W->h - 1 - bh;          /* the rule; the ring owns the last row */
+    /* client_of()'s left inset, spelled the same way so the two cannot drift,
+     * plus the body's own ZD_PAD */
+    int pad = UI_DP(t, ZD_PAD);
+    int ix = W->x + 1 + t->focus_bar + pad;
+    int iw = W->w - 2 - t->focus_bar - 2 * pad;
+    if (iw <= 0) return;
+    fb_fill_px(ix, ry, iw, 1, t->cut);
+
+    int by = ry + 1, bhh = bh - 1;
+    int cw = fb_cell_w();
+    int cy = by + (bhh - fb_cell_h()) / 2;
+    int gap = UI_DP(t, ZD_STATUS_GAP);
+    int x = ix;
+    int stop = ix + iw;
+    int grip = W->x + W->w - 1 - UI_S3(t);
+    if (stop > grip) stop = grip;
+    if (stop <= x) return;
+
+    /* the workspace first, because it is the one field with a fixed right
+     * edge and everything to its left has to stop before it */
+    char ws[8];
+    ws[0] = 'w'; ws[1] = 's'; ws[2] = ' ';
+    ws[3] = (char)('0' + (W->ws / 10) % 10);
+    ws[4] = (char)('0' + W->ws % 10);
+    ws[5] = 0;
+    int wsw = 5 * cw;
+    if (stop - wsw >= x) {
+        fb_text_aa(stop - wsw, cy, ws, t->text_dim);
+        stop -= wsw + gap;
+    }
+
+    if (W->reg > 0) {
+        char r[3];
+        r[0] = (char)('0' + W->reg / 10);
+        r[1] = (char)('0' + W->reg % 10);
+        r[2] = 0;
+        if (x + 2 * cw > stop) return;
+        fb_text_aa(x, cy, r, t->text_dim);
+        x += 2 * cw + gap;
+    }
+
+    if (W->status[0]) {
+        int sw = 0;
+        while (W->status[sw]) sw++;
+        if (x + sw * cw > stop) return;
+        fb_text_aa(x, cy, W->status, t->text_dim);
+        x += sw * cw + gap;
+    }
+
+    /* APP US, and the label is the label style at the one size a caption gets:
+     * SM, bold, uppercase, untracked for the reason chrome_title gives. */
+    int lw = fb_text_role_w("APP US", UI_SM, 1);
+    char v[16];
+    unsigned u = W->band_us;
+    if (u > 999999u) u = 999999u;
+    int n = 0;
+    char rev[8];
+    if (!u) rev[n++] = '0';
+    while (u && n < 6) { rev[n++] = (char)('0' + (int)(u % 10u)); u /= 10u; }
+    int k = 0;
+    while (n > 0) v[k++] = rev[--n];
+    v[k++] = ' '; v[k++] = 'u'; v[k++] = 's'; v[k] = 0;
+    int vw = k * cw;
+    if (x + lw + UI_S1(t) + vw > stop) return;
+    fb_text_role(x, by + (bhh - fb_text_role_h(UI_SM)) / 2, "APP US",
+                 t->text_dim, UI_SM, 1);
+    fb_text_aa(x + lw + UI_S1(t), cy, v, t->text_hi);
+}
+
 static void chrome_shell(int win, int focused)
 {
     const struct ui_theme *t = ui_theme();
@@ -2303,6 +2892,7 @@ static void chrome_shell(int win, int focused)
 
     chrome_header(W, r, focused);
     chrome_focus_bar(W, r, focused);
+    chrome_band(W, focused, band_h_of(W->h, W->flags));
 
     if (wins[win].ntab > 1) {
         /* a tab strip instead of a title. The active one is a raised surface
@@ -2343,19 +2933,13 @@ static void chrome_shell(int win, int focused)
                        wins[win].tab_title[i], tab_ink);
         }
     } else {
-        int title_w = fb_text_prop_w(W->title);
-        int title_x = W->x + (W->w - title_w) / 2;
-        int safe_l = W->x + UI_S6(t);
-        /* the safe margin is now DERIVED from the control cluster instead of
-         * being a 112dp constant that happened to match three 26dp squares */
-        int safe_r = W->x + W->w - 1 - title_controls_w(t) - UI_S1(t);
-        if (title_x < safe_l) title_x = safe_l;
-        if (title_x + title_w > safe_r) title_x = safe_r - title_w;
-        /* REVERSED OUT OF THE KNOCKOUT: theme.knock_ink is 8.5329:1 on it, the
-         * loudest pairing on the screen and the point of the whole inversion.
-         * Unfocused it is theme.text_dim on the plate at 6.6809:1. */
-        fb_text_prop(title_x, W->y + (t->title_h - fb_text_prop_h()) / 2,
-                     W->title, focused ? t->knock_ink : t->text_dim);
+        /* THE TITLE LINE, and it is clamped to the header this window can
+         * actually afford - the same hh chrome_header() derives, for the same
+         * reason. A window shorter than its own title bar would otherwise
+         * centre its text below its own foot. */
+        int hh = t->title_h;
+        if (hh > W->h) hh = W->h;
+        if (hh >= 2) (void)chrome_title_run(W, focused, hh, 1);
     }
 
     /* One window-control component, three actions. Shared geometry keeps the
@@ -2474,7 +3058,56 @@ static unsigned int shell_state_key(int win, int focused)
      * and only disagrees with itself after a particular sequence of moves. */
     key ^= (unsigned int)(win_over_below(win) ? 1 : 0) << 25;
     key ^= (unsigned int)(win_lifted(win) ? 1 : 0) << 26;
+    /* NOTHING THE FOOT BAND OR THE TITLE LINE PRINTS IS IN THIS KEY, and that
+     * is a decision rather than an omission. This key is an ENUMERATION of
+     * states - one bit per state, no two states sharing a value - and a
+     * band_us of 995 or a status string does not fit in a bit. Hashing them in
+     * would turn the key into a digest and give the cache a collision mode it
+     * has never had, for values that change on their own schedule anyway. So
+     * each of them invalidates the shell where it is written instead:
+     *
+     *   reg / sub / status   wm_set_label(), wm_set_status()
+     *   band_us              band_us_latch(), on its 320 ms cadence
+     *   ws                   wm_set_win_ws(), which already damages twice
+     *
+     * THE MODULE CODE IS NOT HERE EITHER, and for a stronger reason: it is the
+     * one thing the frame draws that depends on the window's POSITION, and
+     * this surface is position-independent by design. Any mechanism that made
+     * it correct here - key bit or invalidation - would rebuild the shell and
+     * its shadow on every frame of every drag. It is drawn in the direct pass
+     * instead; see chrome_module(). */
     return key;
+}
+
+/* THE BAND'S FIGURE IS A PRINTED READOUT, NOT A LIVE COUNTER, and the
+ * difference is the whole reason app_us and band_us are two fields.
+ *
+ * app_us is written by app_draw_dispatch() every time the app draws, which for
+ * a terminal with a blinking cursor is every frame. Feeding that straight into
+ * the band would re-key the retained shell surface sixty times a second and
+ * hand back exactly the chrome rebuild the retained layer exists to avoid -
+ * for a three-digit number nobody can read at that rate anyway.
+ *
+ * So the band latches: it takes the current measurement at most once every
+ * WM_BAND_US_TICKS of the 100 Hz PIT, which is 320 ms. On an idle desktop this
+ * loop does nothing at all - app_us only moves when an app actually redraws -
+ * and the damage is the band's own strip rather than the whole window. */
+#define WM_BAND_US_TICKS 32
+static void band_us_latch(void)
+{
+    unsigned int now = idt_ticks();
+    for (int i = 0; i < WM_MAX; i++) {
+        if (!(wins[i].flags & WF_OPEN)) continue;
+        if (wins[i].band_us == wins[i].app_us) continue;
+        if (wins[i].band_us_tick &&
+            now - wins[i].band_us_tick < WM_BAND_US_TICKS) continue;
+        wins[i].band_us_tick = now ? now : 1u;
+        wins[i].band_us = wins[i].app_us;
+        int bh = band_h_of(wins[i].h, wins[i].flags);
+        if (!bh || !win_visible(i)) continue;
+        wins[i].shell_valid = 0;
+        wm_damage(wins[i].x, wins[i].y + wins[i].h - 1 - bh, wins[i].w, bh);
+    }
 }
 
 /* Shell AND shadow are one retained straight-alpha layer. Rounded corners and
@@ -2736,6 +3369,14 @@ void wm_repaint(void)
                 chrome_shadow(win, win == focus_win);
                 chrome_shell(win, win == focus_win);
             }
+            /* THE MODULE CODE, ON TOP OF WHICHEVER PATH DREW THE FRAME. It is
+             * the only chrome that depends on where the window IS, so it lives
+             * outside the position-independent shell cache - see
+             * chrome_module(). Drawn here rather than inside chrome_shell so
+             * the cached and direct paths produce the same pixels, and under
+             * the frame-plus-shadow scissor already set above. */
+            fb_clip(cx, cy, cw, ch);
+            chrome_module(win, win == focus_win);
             paint_end(&paint_chrome_cycles, phase_started);
 
             int fx, fy, fw, fh, ax, ay, aw, ah;
@@ -2752,7 +3393,7 @@ void wm_repaint(void)
                      * bytes and expose them when the window later moves. */
                     phase_started = paint_begin();
                     if (fb_surface_begin(W->client_px, aw, ah, ax, ay)) {
-                        app_draw_dispatch(win_app(win), ax, ay, aw, ah,
+                        app_draw_dispatch(win, win_app(win), ax, ay, aw, ah,
                                           win == focus_win);
                         fb_surface_end();
                         W->client_valid = 1;
@@ -2771,7 +3412,7 @@ void wm_repaint(void)
                     phase_started = paint_begin();
                     if (fb_surface_begin(W->client_px, aw, ah, ax, ay)) {
                         fb_clip(ax + dx0, ay + dy0, dx1 - dx0, dy1 - dy0);
-                        app_draw_dispatch(win_app(win), ax, ay, aw, ah,
+                        app_draw_dispatch(win, win_app(win), ax, ay, aw, ah,
                                           win == focus_win);
                         fb_surface_end();
                         W->client_dirty = 0;
@@ -2793,7 +3434,7 @@ void wm_repaint(void)
                      * refusal: today's direct path remains the correctness
                      * fallback and never leaves a blank/stale client. */
                     phase_started = paint_begin();
-                    app_draw_dispatch(win_app(win), ax, ay, aw, ah,
+                    app_draw_dispatch(win, win_app(win), ax, ay, aw, ah,
                                       win == focus_win);
                     paint_end(&paint_app_cycles, phase_started);
                     if (paint_trace) paint_app_calls++;
@@ -3519,6 +4160,10 @@ void wm_frame(void)
     /* advance every animation. Damaging the SETTLED rect (which is the
      * largest) is what erases the smaller frame drawn a moment ago. */
     anim_tick();
+
+    /* the foot band's app_us figure, moved on its own slow cadence rather than
+     * on the app's. See band_us_latch. */
+    band_us_latch();
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)

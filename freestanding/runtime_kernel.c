@@ -535,6 +535,16 @@ extern unsigned int wm_region_fallbacks(void);
 extern unsigned long long wm_region_occluded_pixels(void);
 extern void wm_client(int win, int *x, int *y, int *w, int *h);
 extern void wm_focus(int win);
+/* THE THREE POLICY CELLS. wm.c draws the register number, the mono
+ * subtitle and the status band, but it must not INVENT their contents -
+ * which app is 03, what its subtitle says, what its status line reads are
+ * all shell decisions. These three carry them across. Without them the
+ * chrome renders correctly with every cell blank, which is the shape of
+ * bug this project keeps finding: complete-looking code that nothing
+ * calls. */
+extern void wm_set_label(int win, int reg, const char *sub);
+extern void wm_set_status(int win, const char *status);
+extern void wm_set_field(int x, int y, int w, int h);
 extern void wm_raise(int win);
 extern void wm_set_home(int win);
 extern int  wm_count(void);
@@ -1539,6 +1549,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_bind"))    return zl_num((double)wm_bind_zl());
     if (streq(name, "wm_init"))    { wm_init(); return zl_nil(); }
     if (streq(name, "wm_open"))    { if (a[1].type==V_STR) return zl_num((double)wm_open((int)a[0].num, a[1].str, (int)a[2].num, (int)a[3].num, (int)a[4].num, (int)a[5].num)); return zl_num(-1.0); }
+    if (streq(name, "wm_set_label"))  { if (a[2].type == V_STR) wm_set_label((int)a[0].num, (int)a[1].num, a[2].str); return zl_nil(); }
+    if (streq(name, "wm_set_status")) { if (a[1].type == V_STR) wm_set_status((int)a[0].num, a[1].str); return zl_nil(); }
+    if (streq(name, "wm_set_field"))  { wm_set_field((int)a[0].num, (int)a[1].num, (int)a[2].num, (int)a[3].num); return zl_nil(); }
     if (streq(name, "wm_tab"))     { if (a[2].type==V_STR) return zl_num((double)wm_add_tab((int)a[0].num, (int)a[1].num, a[2].str)); return zl_num(-1.0); }
     if (streq(name, "wm_close"))   { wm_close((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_frame"))   { wm_frame(); return zl_nil(); }

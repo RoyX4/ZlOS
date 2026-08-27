@@ -228,6 +228,88 @@ static int text_cy(int y, int h, int size, int flags)
     return y + (h - th) / 2;
 }
 
+/* ---- THE LABEL STYLE, AND IT IS NOW DRAWN RATHER THAN DEFERRED -------------
+ *
+ *     th, .t-lab { font-size: var(--fs-sm); line-height: var(--lh-sm);
+ *                  text-transform: uppercase; font-weight: 700;
+ *                  letter-spacing: var(--tr-lab);
+ *                  margin-right: calc(-1 * var(--tr-lab)); }
+ *
+ * PRESSWORK's fourth type style is not a fourth size - there are three baked
+ * atlases and no rasteriser, so a fourth size does not exist to be asked for.
+ * It is SM, uppercase, bold and TRACKED, and design.h has carried ZD_TR_LAB
+ * (1.4 design px) since PRESSWORK landed with nothing in the tree reading it.
+ * Two comments in this file - ui_colhead's and ui_heading's - recorded the
+ * tracking as unavailable and the prototype's own note calls it "the one
+ * unpriced thing in this file".
+ *
+ * It was never unavailable. What is unavailable is letter-spacing INSIDE
+ * fb_text_role, which draws a whole string in one call; tracking a string is
+ * one call per glyph with the pen advanced by the glyph's own width plus the
+ * track, and that is this layer's job, not fb.c's. fb.c is not edited.
+ *
+ * THE MEASURE AND THE DRAW SHARE THE ADVANCE, which is the requirement
+ * design.h states in the same breath as the token: a label measured without
+ * the track and drawn with it is a label that clips at its right edge. Both
+ * walk the same loop below, so they cannot disagree.
+ *
+ * THE TRAILING TRACK IS CANCELLED, and that is the prototype's rule rather
+ * than a rounding choice - `margin-right: calc(-1 * var(--tr-lab))` on the
+ * same selector. Letter-spacing in CSS is applied AFTER every glyph including
+ * the last, which pushes a right-flushed label off its own edge by the track;
+ * the negative margin takes it back. So the width here is the sum of the
+ * glyphs plus (n-1) tracks, never n.
+ *
+ * UPPERCASING IS THE WIDGET'S, NOT THE CALLER'S. `text-transform` is in the
+ * stylesheet in the prototype, so a caller passing "Name" gets "NAME" for the
+ * same reason it gets bold: it asked for a column head, not for a string it
+ * styled itself. The transform is ASCII-only, which is the whole of what the
+ * three atlases carry.
+ *
+ * THESE TWO ARE FILE-LOCAL because publishing them is a ui.h change and ui.h
+ * is not this file's to edit in this pass. Every widget in this file that
+ * draws the label style uses them; an APP that wants the style still cannot
+ * reach it, and the one line that would fix that is recorded in the handover
+ * rather than written here. */
+static char lab_upper(char c)
+{
+    return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+}
+
+/* One design-px track, in device px, floored at 1 so the style survives a
+ * scale where DP(1.4) rounds to 0 - a label with no tracking at all is still
+ * a label, but one whose measure and draw round differently is a clip. */
+static int lab_track(void)
+{
+    int tr = UI_DP(T, ZD_TR_LAB) / 10;      /* ZD_TR_LAB is tracking x10 */
+    return tr < 1 ? 1 : tr;
+}
+
+static int lab_w(const char *s)
+{
+    char g[2] = { 0, 0 };
+    int w = 0, n = 0, tr = lab_track();
+    if (!s) return 0;
+    for (int i = 0; s[i]; i++) {
+        g[0] = lab_upper(s[i]);
+        w += ui_text_w(g, UI_SM, UI_F_BOLD);
+        n++;
+    }
+    return n ? w + (n - 1) * tr : 0;
+}
+
+static void lab_text(int x, int y, const char *s, unsigned rgb)
+{
+    char g[2] = { 0, 0 };
+    int tr = lab_track();
+    if (!s || ui_mode_get() != UI_DRAW) return;
+    for (int i = 0; s[i]; i++) {
+        g[0] = lab_upper(s[i]);
+        ui_text(x, y, g, rgb, UI_SM, UI_F_BOLD);
+        x += ui_text_w(g, UI_SM, UI_F_BOLD) + tr;
+    }
+}
+
 /* ---- THE SEAT, and it replaces the neutral fill ----------------------------
  * What was here was rgba(255,255,255,.07) - white at an alpha rather than a
  * surface step, so the same pill took the colour of whatever it was drawn on.
@@ -790,11 +872,25 @@ int ui_tabstrip(int x, int y, int w, const char *items, int sel)
         if (cx + tw > x + w - pxo) tw = x + w - pxo - cx;
         if (tw <= 0) break;
         int ty = y + pt;
-        /* the ✕ first: it sits INSIDE the tab, so a hit on it must not also
-         * count as a hit on the tab - test the smaller rect first and return */
+        /* the ✕ first: it sits at the tab's trailing edge, so a hit on it must
+         * not also count as a hit on the tab - its result wins.
+         *
+         * BOTH ui_fire() CALLS RUN, EVERY FRAME, AND THAT IS THE FIX. This was
+         * `if (ui_fire(x)) ... else if (ui_fire(body)) ...`, so on the one
+         * frame a click landed on the ✕ the body's ui_fire() was never
+         * reached. ui.c's funnel counts a focus stop per ui_fire() call, so
+         * that frame numbered every widget after this tab one lower than the
+         * frame before it: the focus ring jumped to its neighbour, and if
+         * focus sat past the strip it moved for real. A widget's identity may
+         * not depend on where the pointer was - that is exactly the class the
+         * disabled-pill note further up calls out, where the index shift IS
+         * intended and is therefore stated. Here it was neither. The `else`
+         * now lives on the RESULTS, which is where the precedence belonged. */
         int xx = cx + tw - pr - xw;
-        if (ui_fire(xx, ty, xw, th)) tab_closed_idx = i;
-        else if (ui_fire(cx, ty, tw - pr - xw, th)) hitidx = i;
+        int hit_close = ui_fire(xx, ty, xw, th);
+        int hit_body  = ui_fire(cx, ty, tw - pr - xw, th);
+        if (hit_close)     tab_closed_idx = i;
+        else if (hit_body) hitidx = i;
 
         if (ui_mode_get() == UI_DRAW) {
             int st = ctl_state(cx, ty, tw, th, i == sel, 0);
@@ -822,6 +918,13 @@ int ui_tabstrip(int x, int y, int w, const char *items, int sel)
              * nobody can see and, worse, a GLYPH in the one colour this
              * ladder reserves for structure. */
             ui_text(xx, text_cy(ty, th, UI_SM, 0), "x", xink, UI_SM, 0);
+            /* the third fire target in this file that drew no focus mark.
+             * The ring lands on the tab BODY, because the body's ui_fire() is
+             * the later of the two and focus_ring() marks `L.index - 1`; the
+             * ✕ is a stop of its own and keeps the ring it cannot draw here.
+             * Marking the body is the useful half - it is the tab you are on,
+             * and the ✕ is one Tab further along from it. */
+            ui_ring(cx, ty, tw, th);
         }
         cx += tw + gap;
     }
@@ -1026,21 +1129,32 @@ int ui_colhead(int x, int y, int w, const char *labels, int sortcol, int sortdir
         unsigned ink = (st == UI_ST_ON)  ? ui_color(UI_COLOR_TEXT_HI)
                      : (st == UI_ST_OFF) ? ui_color(UI_COLOR_TEXT_DIM)
                                          : ui_color(UI_COLOR_TEXT_2);
-        /* THE LABEL STYLE, as far as this layer can carry it. PRESSWORK's
-         * fourth type style is not a fourth size - it is SM, uppercase, bold,
-         * tracked. Two of those four are available: SM and bold, and bold is
-         * new here (this drew regular weight before). Uppercasing belongs to
-         * the caller, since the toolkit does not own the string. TRACKING IS
-         * NOT AVAILABLE AND IS NOT FAKED: fb_text_role has no letter-spacing
-         * and inserting spaces would break every width measurement, so a
-         * label is 1.4 design px per gap tighter than the prototype's. The
-         * prototype prices the same item the same way and calls it the one
-         * unpriced thing in its file. */
-        int tw = ui_text_w(buf, UI_SM, UI_F_BOLD);
-        int tx = (G.fixed[i] && i != G.star) ? cx + cw - tw - DP(10)
-                                             : cx + DP(8);
+        /* THE LABEL STYLE, ALL FOUR PARTS OF IT. `th` is SM, uppercase, bold
+         * and tracked by ZD_TR_LAB, and this used to carry two of the four -
+         * the note here said tracking was "NOT AVAILABLE AND IS NOT FAKED"
+         * and uppercasing "belongs to the caller". Both are now drawn, by
+         * lab_text() above, which advances the pen a glyph at a time; see the
+         * derivation there for why that is this layer's job and not fb.c's.
+         *
+         * The padding is the prototype's `td`/`th` 6dp on BOTH sides. It was
+         * DP(8) left and DP(10) right - two bare numbers in a file whose rule
+         * 2 says the numbers live in design.h, and asymmetric where the
+         * prototype's padding is `0 6px`, one value both ends.
+         *
+         * WHAT THAT ASYMMETRY DID NOT DO IS MISALIGN A COLUMN, and the first
+         * draft of this comment said it did. ui_grid_cell() spelled the same
+         * DP(8)/DP(10), so head and cell already agreed; measured on the
+         * scratch render at ui scale 2, the SIZE head's right edge sits at
+         * x=902 and its column's first value at x=901, a 1px glyph
+         * side-bearing that is unchanged after this edit (910 and 909). The
+         * change is a token where two literals were, and the prototype's
+         * margin where an invented one was. It is not a bug fix and is not
+         * written up as one. */
+        int tw = lab_w(buf);
+        int cp = DP(ZD_CELL_PX);
+        int tx = (G.fixed[i] && i != G.star) ? cx + cw - tw - cp : cx + cp;
         if (tx < cx) tx = cx;
-        ui_text(tx, text_cy(y, h, UI_SM, UI_F_BOLD), buf, ink, UI_SM, UI_F_BOLD);
+        lab_text(tx, text_cy(y, h, UI_SM, UI_F_BOLD), buf, ink);
         if (i == sortcol) {
             /* the sort arrow: icon('sortU'|'sortD', 8) in the reference, a
              * 4px triangle of hairlines here - there is no icon atlas in the
@@ -1058,6 +1172,18 @@ int ui_colhead(int x, int y, int w, const char *labels, int sortcol, int sortdir
                            ui_color(UI_COLOR_TEXT_HI));
             }
         }
+        /* A COLUMN HEAD IS A TAB STOP AND HAD NO FOCUS MARK. It calls
+         * ui_fire(), which is what counts a focus stop in ui.c's funnel, so
+         * a keyboard walking a table already landed on every sortable head -
+         * and drew nothing when it got there. That is the whole of rule 3's
+         * `focus` state missing on this control, and the fix is the one call
+         * every other fire target in this file already makes.
+         *
+         * It goes HERE, at the foot of the item's own iteration: focus_ring()
+         * tests `L.index - 1`, so it marks the widget whose ui_fire() was the
+         * most recent one. Hoisting it out of the loop would draw the ring on
+         * the last column no matter which one had focus. */
+        ui_ring(cx, y, cw, h);
     }
     return hitidx;
 }
@@ -1107,6 +1233,40 @@ int ui_grid_row(int x, int y, int w, int idx, int selected)
     grid_row_ink = selected ? ui_color(UI_COLOR_KNOCK_INK) : 0;
     if (ui_mode_get() == UI_DRAW) {
         int st = ctl_state(x, y, w, h, selected, 0);
+
+        /* THE TEXTLESS KNOCKOUT SLAB IS NOT DRAWN HERE, AND THE PROOF IS IN
+         * THE RETURN VALUE OF A LINKER WRAP.
+         *
+         * A previous pass read the 500 x 15 band of bare ZD_KNOCK in the
+         * default wmshot frame as a grid row that a scroll viewport had cut in
+         * half - the fill is a rectangle and survives the scissor, the label
+         * sits 18px further down and does not - and gated the knockout here on
+         * the row being wholly inside fb_clip_top()..fb_clip_bot(). The band
+         * did not move, because ui_grid_row has no caller anywhere in the tree
+         * outside uitest.c: the whole grid API is drawn by nothing yet.
+         *
+         * Wrapping fb_fill_px with -Wl,--wrap and printing a backtrace for
+         * every call laying ZD_KNOCK wider than 200px names the drawer once
+         * and for good:
+         *
+         *     FILL KNOCK x=1289 y=356 w=507 h=52 clip=[220,371)
+         *         ui_list_row+0xdd
+         *
+         * ui_list_row, in ui.c. A 52px row whose scissor ends at 371 shows its
+         * top 15px, and a row of this design carries 18px of leading above the
+         * glyphs, so the visible sliver is by construction the blank part.
+         *
+         * The gate it needed therefore belongs in ui.c, where the viewport is
+         * known (the S struct), and NOT here: uitest.c links ui.c and uikit.c
+         * with no fb.c at all, so a reference to fb_clip_top from this file
+         * does not fail a check, it fails the LINK - the 176-check suite
+         * stopped building the moment that guard landed. This file learns
+         * about clipping through the primitives it calls and in no other way.
+         *
+         * ui_grid_row can be cut in half by the same viewport once something
+         * calls it inside one. When that caller exists the fix is ui.c's, made
+         * once for both row idioms, not a second copy of the rule here. */
+
         if (st == UI_ST_ON) {
             fb_fill_px(x, y, w, h, ui_color(UI_COLOR_KNOCK));
             fb_fill_px(x, y + h - 1, w, 1, ui_color(UI_COLOR_KO_EDGE));
@@ -1127,9 +1287,18 @@ void ui_grid_cell(int x, int w, int y, int h, int col, const char *s,
     if (ui_mode_get() != UI_DRAW) return;
     ui_grid_span(x, w, col, &cx, &cw);
     if (cw <= 0) return;
+    /* THE SAME MARGIN THE HEAD STANDS ON, and now the same TOKEN. These were
+     * DP(8) left and DP(10) right, the same two literals ui_colhead spelled -
+     * so the head and the column already agreed, and what was wrong was that
+     * they agreed by both repeating the number rather than by both reading
+     * it. That is the failure mode design.h's one-home rule exists for: the
+     * next edit to one of the two is the one that breaks the alignment, and
+     * nothing would have caught it. ZD_CELL_PX is 6dp, the prototype's
+     * `padding: 0 6px`, one value at both ends. */
+    int cp = DP(ZD_CELL_PX);
     int tw = ui_text_w(s, size, flags);
-    int tx = cx + DP(8);
-    if (align == UI_ALIGN_R) tx = cx + cw - tw - DP(10);
+    int tx = cx + cp;
+    if (align == UI_ALIGN_R) tx = cx + cw - tw - cp;
     else if (align == UI_ALIGN_C) tx = cx + (cw - tw) / 2;
     if (tx < cx) tx = cx;
     if (grid_row_ink) rgb = grid_row_ink;
@@ -1244,16 +1413,22 @@ int ui_heading_h(void)
     return DP(ZD_HEADING_PT) + ui_text_h(UI_SM) + DP(ZD_HEADING_PB);
 }
 
-/* `#rail .sect` - the LABEL style. SM and bold are available, uppercase is the
- * caller's, tracking is not available at this layer (see ui_colhead). The ink
- * is ZD_TEXT_3, 5.3585:1 on the rail; it was ZD_TEXT_6, a rung the widened
- * ladder no longer has. */
+/* `#rail .sect` - the LABEL style, and now all four parts of it rather than
+ * two. This said "tracking is not available at this layer (see ui_colhead)";
+ * ui_colhead no longer says that either, and this draws through the same
+ * lab_text() so the rail's section heads and a table's column heads are one
+ * style with one implementation. The ink is ZD_TEXT_3, 5.3585:1 on the rail;
+ * it was ZD_TEXT_6, a rung the widened ladder no longer has.
+ *
+ * The indent is ZD_CELL_PX, the same margin a cell stands on, not the DP(8)
+ * literal that was here - a section head and the rows under it sitting on two
+ * different left margins is the thing a reader sees before they read either. */
 void ui_heading(int x, int y, int w, const char *s)
 {
     (void)w;
     if (ui_mode_get() != UI_DRAW) return;
-    ui_text(x + DP(8), y + DP(ZD_HEADING_PT), s, ui_color(UI_COLOR_TEXT_DIM),
-            UI_SM, UI_F_BOLD);
+    lab_text(x + DP(ZD_CELL_PX), y + DP(ZD_HEADING_PT), s,
+             ui_color(UI_COLOR_TEXT_DIM));
 }
 
 int ui_nav_h(void) { return DP(ZD_NAV_H); }
@@ -1505,11 +1680,19 @@ void ui_kv(int x, int y, int w, const char *k, const char *v,
      * 2..n is what stops it doubling with the card's own bottom edge. Kept as
      * it was; only the colour moves, from ZD_FLOAT to the groove. */
     if (!first) fb_fill_px(x, y, w, 1, ui_color(UI_COLOR_CUT));
-    /* the key is the LABEL style (SM, bold, ZD_TEXT_3) and the value is the
-     * DATA style - mono, one size forever, ZD_TEXT_0 unless the caller has a
-     * semantic to say. 5.3585:1 and 8.9894:1 respectively on ZD_RAISE. */
-    ui_text(x + DP(13), text_cy(y, h, UI_SM, UI_F_BOLD), k,
-            ui_color(UI_COLOR_TEXT_DIM), UI_SM, UI_F_BOLD);
+    /* the key is the LABEL style and the value is the DATA style - mono, one
+     * size forever, ZD_TEXT_0 unless the caller has a semantic to say.
+     * 5.3585:1 and 8.9894:1 respectively on ZD_RAISE.
+     *
+     * `.kv .k` is `text-transform: uppercase; letter-spacing: var(--tr-lab);
+     * font-weight: 700`, which is the same four-part style ui_colhead and
+     * ui_heading draw, so it goes through the same helper. That is the whole
+     * argument for having a helper: this is the FOURTH site, and a style with
+     * four hand-rolled copies is a style that will have three variants by the
+     * next change. The 13dp indent is left alone - it is not a number this
+     * pass measured off the prototype, and moving it would be a guess. */
+    lab_text(x + DP(13), text_cy(y, h, UI_SM, UI_F_BOLD), k,
+             ui_color(UI_COLOR_TEXT_DIM));
     int vw = ui_text_w(v, UI_SM, UI_F_MONO);
     ui_text(x + w - DP(13) - vw, text_cy(y, h, UI_SM, UI_F_MONO), v,
             v_rgb ? v_rgb : ui_color(UI_COLOR_TEXT_HI), UI_SM, UI_F_MONO);
@@ -1891,6 +2074,24 @@ static int input_body(int x, int y, int w, int h, int r, const char *text,
             fb_fill_px(cx, text_cy(y, h, UI_MD, 0), cw, ui_text_h(UI_MD),
                        ui_color(UI_COLOR_ACCENT));
     }
+    /* THERE ARE TWO NOTIONS OF FOCUS HERE AND ONLY ONE OF THEM WAS DRAWN.
+     *
+     * `focused` is the APP's: this is the field my program is putting
+     * keystrokes into, and the in-field bar and caret above say so. ui_ring()
+     * is the TOOLKIT's: ui.c's funnel counts a focus stop per ui_fire() call
+     * and this widget makes one, so a keyboard walking a form has always
+     * stopped here - and drew nothing when it did, because the only mark this
+     * control had was the one the app controls. A tab stop that renders
+     * identically whether or not it is the tab stop is the `focus` state
+     * missing, which is the third of the five this file's header promises.
+     *
+     * The two marks do not collide: ui_ring() draws its bar OUTSIDE the left
+     * edge, in the gutter ui.c's layout cursor leaves, where every other
+     * control in the toolkit puts it; the app's bar is drawn INSIDE the well.
+     * When both are true - the common case, an app focusing the field the
+     * keyboard is on - they stack into one continuous mark, which is the
+     * right picture for a field that is focused twice over. */
+    ui_ring(x, y, w, h);
     return fired;
 }
 

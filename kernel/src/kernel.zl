@@ -443,12 +443,81 @@ fn field_h() { return px_h() - field_y() - foot_h() - RULE_H * ui() }
 # 600-tall panel and on a 1440-tall one without a second table.
 RAIL_IDENT_H = 58                # 11 pad + the 24 dp identity line + 15 + 7
 RAIL_SECT_H  = 26                # a section caption: 7 + 15 + 4
-RAIL_STAT_H  = 44                # 3 + two 19 dp reading rows + 3
+RAIL_STAT_H  = 63                # 3 + three 19 dp reading rows + 3
 RAIL_CLOCK_H = 54                # 5 + the 24 dp HH:MM + 15 + 10
 RAIL_SLOT_PL = 13                # a register row's left inset, past the mark
 RAIL_SLOT_PR = 6
-RAIL_SLOT_GAP = 7                # between the number and the name
+RAIL_SLOT_GAP = 7                # between the number and the icon, and again
+                                 # between the icon and the name
 RAIL_STROW_H = 19                # one reading row inside the stat block
+
+# THE STAT BLOCK GREW FROM 44 TO 63 BECAUSE IT HAS THREE ROWS NOW, not two.
+# 3 + three 19 dp rows + 3 = 63. Read that against rail_bot_h(): the register
+# band loses 19 dp, and the bill is COUNTED rather than waved off. Run
+# check-shell-layout.py against this file before and after and rail_reg_fit()
+# on its four panel sizes goes
+#
+#   800x600 ui1   13 -> 13     the smallest panel, and the binding one:
+#                              rail_bot_h() 155 -> 174, the band 358 -> 339 px,
+#                              idiv(339, 26) is still 13
+#   1280x800 ui1  21 -> 20
+#   1920x1080 ui2 11 -> 10
+#   2560x1440 ui2 18 -> 17
+#
+# One row off the CEILING on three of the four, none off the smallest, and the
+# ceiling is what a tail window uses - the fixed twelve are untouched at every
+# size the shipped ui scale actually produces. The 1920x1080 line is the one to
+# read twice: it is already under REG_ROWS at 11, and it was before this change.
+# That case is the checker's own assumption of ui 2 at 1920. fb.c computes
+# ui_scale_q8 as width*256/1920 clamped at 256, so 1920 is ui 1 on the machine,
+# where the band is 819 px and fits 31 rows - and 1920x1200 fits 36. Nothing
+# ships clipped there.
+#
+# THE STATUS ROWS DO NOT CARRY THE PROTOTYPE'S ICON, and this is the one place
+# the icon column could not be reproduced. `.strow` puts a 13 dp glyph before
+# each of net / vol / pwr. The reason it is absent is arithmetic and it was
+# found by computing it rather than by looking at a 1920 render, where it does
+# not show:
+#
+#   fb_icon24's smallest output is 24 PHYSICAL pixels and it scales by
+#   ui_scale_q8, so on a 2560-wide panel (q8 341) it draws 32 px. But a row
+#   height written as `RAIL_STROW_H * ui()` does NOT scale by q8: zl_binop
+#   (freestanding/runtime_kernel.c) casts both operands to long long before
+#   multiplying, so ui() - which is q8/256.0 - TRUNCATES to 1 for every panel
+#   from 1920 to 3839 px wide. At 2560 the row is 19 px and the icon is 32 -
+#   thirteen pixels of one reading's glyph landing in the next reading's row.
+#   (An earlier draft of this change grew the row to 26 to make room and still
+#   overflowed by six there, which is how the truncation was found at all.)
+#
+# Sizing the block to absorb that needs RAIL_STAT_H >= 150 (the worst q8/trunc
+# ratio approaches 2), which is 150 px of a 600 px panel spent on three
+# readings. The register row escapes the same trap only because its height is
+# row_h() - a THEME metric, computed in C by ui.c's dp() with proper rounding -
+# where the stat block's is not, and it cannot be: check-shell-layout.py asserts
+# `stat_y + RAIL_STAT_H * u + rule1 == clock_top` against a constant it parses
+# out of this line, so the block's height has to stay a constant times ui().
+#
+# So the rows are the label, the state dot and the state WORD, which is the
+# whole of the reading; the glyph was the only decorative part of that row and
+# it is the part that did not fit. Closing it needs either a size argument on
+# fb_icon24 or a dp()-equivalent for design units in zl, and neither is inside
+# this file.
+
+# THE STATE DOT beside a reading's state WORD. 7 dp square, the prototype's
+# `.dot { width: 7px; height: 7px }`. It is square and not round because this
+# file has no circle primitive that is not a rounded rect, and a 7 px rounded
+# rect at radius 3 is a lumpy circle - a square swatch is what a printed key
+# uses anyway. Colour never carries the state alone: the WORD is always beside
+# it, which is the free rider all four parent designs share.
+RAIL_DOT = 7
+RAIL_DOT_GAP = 5                 # between the dot and the word
+
+# THE ICON COLUMN. fb_icon24 is the whole icon vocabulary this kernel has and
+# it takes NO size: it draws 24 design units, resolved against ui_scale_q8
+# exactly the way rail_ico_w() below repeats. So the column is 24 and not the
+# prototype's 14, and that divergence is recorded at rail_ico_w rather than
+# hidden here.
+RAIL_SLOT_ICO = 24
 
 # THE REGISTER MARK - overprint job 1 of PRESSWORK's four, and the only part of
 # the focus signal that is legible from the rail. Vermilion, ZD_FOCUS_BAR wide,
@@ -461,6 +530,37 @@ RAIL_STROW_H = 19                # one reading row inside the stat block
 # than a design constant because row_h() is a theme metric and a fixed mark on a
 # scaled row is a mark that drifts off centre at ui 2.
 RAIL_MK_PC = 30
+
+# HOW WIDE THE ICON ACTUALLY LANDS, and this repeats fb_icon24's own arithmetic
+# on purpose. THE RESERVED COLUMN AND THE DRAWN GLYPH MUST BE ONE NUMBER: the
+# icon primitive takes no size argument, so a caller that reserves
+# `RAIL_SLOT_ICO * ui()` and lets fb.c draw `(24 * ui_scale_q8 + 128) / 256`
+# has two independently-derived widths for the same box - which is the second
+# origin this file has already been bitten by twice (pip_at, tray_x).
+#
+# AND THEY DISAGREE BY EIGHT PIXELS, not by rounding. `K * ui()` does not scale
+# by q8 at all in the fractional band: zl_binop casts both operands to long
+# long before multiplying (freestanding/runtime_kernel.c), and ui() is
+# q8/256.0, so it truncates to 1 for every panel from 1920 to 3839 px wide. At
+# 2560 - q8 341, a size check-shell-layout.py tests - `RAIL_SLOT_ICO * ui()`
+# reserves 24 while fb_icon24 draws 32. So this is the SAME expression fb.c
+# evaluates, floor clamp included, and the layout below reads it rather than
+# multiplying.
+#
+# THE 24 IS NOT A CHOICE AND IT IS NOT THE PROTOTYPE'S. `.slot` puts a 14 dp
+# glyph before the name; fb_icon24's smallest output is 24 physical pixels,
+# because it clamps `if (dst < ICON_W) dst = ICON_W`. Measured against the
+# atlas rather than guessed: across the fifteen icons the register uses, the
+# ink inside that 24 px box runs 13 px tall (snake) to 22 px (settings), median
+# 19, in a 26 dp row - so the mark reads at roughly 73% of the row where the
+# prototype's reads at about 54%. It is heavier than the reference and that is
+# the whole of the divergence. Closing it needs a size argument on fb_icon24,
+# and fb.c is not this change's to edit.
+fn rail_ico_w() {
+    iw = idiv(RAIL_SLOT_ICO * ui_scale_q8() + 128, 256)
+    if iw < RAIL_SLOT_ICO { iw = RAIL_SLOT_ICO }
+    return iw
+}
 
 # THE CLOCK GETS A FIXED CELL, and that is this file's own established rule for
 # a live number, stated a few hundred lines down: "a readout whose labels slide
@@ -610,27 +710,166 @@ REG_N = 11
 REG_CATALOG = 11                   # the row past the register: "ALL APPS"
 REG_ROWS = 12                      # fixed rows drawn, register + catalog
 
-# THE NAMES ARE LABEL CAPS and they are literals, not upper-cased at runtime -
-# zl's kernel subset has no string type to walk. They are also SHORT: the rail
-# is 170 dp, of which 13 is the left inset, two mono cells is the number, 7 is
-# the gap and 6 is the right inset, so a name has 170 - 13 - 16 - 7 - 6 = 128 dp
-# at ui 1. "SYSTEM MONITOR" does not fit in that at T_BODY, which is why the
-# name is drawn at the LABEL style - T_CAPTION, bold, caps - rather than at the
-# prototype's fs-md. LABEL is a style PAPER adds and not a fourth size, so this
-# is using the design's own type ramp rather than inventing a smaller one.
+# THE NAMES ARE LOWERCASE, which is a correction rather than a preference. The
+# prototype's rows are `01 [icon] terminal 1119`: LABEL caps carry the NUMBER
+# and the section captions, and the app's own name is set lowercase at fs-md
+# (`.slot .nm`). This file had every name in caps, so the rail read as twelve
+# headings with nothing under them - caps everywhere is caps meaning nothing,
+# and the caption rung stops separating "REGISTER" from "terminal".
+#
+# They are literals and not lower-cased at runtime because zl's kernel subset
+# has no string type to walk.
+#
+# THE WIDTH BUDGET, remeasured now the row carries an icon and a figure. The
+# rail is 170 dp; at ui 1 that is 13 left inset + 16 of number + 7 + 24 of icon
+# + 7 = 67 before the name, and the count is right-aligned into the last
+# 6 + 4 mono cells = 38, so the figure starts at 132 and a name has 65 dp.
+# MEASURED with fb_text_role_w against the shipped atlas, not estimated: the
+# longest of these is "terminal" - 44 px at T_CAPTION regular, which is how an
+# idle or running row draws it, and 50 px at W_BOLD, which is how the FOCUSED
+# row draws it. Worst case is therefore 67 + 50 = 117 against a figure at 132:
+# 15 px of air, and the same 15 px at 800x600 and 1920x1200 because all three
+# are ui_scale_q8 256. On a 2560 panel the rail is 226 px and the slack is 63;
+# on a 3840 panel it is 80. No panel this tree targets is tight.
+#
+# It stays T_CAPTION rather than the prototype's fs-md because T_BODY and
+# T_CAPTION are the SAME 12 px cell at ui 1 (fb.c's role_base collapses to two
+# steps there, and says why), so at the size this ships at the two are
+# indistinguishable and T_CAPTION is the one that keeps its promise on a panel
+# where they diverge.
 fn rail_name(slot) {
-    if slot == 0 { return "TERMINAL" }
-    if slot == 1 { return "FILES" }
-    if slot == 2 { return "MONITOR" }
-    if slot == 3 { return "BROWSER" }
-    if slot == 4 { return "EDITOR" }
-    if slot == 5 { return "PAINT" }
-    if slot == 6 { return "SNAKE" }
-    if slot == 7 { return "CUBE" }
-    if slot == 8 { return "ABOUT" }
-    if slot == 9 { return "SETTINGS" }
-    if slot == 10 { return "RUN" }
-    return "ALL APPS"
+    if slot == 0 { return "terminal" }
+    if slot == 1 { return "files" }
+    if slot == 2 { return "monitor" }
+    if slot == 3 { return "browser" }
+    if slot == 4 { return "editor" }
+    if slot == 5 { return "paint" }
+    if slot == 6 { return "snake" }
+    if slot == 7 { return "cube" }
+    if slot == 8 { return "about" }
+    if slot == 9 { return "settings" }
+    if slot == 10 { return "run" }
+    return "all apps"
+}
+
+# THE ROW'S ICON, as an index into icons.c's 89-entry coverage atlas. The atlas
+# is already in the image - the window titlebars draw out of it - so this is a
+# table and not new artwork, and the indices are the generated header comment
+# at the top of icons.c rather than numbers picked by eye.
+#
+# It is a SECOND table beside rail_app() and rail_name() rather than a field on
+# one, because zl has no record type; the three are kept adjacent and walked by
+# the same `slot` so a row added to one is visibly missing from the others.
+# THE ROW'S SUBTITLE, the dim mono word wm.c prints after the window title.
+# It answers "which one" where the title answers "what": the terminal's tty,
+# the file window's volume, the monitor's sample rate. A THIRD table beside
+# rail_app(), rail_name() and rail_icon(), kept adjacent for the same reason
+# they are - zl has no record type, so a row added to one is visibly missing
+# from the others.
+fn rail_sub(slot) {
+    if slot == 0 { return "zlsh" }
+    if slot == 1 { return "rd0" }
+    if slot == 2 { return "1 Hz" }
+    if slot == 3 { return "http" }
+    if slot == 4 { return "buf" }
+    if slot == 5 { return "rgba" }
+    if slot == 6 { return "20x15" }
+    if slot == 7 { return "wire" }
+    if slot == 8 { return "0.3" }
+    if slot == 9 { return "theme" }
+    if slot == 10 { return "exec" }
+    return "reg"
+}
+
+# EVERY OPEN WINDOW GETS ITS REGISTER NUMBER AND SUBTITLE, once per frame.
+#
+# wm.c draws those two cells but must not invent them - which app is 03 and
+# what its subtitle says are shell facts, and the chrome deliberately renders
+# them blank rather than guessing. This is the call that fills them, and
+# without it the title bar comes out correct and empty, which is the exact
+# shape of bug this tree keeps catching: finished-looking code with no caller.
+#
+# Once per frame rather than once per open, because a window can be closed and
+# reopened into the same slot and because the rail table is the authority - a
+# row added there should not need a second edit at some wm_open site to show
+# up in the chrome. Twelve iterations of two stores is not worth caching.
+fn label_windows() {
+    ls = 0
+    while ls < 12 {
+        lw = rail_win(ls)
+        if lw >= 0 {
+            if wm_is_open(lw) == 1 { wm_set_label(lw, ls + 1, rail_sub(ls)) }
+        }
+        ls = ls + 1
+    }
+}
+
+fn rail_icon(slot) {
+    if slot == 0 { return 0 }        # terminal
+    if slot == 1 { return 7 }        # files
+    if slot == 2 { return 4 }        # monitor
+    if slot == 3 { return 20 }       # browser
+    if slot == 4 { return 3 }        # editor
+    if slot == 5 { return 2 }        # paint
+    if slot == 6 { return 1 }        # snake
+    if slot == 7 { return 6 }        # cube3d
+    if slot == 8 { return 5 }        # about
+    if slot == 9 { return 8 }        # settings
+    if slot == 10 { return 42 }      # play - the RUN row launches a command
+    return 19                        # grid - ALL APPS
+}
+
+# The same, for a TAIL row: a window whose app has no fixed register slot. The
+# tail is where the catalog's apps appear, and there are forty-seven of them
+# against fourteen atlas entries that mean anything specific - so the ones this
+# kernel names get their own mark and the rest get `svc`, the generic unit
+# glyph, rather than a wrong specific one. A wrong icon is worse than a neutral
+# one: it says "this is the editor" about something that is not.
+fn app_icon(app) {
+    if app == APP_SHELL   { return 0 }
+    if app == APP_MONITOR { return 4 }
+    if app == APP_ABOUT   { return 5 }
+    if app == APP_SNAKE   { return 1 }
+    if app == APP_BROWSER { return 20 }
+    if app == APP_SETTINGS { return 8 }
+    if app == APP_RUN     { return 42 }
+    if app == APP_PAINT   { return 2 }
+    if app == APP_CUBE    { return 6 }
+    if app == APP_EDIT    { return 3 }
+    if app == APP_FILES   { return 7 }
+    if app == APP_ANIM    { return 45 }   # render
+    if app == APP_MOUSE   { return 47 }   # snap
+    return 52                             # svc
+}
+
+# ---- THE ROW'S FIGURE --------------------------------------------------------
+# The prototype puts a live per-window number on every running row - `01
+# terminal 1119` - and it is the SAME number its window's status band shows.
+# Two modes exist there: `measured`, the window's app_us, and the fallback,
+# `w.px / 1000` in kilopixels.
+#
+# THIS KERNEL CAN ONLY HONESTLY DRAW THE SECOND, and the prototype's own cost
+# sheet says so before this file does: "PER WINDOW MICROSECONDS. wm.c measures
+# app_us in AGGREGATE only, so per window attribution is new work. the fallback
+# is the window's repaint_pixels in the same slot, same face." Verified against
+# wm.c rather than taken on trust - frame_us and frame_peak_us are file-static
+# singletons and paint_repaint_pixels is reset once per COMPOSITE, not per
+# window, so there is no per-window timing to read and wm_us() would print the
+# whole frame's cost twelve times over. Twelve rows all reading 2939 is not a
+# per-app figure; it is one figure drawn twelve times, which is the shape of a
+# readout that lies.
+#
+# So the figure is the window's own client area in KILOPIXELS - which is
+# exactly repaint_pixels for a full repaint of that window, per window, from
+# numbers wm.c already keeps. It changes when the window is resized or
+# maximised, which is when a window's repaint cost actually changes.
+#
+# THE UNIT IS NOT PRINTED, and that is the prototype's shape too: `.slot .us`
+# is a bare figure and the window's own status band carries the word. A unit on
+# every row of a 170 dp rail is thirty characters of the same three letters.
+fn rail_slot_kpx(win) {
+    if win < 0 { return 0 }
+    return idiv(wm_cw(win) * wm_ch(win), 1000)
 }
 
 # THE RAIL'S OWN BLOCK BOUNDARIES. Fixed heights measured DOWN from the top and
@@ -684,16 +923,28 @@ fn rail_reg_fit() { return idiv(rail_reg_h(), row_h()) }
 #
 # There is no ring and no glow on any of them. PRESSWORK deleted both tokens
 # (ZD_RING_FOCUS_A is 0), because focus is the knockout and the register mark.
-fn draw_rail_row(ry, num, nm, running, focused, hovered) {
+#
+# THE ROW IS FOUR COLUMNS NOW and it reads left to right exactly as the
+# prototype's `.slot` does: mark, number, icon, name, figure. Everything past
+# the number is laid out from ONE running x rather than from four independent
+# offsets, because four offsets is four chances for the icon to sit inside the
+# name on a scale nobody rendered.
+#
+# WEIGHT FOLLOWS FOCUS, which it did not before. Every name in the rail was
+# W_BOLD, so the focused row - the one thing bold is for here - had no weight
+# left to take. `.slot .nm` is the face's regular and `.slot.act .nm` is 700;
+# this now says the same thing.
+fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
     u = ui()
     rw = rail_w()
     rh = row_h()
     ground = theme(TH_PANEL_HI)
     ncol = theme(TH_TEXT_DIM)
     tcol = theme(TH_TEXT_DIM)
+    wgt = W_REG
     if hovered == 1 { ground = theme(TH_SURF_5) }
     if running == 1 { ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT) }
-    if focused == 1 { ground = theme(TH_PANEL)  ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT_HI) }
+    if focused == 1 { ground = theme(TH_PANEL)  ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT_HI)  wgt = W_BOLD }
     fill_rgb(0, ry, rw, rh, ground)
     # the row's own groove. `border-bottom: 1px solid var(--zd-cut)`, and it is
     # 1 PHYSICAL pixel at every scale: a hairline that thickens with ui() stops
@@ -718,14 +969,38 @@ fn draw_rail_row(ry, num, nm, running, focused, hovered) {
     } else {
         num_aa(RAIL_SLOT_PL * u, ny, num, ncol)
     }
+    # THE ICON, then the name, off one running x. The icon's ink follows the
+    # NUMBER's rung rather than the name's: it is the row's address in picture
+    # form, structure beside a glyph, and putting it on the name's rung made
+    # twelve marks compete with twelve words at the same value.
     tx = RAIL_SLOT_PL * u + 2 * cell_w() + RAIL_SLOT_GAP * u
-    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, nm, tcol, T_CAPTION, W_BOLD)
+    iw = rail_ico_w()
+    icon(tx, ry + (rh - iw) / 2, ico, ncol)
+    tx = tx + iw + RAIL_SLOT_GAP * u
+    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, nm, tcol, T_CAPTION, wgt)
+    # THE FIGURE, on running rows only, right-aligned against the rail's own
+    # inset. `.slot .us` is `margin-left: auto` and absent when the app is not
+    # open, and both halves of that are the reading: an idle row has no window,
+    # so it has no repaint cost, so a zero there would be a measurement of
+    # nothing. It is ZD_TEXT_INERT - the structure rung, never a glyph rung -
+    # for the same reason the section caption's figure is.
+    if running == 1 {
+        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(kpx), ny, kpx, theme(TH_SURF_7))
+    }
     return 0
 }
 
 # The same row, for a window with no fixed register slot. Its number continues
 # the register's numbering, and its name is the app's, so a catalog app that is
 # open is addressable the same way Terminal is.
+#
+# ITS NAME STAYS TITLE CASE where the fixed register's are lowercase, and that
+# is a real divergence rather than an oversight. The label is app_name(), which
+# is the same function wm.c's window titles and the catalog's list read; the
+# register's twelve are literals in rail_name() and cost nothing to set
+# lowercase, but lowercasing app_name() would lowercase every window title in
+# the system. Closing it needs a second name table for the rail, which is the
+# kind of duplicate table the register's own comment above warns about.
 fn draw_rail_win(ry, num, win, hovered) {
     u = ui()
     rw = rail_w()
@@ -735,8 +1010,9 @@ fn draw_rail_win(ry, num, win, hovered) {
     ground = theme(TH_PANEL_HI)
     ncol = theme(TH_TEXT_2)
     tcol = theme(TH_TEXT)
+    wgt = W_REG
     if hovered == 1 { ground = theme(TH_SURF_5) }
-    if focused == 1 { ground = theme(TH_PANEL)  tcol = theme(TH_TEXT_HI) }
+    if focused == 1 { ground = theme(TH_PANEL)  tcol = theme(TH_TEXT_HI)  wgt = W_BOLD }
     fill_rgb(0, ry, rw, rh, ground)
     fill_rgb(0, ry + rh - 1, rw, 1, theme(TH_CUT))
     mkh = rh * RAIL_MK_PC / 100
@@ -752,7 +1028,18 @@ fn draw_rail_win(ry, num, win, hovered) {
         num_aa(RAIL_SLOT_PL * u, ny, num, ncol)
     }
     tx = RAIL_SLOT_PL * u + 2 * cell_w() + RAIL_SLOT_GAP * u
-    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, app_name(wm_app(win)), tcol, T_CAPTION, W_BOLD)
+    iw = rail_ico_w()
+    icon(tx, ry + (rh - iw) / 2, app_icon(wm_app(win)), ncol)
+    tx = tx + iw + RAIL_SLOT_GAP * u
+    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, app_name(wm_app(win)), tcol, T_CAPTION, wgt)
+    # A tail row exists ONLY because its window is open, so it is running by
+    # construction and the figure is unconditional here where it is guarded on
+    # the fixed rows. rail_running_n() counts the tail on exactly that reasoning.
+    # ONE CALL TO rail_slot_kpx, held in a local, because the x it is drawn at
+    # is measured from the same value that is drawn - a second call is a second
+    # chance for a resized window to change the answer between the two.
+    tkpx = rail_slot_kpx(win)
+    num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tkpx), ny, tkpx, theme(TH_SURF_7))
     return 0
 }
 
@@ -768,14 +1055,38 @@ fn rail_rule2(ry) { fill_rgb(0, ry, rail_w(), RULE_H * ui(), theme(TH_LIT))  ret
 # A section caption: LABEL caps at ZD_TEXT_3, optionally with a mono figure
 # pushed to the right margin. `n < 0` means "no figure", because zl has no way
 # to say "absent" other than a sentinel.
-fn rail_sect(ry, nm, n) {
+#
+# THE FIGURE IS A FRACTION NOW - `7/14`, running over total - and the shape is
+# the correction. `#regcount` is `runc + '/' + APPS.length`, and a bare "3" was
+# answering a question nobody asked: three OF WHAT is the only reading a
+# register count carries, and without the denominator the number has to be
+# compared against a row count you can only get by counting rows. The
+# denominator is also not a constant - the tail grows the register when a
+# catalog app opens - so it has to be drawn, not baked.
+#
+# `m < 0` is the second sentinel and means "a plain figure, no denominator",
+# which is what every caller outside the REGISTER caption wants.
+fn rail_sect(ry, nm, n, m) {
     u = ui()
     fill_rgb(0, ry, rail_w(), RAIL_SECT_H * u, theme(TH_PANEL_HI))
     fill_rgb(0, ry, 1, RAIL_SECT_H * u, theme(TH_LIT))
     fill_rgb(rail_w() - 1, ry, 1, RAIL_SECT_H * u, theme(TH_CUT))
     label(pad_d(), ry + 7 * u, nm, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
     if n >= 0 {
-        num_aa(rail_w() - pad_d() - s3_numw(n), ry + 7 * u, n, theme(TH_SURF_7))
+        # THE WHOLE FRACTION IS MEASURED BEFORE ANY OF IT IS DRAWN, then laid
+        # out left to right from that one origin. Right-aligning each piece
+        # against the margin separately is how "7/14" ends up as "7" and "14"
+        # overlapping a slash, and the widths differ by a digit every time the
+        # tail changes - this file has already paid for that mistake once, at
+        # clock_field.
+        fw = s3_numw(n)
+        if m >= 0 { fw = fw + cell_w() + s3_numw(m) }
+        fx = rail_w() - pad_d() - fw
+        num_aa(fx, ry + 7 * u, n, theme(TH_SURF_7))
+        if m >= 0 {
+            text_aa(fx + s3_numw(n), ry + 7 * u, "/", theme(TH_SURF_7))
+            num_aa(fx + s3_numw(n) + cell_w(), ry + 7 * u, m, theme(TH_SURF_7))
+        }
     }
     return ry + RAIL_SECT_H * u
 }
@@ -830,7 +1141,7 @@ fn draw_rail_static() {
     # clock is at the bottom of the rail on every panel height.
     by = px_h() - rail_bot_h()
     by = rail_rule2(by)
-    by = rail_sect(by, "WORKSPACE", 0 - 1)
+    by = rail_sect(by, "WORKSPACE", 0 - 1, 0 - 1)
     by = by + row_h()                     # the workspace row is drawn live
     by = rail_rule2(by)
     by = by + RAIL_STAT_H * u             # the stat block is drawn live
@@ -886,41 +1197,261 @@ fn rail_ws_at(hx, hy) {
 }
 
 # ---- the machine's own readings ----------------------------------------------
-# Two rows, and both are things the compositor already measures rather than
-# things invented to fill a block. ZD_STEEL is the ink for a reading INSIDE an
-# instrument and this is one, so the figures are steel and their labels are the
-# label rung. Vermilion appears nowhere here: it is the overprint, and a status
-# number is not one of its four jobs.
+# THREE STATUS ROWS, replacing the two figure rows that were here. The
+# prototype's `#railstat` is `[['net','net','UP'], ['vol','vol','OK'],
+# ['power','pwr','WARN']]` - an icon, a LABEL-caps name, and a STATE WORD with
+# a coloured dot beside it. Three of those four are here; the icon is not, and
+# the arithmetic that rules it out is written out at RAIL_STROW_H rather than
+# repeated here. The rows this file had were FRAME and WINDOWS,
+# two mono figures, which is a different instrument in the same slot.
+#
+# WHAT WAS LOST AND WHERE IT WENT, because deleting a reading needs an account:
+#   FRAME    the same wm_us() the RASTER STRIP plots, one column per composite,
+#            with its BUDGET printed at the right-hand end - and a plot of the
+#            last several hundred frames is strictly more than one instantaneous
+#            sample of the same number. The System Monitor window carries the
+#            figure itself. NOTE FOR WHOEVER RECONCILES THIS: the slug's own
+#            comment above slug_fit() says FRAME was dropped from the foot
+#            because "the rail prints it in its stat block", and after this
+#            change the rail does not. The strip and the Monitor window are the
+#            two places left; if an instantaneous figure is still wanted in the
+#            chrome, the strip's readout is where it belongs, beside its budget.
+#   WINDOWS  the count is now the REGISTER caption's NUMERATOR - "3/12" says
+#            three of twelve rows are running, and a running row IS an open
+#            window on this workspace, because rail_running() is wm_open_p() of
+#            the row's window. Better shaped than the bare count it replaces,
+#            which never said what it was three OUT OF.
+#
+# STATE COLOUR NEVER TRAVELS ALONE. Every row draws the WORD as well as the
+# dot, which is the free rider all four parent designs share and the only
+# reason a colour-blind reader gets the same reading. The dot is ZD_OK /
+# ZD_WARN / ZD_BAD; those are wired to STATE and never to the accent, so
+# vermilion still appears nowhere in this block.
+#
+# DIVERGENCE, recorded: the prototype inks a FAILING word with ZD_BAD_INK
+# (#EF9077), a lightened vermilion, where the fill colour ZD_BAD is too dark to
+# carry text - ui.c's own token comment is the source of that judgement and of
+# the figure it quotes, not a ratio computed here. design.h has the token; ui.c
+# does not expose a ui_color() role for it, so kernel.zl cannot name it. The bad
+# word is drawn at ZD_TEXT_0 with the dot carrying the colour, which is
+# under-signalled rather than mis-signalled - the safe direction, and the same
+# call ui.c already documents for the focused header. Closing it is one theme
+# role in ui.h/ui.c and one TH_ index here.
+fn rail_st_word(sy, nm, word, dotc, wordc) {
+    u = ui()
+    rw = rail_w()
+    ty = sy + (RAIL_STROW_H * u - label_h(T_CAPTION)) / 2
+    label(pad_d(), ty, nm, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    # the word first, measured, then the dot placed against its left edge - one
+    # origin, so the dot cannot drift when "UP" becomes "DOWN".
+    ww = label_w(word, T_CAPTION, W_BOLD)
+    wx = rw - pad_d() - ww
+    label(wx, ty, word, wordc, T_CAPTION, W_BOLD)
+    dw = RAIL_DOT * u
+    dy = sy + (RAIL_STROW_H * u - dw) / 2
+    fill_rgb(wx - RAIL_DOT_GAP * u - dw, dy, dw, dw, dotc)
+    return sy + RAIL_STROW_H * u
+}
+
 fn draw_rail_stat() {
     u = ui()
     rw = rail_w()
     sy = px_h() - rail_bot_h() + RULE_H * ui() + RAIL_SECT_H * ui() + row_h() + RULE_H * ui()
     fill_rgb(0, sy, rw, RAIL_STAT_H * u, theme(TH_PANEL_HI))
-    r1y = sy + 3 * u
-    label(pad_d(), r1y + 2 * u, "FRAME", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-    num_aa(rw - pad_d() - s3_numw(wm_us()), r1y + 2 * u, wm_us(), theme(TH_STEEL))
-    r2y = r1y + RAIL_STROW_H * u
-    label(pad_d(), r2y + 2 * u, "WINDOWS", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-    num_aa(rw - pad_d() - s3_numw(wm_n()), r2y + 2 * u, wm_n(), theme(TH_STEEL))
+    ry = sy + 3 * u
+    # NET - netdev_link_up(), which is the ONE call the whole net stack answers
+    # "is there a link" with. It dispatches to whichever of e1000 / virtio-net /
+    # CDC-ECM was selected and returns 0 when none was, so an absent card and a
+    # cabled-but-down card both read DOWN, which is true of both.
+    if net_link() == 1 {
+        ry = rail_st_word(ry, "NET", "UP", theme(TH_OK), theme(TH_OK))
+    } else {
+        ry = rail_st_word(ry, "NET", "DOWN", theme(TH_DANGER), theme(TH_TEXT_HI))
+    }
+    # VOL - the PC speaker gate, read off port 0x61 bits 0 and 1, which is
+    # literally the only audio output this machine has. speaker_on() sets them
+    # and speaker_off() clears them (arch/x86/support.c), so this changes when a
+    # beep plays and is a reading rather than a caption. There is no mixer and
+    # no level to show: MUTE and ON are the two states that exist.
+    if band(inb(0x61), 3) == 3 {
+        ry = rail_st_word(ry, "VOL", "ON", theme(TH_OK), theme(TH_OK))
+    } else {
+        ry = rail_st_word(ry, "VOL", "MUTE", theme(TH_WARN), theme(TH_WARN))
+    }
+    # PWR - the panel power sequencer's PP_STATUS "panel on" bit, through
+    # intel_panel_on(), which guards on intel_present() and costs one MMIO read.
+    # This is the real power domain the prototype's own PWR row sits beside in
+    # 13 REGISTERS (PP_STATUS "panel on, backlight on", PWR_WELL_CTL2 "wells 1
+    # and 2 enabled"). On anything that is not an Intel display - QEMU, BGA,
+    # virtio-gpu - it is 0, which is why the reference render shows PWR WARN:
+    # the sequencer is not driving this panel, and nothing here knows the power
+    # state of a panel it does not own. Saying WARN is the honest reading;
+    # saying OK would be this file inventing a fact about hardware.
+    if panel_on() == 1 {
+        ry = rail_st_word(ry, "PWR", "OK", theme(TH_OK), theme(TH_OK))
+    } else {
+        ry = rail_st_word(ry, "PWR", "WARN", theme(TH_WARN), theme(TH_WARN))
+    }
     return 0
 }
 
 # ---- the rail's clock --------------------------------------------------------
+# THE MONTH, as one of twelve literals, because zl's kernel subset has no way
+# to build a string and label() takes a literal. Lowercase to match the
+# prototype's `26 aug 2026`, and three letters because the date line shares the
+# rail's 170 dp with nothing to spare: `dd mon yyyy` is 11 mono cells, 88 px at
+# ui 1, against 150 px of usable width.
+fn rail_mon(m) {
+    if m == 1  { return "jan" }
+    if m == 2  { return "feb" }
+    if m == 3  { return "mar" }
+    if m == 4  { return "apr" }
+    if m == 5  { return "may" }
+    if m == 6  { return "jun" }
+    if m == 7  { return "jul" }
+    if m == 8  { return "aug" }
+    if m == 9  { return "sep" }
+    if m == 10 { return "oct" }
+    if m == 11 { return "nov" }
+    if m == 12 { return "dec" }
+    return "---"
+}
+
+# THE DATE LINE, under the clock, replacing the word "presswork". A build name
+# printed in the same slot as a reading is the exact shape this file objects to
+# elsewhere: it never changes, so the eye stops reading that line, and the line
+# under a clock is where a date belongs.
+#
+# IT IS GATED ON rtc_valid() AND SAYS SO WHEN THE READ FAILED. rtc.c only
+# publishes a date when two consecutive CMOS reads agreed and every field
+# passed its range check; l_year and friends are file-static and stay 0
+# otherwise. Drawing "00 --- 0000" as though it were a date is worse than
+# saying the clock has no source, so the failed case prints what is actually
+# wrong instead.
+fn draw_rail_date(dx, dy) {
+    col = theme(TH_TEXT_DIM)
+    if rtc_here() == 0 { text_aa(dx, dy, "no rtc", col)  return 0 }
+    if rtc_ok() == 0   { text_aa(dx, dy, "rtc unread", col)  return 0 }
+    if rtc_d() < 10 {
+        num_aa(dx, dy, 0, col)
+        num_aa(dx + cell_w(), dy, rtc_d(), col)
+    } else {
+        num_aa(dx, dy, rtc_d(), col)
+    }
+    text_aa(dx + 3 * cell_w(), dy, rail_mon(rtc_mo()), col)
+    num_aa(dx + 7 * cell_w(), dy, rtc_y(), col)
+    return 0
+}
+
+# HH:MM WITH NO SOURCE - the same five cells, filled with rules instead of
+# digits. It exists because the first version of this block did not have it, and
+# the result was a 24 dp "00:00" in ZD_TEXT_0 sitting directly on top of a line
+# reading "rtc unread": the largest, brightest thing in the rail confidently
+# stating a time, contradicted in six point underneath it. A readout with no
+# source has to LOOK like one. The cells are draw_hhmm's own - two, a half for
+# the colon, two - so the two forms occupy exactly the same box and the block
+# does not reflow when a chip starts or stops answering.
+fn draw_hhmm_none(cx, cy, cell, role, col) {
+    label(cx, cy, "-", col, role, W_REG)
+    label(cx + cell, cy, "-", col, role, W_REG)
+    label(cx + cell * 2, cy, ":", col, role, W_REG)
+    label(cx + cell * 2 + cell / 2, cy, "-", col, role, W_REG)
+    label(cx + cell * 3 + cell / 2, cy, "-", col, role, W_REG)
+    return 0
+}
+
 fn draw_rail_clock() {
     u = ui()
     rw = rail_w()
     cy = px_h() - RAIL_CLOCK_H * u
     fill_rgb(0, cy, rw, RAIL_CLOCK_H * u, theme(TH_PANEL_HI))
-    draw_hhmm(pad_d(), cy + 5 * u, CLOCK_CELL_LG * u, T_TITLE, theme(TH_TEXT_HI))
-    text_aa(pad_d(), cy + 5 * u + 24 * u, "presswork", theme(TH_TEXT_DIM))
+    # ...and it is rtc_ok() that decides, not rtc_here(): a chip that answers
+    # its port but whose two reads never agreed has published nothing, and
+    # rtc_valid() is the only flag that distinguishes "l_hour is a time" from
+    # "l_hour is still its zero initialiser".
+    if rtc_ok() == 1 {
+        draw_hhmm(pad_d(), cy + 5 * u, CLOCK_CELL_LG * u, T_TITLE, theme(TH_TEXT_HI))
+    } else {
+        draw_hhmm_none(pad_d(), cy + 5 * u, CLOCK_CELL_LG * u, T_TITLE, theme(TH_TEXT_DIM))
+    }
+    draw_rail_date(pad_d(), cy + 5 * u + 24 * u)
     return 0
+}
+
+# ---- WHY THE CLOCK READ 00:00, AND WHERE THE READ NOW HAPPENS ----------------
+# NOT A MISSING DRIVER AND NOT A MISSING BINDING. arch/x86/rtc.c is complete and
+# has a host suite of its own; runtime_kernel.c binds all eleven of its entry
+# points. rtc_hour() and rtc_min(), which draw_hhmm calls, return the file-local
+# l_hour / l_min - and those are ONLY ever written by rtc_read(). Nothing on the
+# desktop path ever called it. Grepped rather than assumed: the whole tree's
+# calls to rtc_read() are the `date` command's zl arm, net/entropy.c seeding a
+# PRNG, and rtctest.c. So the CMOS was never sampled while the compositor ran,
+# the statics stayed at their zero initialiser, and the rail printed a
+# perfectly-formatted midnight for ever.
+#
+# THAT IS THE WHOLE BUG and it is one call, but it does not belong in the paint
+# path. draw_rail_clock runs on every damage rectangle that touches the rail -
+# many times a second while a window is dragged - and rtc_read() spins on the
+# CMOS update-in-progress flag and then reads all seven registers TWICE and
+# compares them. Sampling a chip that ticks once a second at sixty hertz is
+# sixty times the port traffic for the same answer.
+#
+# SO IT IS A TICK, and it is deliberately NOT hung off the Monitor app's
+# once-a-second block a few hundred lines down. That block only runs while
+# APP_MONITOR has a window: close Monitor and the slug's uptime already stops,
+# and hanging the clock there would make the time stop with it. app_tick runs
+# once per open window per frame, so the seconds guard here is what makes the
+# read once per SECOND rather than once per window - the same shape raster_tick
+# uses against wm_painted(), and for the same reason.
+#
+# IT ASKS FOR THE CLOCK BACK ONLY WHEN THE MINUTE CHANGES. The rail shows HH:MM
+# and a date, so fifty-nine of every sixty reads change nothing on screen, and a
+# damage rectangle for an unchanged readout is a repaint that buys nothing. The
+# rectangle is the WHOLE clock block rather than a hand-counted strip inside it,
+# which is this file's standing rule after the `)08` debris: a number that
+# SHRINKS leaves the head of its previous value behind when the invalidated
+# rectangle is narrower than the value that was there.
+# AND IT GIVES UP AFTER THREE CONSECUTIVE FAILURES, which is the one part of
+# this that is a hazard rather than a convenience. rtc_read() spins on the
+# update-in-progress flag for UIP_SPINS - 100 000 iterations, two port accesses
+# each - and RETURNS ZERO when it never clears. On a chip that is wedged that
+# way, an unguarded once-a-second read is a spin of that length inside the frame
+# loop every second for the life of the machine: a dropped frame per second, for
+# ever, on hardware whose only symptom is that it cannot tell the time. Three
+# strikes and this stops asking. The date line already prints what happened, so
+# a reader is told rather than left with a clock that silently stopped, and the
+# `date` command still reads the chip directly when a person asks it to.
+RTC_GIVE_UP = 3
+
+rtc_sec_seen = 0 - 1               # the ticks()/100 the last CMOS read came from
+rtc_min_seen = 0 - 1               # h*60+mi the clock block was last drawn for
+rtc_fails = 0                      # consecutive failed reads, latched at RTC_GIVE_UP
+
+fn rail_clock_tick() {
+    if rtc_fails >= RTC_GIVE_UP { return 0 }
+    csec = ticks() / 100
+    if csec == rtc_sec_seen { return 0 }
+    rtc_sec_seen = csec
+    if rtc_here() == 0 { rtc_fails = RTC_GIVE_UP  return 0 }
+    if rtc_up() == 0 { rtc_fails = rtc_fails + 1  return 0 }
+    rtc_fails = 0
+    cmin = rtc_h() * 60 + rtc_mi()
+    if cmin == rtc_min_seen { return 0 }
+    rtc_min_seen = cmin
+    wm_damage(0, px_h() - RAIL_CLOCK_H * ui(), rail_w(), RAIL_CLOCK_H * ui())
+    return 1
 }
 
 # ---- the whole register band -------------------------------------------------
 # Drawn live rather than baked, because every one of the four row states is a
 # function of what is open and what has focus.
 fn draw_rail_reg() {
-    rail_sect(rail_sect_y(), "REGISTER", rail_running_n())
+    # RUNNING OVER TOTAL, and both terms are the ones the rows below are drawn
+    # from: rail_running_n() counts the same rows draw_rail_row marks, and
+    # rail_reg_rows() is the same clamped count rail_slot_at hit-tests against.
+    # A denominator derived some other way is a denominator that disagrees with
+    # the rows on a panel too short to show them all.
+    rail_sect(rail_sect_y(), "REGISTER", rail_running_n(), rail_reg_rows())
     ry = rail_reg_y()
     fit = rail_reg_fit()
     rs = 0
@@ -929,13 +1460,21 @@ fn draw_rail_reg() {
         if drawn < fit {
             run = 0
             foc = 0
+            # rkpx, not kpx: draw_rail_row takes the figure as a PARAMETER
+            # called kpx, and this file's own note on zl scope is that params
+            # are frame-scoped while free locals are not. Two distinct names
+            # costs nothing and removes the question entirely.
+            rkpx = 0
             if rs < REG_N {
                 run = rail_running(rs)
-                if run == 1 { if wm_focus() == rail_win(rs) { foc = 1 } }
+                if run == 1 {
+                    rkpx = rail_slot_kpx(rail_win(rs))
+                    if wm_focus() == rail_win(rs) { foc = 1 }
+                }
             }
             hov = 0
             if rail_hover == rs { hov = 1 }
-            draw_rail_row(ry + drawn * row_h(), rs + 1, rail_name(rs), run, foc, hov)
+            draw_rail_row(ry + drawn * row_h(), rs + 1, rail_name(rs), rail_icon(rs), rkpx, run, foc, hov)
             drawn = drawn + 1
         }
         rs = rs + 1
@@ -1082,14 +1621,160 @@ fn rail_cmd(slot) {
 # suite's buffers so check-memmap.sh's dupe sweep covers it - see the note there
 # for why every fixed address in this tree is declared in kernel.zl.
 RASTER_CAP  = 4096                 # bytes in RASTER_RING, one per column
-RASTER_PITCH = 3                   # design units per column: 2 of bar, 1 of gap
-RASTER_FULL = 20000                # us at which a column reaches the ceiling
+RASTER_PITCH = 3                   # design units per column: 1 of bar, 2 of gap
+# THE STORED UNIT IS THE BUDGET, NOT A ROUND NUMBER, and that is the correction
+# that made the band mean anything. It was 255 units per 20 000 us - a ceiling
+# nothing in this system names, so a column at half height meant "10 ms", which
+# is a number you then have to compare against 16 667 in your head. Now
+# RASTER_SCALE units IS one wm_budget(): a column at full height is a frame
+# that spent its whole presentation deadline, and the word BUDGET with the
+# figure is printed at the right-hand end of the same band. 255 still caps it,
+# which is now just under two budgets rather than an unrelated 20 ms.
+RASTER_SCALE = 128                 # stored units in ONE wm_budget()
+# where a column turns. The reference's threshold is 0.85 of the budget, which
+# on a 128-unit scale is 108.8 - so this is 108, the nearest whole unit BELOW
+# it, because a threshold rounded up marks one band of frames as fine that the
+# reference marks as late. 108/128 is 84.4 %, and that is the real figure.
+RASTER_WARN  = 108
+RASTER_FOOT  = 4                   # dp from the band's floor to the base rule
+RASTER_HEAD  = 4                   # dp of clear the tallest column keeps
+RASTER_GAP   = 12                  # dp of quiet either side of the plot
+RASTER_MIN   = 64                  # columns the plot keeps before the readout goes
+RD_GAP       = 11                  # dp between the readout's fields
+RD_ADV_CELLS = 7                   # the advance counter's FIXED cell field
 raster_head = 0                    # next byte to write
 raster_n = 0                       # how many are valid, capped at RASTER_CAP
 raster_seen = 0 - 1                # the wm_painted() value the last column came from
 
+# ---- the readout at the right-hand end --------------------------------------
+# THE BAND USED TO BE A PLOT WITH NOTHING TO READ IT AGAINST. A histogram with
+# no axis and no scale is a texture: it says "something happened" and refuses to
+# say how much. The reference prints three readings beside it and each one
+# answers a question the columns raise -
+#
+#   ADVANCE <n> composite   what a column IS, and how many there have been.
+#                           wm_painted() is the compositor's own count of frames
+#                           that repainted, and it is the same edge raster_tick
+#                           clocks on, so the counter and the plot cannot drift.
+#   IDLE WAKEUPS/H 0        what the clocking COSTS. See below.
+#   BUDGET 16 667 us        what full height means. wm_budget(), not a literal.
+#
+# MEASURED, NOT DECORATIVE, with one exception which is called out where it is
+# drawn: the zero.
+#
+# ITS WIDTH IS FIXED so the plot's right edge does not step as the counter grows
+# a digit - the same rule the foot's ruler follows for the same reason, and the
+# same rule the rail's clock follows. strip_rd_w() and draw_strip_rd() walk the
+# identical field list; that pairing is the shape check-shell-layout.py exists
+# to police in the rail, and it is hand-checked here because the plot is bounded
+# by the sum and drawn by the walk.
+#
+# MEASURED against the real font, all four panel sizes, ui 1: the readout is
+# 487 px, which leaves the plot 549 / 530 / 1170 / 1810 px - that is 183 / 176 /
+# 390 / 603 columns at 800x600, 1280x800, 1920x1200 and 2560x1440. 800x600 is
+# the one that DROPS the readout: with it shown the plot would keep 50 px, which
+# is 16 columns, far under the RASTER_MIN floor - so the band gives the whole
+# width to the plot and the readout is not drawn at all.
+fn budget_w() {
+    # "16 667 us" - thousands, a printer's space, three digits, then the unit
+    return s3_numw(idiv(wm_budget(), 1000)) + 7 * cell_w()
+}
+fn strip_rd_w() {
+    cw = cell_w()
+    g = RD_GAP * ui()
+    w = label_w("ADVANCE", T_CAPTION, W_BOLD)
+    w = w + g + RD_ADV_CELLS * cw
+    w = w + g + 9 * cw                                  # "composite"
+    w = w + g + label_w("IDLE WAKEUPS/H", T_CAPTION, W_BOLD)
+    w = w + g + cw                                      # the zero
+    w = w + g + label_w("BUDGET", T_CAPTION, W_BOLD)
+    w = w + g + budget_w()
+    return w
+}
+# ...and it is DROPPED rather than squeezed when the plot cannot keep RASTER_MIN
+# columns beside it. At 800x600 - the BIOS fallback mode, which is a real mode
+# this kernel boots in - the readout and the two gutters take nearly the whole
+# band, and a sixteen-column histogram is not an instrument. The plot is the
+# thing that cannot be printed anywhere else, so the plot wins the measure.
+fn strip_rd_on() {
+    room = px_w() - pad_d() - strip_rd_w() - RASTER_GAP * ui() - raster_x0()
+    if room >= RASTER_MIN * RASTER_PITCH * ui() { return 1 }
+    return 0
+}
+fn raster_x0() {
+    return rail_w() + pad_d() + label_w("RASTER", T_CAPTION, W_BOLD) + RASTER_GAP * ui()
+}
+fn raster_x1() {
+    if strip_rd_on() == 1 {
+        return px_w() - pad_d() - strip_rd_w() - RASTER_GAP * ui()
+    }
+    return px_w() - pad_d()
+}
+# Three digits, zero padded, because a budget that prints "16 7 us" is worse
+# than no budget. Only ever called with the sub-thousand remainder.
+fn num3(nx, ny, v, col) {
+    num_aa(nx, ny, idiv(v, 100), col)
+    num_aa(nx + cell_w(), ny, idiv(v, 10) - idiv(v, 100) * 10, col)
+    num_aa(nx + 2 * cell_w(), ny, v - idiv(v, 10) * 10, col)
+    return nx + 3 * cell_w()
+}
+fn draw_strip_rd(rx, sh) {
+    u = ui()
+    cw = cell_w()
+    g = RD_GAP * u
+    ly = (sh - label_h(T_CAPTION)) / 2
+    ny = (sh - cell_h()) / 2
+    # the labels take the rung the RASTER label already sits on. This band is
+    # ZD_CUT, which is the darkest ground in the system, and the caption rung
+    # that reads on a panel is not the one that reads here - that judgement was
+    # already made for the label at the other end of the same band, and making
+    # a different one twelve hundred pixels away would be the odd thing.
+    lab = theme(TH_TEXT_2)
+    val = theme(TH_TEXT)
+    dim = theme(TH_TEXT_DIM)
+    label(rx, ly, "ADVANCE", lab, T_CAPTION, W_BOLD)
+    rx = rx + label_w("ADVANCE", T_CAPTION, W_BOLD) + g
+    # LEFT aligned inside a FIXED field, which is the pairing that matters: the
+    # field's width never changes, so "composite" and everything right of it
+    # cannot shuffle when the machine passes ten thousand; and the number sits
+    # against its own label rather than five blank cells away from it, because
+    # this is a sentence and not a column of figures. Right-aligning it - which
+    # is what the foot's two size figures correctly do - printed "ADVANCE" and
+    # then a five-cell hole.
+    n = wm_painted()
+    num_aa(rx, ny, n, val)
+    rx = rx + RD_ADV_CELLS * cw + g
+    text_aa(rx, ny, "composite", val)
+    rx = rx + 9 * cw + g
+    label(rx, ly, "IDLE WAKEUPS/H", lab, T_CAPTION, W_BOLD)
+    rx = rx + label_w("IDLE WAKEUPS/H", T_CAPTION, W_BOLD) + g
+    # THE ONE FIGURE HERE THAT IS NOT A MEASUREMENT, and it is printed anyway
+    # because it is the reading that justifies the whole re-clocking. The strip
+    # arms no timer: raster_tick() is edge-triggered on wm_painted() and returns
+    # on its first line when nothing has composited, so an idle machine performs
+    # exactly zero wakeups on the strip's account. A strip clocked per FRAME
+    # would cost one wakeup per vblank whether or not anything moved, which at
+    # this panel's 59.998 Hz is about 216 000 an hour - the reference prints
+    # that figure against the other setting for exactly this comparison.
+    # It is a zero DERIVED FROM THE MECHANISM, not sampled from a counter, and
+    # if the strip ever grows a timer this line becomes a lie. It is written as
+    # a literal for that reason: there is no counter to read, and inventing one
+    # that always answers zero would hide the fact.
+    text_aa(rx, ny, "0", val)
+    rx = rx + cw + g
+    label(rx, ly, "BUDGET", lab, T_CAPTION, W_BOLD)
+    rx = rx + label_w("BUDGET", T_CAPTION, W_BOLD) + g
+    bg = wm_budget()
+    hi = idiv(bg, 1000)
+    num_aa(rx, ny, hi, dim)
+    rx = rx + s3_numw(hi) + cw
+    rx = num3(rx, ny, bg - hi * 1000, dim)
+    text_aa(rx, ny, " us", dim)
+    return 0
+}
+
 fn raster_cols() {
-    rc = idiv(px_w() - rail_w() - 2 * pad_d(), RASTER_PITCH * ui())
+    rc = idiv(raster_x1() - raster_x0(), RASTER_PITCH * ui())
     if rc < 1 { rc = 1 }
     if rc > RASTER_CAP { rc = RASTER_CAP }
     return rc
@@ -1101,14 +1786,14 @@ fn raster_cols() {
 # for the same reason.
 #
 # The value stored is the frame's own body time from wm_us(), scaled so that
-# RASTER_FULL microseconds fills the band. It is clamped rather than wrapped:
-# an instrument that wraps reads as a fast frame when it means a catastrophic
-# one, which is a readout that lies in the dangerous direction.
+# ONE wm_budget() fills the band. It is clamped rather than wrapped: an
+# instrument that wraps reads as a fast frame when it means a catastrophic one,
+# which is a readout that lies in the dangerous direction.
 fn raster_tick() {
     rp = wm_painted()
     if rp == raster_seen { return 0 }
     raster_seen = rp
-    rv = wm_us() * 255 / RASTER_FULL
+    rv = idiv(wm_us() * RASTER_SCALE, wm_budget())
     if rv > 255 { rv = 255 }
     if rv < 1 { rv = 1 }
     poke8(RASTER_RING + raster_head, rv)
@@ -1130,25 +1815,50 @@ fn draw_strip() {
         sh = strip_h()
         fill_rgb(sx, 0, sw, sh, theme(TH_CUT))
         fill_rgb(sx, sh, sw, RULE_H * u, theme(TH_LIT))
-        # the columns, right-aligned so the newest is at the right edge and the
-        # history runs backwards into the past - which is the direction every
-        # oscilloscope and every load graph has read since there were any.
-        cols = raster_cols()
-        shown = raster_n
-        if shown > cols { shown = cols }
-        bar_w = 2 * u
-        ci = 0
-        while ci < shown {
-            idx = raster_head - 1 - ci
-            while idx < 0 { idx = idx + RASTER_CAP }
-            v = peek8(RASTER_RING + idx)
-            bh = v * (sh - 4 * u) / 255
-            if bh < 1 { bh = 1 }
-            bx = px_w() - pad_d() - (ci + 1) * RASTER_PITCH * u
-            if bx > sx + pad_d() {
-                fill_rgb(bx, sh - 2 * u - bh, bar_w, bh, theme(TH_STEEL))
+        # THE PLOT IS BOUNDED BY ITS OWN GUTTERS NOW. It used to run from the
+        # right-hand pad all the way to the left-hand pad, which meant the
+        # columns ran UNDER the label at one end and under nothing at all at the
+        # other, because there was nothing at the other. Both ends now belong to
+        # something printed, and the plot is what is left between them.
+        x0 = raster_x0()
+        x1 = raster_x1()
+        base = sh - RASTER_FOOT * u
+        top = RASTER_HEAD * u
+        if x1 > x0 {
+            # THE BASE RULE, and it is the thing that turns a scatter of ticks
+            # into a reading. Without it a run of cheap frames is a row of
+            # 1 px marks floating in a black band and the eye cannot tell them
+            # from dust; with it they are short columns standing on a line.
+            # ZD_TEXT_INERT, which is structure and never a glyph - the same
+            # rung the reference rules its charts with.
+            fill_rgb(x0, base, x1 - x0, 1, theme(TH_SURF_7))
+            # the columns, right-aligned so the newest is at the right edge and
+            # the history runs backwards into the past - which is the direction
+            # every oscilloscope and every load graph has read since there were
+            # any.
+            cols = raster_cols()
+            shown = raster_n
+            if shown > cols { shown = cols }
+            ci = 0
+            while ci < shown {
+                idx = raster_head - 1 - ci
+                while idx < 0 { idx = idx + RASTER_CAP }
+                v = peek8(RASTER_RING + idx)
+                bh = idiv(v * (base - top), RASTER_SCALE)
+                if bh < 1 { bh = 1 }
+                if bh > base - top { bh = base - top }
+                # ONE COLUMN CHANGES COLOUR AND ONLY ONE THING MAKES IT: a
+                # composite that spent 85 % of the presentation deadline. That
+                # is the only state this band reports, and it reports it in the
+                # rung the system already uses for drift rather than in the
+                # vermilion, because vermilion is the one overprint and it is
+                # spent on the framebuffer's datum in the foot.
+                col = theme(TH_STEEL)
+                if v >= RASTER_WARN { col = theme(TH_WARN) }
+                bx = x1 - (ci + 1) * RASTER_PITCH * u
+                if bx >= x0 { fill_rgb(bx, base - bh, u, bh, col) }
+                ci = ci + 1
             }
-            ci = ci + 1
         }
         # the label rides OVER the columns at the left, on the strip's own
         # ground, because a legend that the data can draw through is not a
@@ -1156,6 +1866,9 @@ fn draw_strip() {
         lw = label_w("RASTER", T_CAPTION, W_BOLD) + 2 * pad_d()
         fill_rgb(sx + 1, 1, lw, sh - 2, theme(TH_CUT))
         label(sx + pad_d(), (sh - label_h(T_CAPTION)) / 2, "RASTER", theme(TH_TEXT_2), T_CAPTION, W_BOLD)
+        if strip_rd_on() == 1 {
+            draw_strip_rd(px_w() - pad_d() - strip_rd_w(), sh)
+        }
     } else {
         bar(0, C_TITLE)
         at(0, 2, "zlOS", C_TITLE)
@@ -1303,38 +2016,160 @@ fn draw_grid_legend() {
 
 # ---- THE FOOT ----------------------------------------------------------------
 # Two instruments in one 46 dp band, which is the only reason both fit. The top
-# row is Datum's memory-map ruler - the whole address space to scale, with the
-# framebuffer's base marked. The bottom row is PLATE's printer's slug: one mono
-# line stating the machine and the grid AS MEASURED.
+# row is Datum's memory map - every region this kernel holds, drawn to scale
+# against each other, with the framebuffer marked. The bottom row is PLATE's
+# printer's slug: one mono line stating the machine and the grid AS MEASURED.
 #
-# THE MEMORY MAP IS THIS KERNEL'S OWN, not a picture of one. Every boundary
-# below is a constant this file or its modules already declare, or a number the
-# hardware answers for, and the ruler is drawn to scale between them. The
-# segments are surface rungs rather than colours: an instrument's regions are
-# read by their order, and a rainbow would make them look like categories.
+# THE MEMORY MAP IS THIS KERNEL'S OWN, not a picture of one. Every region below
+# is a constant this file or memmap.h already declares, or a figure an allocator
+# answers for. The segments are surface rungs rather than colours: an
+# instrument's regions are read by their order, and a rainbow would make them
+# look like categories.
 # NAMED RULER_*, not MEM_*, and that is a note to the next reader rather than a
 # style choice: check-memmap.sh sweeps this file for `NAME = 0x...` and lists
-# everything it cannot size as a fixed address. These two are not allocations -
+# everything it cannot size as a fixed address. These are not allocations -
 # they are the ends of a READOUT - so they carry a name that says so instead of
-# looking like two more buffers nobody bounded.
-RULER_BASE = 0x00100000            # where the kernel image is loaded
-RULER_FLOOR = 0x08000000           # 128 MiB, the floor the ruler will not go under
-# THE SEGMENTS ARE IN ADDRESS ORDER and that is not a style point: foot_seg
-# refuses a segment whose end is not past its start, so a list written in the
-# order the constants happen to appear in this file draws some of its regions
-# and silently drops the rest. DISK_SCRATCH is 0x02040000 and sits BELOW
-# TT_BOARD's 0x02200000, which is exactly the pair that catches it.
+# looking like more buffers nobody bounded.
 #
-# The top of the ruler is the END OF THE FRAMEBUFFER, not a round number, so
-# the datum mark at vram() lands inside the bar rather than clamped against its
-# right edge. On this machine that is roughly 0xFD000000 - the prototype's own
-# ruler reads "0x00100000 .. 0xC0611000" for the same reason.
+# ---- WHY THE BAR IS PACKED BY SIZE AND NOT RULED BY ADDRESS ------------------
+# IT USED TO BE ADDRESS-LINEAR AND IT WAS EMPTY. Every region this kernel maps
+# lives under 256 MiB; the framebuffer is a PCI aperture and on this machine
+# lands at 0xFD000000. A linear ruler between those two ends spends nearly all
+# of its width on the hole between RAM and the aperture.
+#
+# MEASURED off the shipped render, 1920x1200, by counting the scanline through
+# the middle of the bar: the bar was 1545 px and the three segments it drew
+# covered TWELVE of them. 99.2 % of a memory map was the colour of unmapped
+# address space. That is not a quiet instrument, it is an instrument that
+# cannot be read - and the segment list could not be fixed by adding regions,
+# because every region worth naming was already sub-pixel.
+#
+# The bar now gives each region a width proportional to its OWN SIZE, laid end
+# to end, which is what the reference prototype does - its renderFoot() sums
+# MEMMAP's sizes and takes each region's percentage of the sum, and prints the
+# address range beside it as a caption. So the bar answers "how much", the
+# readout answers "where", and neither pretends to be the other. The one thing
+# a packed bar must not do is claim to be a ruler, which is why the readout
+# leads with the two real addresses rather than with the sizes.
+#
+# EVERY REGION IS DISJOINT, which is the property that makes the packing honest.
+# Window surfaces come out of heap_alloc - wm.c's client_surface_ensure and
+# shell_surface_ensure both call it - so wm_sbytes() is INSIDE heap_used(), and
+# it is drawn as a slice of the heap rather than beside it. Drawing both would
+# count those megabytes twice and inflate the total under exactly the condition
+# - many open windows - where the reading matters most.
+RULER_BASE = 0x00100000            # where the kernel image is loaded
+# The driver map, drawn AS ONE SPAN and not as its thirteen regions, which is a
+# deliberate imprecision and worth naming. memmap.h places png.c's pictures, the
+# EDID page, virtio_net's rings, the browser's document store, fb.c's back
+# buffer and blur arena, the AP stacks, sched.c, i2c_hid, gpuring, nvme, xhci
+# and virtio_gpu between HI_IMG and HI_HEAP, with real holes between several of
+# them - so this segment is somewhat WIDER than what is genuinely occupied.
+#
+# The alternative is restating thirteen C macros in a zl file that cannot
+# include the header they live in, which is thirteen constants that go stale
+# silently instead of two. This file's own history is the argument: memmap.h's
+# header records arena.c carrying a base that disagreed with the map for
+# months, and png.c's arena being placed on top of Snake because "64 MiB looked
+# free". Two restated ends with a comment saying they are restated is the
+# smaller standing risk, and they carry the RULER_ prefix so check-memmap.sh's
+# discovery sweep lists them as a readout rather than as two more buffers.
+RULER_DMA     = 0x03000000         # memmap.h HI_IMG  - the first driver region
+RULER_DMA_END = 0x10000000         # memmap.h HI_HEAP - the last one's ceiling
+# THE READOUT IS SET TO THE MEASURE, exactly as the slug below it is, and for
+# the same reason: the full form is sixty mono cells, which at 800x600 - the
+# BIOS fallback mode this kernel really boots in - would leave the bar 57 px
+# wide, measured against the real font. A 57 px memory map is not a smaller
+# memory map, it is no memory map. The 24-cell form leaves 345 px. So
+# the readout drops its two size figures first and keeps the address range,
+# which is the half a bar cannot state on its own; below that it goes entirely
+# and the ruler takes the width.
+RULER_RD_FULL = 60                 # address range, then mapped, then free
+RULER_RD_ADDR = 24                 # "0x........ .. 0x........" alone
+RULER_MIN_BAR = 240                # dp of bar the readout will not shrink past
+# The top of the ruler is the END OF THE FRAMEBUFFER, so the readout names the
+# real span the map covers rather than a round number. On this machine that is
+# roughly 0xFD000000 - the prototype's own readout reads "0x00100000 ..
+# 0xC0611000" for the same reason, and for the same reason it is a caption.
 fn mem_top() {
-    mt = vram() + px_w() * px_h() * 4
-    if mt < RULER_FLOOR { mt = RULER_FLOOR }
-    return mt
+    return vram() + px_w() * px_h() * 4
 }
 fn foot_y() { return px_h() - foot_h() }
+
+# ---- the eight regions, each measured, each disjoint -------------------------
+# ONE FUNCTION PER REGION so the sum and the walk cannot disagree: ruler_total()
+# adds these up and draw_foot() draws them in the same order, and both call the
+# same eight functions rather than restating them. That is the pairing
+# check-shell-layout.py polices in the rail, and the reason it is worth copying
+# is that the last region takes the bar's REMAINDER - so a walk that drew a
+# region the sum did not count would silently eat the free tail instead of
+# overflowing, which is the failure mode nobody sees.
+fn ruler_lo() {
+    # the image and the stacks, which is everything between the load address
+    # and the arena. Clamped rather than trusted for the reason ruler_heap() is:
+    # arena_base() crosses a file boundary, and a negative width here would be
+    # subtracted from the total and then drawn as nothing, so the bar would be
+    # quietly wrong in two places at once instead of loudly wrong in one.
+    lo = arena_base() - RULER_BASE
+    if lo < 0 { lo = 0 }
+    return lo
+}
+fn ruler_ar()   { return arena_used() }                     # the zl program arena
+fn ruler_zl()   { return RASTER_RING + 0x1000 - SNAKE_X }   # kernel.zl's own block
+fn ruler_dma()  { return RULER_DMA_END - RULER_DMA }        # every driver's region
+fn ruler_srf()  { return wm_sbytes() }                      # window surfaces
+fn ruler_heap() {
+    # the heap MINUS the surfaces already counted above - see the disjointness
+    # note in the block comment. Clamped at zero rather than trusted: the two
+    # figures come from different files and a negative width would draw a
+    # region the length of the bar.
+    hr = heap_used() - wm_sbytes()
+    if hr < 0 { hr = 0 }
+    return hr
+}
+fn ruler_fb()   { return px_w() * px_h() * 4 }              # the framebuffer
+fn ruler_free() { return arena_free() + heap_free() }       # headroom in both
+fn ruler_mapped() {
+    return ruler_lo() + ruler_ar() + ruler_zl() + ruler_dma() + ruler_srf() + ruler_heap() + ruler_fb()
+}
+fn ruler_total() { return ruler_mapped() + ruler_free() }
+
+# One packed region. Returns the x the NEXT region starts at, so the walk is a
+# chain and no region can be placed from a stale accumulator.
+#
+# THE DIVISION IS DONE IN KIBIBYTES, not bytes, for the reason foot_at's comment
+# gave: a 200 MiB region times a 1600 px bar is 3.4e11, which zl's doubles hold
+# and an integer backend would not. Dividing by 1024 first keeps the arithmetic
+# inside 32 bits without changing a single drawn pixel at any bar width this
+# shell can have.
+fn ruler_seg(rx, ry, rh, bw, bytes, total, col, xend) {
+    if bytes < 1 { return rx }
+    sw = idiv(idiv(bytes, 1024) * bw, idiv(total, 1024))
+    # a region that exists gets at least one pixel. The app-suite block is
+    # 2.1 MiB against a total near 300 MiB, which rounds to nothing; a map that
+    # silently omits its smallest region is the failure this whole rewrite is
+    # about, one order of magnitude down.
+    if sw < 1 { sw = 1 }
+    if rx + sw > xend { sw = xend - rx }
+    if sw < 1 { return rx }
+    fill_rgb(rx, ry, sw, rh, col)
+    fill_rgb(rx + sw - 1, ry, 1, rh, theme(TH_CUT))
+    return rx + sw
+}
+
+# NNN.N MiB, right-aligned on its DECIMAL POINT rather than on either end. The
+# point is at mx and never moves, which is what stops the two figures jittering
+# against their units as the heap grows - the same rule the clock's fixed cells
+# follow. One decimal because the prototype prints one, and because whole
+# mebibytes would report every surface allocation this desktop makes as "0".
+fn mib1(mx, my, bytes, col) {
+    wh = idiv(bytes, 1048576)
+    fr = idiv((bytes - wh * 1048576) * 10, 1048576)
+    num_aa(mx - s3_numw(wh), my, wh, col)
+    text_aa(mx, my, ".", col)
+    num_aa(mx + cell_w(), my, fr, col)
+    return 0
+}
 
 fn draw_foot() {
     u = ui()
@@ -1344,38 +2179,7 @@ fn draw_foot() {
     fh = foot_h()
     fill_rgb(fx, fy - RULE_H * u, fw, RULE_H * u, theme(TH_LIT))
     fill_rgb(fx, fy, fw, fh, theme(TH_PANEL_HI))
-    # ---- row 1: the memory ruler
-    ry = fy + 3 * u
-    label(fx + pad_d(), ry + 2 * u, "MEMORY", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-    bx = fx + pad_d() + label_w("MEMORY", T_CAPTION, W_BOLD) + 9 * u
-    # the readout is right-aligned and fixed-width, so the bar's right edge does
-    # not move as the numbers change - the same fixed-cell rule as the clock
-    rdw = 14 * cell_w()          # "fb 0x" + eight hex digits, one mono cell each
-    bw = fw - (bx - fx) - pad_d() - rdw - 9 * u
-    bh = 11 * u
-    if bw > 0 {
-        fill_rgb(bx, ry, bw, bh, theme(TH_SURF_WELL))
-        fill_rgb(bx, ry, bw, 1, theme(TH_CUT))
-        fill_rgb(bx, ry + bh - 1, bw, 1, theme(TH_CUT))
-        fill_rgb(bx, ry, 1, bh, theme(TH_CUT))
-        fill_rgb(bx + bw - 1, ry, 1, bh, theme(TH_CUT))
-        foot_seg(bx, ry + 1, bw, bh - 2, RULER_BASE, DISK_SCRATCH, theme(TH_PANEL))
-        foot_seg(bx, ry + 1, bw, bh - 2, DISK_SCRATCH, TT_BOARD, theme(TH_SURF_5))
-        foot_seg(bx, ry + 1, bw, bh - 2, TT_BOARD, RASTER_RING + 0x1000, theme(TH_PANEL))
-        # the hole between the last fixed buffer and the framebuffer is drawn
-        # SUNKEN, because that is what it is: address space nothing is mapped in
-        foot_seg(bx, ry + 1, bw, bh - 2, RASTER_RING + 0x1000, vram(), theme(TH_SURF_WELL))
-        foot_seg(bx, ry + 1, bw, bh - 2, vram(), mem_top(), theme(TH_SURF_5))
-        # THE DATUM MARK. Overprint job 4: one vermilion hairline at the
-        # framebuffer's base address, because that address is what this whole
-        # project is about. vram() is the real pointer, not a guess.
-        dx = foot_at(bx, bw, vram())
-        if dx > bx { fill_rgb(dx, ry - 3 * u, 1, bh + 6 * u, theme(TH_ACCENT)) }
-        # ...and the readout: the framebuffer base in hex and the mapped size.
-        rx = fx + fw - pad_d() - rdw
-        text_aa(rx, ry, "fb 0x", theme(TH_TEXT_DIM))
-        hexat(rx + 5 * cell_w(), ry, vram(), theme(TH_STEEL))
-    }
+    draw_foot_ruler()
     # ---- row 2: the printer's slug
     sy = fy + fh - band_h()
     fill_rgb(fx + pad_d(), sy - 2 * u, fw - 2 * pad_d(), 1, theme(TH_CUT))
@@ -1383,23 +2187,123 @@ fn draw_foot() {
     return 0
 }
 
-# One segment of the ruler, clipped to the bar. Addresses are divided down
-# before they are multiplied up: MEM_TOP is 0x08000000 and a bar is a few
-# thousand pixels wide, so `addr * bw` overflows nothing here only because zl
-# numbers are doubles - dividing first keeps it true on an integer backend too.
-fn foot_at(bx, bw, addr) {
-    if addr < RULER_BASE { return bx }
-    if addr > mem_top() { return bx + bw }
-    return bx + idiv(addr - RULER_BASE, 1024) * bw / idiv(mem_top() - RULER_BASE, 1024)
-}
-fn foot_seg(bx, by, bw, bh, a0, a1, col) {
-    x0 = foot_at(bx, bw, a0)
-    x1 = foot_at(bx, bw, a1)
-    if x1 <= x0 { return 0 }
-    fill_rgb(x0, by, x1 - x0, bh, col)
-    fill_rgb(x1 - 1, by, 1, bh, theme(TH_CUT))
+# ---- row 1: the memory ruler ------------------------------------------------
+# SPLIT OUT OF draw_foot BECAUSE IT IS NOW LIVE. The old row 1 read vram(), a
+# pointer that is fixed for the life of the boot, so painting it once with the
+# rest of the foot cost nothing. Four of the eight regions below come from the
+# two allocators and move every time a window opens, and draw_foot only runs on
+# boot and at a command transition - so left where it was, this bar would sit
+# showing the heap as it stood when the shell last printed a prompt. It is
+# called from draw_clock too, which is the once-a-second pass the slug already
+# uses, and a memory map is exactly a once-a-second reading.
+#
+# It clears its own band first, for the reason the slug's own redraw does: a
+# figure that shrinks a digit leaves the old digit's tail behind otherwise.
+fn draw_foot_ruler() {
+    u = ui()
+    fx = rail_w()
+    fw = px_w() - fx
+    fy = foot_y()
+    ry = fy + 3 * u
+    fill_rgb(fx + 1, ry - 3 * u, fw - 2, foot_h() - band_h() - 3 * u, theme(TH_PANEL_HI))
+    label(fx + pad_d(), ry + 2 * u, "MEMORY", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    bx = fx + pad_d() + label_w("MEMORY", T_CAPTION, W_BOLD) + 9 * u
+    # the readout is right-aligned and fixed-width, so the bar's right edge does
+    # not move as the numbers change - the same fixed-cell rule as the clock
+    cw = cell_w()
+    rdc = ruler_rd_cells()
+    rdw = rdc * cw
+    bw = fw - (bx - fx) - pad_d() - rdw - 9 * u
+    bh = 11 * u
+    tot = ruler_total()
+    if bw > 0 and tot > 0 {
+        fill_rgb(bx, ry, bw, bh, theme(TH_SURF_WELL))
+        fill_rgb(bx, ry, bw, 1, theme(TH_CUT))
+        fill_rgb(bx, ry + bh - 1, bw, 1, theme(TH_CUT))
+        fill_rgb(bx, ry, 1, bh, theme(TH_CUT))
+        fill_rgb(bx + bw - 1, ry, 1, bh, theme(TH_CUT))
+        # inside the ring, so no region draws over the well's own edge
+        sy1 = ry + 1
+        sh1 = bh - 2
+        iw = bw - 2
+        xe = bx + bw - 1
+        sx1 = bx + 1
+        # THE WALK, in the order a printed map is read: the image, then what the
+        # kernel hands out, then what the drivers hold, then the heap, then the
+        # framebuffer, then what is left.
+        #
+        # THREE INKS AND EACH ONE MEANS SOMETHING. ZD_TEXT_INERT is STRUCTURE -
+        # memory nobody allocates and nobody frees, fixed at link time; ZD_STEEL
+        # is the machine's own reading, so it carries the two allocators, whose
+        # figures change while you watch; ZD_WARN carries the driver map because
+        # that region is a different KIND of memory - device-visible, uncached,
+        # written by hardware - and not because anything is wrong with it. The
+        # vermilion is spent once, on the framebuffer, which is the address this
+        # whole project is about.
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_lo(), tot, theme(TH_SURF_7), xe)
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_ar(), tot, theme(TH_STEEL), xe)
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_zl(), tot, theme(TH_SURF_7), xe)
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_dma(), tot, theme(TH_WARN), xe)
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_heap(), tot, theme(TH_STEEL), xe)
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_srf(), tot, theme(TH_STEEL_BR), xe)
+        # THE DATUM MARK. Overprint job 4: one vermilion hairline where the
+        # framebuffer starts, because that address is what this whole project is
+        # about. It overshoots the bar top and bottom so it reads as a tick
+        # against a scale rather than as a boundary between two regions - which
+        # is what the prototype's own <u> element does, and it has to, because
+        # the region it marks is vermilion too.
+        dx = sx1
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_fb(), tot, theme(TH_ACCENT), xe)
+        if sx1 > dx { fill_rgb(dx, ry - 3 * u, 1, bh + 6 * u, theme(TH_ACCENT)) }
+        # ...and the free tail takes the REMAINDER rather than its own share, so
+        # the bar always ends flush against its ring. Seven roundings-up of one
+        # pixel each would otherwise leave the last region short by seven, and a
+        # ruler with a gap at the end reads as a drawing fault.
+        if xe > sx1 { fill_rgb(sx1, sy1, xe - sx1, sh1, theme(TH_SURF_WELL)) }
+        # ---- the readout. Sixty mono cells, laid out on fixed columns:
+        #   0    "0x" + eight hex          the base of the map
+        #   10   " .. "
+        #   14   "0x" + eight hex          the end of the framebuffer
+        #   26   NNN.N                     point at column 30
+        #   32   " MiB mapped"
+        #   45   NNN.N                     point at column 49
+        #   51   " MiB free"               ends at column 60
+        # The addresses and the figures take ZD_STEEL because they are readings;
+        # the words between them take the caption rung, because they are not.
+        rx = fx + fw - pad_d() - rdw
+        dim = theme(TH_TEXT_DIM)
+        stl = theme(TH_STEEL)
+        if rdc > 0 {
+            text_aa(rx, ry, "0x", dim)
+            hexat(rx + 2 * cw, ry, RULER_BASE, stl)
+            text_aa(rx + 10 * cw, ry, " .. 0x", dim)
+            hexat(rx + 16 * cw, ry, mem_top(), stl)
+        }
+        if rdc >= RULER_RD_FULL {
+            mib1(rx + 30 * cw, ry, ruler_mapped(), stl)
+            text_aa(rx + 32 * cw, ry, " MiB mapped", dim)
+            mib1(rx + 49 * cw, ry, ruler_free(), stl)
+            text_aa(rx + 51 * cw, ry, " MiB free", dim)
+        }
+    }
     return 0
 }
+
+# The measure the readout is set to. Both branches subtract the SAME leading
+# terms draw_foot_ruler does - the label, the two 9 dp gaps and the two pads -
+# so the two cannot disagree about where the bar starts; only the trailing
+# width is decided here.
+fn ruler_rd_cells() {
+    room = px_w() - rail_w() - 2 * pad_d() - label_w("MEMORY", T_CAPTION, W_BOLD) - 18 * ui()
+    if room - RULER_RD_FULL * cell_w() >= RULER_MIN_BAR * ui() { return RULER_RD_FULL }
+    if room - RULER_RD_ADDR * cell_w() >= RULER_MIN_BAR * ui() { return RULER_RD_ADDR }
+    return 0
+}
+
+# foot_at and foot_seg were here. They mapped an ADDRESS onto the bar, which is
+# the operation the packed ruler above does not perform - see the block comment
+# for why it stopped performing it. Deleted rather than left dead: a helper that
+# still compiles is a helper the next person wires back in.
 
 # A hex address, drawn digit by digit because there is no string to build.
 # hex() prints to the console; this puts one on the framebuffer.
@@ -1422,30 +2326,146 @@ fn hexchar(d) {
 # printed sheet puts it, and having it twice is deliberate: the legend belongs
 # to the desk and disappears under a maximised window, the slug belongs to the
 # machine and does not.
+#
+# ---- IT IS SET TO A MEASURE, and that is the whole reason it can grow --------
+# The reference's slug is about 150 characters. At 1920 there is room for four
+# hundred; at 800x600 - the BIOS fallback, which this kernel really boots in -
+# the foot is 632 px, which is 79 mono cells, and a fixed 150-character line
+# would run off the right-hand end of the plate and print on the desk. So every
+# field measures itself against `se` before it is drawn, and the line simply
+# STOPS at the last field that fits. That makes the field ORDER the priority
+# order, which is why it reads machine, panel, cores, module, gutter, uptime,
+# clock: what the sheet is of, then what it is, then how it is ruled.
+#
+# WHAT THE REFERENCE PRINTS THAT THIS DOES NOT, and why - because a slug that
+# invents a figure is worse than a short one:
+#
+#   LOAD 0.58      there is no load average in this kernel. It needs a run-queue
+#                  sample history and sched.c keeps none; the reference computes
+#                  it from its own two fake CPU meters.
+#   MIN STEP       both are WCAG contrast ratios between two palette rungs.
+#   KNOCK          Computing one needs pow(x, 2.4) on a linearised channel, and
+#   SKEW           there are no floats in this drawing path by design. design.h
+#                  states 1.1682 and 6.4796 in prose and exports neither as a
+#                  number; the host `palette` suite computes them in C. Printing
+#                  them would mean a fourth hand-copy of two figures that already
+#                  drifted once - see the palette suite's own comment on why it
+#                  parses rather than restates.
+#
+# What was ADDED is measured: smp_total() is the count of processors that came
+# up, the module's two pixel widths are the real integer division and its
+# remainder (which is why they print as "133/132" and not as one number), and
+# the clock is the RTC, drawn only when rtc_ok() says there is one.
+#
+# FRAME <us> was REMOVED. It is the same wm_us() the raster strip now plots as a
+# histogram twenty pixels above it and the rail prints in its stat block, and
+# one instantaneous sample beside a plot of the last five hundred is the reading
+# the plot exists to replace.
+fn slug_fit(sx, se, w) {
+    if sx + w <= se { return 1 }
+    return 0
+}
+# One zero-padded two-digit field. Both branches advance by exactly two cells,
+# which is the bug draw_hhmm's own comment records having made the other way.
+fn slug2(sx, sy, v, col) {
+    if v < 10 {
+        text_aa(sx, sy, "0", col)
+        num_aa(sx + cell_w(), sy, v, col)
+    } else {
+        num_aa(sx, sy, v, col)
+    }
+    return sx + 2 * cell_w()
+}
 fn draw_slug(sx, sy) {
     col = theme(TH_TEXT_DIM)
+    cw = cell_w()
+    se = px_w() - pad_d()
+    # ---- the machine and the panel
+    w = 10 * cw + s3_numw(px_w()) + cw + s3_numw(px_h())
+    if slug_fit(sx, se, w) == 0 { return 0 }
     text_aa(sx, sy, "zlOS 0.3  ", col)
-    sx = sx + 10 * cell_w()
+    sx = sx + 10 * cw
     sx = legend_num(sx, sy, px_w(), col)
     text_aa(sx, sy, "x", col)
-    sx = sx + cell_w()
+    sx = sx + cw
     sx = legend_num(sx, sy, px_h(), col)
+    # ---- the cores that actually came up, which is not the same as the cores
+    # the package has: smp_total() counts the ones the trampoline brought online
+    cpus = smp_total()
+    w = 2 * cw + s3_numw(cpus) + 4 * cw
+    if slug_fit(sx, se, w) == 0 { return 0 }
+    text_aa(sx, sy, "  ", col)
+    sx = sx + 2 * cw
+    sx = legend_num(sx, sy, cpus, col)
+    text_aa(sx, sy, " CPU", col)
+    sx = sx + 4 * cw
+    # ---- the module, with the two real widths. The remainder is spread one
+    # pixel per column, so there are genuinely two column widths on this screen
+    # and printing one of them would be the lie draw_grid_legend already refuses.
+    # the two "NNN/NNN" pairs are counted WHOLE here and drawn conditionally
+    # below, so on a screen whose division comes out exact this over-reserves by
+    # about eight cells. That is the safe direction and it is deliberate: an
+    # estimate that is short by one cell prints past the plate's right edge,
+    # an estimate that is long by eight drops the field one screen width early.
+    w = 9 * cw + s3_numw(GRID_COLS) + cw + s3_numw(GRID_ROWS) + cw
+    w = w + s3_numw(grid_cw() + 1) + cw + s3_numw(grid_cw()) + cw
+    w = w + s3_numw(grid_rh() + 1) + cw + s3_numw(grid_rh()) + 3 * cw
+    if slug_fit(sx, se, w) == 0 { return 0 }
     text_aa(sx, sy, "  MODULE ", col)
-    sx = sx + 9 * cell_w()
+    sx = sx + 9 * cw
     sx = legend_num(sx, sy, GRID_COLS, col)
     text_aa(sx, sy, "x", col)
-    sx = sx + cell_w()
+    sx = sx + cw
     sx = legend_num(sx, sy, GRID_ROWS, col)
+    text_aa(sx, sy, " ", col)
+    sx = sx + cw
+    if grid_cwr() > 0 {
+        sx = legend_num(sx, sy, grid_cw() + 1, col)
+        text_aa(sx, sy, "/", col)
+        sx = sx + cw
+    }
+    sx = legend_num(sx, sy, grid_cw(), col)
+    text_aa(sx, sy, "x", col)
+    sx = sx + cw
+    if grid_rhr() > 0 {
+        sx = legend_num(sx, sy, grid_rh() + 1, col)
+        text_aa(sx, sy, "/", col)
+        sx = sx + cw
+    }
+    sx = legend_num(sx, sy, grid_rh(), col)
+    text_aa(sx, sy, " px", col)
+    sx = sx + 3 * cw
+    # ---- the gutter
+    w = 6 * cw + s3_numw(grid_gut())
+    if slug_fit(sx, se, w) == 0 { return 0 }
     text_aa(sx, sy, "  GUT ", col)
-    sx = sx + 6 * cell_w()
+    sx = sx + 6 * cw
     sx = legend_num(sx, sy, grid_gut(), col)
+    # ---- uptime, off the 100 Hz tick
+    up = idiv(ticks(), 100)
+    w = 5 * cw + s3_numw(up) + cw
+    if slug_fit(sx, se, w) == 0 { return 0 }
     text_aa(sx, sy, "  UP ", col)
-    sx = sx + 5 * cell_w()
-    sx = legend_num(sx, sy, ticks() / 100, col)
-    text_aa(sx, sy, "s  FRAME ", col)
-    sx = sx + 9 * cell_w()
-    sx = legend_num(sx, sy, wm_us(), col)
-    text_aa(sx, sy, "us", col)
+    sx = sx + 5 * cw
+    sx = legend_num(sx, sy, up, col)
+    text_aa(sx, sy, "s", col)
+    sx = sx + cw
+    # ---- the wall clock, LAST because it is the one field that is not about
+    # this machine's configuration - and guarded, because a foot that prints
+    # 00:00:00 on a box with no readable RTC is stating a time it does not know.
+    if rtc_ok() > 0 {
+        w = 2 * cw + 8 * cw
+        if slug_fit(sx, se, w) == 0 { return 0 }
+        text_aa(sx, sy, "  ", col)
+        sx = sx + 2 * cw
+        sx = slug2(sx, sy, rtc_h(), col)
+        text_aa(sx, sy, ":", col)
+        sx = sx + cw
+        sx = slug2(sx, sy, rtc_mi(), col)
+        text_aa(sx, sy, ":", col)
+        sx = sx + cw
+        sx = slug2(sx, sy, rtc_s(), col)
+    }
     return 0
 }
 
@@ -1482,6 +2502,12 @@ fn draw_status(msg) {
 # slug - the whole line, because the slug is one mono run and re-laying it out
 # from its own start is what stops the "up 9" -> "up 10" case from leaving the
 # head of the previous value behind. On VGA it uses the text cell.
+#
+# IT TAKES THE MEMORY RULER WITH IT, and that is not scope creep: four of the
+# ruler's eight regions are allocator figures that move whenever a window opens,
+# and the only other thing that paints them is draw_foot, which runs at a
+# command transition. Once a second is the right cadence for a memory map and
+# it is the cadence that already exists here.
 fn draw_clock(sec) {
     if px_w() > 0 {
         u = ui()
@@ -1489,6 +2515,7 @@ fn draw_clock(sec) {
         sy = foot_y() + foot_h() - band_h() + 2 * u
         fill_rgb(sx, sy, px_w() - sx - pad_d(), cell_h(), theme(TH_PANEL_HI))
         draw_slug(sx, sy)
+        draw_foot_ruler()
         draw_rail_clock()
     } else {
         at_num(status_row(), 70, sec, C_STATUS)
@@ -5198,6 +6225,14 @@ fn app_tick(id, win) {
     # saying the infinite pulse is deleted rather than merely unused. A register
     # mark that breathes is decoration on a control, and the mark is a reading.
     raster_tick()
+    # THE WALL CLOCK'S ONE SAMPLE PER SECOND, here for the same reason
+    # raster_tick is: app_tick is the only per-frame hook the policy layer has,
+    # and this is furniture rather than any window's business. It is guarded on
+    # its own seconds counter, so it costs one comparison per call and one CMOS
+    # read per second no matter how many windows are open - and unlike the
+    # APP_MONITOR block below it keeps ticking when Monitor is closed. It draws
+    # nothing; it asks for the clock block back when the minute rolls.
+    rail_clock_tick()
     if id == APP_SNAKE { return sn_step() }
     # The browser drives its own fetch from the frame loop. app_tick MUST NOT
     # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
@@ -5260,6 +6295,14 @@ fn app_tick(id, win) {
 # actually overlaps it. That is not an optimisation of the drawing; it is
 # noticing that desk_draw was handed a rectangle and ignored it.
 fn desk_draw(dx, dy, dw, dh) {
+    # THE CHROME'S TWO SHELL FACTS, refreshed before anything is painted.
+    # wm_set_field tells wm.c where the module grid's origin is, so a window
+    # can print its own cell as "M0101 7x5"; label_windows fills the register
+    # and subtitle cells. Both are cheap and both are stale-able - the field
+    # moves when the panel resizes, and the labels move when an app opens into
+    # a slot - so they are refreshed rather than set once at boot.
+    wm_set_field(field_x(), field_y(), field_w(), field_h())
+    label_windows()
     if wall_ok() == 1 {
         wall_paint(dx, dy, dw, dh)
     } else {
@@ -5908,6 +6951,14 @@ fn wm_boot_start() {
     #           open), the workspace row, the stat block, the clock, the raster
     #           strip and the foot. None of those can be cached because none of
     #           them is the same twice.
+    # SAMPLE THE CMOS ONCE BEFORE THE FIRST FRAME. rail_clock_tick() would get
+    # there within a second anyway, but "within a second" means the desktop's
+    # first painted frame - the one a screenshot gate captures and the one a
+    # person sees at boot - carries a midnight the machine never claimed. The
+    # cost is a single read on a path that has just spent milliseconds on the
+    # wallpaper. rtc_here() guards it so a machine with no CMOS at all does not
+    # spin the update-in-progress loop for nothing.
+    if rtc_here() == 1 { rtc_up() }
     draw_wallpaper()
     draw_rail_static()
     # SHELL_BAKED IS THE RETURN VALUE, not 1. wall_save() returns 0 when the
