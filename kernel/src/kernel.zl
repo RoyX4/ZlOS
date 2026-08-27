@@ -821,7 +821,12 @@ fn rail_sub(slot) {
 # up in the chrome. Twelve iterations of two stores is not worth caching.
 fn label_windows() {
     ls = 0
-    while ls < 12 {
+    # REG_N, not 12. This said 12 while the register was twelve rows long, and
+    # stayed 12 when it became fourteen - so rows 13 and 14 opened windows whose
+    # chrome had no register number and no subtitle. The same class as
+    # rail_cmd's slot table, found the same way: by changing REG_N and looking
+    # for what did not move with it.
+    while ls < REG_N {
         lw = rail_win(ls)
         if lw >= 0 {
             if wm_is_open(lw) == 1 { wm_set_label(lw, ls + 1, rail_sub(ls)) }
@@ -4565,6 +4570,13 @@ fn run_command(cmd, arg) {
     # The context menu at a fixed point, for rendering and for gates. It opens
     # a third of the way across the field so it is clear of the rail and of the
     # boot composition's windows.
+    if cmd == 205 {
+        if wm_run() == 0 { return needs_wm("activities") }
+        ov_mode = OV_ACTIVITIES
+        ov_sel = 0
+        wm_damage(0, 0, px_w(), px_h())
+        return 0
+    }
     if cmd == 204 {
         if wm_run() == 0 { return needs_wm("the context menu") }
         return desk_menu_at(rail_w() + field_w() / 3, px_h() / 4)
@@ -9063,6 +9075,121 @@ fn ov_draw_menu(u) {
     return 0
 }
 
+# ---- activities --------------------------------------------------------------
+# The prototype's #overview: every window on this workspace as a scaled plate,
+# under a header that reads `activities  N plates on workspace 0N  esc to
+# dismiss`. At most three columns, and the tiles take each window's OWN aspect
+# at ONE shared scale - so the grid also states the windows' real sizes relative
+# to each other, which a uniform grid of equal boxes throws away.
+#
+# THE TILE IS THE PLATE AT SCALE, NOT A BOX THE PLATE SITS IN. The prototype's
+# own comment records getting this wrong first: tiles took the whole grid cell
+# while the scaled window filled only the top, so every tile carried 130-160 px
+# of blank ground and the overview read as half-printed sheets.
+OV_ACT_COLS = 3
+OV_ACT_GAP  = 14                   # design units between tiles
+OV_ACT_TH   = 20                   # the tile's own header band
+OV_ACT_PAD  = 28                   # margin around the grid
+OV_ACT_HEAD = 34                   # the surface's header
+
+# How many windows the overview will show: open, on this workspace. The register
+# counts differently (it counts APPS with a row), so this walks the z-order.
+fn ov_act_n() {
+    oan = 0
+    oai = 0
+    while oai < wm_n() {
+        oaw = wm_zat(oai)
+        if wm_winws(oaw) == wm_ws() { oan = oan + 1 }
+        oai = oai + 1
+    }
+    return oan
+}
+fn ov_act_win(idx) {
+    oas = 0
+    oaj = 0
+    while oaj < wm_n() {
+        oaw2 = wm_zat(oaj)
+        if wm_winws(oaw2) == wm_ws() {
+            if oas == idx { return oaw2 }
+            oas = oas + 1
+        }
+        oaj = oaj + 1
+    }
+    return 0 - 1
+}
+
+fn ov_draw_activities(u) {
+    n = ov_act_n()
+    gx0 = rail_w() + OV_ACT_PAD * u
+    gy0 = strip_h() + OV_ACT_PAD * u + OV_ACT_HEAD * u
+    gw = px_w() - gx0 - OV_ACT_PAD * u
+    gh = px_h() - gy0 - OV_ACT_PAD * u - foot_h()
+    # the header, at the same rung the other modals use
+    ui_caps(gx0, strip_h() + OV_ACT_PAD * u, "ACTIVITIES", theme(TH_TEXT_HI), T_CAPTION)
+    label_num(gx0 + 108 * u, strip_h() + OV_ACT_PAD * u, n, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(gx0 + 126 * u, strip_h() + OV_ACT_PAD * u, "plates on this workspace", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    ui_caps(px_w() - OV_ACT_PAD * u - 96 * u, strip_h() + OV_ACT_PAD * u, "ESC TO DISMISS", theme(TH_TEXT_2), T_CAPTION)
+    if n < 1 { return 0 }
+    cols = n
+    if cols > OV_ACT_COLS { cols = OV_ACT_COLS }
+    rows = (n + cols - 1) / cols
+    cw = (gw - (cols - 1) * OV_ACT_GAP * u) / cols
+    ch = (gh - (rows - 1) * OV_ACT_GAP * u) / rows
+    # ONE SCALE FOR THE WHOLE WORKSPACE, taken from the largest window, so the
+    # tiles keep their sizes relative to each other. Per-tile scaling would make
+    # a 320-wide window and a 1200-wide one the same size on screen, which is
+    # the one thing this grid is meant to show.
+    maxw = 1
+    maxh = 1
+    oi = 0
+    while oi < n {
+        ow = wm_w(ov_act_win(oi))
+        oh = wm_hh(ov_act_win(oi))
+        if ow > maxw { maxw = ow }
+        if oh > maxh { maxh = oh }
+        oi = oi + 1
+    }
+    # scale in 1/256ths - there are no floats here
+    scx = idiv(cw * 256, maxw)
+    scy = idiv((ch - OV_ACT_TH * u) * 256, maxh)
+    sc = scx
+    if scy < sc { sc = scy }
+    if sc < 16 { sc = 16 }
+    oi = 0
+    while oi < n {
+        ow2 = ov_act_win(oi)
+        c = oi - idiv(oi, cols) * cols
+        r = idiv(oi, cols)
+        tw = idiv(wm_w(ow2) * sc, 256)
+        th = idiv(wm_hh(ow2) * sc, 256) + OV_ACT_TH * u
+        tx = gx0 + c * (cw + OV_ACT_GAP * u) + (cw - tw) / 2
+        ty = gy0 + r * (ch + OV_ACT_GAP * u)
+        # the plate, its struck edge and its groove - a tile is a plate
+        fill_rgb(tx, ty, tw, th, theme(TH_PANEL))
+        fill_rgb(tx, ty, tw, 1, theme(TH_LIT))
+        fill_rgb(tx, ty + th - 1, tw, 1, theme(TH_CUT))
+        if wm_focus() == ow2 {
+            fill_rgb(tx, ty, focus_bar(), th, theme(TH_ACCENT))
+        }
+        # the tile header: register number, name, and the window's REAL size
+        osl = slot_of_app(wm_app(ow2))
+        if osl >= 0 {
+            label_num(tx + 8 * u, ty + 4 * u, osl + 1, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+            label(tx + 28 * u, ty + 4 * u, rail_name(osl), theme(TH_TEXT_2), T_CAPTION, W_REG)
+        }
+        label_num(tx + tw - 62 * u, ty + 4 * u, wm_w(ow2), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(tx + tw - 34 * u, ty + 4 * u, "x", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label_num(tx + tw - 26 * u, ty + 4 * u, wm_hh(ow2), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        fill_rgb(tx, ty + OV_ACT_TH * u - 1, tw, 1, theme(TH_CUT))
+        # THE PREVIEW IS THE WINDOW, box-filtered. wm_thumb returns 0 for a
+        # window that has never painted, and that case is left as bare plate
+        # rather than filled with something invented.
+        wm_thumb(ow2, tx, ty + OV_ACT_TH * u, tw, th - OV_ACT_TH * u)
+        oi = oi + 1
+    }
+    return 0
+}
+
 # THE ONE ENTRY POINT the compositor calls. x0,y0,x1,y1 is the DAMAGE rect, in
 # the same form wm.c's paint walk carries it.
 fn overlay_draw(ox0, oy0, ox1, oy1) {
@@ -9084,6 +9211,7 @@ fn overlay_draw(ox0, oy0, ox1, oy1) {
     }}
     if ov_mode == OV_PALETTE { return ov_draw_palette(ou) }
     if ov_mode == OV_MENU { return ov_draw_menu(ou) }
+    if ov_mode == OV_ACTIVITIES { return ov_draw_activities(ou) }
     return 0
 }
 
@@ -9324,8 +9452,35 @@ fn desk_key(kcode, kmods) {
             return 1
         }
     }
+    # F1 IS ACTIVITIES, which is what the context menu says it is. A menu that
+    # advertises a key the system does not answer is a picture of a menu, so the
+    # row and the binding land together.
+    if kcode == 0x13B {
+        if ov_mode == OV_ACTIVITIES {
+            ov_mode = OV_NONE
+        } else {
+            ov_mode = OV_ACTIVITIES
+            ov_sel = 0
+        }
+        wm_damage(0, 0, px_w(), px_h())
+        return 1
+    }
     if kcode == 0x11A { return open_menu() }
     return 0
+}
+
+# THE WINDOW'S OWN MENU. wm.c hands over the window it was pressed on, so the
+# header can name the register row rather than say "window" - which is the whole
+# difference between the prototype's `03 monitor` header and a generic one.
+fn win_menu_at(wmw, wmx, wmy) {
+    ov_mode = OV_MENU
+    ov_menu_kind = OV_MENU_WIN
+    ov_menu_win = wmw
+    ov_menu_x = wmx
+    ov_menu_y = wmy
+    ov_sel = 0 - 1
+    wm_damage(0, 0, px_w(), px_h())
+    return 1
 }
 
 # THE DESK'S RIGHT-CLICK MENU. wm.c routes a click on the field here, and the
@@ -9390,6 +9545,18 @@ fn app_name(app) {
 # drift: adding an app to the register removes it from the tail automatically,
 # which the old hand-written list demonstrably could not manage - it named
 # APP_EDIT, APP_PAINT and APP_CUBE twice each and APP_RUN not at all.
+# WHICH REGISTER ROW OWNS AN APP, or -1. app_has_slot answers yes/no over the
+# same walk; the overview needs the row itself, to print its number and name on
+# the tile. One walk, two callers, rather than a second table.
+fn slot_of_app(app) {
+    sa = 0
+    while sa < REG_N {
+        if rail_app(sa) == app { return sa }
+        sa = sa + 1
+    }
+    return 0 - 1
+}
+
 fn app_has_slot(app) {
     if app == APP_MENU { return 1 }           # a modal, never listed at all
     if app == APP_CATALOG { return 1 }        # reachable from the ALL APPS row

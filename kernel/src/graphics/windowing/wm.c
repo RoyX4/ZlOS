@@ -470,6 +470,7 @@ static app_event_fn hook_event;
 static app_tick_fn  hook_tick;
 static desk_draw_fn hook_desk;
 static overlay_draw_fn hook_overlay;      /* above the windows AND the toast */
+static win_menu_fn hook_win_menu;         /* a right-press over a window     */
 extern int userwin_is_app(int app) __attribute__((weak));
 extern void userwin_draw_app(int app, int x, int y, int w, int h, int focused)
     __attribute__((weak));
@@ -1732,6 +1733,68 @@ void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
  * layers this desktop had", and widening the signature would edit every one of
  * them to pass 0 and prove nothing. */
 void wm_overlay(overlay_draw_fn f) { hook_overlay = f; }
+void wm_win_menu(win_menu_fn f) { hook_win_menu = f; }
+
+/* ---- A WINDOW, BOX-FILTERED INTO A TILE -------------------------------------
+ * The prototype's activities grid does not draw placeholders. Each tile is the
+ * window's own content at scale - it clones the .wbody and scales the clone -
+ * so the overview answers "which window is that" by showing it rather than by
+ * naming it. A tile with an empty body would be a picture of a preview.
+ *
+ * zlOS had no way to do this. fb_surface_blit is 1:1, and every box filter in
+ * this tree - the icon atlas, the fonts - runs OFFLINE in a generator and ships
+ * as a table. This is the first one that runs at draw time.
+ *
+ * IT READS THE RETAINED CLIENT SURFACE, which is what makes it cheap enough to
+ * be worth doing: `client_px` is already the window's last painted content, so
+ * a thumbnail costs no app code, no re-entry into zl, and nothing that can
+ * recurse. A window whose surface is not valid is skipped rather than faked -
+ * an app that has never painted has nothing to show, and inventing something
+ * would be the same lie as a placeholder.
+ *
+ * Integer box filter: destination pixel (x, y) is the average of the source
+ * block it covers. No floats - this is the drawing path. The empty-block guard
+ * (sx1 <= sx0) matters when the tile is LARGER than the source in an axis,
+ * which happens to a very small window in a wide grid.
+ *
+ * fb_fill_px at 1x1 rather than a direct framebuffer write, because it is the
+ * one that honours the scissor - and this is drawn from the overlay layer,
+ * where the scissor is the damage rectangle. */
+int wm_thumb(int win, int dx, int dy, int dw, int dh)
+{
+    if (win < 0 || win >= WM_MAX) return 0;
+    struct win *W = &wins[win];
+    if (!(W->flags & WF_OPEN) || !W->client_px || !W->client_valid) return 0;
+    if (dw <= 0 || dh <= 0 || W->client_w <= 0 || W->client_h <= 0) return 0;
+
+    for (int y = 0; y < dh; y++) {
+        int sy0 = (int)((long long)y * W->client_h / dh);
+        int sy1 = (int)((long long)(y + 1) * W->client_h / dh);
+        if (sy1 <= sy0) sy1 = sy0 + 1;
+        if (sy1 > W->client_h) sy1 = W->client_h;
+        for (int x = 0; x < dw; x++) {
+            int sx0 = (int)((long long)x * W->client_w / dw);
+            int sx1 = (int)((long long)(x + 1) * W->client_w / dw);
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            if (sx1 > W->client_w) sx1 = W->client_w;
+            unsigned long r = 0, g = 0, b = 0, n = 0;
+            for (int sy = sy0; sy < sy1; sy++) {
+                const unsigned int *row = W->client_px + (unsigned long)sy * W->client_w;
+                for (int sx = sx0; sx < sx1; sx++) {
+                    unsigned int px = row[sx];
+                    r += (px >> 16) & 0xFFu;
+                    g += (px >> 8) & 0xFFu;
+                    b += px & 0xFFu;
+                    n++;
+                }
+            }
+            if (!n) continue;
+            fb_fill_px(dx + x, dy + y, 1, 1,
+                       (unsigned int)(((r / n) << 16) | ((g / n) << 8) | (b / n)));
+        }
+    }
+    return 1;
+}
 
 static void title_copy(char *dst, const char *src)
 {
@@ -3839,6 +3902,10 @@ static void route_mouse(int x, int y, int btn)
 {
     int down = (btn & 1) && !(last_btn & 1);
     int up   = !(btn & 1) && (last_btn & 1);
+    /* Bit 1 is the right button - ui.h states the PS/2 mask where it explains
+     * why the double-click bit had to go at bit 8. Read BEFORE last_btn is
+     * overwritten, like down and up, so this is an edge and not a level. */
+    int rdown = (btn & 2) && !(last_btn & 2);
     last_btn = btn;
     ptr_x = x; ptr_y = y;
 
@@ -3917,6 +3984,11 @@ static void route_mouse(int x, int y, int btn)
         if (hook_desk_click) hook_desk_click(x, y, btn);
         return;
     }
+    /* THE WINDOW'S MENU, before the left button's three destinations. It does
+     * not focus or raise: the prototype's first item IS "bring to front", so
+     * doing it on the way in would make that row a no-op describing something
+     * that already happened. */
+    if (rdown && hook_win_menu) { hook_win_menu(hit, x, y); return; }
     if (down) {
         wm_focus(hit);
         wm_raise(hit);

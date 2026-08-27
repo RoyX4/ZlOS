@@ -51,6 +51,8 @@ extern Value zl_fn_desk_draw(Value, Value, Value, Value) __attribute__((weak));
  * Weak like the rest: a tree whose kernel.zl has not grown it simply does not
  * register the layer, and the compositor never calls it. */
 extern Value zl_fn_overlay_draw(Value, Value, Value, Value) __attribute__((weak));
+/* fn win_menu_at(win, x, y) - the window's own menu, on a right-press */
+extern Value zl_fn_win_menu_at(Value, Value, Value) __attribute__((weak));
 
 /* fn desk_click(x, y, btn) - a pointer event on the dock, the start button or
  * the tray. Every event, not just presses: a dock with no hover state reads as
@@ -144,6 +146,12 @@ static void glue_overlay(int x0, int y0, int x1, int y1)
     zl_fn_overlay_draw(zl_num(x0), zl_num(y0), zl_num(x1), zl_num(y1));
 }
 
+static void glue_win_menu(int win, int x, int y)
+{
+    if (!zl_fn_win_menu_at) return;
+    zl_fn_win_menu_at(zl_num(win), zl_num(x), zl_num(y));
+}
+
 /* ---- binding ---------------------------------------------------------------
  * Returns 1 if the compositor now has apps to call, 0 if kernel.zl has not
  * grown them yet. A caller that ignores the answer and starts the frame loop
@@ -164,6 +172,7 @@ int wm_bind_zl(void)
              zl_fn_app_tick  ? glue_tick  : 0,
              zl_fn_desk_draw ? glue_desk  : 0);
     if (zl_fn_overlay_draw) wm_overlay(glue_overlay);
+    if (zl_fn_win_menu_at) wm_win_menu(glue_win_menu);
     if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
     if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
     return 1;

@@ -312,6 +312,17 @@ void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk);
  * desktop had", and widening the signature would edit each of them to pass 0
  * and prove nothing. */
 void wm_overlay(overlay_draw_fn f);
+/* A RIGHT-PRESS OVER A WINDOW. The left button already has three destinations
+ * inside route_mouse - grab, control, app - and none of them is the shell. The
+ * window's own menu is a shell surface (it names the register row, and it is
+ * drawn on the overlay layer), so it needs its own way out, exactly as the
+ * desk's click does. Edge-triggered: holding the button must not reopen the
+ * menu on every motion event. */
+typedef void (*win_menu_fn)(int win, int x, int y);
+void wm_win_menu(win_menu_fn f);
+/* A window's retained content, box-filtered into dx,dy,dw,dh. 0 if it has
+ * never painted - the caller must not fake a preview for a window with none. */
+int  wm_thumb(int win, int dx, int dy, int dw, int dh);
 void wm_desk_click(desk_click_fn f);
 void wm_desk_key(desk_key_fn f);
 

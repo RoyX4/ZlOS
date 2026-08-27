@@ -346,6 +346,7 @@ static const struct cmd table[] = {
      * use; this exists so a probe that can only type can still render it - the
      * same reason `windows` exists beside the compositor itself. */
     { "ctxmenu", 204 }, { "menu2",   204 },
+    { "activities", 205 }, { "overview", 205 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },

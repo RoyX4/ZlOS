@@ -243,6 +243,7 @@ extern void console_blur_free(void);
 extern void ser_puts(const char *s);
 extern unsigned long long console_vram(void);
 extern int  console_cols(void);
+extern int  wm_thumb(int, int, int, int, int);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
 extern int  console_ui_scale_q8(void);
@@ -1739,6 +1740,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_cw"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)w); }
     if (streq(name, "wm_ch"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)h); }
     if (streq(name, "wm_dmg"))     { wm_invalidate_client((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_thumb"))   { return zl_num((double)wm_thumb((int)a[0].num,
+                                        (int)a[1].num, (int)a[2].num,
+                                        (int)a[3].num, (int)a[4].num)); }
     if (streq(name, "wm_cdmg"))    { wm_invalidate_client_rect((int)a[0].num,
                                             (int)a[1].num,(int)a[2].num,
                                             (int)a[3].num,(int)a[4].num); return zl_nil(); }
