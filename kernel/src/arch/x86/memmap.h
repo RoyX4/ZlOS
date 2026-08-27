@@ -177,12 +177,13 @@
  * and the alignment rule; only the EXTENT is here, so its ceiling assert can
  * name the region that is actually next instead of one two regions away. */
 /* MOVED 8 -> 14 MiB, and this header did not follow until 2026-08-20. The arena
- * moved when raw_boot.asm's CHUNKS went to 192: the loaded image now spans
+ * moved when raw_boot.asm's CHUNKS went to 192: the loaded image then spanned
  * 1..7 MiB and the raw-boot stack moved 6 -> 12 MiB, so an arena based at 8 MiB
  * with a 16 MiB budget spans 8..24 MiB and SWALLOWS that stack. arena.c carried
  * the correct 0x00E00000 as its own literal while this file said 0x00800000;
  * the two only met when arena.c stopped restating and started deriving, which
- * is when check-memmap.sh failed and produced this fix. */
+ * is when check-memmap.sh failed and produced this fix. CHUNKS is now 256 and
+ * fills 1..9 MiB, still below the 12 MiB stack. */
 #define LO_ARENA     0x00E00000UL /* arena.c      - the zl program arena     */
 #define LO_ARENA_END 0x01E00000UL /* +16 MiB, the BUDGET not the span        */
 

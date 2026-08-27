@@ -75,8 +75,8 @@
  *   0x00009000..0x00009FF0   smp.c:55,124       the SMP trampoline
  *   0x000A0000..0x000FFFFF   -                  VGA hole and BIOS ROM
  *   0x00100000..0x002E15C0   link-raw.ld        the kernel image - MEASURED
- *   0x00100000..0x00700000   raw_boot.asm       what the LOADER fills: CHUNKS
- *                                               x 32 KiB = 6 MiB from 1 MiB
+ *   0x00100000..0x00900000   raw_boot.asm       what the LOADER fills: CHUNKS
+ *                                               x 32 KiB = 8 MiB from 1 MiB
  *   0x00C00000               raw_entry.S        raw-boot stack TOP, grows DOWN
  *                            raw_boot.asm       the same address, same stack
  *   0x00E00000..0x01E00000   HERE               the program arena
@@ -107,11 +107,12 @@
  *     the same number". That day has been and gone: HI_TOP is 1 GiB now and
  *     the checks have visibly different slack, which is why they were two.
  *
- * IT WAS 8 MiB UNTIL raw_boot.asm's CHUNKS WENT TO 192. The loader fills
- * 1 MiB .. 7 MiB now, which put the old raw-boot stack (6 MiB) inside the
+ * IT WAS 8 MiB UNTIL raw_boot.asm's CHUNKS WENT TO 192. The loader filled
+ * 1 MiB .. 7 MiB then, which put the old raw-boot stack (6 MiB) inside the
  * region being loaded; the stack went to 12 MiB and the arena had to clear it.
- * Both moves are one commit, because half of it is a machine that overwrites
- * its own stack while booting.
+ * Both moves were one commit, because half of it is a machine that overwrites
+ * its own stack while booting. CHUNKS later went to 256, filling 1 MiB .. 9 MiB;
+ * that still clears the 12 MiB stack and requires no map move.
  */
 
 #include "memmap.h"
