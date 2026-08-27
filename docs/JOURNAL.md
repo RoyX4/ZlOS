@@ -7,6 +7,32 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(gates): close presswork integration gaps (c0a94fa)
+
+`codex/presswork-close` · 10 files changed, 294 insertions(+), 222 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | ? |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>10 file(s)</summary>
+
+- `TODO.md`
+- `docs/evidence/grub-bios64-unwatched-2026-08-27.md`
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `gates/land-gate.sh`
+- `kernel/HANDOFF.md`
+- `kernel/metadata/wrapper-registry.json`
+- `kernel/src/core/README.md`
+- `kernel/tools/checks/check-land-gate.py`
+- `kernel/tools/checks/check-zl-dispatch.py`
+
+</details>
+
 ## 2026-08-27 — chore: boot receipts and build identity from the verified gate runs (d6c860d)
 
 `design/presswork` · 6 files changed, 53 insertions(+), 26 deletions(-)
