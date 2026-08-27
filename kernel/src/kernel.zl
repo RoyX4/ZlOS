@@ -9588,14 +9588,17 @@ fn reopen_files() {
 # A modal takes every event and a click outside dismisses it - both already in
 # route_mouse. Restoring what was underneath is a repaint of the damage it
 # leaves, which needs no saved bitmap at all.
-# 10 rows now: the original 8 plus Settings and All Applications, both of
+# 13 rows now: the original 8 plus Settings, System, Type, All Applications,
+# and Browser. Browser lost its persistent route when the prototype's fourteen
+# replaced the old dock table; a compiled reopen function with no launcher is
+# dead code, so the menu owns the explicit fallback route.
 # which existed already (settings.c; the catalog above) and had no caller
 # anywhere on the running desktop until this brief.
 # TWELVE, and rows 10 SYSTEM and 14 TYPE remain redundant keyboard/menu routes
 # for the same windows their fixed register rows own. Keeping both surfaces is
 # intentional: the menu is keyboard-addressable, while the register is the
 # persistent pointer route.
-MENU_ROWS = 12
+MENU_ROWS = 13
 menu_win = 0 - 1
 
 fn menu_label(idx) {
@@ -9610,6 +9613,7 @@ fn menu_label(idx) {
     if idx == 8 { return "System" }
     if idx == 9 { return "Type" }
     if idx == 10 { return "All Applications" }
+    if idx == 11 { return "Browser" }
     return "Halt"
 }
 
@@ -9625,7 +9629,8 @@ fn menu_pick(idx) {
     if idx == 8 { return open_syspane() }
     if idx == 9 { return open_typepane() }
     if idx == 10 { return reg_open(APP_CATALOG) }
-    if idx == 11 { wm_stop()  return 0 }
+    if idx == 11 { return reopen_browser() }
+    if idx == 12 { wm_stop()  return 0 }
     raise_shell()
     if idx == 4 { run_command(118, 0) }
     if idx == 5 { run_command(100, 0) }

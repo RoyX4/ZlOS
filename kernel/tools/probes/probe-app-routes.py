@@ -65,6 +65,18 @@ WORDS = [
     ("files", 13, "Files"),
 ]
 BOOT_OPEN = [(0, "Terminal"), (13, "Files"), (1, "System Monitor")]
+MENU_SURFACES = [
+    (3, 2, "About"),
+    (8, 71, "System"),
+    (9, 72, "Type"),
+    (11, 5, "Browser"),
+]
+MENU_HANDLERS = {
+    3: "reopen_about",
+    8: "open_syspane",
+    9: "open_typepane",
+    11: "reopen_browser",
+}
 TITLE_REPORT = re.compile(r"wm: win \d+ title (\d+),(\d+) (\d+)x(\d+)")
 
 
@@ -249,6 +261,12 @@ def source_register_routes():
         seam = f"if da == {app} {{ return {owner}() }}"
         if seam not in launch:
             fail(f"rail_launch does not route kernel-owned {app} through {owner}")
+    menu = gen.function_body(kernel, "menu_pick")
+    for row, _, name in MENU_SURFACES:
+        seam = f"if idx == {row} {{ return {MENU_HANDLERS[row]}() }}"
+        if seam not in menu:
+            fail(f"menu_pick no longer routes tested {name} row {row} through "
+                 f"{MENU_HANDLERS[row]}")
     return routes
 
 
@@ -266,8 +284,8 @@ def run(receipt_path, no_build, timeout):
         if identities.get(app) != name:
             fail(f"word route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
 
-    for app, name in ((4, "Menu"), (70, "All Applications"),
-                      (71, "System"), (72, "Type")):
+    for app, name in ((2, "About"), (4, "Menu"), (5, "Browser"),
+                      (70, "All Applications"), (71, "System"), (72, "Type")):
         if identities.get(app) != name:
             fail(f"surface route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
 
@@ -310,7 +328,7 @@ def run(receipt_path, no_build, timeout):
         menu = super_cycle(machine, 4, timeout)
         result["surface"].append({"route": "super", "id": 4, "name": "Menu", **menu})
         print("[super] Menu                 open-ready-close PASS")
-        for row, app, name in ((8, 71, "System"), (9, 72, "Type")):
+        for row, app, name in MENU_SURFACES:
             cycle = menu_row_cycle(machine, row, app, timeout)
             result["surface"].append({"route": f"menu:{row}", "id": app,
                                       "name": name, **cycle})

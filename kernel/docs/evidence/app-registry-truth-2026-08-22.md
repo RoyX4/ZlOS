@@ -78,7 +78,7 @@ inverse question “does every dense catalogue ID name a real reference app?”
 - the terminal rail path recreates a closed boot terminal. The retired dock
   path retained a dead slot and only tried to raise it; QEMU reproduced the
   route timing out after Ctrl+W before the shared create/reopen path was added.
-- `rail_app(slot)` is the single source mapping for all 11 register identities;
+- `rail_app(slot)` is the single source mapping for all 14 register identities;
   both the PRESSWORK shell and the route probe consume it.
 - the graphical terminal now maps both `.` and `mount` to the kernel's existing
   zlfs/NVMe command 46. The help and kernel dispatch already advertised `.`,
@@ -166,7 +166,7 @@ Three independently generated receipts all name that exact artifact:
   completed open -> first compositor draw -> close; every cycle preserved its
   slot/generation identity and returned live windows from 5 to 4.
 - `docs/receipts/app-routes-qemu-2026-08-22.json`: three boot-open identities,
-  all 11 PRESSWORK register routes, all seven shell-word routes, the Super-key
+  all 14 PRESSWORK register routes, all seven shell-word routes, the Super-key
   Menu route, the System and Type menu rows, and the rail's All Applications
   route passed their applicable open/ready/close contracts.
 - `docs/receipts/run-qemu-2026-08-22.json`: Run ID 7 distinguished no filename,
