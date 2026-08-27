@@ -64,6 +64,15 @@ void fb_text_prop(int px, int py, const char *s, unsigned int fg)
 int  fb_text_prop_w(const char *s) { (void)s; return 0; }
 int  fb_text_prop_h(void) { return 0; }
 int  fb_cell_w(void) { return 16; }
+/* ui.c's atlas table asks fb.c what pixel height a type role resolves to, so
+ * that ui_atlas_for_role() can say which atlas a register is on RIGHT NOW.
+ * fb.c is not linked here - this file links ui.c alone, on purpose - and the
+ * atlas geometry itself needs no stub because it comes out of sizeof, which
+ * emits no relocation. Only the one live query does. 8 / 12 / 16 is fb.c's own
+ * role_base at scale 1, which is what makes this a stub rather than a lie:
+ * uitest.c exercises the resolution across the shipped scales. */
+int  fb_text_role_h(int role)
+{ return role <= 0 ? 12 : (role == 1 ? 12 : 16); }
 int  fb_cell_h(void) { return 32; }
 void fb_clip(int x, int y, int w, int h) { (void)x;(void)y;(void)w;(void)h; }
 void fb_clip_get(int *x0, int *y0, int *x1, int *y1)
@@ -239,6 +248,20 @@ static const struct token TOKENS[] = {
     { "ZD_WALL_GLOW",     ZD_WALL_GLOW     },
     { "ZD_ACCENT_ALT_1", ZD_ACCENT_ALT_1 }, { "ZD_ACCENT_ALT_2", ZD_ACCENT_ALT_2 },
     { "ZD_ACCENT_ALT_3", ZD_ACCENT_ALT_3 }, { "ZD_ACCENT_ALT_4", ZD_ACCENT_ALT_4 },
+    /* THE COMPARISON LADDER. The PARENT designs' tokens, kept so the settings
+     * pane can COMPUTE the comparison instead of quoting it. Nothing paints
+     * with them - they are arguments to ui_ratio_q4 - but they are colours in
+     * design.h and so they are held to exactly the same standard as the ones
+     * that do: the prototype's own `--zd-ref-*` block, or nothing. */
+    { "ZD_REF_LIT_RAKING",  ZD_REF_LIT_RAKING  },
+    { "ZD_REF_BASE_RAKING", ZD_REF_BASE_RAKING },
+    { "ZD_REF_KNOCK_PLATE", ZD_REF_KNOCK_PLATE },
+    { "ZD_REF_WASH_RAKING", ZD_REF_WASH_RAKING },
+    /* the two ends of the contrast axis. Listed so they are HELD to the rule
+     * rather than quietly outside it - they are exempted below, with the
+     * reason, and the staleness check keeps that exemption honest. */
+    { "ZD_AXIS_BLACK",      ZD_AXIS_BLACK      },
+    { "ZD_AXIS_WHITE",      ZD_AXIS_WHITE      },
 };
 
 /* ---- THE THREE TOKENS THAT ARE NOT LITERALLY IN THE PROTOTYPE --------------
@@ -264,6 +287,27 @@ static const struct exempt EXEMPT[] = {
     { "ZD_LIFT",    ZD_LIFT    },
     { "ZD_WALL_0",  ZD_WALL_0  },
     { "ZD_WALL_42", ZD_WALL_42 },
+    /*   ZD_FOCUS_WASH  the fourth, and it is derived for the same reason
+     *                  ZD_WALL_0 is. The prototype's fallback header is
+     *                  ZD_BASE with a gradient over it whose loudest stop is
+     *                  `color-mix(in srgb, var(--zd-lit) 34%, transparent)` -
+     *                  a colour it never writes down as a hex. The value is
+     *                  ZD_LIT at alpha 0.34 composited on ZD_BASE, computed
+     *                  per channel in design.h's comment, and the assertion
+     *                  below checks that derivation rather than the literal. */
+    { "ZD_FOCUS_WASH", ZD_FOCUS_WASH },
+    /*   ZD_AXIS_BLACK  the ends of the WCAG contrast axis, and they are not
+     *   ZD_AXIS_WHITE  design colours at all - nothing paints with either and
+     *                  no theme role is assigned one. They are in design.h
+     *                  because the "no colour literal outside this file" rule
+     *                  is enforced by a scanner that counts six hex digits and
+     *                  does not take intent as an argument; it caught them
+     *                  written as 0x000000 inside ui_ceil_dn_q4. Neither
+     *                  occurs in the prototype, which is correct: on this
+     *                  ladder pure black is louder than the groove and pure
+     *                  white is twice the knockout, so neither is drawable. */
+    { "ZD_AXIS_BLACK", ZD_AXIS_BLACK },
+    { "ZD_AXIS_WHITE", ZD_AXIS_WHITE },
 };
 #define N_EXEMPT ((int)(sizeof EXEMPT / sizeof EXEMPT[0]))
 
@@ -455,6 +499,112 @@ int main(void)
         ok(zl_duplicates_theme(mixed, TOKENS, N_TOKENS, &mv, &mn) == 1,
            "control: a commented duplicate is ignored, a real one beside it is not");
     }
+
+    /* ---- THE CONTRAST ENGINE, AGAINST design.h's OWN PROSE -----------------
+     * ui_ratio_q4 is what makes the settings pane an argument instead of a
+     * caption: every figure it prints is recomputed from the loaded tokens.
+     * That only means anything if the recomputation is right, and "right" has
+     * an external definition here - design.h states these ratios in prose,
+     * derived independently with IEEE doubles, and this is the integer engine
+     * having to reproduce them to four decimals from a 256-entry sRGB table.
+     *
+     * IT IS THE HARDER DIRECTION ON PURPOSE. Comparing the engine to itself
+     * would pass with the table full of zeroes. Comparing it to the numbers
+     * somebody wrote down after doing the maths a different way catches a
+     * wrong coefficient, a truncation where a rounding belongs, and an
+     * off-by-one in the table - the three ways this can be subtly wrong. */
+    printf("\n  the contrast engine - integer WCAG against design.h's prose\n");
+    ok(ui_ratio_q4(ZD_KNOCK, ZD_BASE)        == 64796, "ZD_KNOCK on ZD_BASE is 6.4796:1");
+    ok(ui_ratio_q4(ZD_KO_EDGE, ZD_KNOCK)     == 25487, "ZD_KO_EDGE on ZD_KNOCK is 2.5487:1");
+    ok(ui_ratio_q4(ZD_LIT, ZD_BASE)          == 25423, "ZD_LIT on ZD_BASE is 2.5423:1");
+    ok(ui_ratio_q4(ZD_VERM, ZD_BASE)         == 46319, "ZD_VERM on ZD_BASE is 4.6319:1");
+    ok(ui_ratio_q4(ZD_CUT, ZD_BASE)          == 14723, "ZD_CUT on ZD_BASE is 1.4723:1");
+    ok(ui_ratio_q4(ZD_KNOCK_INK, ZD_KNOCK)   == 85329, "ZD_KNOCK_INK on the knockout is 8.5329:1");
+    ok(ui_ratio_q4(ZD_KNOCK_INK2, ZD_KNOCK)  == 46965, "ZD_KNOCK_INK2 on the knockout is 4.6965:1");
+    ok(ui_ratio_q4(ZD_STEEL, ZD_BASE)        == 61881, "ZD_STEEL on ZD_BASE is 6.1881:1");
+    ok(ui_ratio_q4(ZD_EDGE_OVER, ZD_FLOAT)   == 34322, "ZD_EDGE_OVER on ZD_FLOAT is 3.4322:1 - the worst case");
+    ok(ui_ratio_q4(ZD_EDGE_OVER, ZD_BASE)    == 49991, "ZD_EDGE_OVER on ZD_BASE is 4.9991:1");
+    ok(ui_ratio_q4(ZD_RAISE, ZD_FLOAT)       == 11682, "the smallest surface step is 1.1682:1");
+    /* ORDER INDEPENDENCE. WCAG defines the ratio lighter-over-darker, so no
+     * caller has to know which of its two colours is on top - and every table
+     * in the settings pane relies on that, because a cell passes a token and
+     * a ground without sorting them. */
+    ok(ui_ratio_q4(ZD_BASE, ZD_KNOCK) == ui_ratio_q4(ZD_KNOCK, ZD_BASE),
+       "ui_ratio_q4 is order independent");
+    /* THE TWO CEILINGS, which are what decide which side an edge goes on.
+     * design.h's header states both for ZD_BASE and derives the whole
+     * asymmetric-widening argument from them. */
+    ok(ui_ceil_dn_q4(ZD_BASE) == 15105, "ZD_BASE has 1.5105:1 of room downward");
+    ok(ui_ceil_up_q4(ZD_BASE) == 139030, "ZD_BASE has 13.9030:1 of room upward");
+    ok(ui_ceil_dn_q4(ZD_KNOCK) > ui_ceil_up_q4(ZD_KNOCK),
+       "on the knockout the room runs DOWNWARD - which is why its edge is a foot rule");
+    ok(ui_ceil_dn_q4(ZD_BASE) < ui_ceil_up_q4(ZD_BASE),
+       "on the plate the room runs UPWARD - which is why its edge is a top run");
+    /* THE SKEW, and it is the widening's central claim in one assertion: the
+     * edge run computes the SAME ratio against the knockout as against the
+     * ground, so the light does not invert its loudness when the header
+     * inverts. design.h says 0.25 %; 64 parts in 25423 is 0.2517 %. */
+    ok(ui_ratio_q4(ZD_KO_EDGE, ZD_KNOCK) - ui_ratio_q4(ZD_LIT, ZD_BASE) == 64,
+       "the edge run is within 0.25% of itself in both geometries");
+    /* THE FALLBACK, derived rather than found. ZD_LIT at alpha 0.34 on
+     * ZD_BASE, per channel - this is the calculation design.h's comment shows,
+     * run, so the token cannot drift from the comment that justifies it. */
+    {
+        unsigned mix = 0;
+        for (int sh = 16; sh >= 0; sh -= 8) {
+            unsigned a = (ZD_LIT >> sh) & 255u, b = (ZD_BASE >> sh) & 255u;
+            /* 34/100, rounded to nearest - the same rounding the comment used */
+            unsigned c = (b * 100u + (a - b) * 34u + 50u) / 100u;
+            mix |= c << sh;
+        }
+        ok(mix == ZD_FOCUS_WASH, "ZD_FOCUS_WASH is ZD_LIT at 34% on ZD_BASE, recomputed");
+        ok(ui_ratio_q4(ZD_FOCUS_WASH, ZD_BASE) == 13681,
+           "...and it computes 1.3681:1, NOT the prototype's quoted 1.3999 - see design.h");
+    }
+    /* THE COMPARISON LADDER. The sign inversion the knockout was designed
+     * around, computed from the parent designs' own tokens: one value, two
+     * grounds, 3.00x the loudness and the opposite sign. design.h's header
+     * quotes the third of these at line 129 as the failure being replaced. */
+    ok(ui_ratio_q4(ZD_REF_LIT_RAKING, ZD_REF_BASE_RAKING) == 19931,
+       "the parent's struck run is 1.9931:1 on its ground - a LIGHTER term");
+    ok(ui_ratio_q4(ZD_REF_LIT_RAKING, ZD_REF_KNOCK_PLATE) == 59822,
+       "...and 5.9822:1 on PLATE's knockout - a DARKER one");
+    ok(ui_ratio_q4(ZD_REF_KNOCK_PLATE, ZD_REF_BASE_RAKING) == 119231,
+       "PLATE's knockout on the un-widened ladder is 11.9231:1, as design.h states");
+
+    /* ---- the two live controls the settings pane owns ---------------------- */
+    printf("\n  the FOCUS tab's two controls\n");
+    ok(ui_knockout_get() == 1, "the knockout is ON by default");
+    ok(ui_theme()->knock == ZD_KNOCK, "...and theme.knock is the knockout");
+    ui_knockout_set(0);
+    ok(ui_theme()->knock == ZD_FOCUS_WASH, "off swaps the fill for graphite's wash");
+    ok(ui_theme()->ko_edge == ZD_CUT, "...the foot rule goes back to the groove");
+    ok(ui_theme()->knock_ink == ZD_TEXT_0,
+       "...and the title stops being reversed out, or it would be 1.29:1");
+    /* THE REGRESSION THIS EXISTS TO CATCH. The switches live above the theme
+     * struct because ui_theme_init_q8 rebuilds it wholesale on every scale
+     * change; a switch stored INSIDE it is silently reverted the next time
+     * anybody drags the UI-scale slider, and the setting appears to work and
+     * then quietly undoes itself. */
+    ui_theme_init_q8(384);
+    ok(ui_theme()->knock == ZD_FOCUS_WASH, "the knockout switch survives a rescale");
+    ui_knockout_set(1);
+    ok(ui_theme()->knock == ZD_KNOCK, "...and back on again");
+
+    ok(ui_focus_bar_dp() == ZD_FOCUS_BAR, "the focus bar starts at its design width");
+    ok(ui_focus_bar_set(6) == 6, "the slider reaches its top value");
+    ok(ui_focus_bar_set(99) == UI_FBAR_MAX, "...and clamps above it");
+    ok(ui_focus_bar_set(-4) == UI_FBAR_MIN, "...and below it");
+    /* THE RETURN VALUE IS THE STATE IT SETTLED ON, not the argument - a caller
+     * that echoed its own argument back into the slider would draw a thumb
+     * past the end of its own track. */
+    ui_focus_bar_set(3);
+    ui_theme_init_q8(512);
+    ok(ui_theme()->focus_bar == 6, "the bar is stored in dp, so it rescales: 3dp at 2x is 6px");
+    ok(ui_focus_bar_dp() == 3, "...and the dp value itself is unchanged by the rescale");
+    ui_theme_init_q8(512);
+    ok(ui_theme()->focus_bar == 6, "the focus-bar width survives a rescale too");
+    ui_theme_init(2);
 
     printf("\n%s (%d failure%s)\n", fails ? "FAILED" : "all passed",
            fails, fails == 1 ? "" : "s");

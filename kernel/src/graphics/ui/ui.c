@@ -45,6 +45,25 @@ void ui_theme_set(const struct ui_theme *t) { theme = *t; }
 
 static int dp(int n, int q8) { return (n * q8 + 128) >> 8; }
 
+/* ---- the two runtime switches the settings pane owns -----------------------
+ * THEY ARE STATE ABOVE THE THEME, NOT INSIDE IT, and that is the whole reason
+ * they exist as statics here instead of as fields the caller pokes.
+ * ui_theme_init_q8() rebuilds the entire struct from design.h on every scale
+ * change, so a switch stored in the struct is silently reverted the next time
+ * anybody drags the UI-scale slider - the setting would appear to work and
+ * then quietly undo itself, which is this repo's most expensive bug shape.
+ * Held here, the rebuild reads them back and the two survive a rescale.
+ *
+ * knock_off  1 == the knockout is switched OFF and the focused header falls
+ *            back to ZD_FOCUS_WASH. See design.h's note on that token for what
+ *            the fallback is and what it measures.
+ * fbar_dp    the focus bar's width in DESIGN px. Stored in dp rather than in
+ *            pixels because a rescale has to re-derive it; storing the pixel
+ *            value would pin a 3dp bar at its 1x width on a 2x screen.
+ */
+static int knock_off;                 /* 0 == the knockout, which is default */
+static int fbar_dp = ZD_FOCUS_BAR;
+
 void ui_theme_init_q8(int scale_q8)
 {
     if (scale_q8 < 192) scale_q8 = 192;
@@ -177,10 +196,25 @@ void ui_theme_init_q8(int scale_q8)
     theme.lit        = ZD_LIT;        /* 31  2.5423:1 on ZD_BASE            */
     theme.litsoft    = ZD_LITSOFT;    /* 32  the grazed left run            */
     theme.edge_over  = ZD_EDGE_OVER;  /* 33  under overlap only             */
-    theme.knock      = ZD_KNOCK;      /* 34  6.4796:1 on ZD_BASE            */
-    theme.knock_ink  = ZD_KNOCK_INK;  /* 35  8.5329:1 on the knockout       */
-    theme.knock_ink2 = ZD_KNOCK_INK2; /* 36  4.6965:1 on the knockout       */
-    theme.ko_edge    = ZD_KO_EDGE;    /* 37  2.5487:1 - 0.25% off theme.lit */
+    /* THE FOUR KNOCKOUT ROLES MOVE TOGETHER OR NOT AT ALL. Switching the fill
+     * back to the wash without switching the two inks with it would leave
+     * ZD_KNOCK_INK - a near-black chosen to reverse OUT of a light plate - on
+     * a surface one rung above the ground, at 1.29:1. The fallback's inks are
+     * the ordinary ramp precisely because its surface is an ordinary surface
+     * again, and ko_edge goes back to the groove because on the wash the
+     * headroom is upward again and the foot is a cut, not a run. This mirrors
+     * the prototype's `body.nokock` block rule for rule. */
+    if (knock_off) {
+        theme.knock      = ZD_FOCUS_WASH; /* 34  1.3681:1 on ZD_BASE        */
+        theme.knock_ink  = ZD_TEXT_0;     /* 35  the title, not reversed    */
+        theme.knock_ink2 = ZD_TEXT_3;     /* 36  the label rung             */
+        theme.ko_edge    = ZD_CUT;        /* 37  the groove is back below   */
+    } else {
+        theme.knock      = ZD_KNOCK;      /* 34  6.4796:1 on ZD_BASE        */
+        theme.knock_ink  = ZD_KNOCK_INK;  /* 35  8.5329:1 on the knockout   */
+        theme.knock_ink2 = ZD_KNOCK_INK2; /* 36  4.6965:1 on the knockout   */
+        theme.ko_edge    = ZD_KO_EDGE;    /* 37  2.5487:1, 0.25% off lit    */
+    }
     theme.grid       = ZD_GRID;       /* 38  1.6470:1 on ZD_VOID            */
     theme.steel      = ZD_STEEL;      /* 39  instruments only               */
     theme.steel_br   = ZD_STEEL_BR;   /* 40 */
@@ -221,7 +255,7 @@ void ui_theme_init_q8(int scale_q8)
     theme.radius  = dp(ZD_R_PLATE,  scale_q8);
     theme.title_h = dp(ZD_TITLE_H,  scale_q8);
     /* the shell's fixed furniture. Ruled once; it does not reflow. */
-    theme.focus_bar = dp(ZD_FOCUS_BAR, scale_q8);
+    theme.focus_bar = dp(fbar_dp, scale_q8);
     theme.rail_w    = dp(ZD_RAIL_W,    scale_q8);
     theme.strip_h   = dp(ZD_STRIP_H,   scale_q8);
     theme.foot_h    = dp(ZD_FOOT_H,    scale_q8);
@@ -253,6 +287,189 @@ int ui_metric(int role)
     case UI_METRIC_BAND_H: return theme.band_h;
     default: return 0;
     }
+}
+
+
+/* ============================================================================
+ * THE CONTRAST ENGINE, IN INTEGERS, BECAUSE THE SETTINGS PANE ARGUES RATHER
+ * THAN ASSERTS.
+ *
+ * The prototype's settings pane recomputes every ratio it prints from the live
+ * custom properties - that is what makes it a control surface and not a page
+ * of prose, and it is the property design.h's header tells you to re-derive
+ * rather than trust. Reproducing it here needs WCAG relative luminance, and
+ * WCAG relative luminance needs the sRGB transfer function, which is a power
+ * of 2.4. THERE IS NO FLOATING POINT IN THE DRAWING PATH and there is not
+ * going to be one, so the curve is a table.
+ *
+ * SRGB_LIN[c] is the linear-light value of channel byte c, in units of 1e-7,
+ * so SRGB_LIN[255] is exactly 10,000,000. Generated from
+ *
+ *     c/255 <= 0.03928 ? (c/255)/12.92 : ((c/255 + 0.055)/1.055)^2.4
+ *
+ * rounded to nearest. 256 entries x 4 bytes = 1 KiB of .rodata, which buys
+ * every ratio in the system with no heap, no float and no per-call cost.
+ *
+ * ACCURACY IS MEASURED, NOT ASSUMED. Against IEEE double over all 900 ordered
+ * pairs of the 30 tokens in design.h the worst absolute error is 6.2e-5, i.e.
+ * the fourth decimal is right or off by one in its last place. Every figure
+ * this file's callers print at four decimals - 6.4796 knock on base, 2.5487
+ * ko_edge on knock, 2.5423 lit on base, 4.6319 verm on base, 1.4723 cut on
+ * base, 8.5329 and 4.6965 the two inks on the knockout - reproduces design.h
+ * exactly. The rounding, not truncation, in both divisions below is what buys
+ * that last decimal; truncating cost up to 1e-4 and lost three of them.
+ *
+ * WHY x10^4 OUT. zl numbers are doubles but zl has no formatting, so a ratio
+ * crosses the seam as an integer and the zl side prints it with a fixed-point
+ * helper. Four decimals is what the prototype prints at its widest (r4), so
+ * that is the fixed point, and a caller wanting fewer just divides.
+ */
+static const unsigned SRGB_LIN[256] = {
+           0,     3035,     6071,     9106,    12141,    15176,    18212,    21247,
+       24282,    27317,    30353,    33465,    36765,    40247,    43914,    47770,
+       51815,    56054,    60488,    65121,    69954,    74990,    80232,    85681,
+       91341,    97212,   103298,   109601,   116122,   122865,   129830,   137021,
+      144438,   152085,   159963,   168074,   176420,   185002,   193824,   202886,
+      212190,   221739,   231534,   241576,   251869,   262412,   273209,   284260,
+      295568,   307134,   318960,   331048,   343398,   356013,   368895,   382044,
+      395462,   409152,   423114,   437350,   451862,   466651,   481718,   497066,
+      512695,   528606,   544803,   561285,   578054,   595112,   612461,   630100,
+      648033,   666259,   684782,   703601,   722719,   742136,   761854,   781874,
+      802198,   822827,   843762,   865005,   886556,   908417,   930590,   953075,
+      975873,   998987,  1022417,  1046165,  1070231,  1094617,  1119324,  1144354,
+     1169707,  1195384,  1221388,  1247718,  1274377,  1301365,  1328683,  1356333,
+     1384316,  1412633,  1441285,  1470273,  1499598,  1529262,  1559265,  1589608,
+     1620294,  1651322,  1682694,  1714411,  1746474,  1778884,  1811642,  1844750,
+     1878208,  1912017,  1946178,  1980693,  2015563,  2050787,  2086369,  2122308,
+     2158605,  2195262,  2232280,  2269659,  2307400,  2345506,  2383976,  2422811,
+     2462013,  2501583,  2541521,  2581829,  2622507,  2663556,  2704978,  2746773,
+     2788943,  2831487,  2874408,  2917706,  2961383,  3005438,  3049873,  3094689,
+     3139887,  3185468,  3231432,  3277781,  3324515,  3371636,  3419144,  3467041,
+     3515326,  3564001,  3613068,  3662526,  3712377,  3762621,  3813260,  3864294,
+     3915725,  3967552,  4019778,  4072402,  4125426,  4178851,  4232677,  4286905,
+     4341536,  4396572,  4452012,  4507858,  4564110,  4620770,  4677838,  4735315,
+     4793202,  4851499,  4910208,  4969330,  5028865,  5088813,  5149177,  5209956,
+     5271151,  5332764,  5394795,  5457245,  5520114,  5583404,  5647115,  5711248,
+     5775804,  5840784,  5906188,  5972018,  6038273,  6104956,  6172066,  6239604,
+     6307571,  6375969,  6444797,  6514056,  6583748,  6653873,  6724432,  6795425,
+     6866853,  6938718,  7011019,  7083758,  7156935,  7230551,  7304607,  7379104,
+     7454042,  7529422,  7605245,  7681511,  7758222,  7835378,  7912979,  7991027,
+     8069523,  8148466,  8227858,  8307699,  8387990,  8468732,  8549926,  8631572,
+     8713671,  8796224,  8879231,  8962694,  9046612,  9130987,  9215819,  9301109,
+     9386857,  9473065,  9559734,  9646862,  9734453,  9822506,  9911021, 10000000,
+};
+
+/* relative luminance x 1e-7. 0 .. 10,000,000. */
+static unsigned ui_lum(unsigned rgb)
+{
+    unsigned long long y = 2126ULL * SRGB_LIN[(rgb >> 16) & 255]
+                         + 7152ULL * SRGB_LIN[(rgb >>  8) & 255]
+                         +  722ULL * SRGB_LIN[ rgb        & 255];
+    return (unsigned)((y + 5000) / 10000);
+}
+
+/* WCAG contrast x 10^4. Order-independent: the ratio is defined lighter over
+ * darker, so ui_ratio(a,b) == ui_ratio(b,a) and no caller has to know which of
+ * its two colours is on top. 0.05 in these units is 500,000. */
+unsigned ui_ratio_q4(unsigned a, unsigned b)
+{
+    unsigned long long ya = ui_lum(a) + 500000u;
+    unsigned long long yb = ui_lum(b) + 500000u;
+    if (ya < yb) { unsigned long long t = ya; ya = yb; yb = t; }
+    return (unsigned)((ya * 10000ULL + yb / 2) / yb);
+}
+
+/* THE TWO CEILINGS, AND THEY ARE WHAT DECIDES WHICH SIDE AN EDGE GOES ON.
+ * A surface has a fixed amount of room below it and a fixed amount above it,
+ * set by the surface alone: the loudest DARKER term against it is the ratio to
+ * pure black, and the loudest LIGHTER term is the ratio to pure white. That is
+ * the arithmetic behind "the ground decides which direction has the headroom",
+ * which is the rule the lit/cut grammar and the knockout's foot edge both
+ * follow. The two endpoints are ZD_AXIS_BLACK / ZD_AXIS_WHITE in design.h -
+ * NOT because they are design colours, they are not and nothing paints with
+ * them, but because "a colour literal may appear in design.h and nowhere else"
+ * is enforced by a scanner that counts six hex digits and does not take
+ * intent as an argument. It caught them written here. See design.h. */
+unsigned ui_ceil_dn_q4(unsigned rgb) { return ui_ratio_q4(rgb, ZD_AXIS_BLACK); }
+unsigned ui_ceil_up_q4(unsigned rgb) { return ui_ratio_q4(ZD_AXIS_WHITE, rgb); }
+
+/* ---- the comparison ladder, published as data -------------------------------
+ * design.h's ZD_REF_* block, reachable by index so that kernel.zl can compute
+ * against the parent designs without a colour literal of its own. The rule
+ * "a colour literal may appear in design.h and nowhere else" has no exception
+ * for a comparison, and a zl file that spelled #F2EDE4 would be the third
+ * simultaneous palette this system has shipped.
+ *
+ * NOTHING PAINTS WITH THESE. They are arguments to ui_ratio_q4() and to
+ * nothing else; ui_theme_init_q8 assigns none of them to a role. An
+ * out-of-range index returns the ground rather than a colour, so the worst a
+ * caller can do by miscounting is print 1.0000:1 - a figure obviously wrong
+ * rather than plausibly wrong, which is the direction to fail in. */
+unsigned ui_ref_color(int which)
+{
+    switch (which) {
+    case UI_REF_LIT_RAKING:  return ZD_REF_LIT_RAKING;
+    case UI_REF_BASE_RAKING: return ZD_REF_BASE_RAKING;
+    case UI_REF_KNOCK_PLATE: return ZD_REF_KNOCK_PLATE;
+    case UI_REF_WASH_RAKING: return ZD_REF_WASH_RAKING;
+    default: return ZD_BASE;
+    }
+}
+
+/* ...and the five figures the pane needs that are not colours. Published the
+ * same way and for the same reason: kernel.zl duplicating 600, 420 or 28 would
+ * be a second copy of a design.h number that drifts the first time one of them
+ * moves, and this pane's whole claim is that its arithmetic is the design's
+ * own. The one duplication kernel.zl already carries (RAIL_W_D and friends)
+ * exists because ui_metric answers 0 before the theme is built and the shell
+ * draws on paths where it is not; the settings pane has no such path - it
+ * cannot be open before the compositor is up - so it takes no copy. */
+int ui_ref_num(int which)
+{
+    switch (which) {
+    case UI_REFN_PLATE_W:  return ZD_REF_PLATE_W;
+    case UI_REFN_PLATE_H:  return ZD_REF_PLATE_H;
+    case UI_REFN_TITLE_H:  return ZD_TITLE_H;      /* dp, not theme.title_h */
+    case UI_REFN_RAKING_PX: return ZD_REF_RAKING_PX;
+    case UI_REFN_GRAPHITE_PX: return ZD_REF_GRAPHITE_PX;
+    case UI_REFN_WASH_Q4:  return ZD_REF_WASH_Q4;
+    case UI_REFN_RAKING_Q4: return ZD_REF_RAKING_Q4;
+    default: return 0;
+    }
+}
+
+/* ---- the two switches ------------------------------------------------------
+ * Both rebuild the theme rather than poking one field, because the knockout is
+ * FOUR roles that have to move together (see ui_theme_init_q8) and because a
+ * rebuild is the only path that cannot leave the struct half-updated. It costs
+ * one pass over a struct, on a gesture, so the cheap version would be an
+ * optimisation of something nobody is waiting for.
+ *
+ * NEITHER REPAINTS. A theme change invalidates every cached window surface in
+ * the system and this layer does not know about surfaces - wm.c does. The
+ * caller damages; kernel.zl's settings pane calls wm_damage_win_all() straight
+ * after. Doing it here would make ui.c depend on the compositor and break the
+ * layering ui.h states.
+ */
+int ui_knockout_get(void) { return !knock_off; }
+int ui_knockout_set(int on)
+{
+    knock_off = on ? 0 : 1;
+    ui_theme_init_q8(theme.scale_q8);
+    return !knock_off;
+}
+
+/* dp, not pixels - see the note on fbar_dp. Clamped to the prototype's own
+ * slider range: 1 is the thinnest run the framebuffer can draw and 6 is where
+ * the bar stops reading as a register mark and starts reading as a panel. */
+int ui_focus_bar_dp(void) { return fbar_dp; }
+int ui_focus_bar_set(int n)
+{
+    if (n < UI_FBAR_MIN) n = UI_FBAR_MIN;
+    if (n > UI_FBAR_MAX) n = UI_FBAR_MAX;
+    fbar_dp = n;
+    ui_theme_init_q8(theme.scale_q8);
+    return fbar_dp;
 }
 
 /* ---- the layout cursor ---------------------------------------------------- */
@@ -462,6 +679,109 @@ unsigned ui_ink_on(unsigned bg)
 {
     return ui_luminance_q16(bg) > 12242u ? (unsigned)ZD_INK_DARK
                                          : (unsigned)ZD_INK_LIGHT;
+}
+
+/* ---- WHAT TYPE IS ACTUALLY IN THIS IMAGE ------------------------------------
+ * THE TYPE APP MUST NOT TYPE ITS OWN FACTS IN. Every number below is read off
+ * the atlas arrays themselves with sizeof, so a regenerated font moves the
+ * table and a font dropped from kernel/SOURCES stops the link rather than
+ * printing a row about something that is not there.
+ *
+ * WHAT THE PROTOTYPE GOT WRONG, and the pane says so on screen. Its TYPE table
+ * has three rows - 8x16, 16x32 and 24x48 - and design.h repeats the claim as a
+ * "hard platform fact". Two of the three are true. font_big.c does hold a
+ * 24x48 coverage atlas, but it IS NOT IN kernel/SOURCES, so it is not linked
+ * into any target; fb.c's own note at the fb_text_aa2x block says why - "the
+ * 24x48 huge font was removed - unused, and its 109 KiB pushed the raw kernel
+ * past the 640 KiB low-memory limit our own bootloader loads into". The LG
+ * register is drawn by resampling the 16x32 coverage atlas, not from a baked
+ * 24x48 one. That row is carried here with a null pointer and reported as
+ * ABSENT rather than quietly dropped, because "the design asked for three and
+ * the image has two" is the fact worth putting on a screen.
+ *
+ * AND THERE ARE SIX MORE THAN THE PROTOTYPE COUNTS. The mono coverage atlases
+ * are the CONSOLE's; every label, title, row and column head in the desktop is
+ * drawn by fb_text_role out of the PROPORTIONAL atlases in font_prop.inc -
+ * three cells at two weights. A type pane that listed only the console's font
+ * would be describing a face the desktop hardly uses.
+ *
+ * Only the linked arrays are externed. Naming font24x48_aa here would make the
+ * link fail, which is the opposite of what this row is for.
+ */
+extern const unsigned char font8x16_aa[95][16][8];
+extern const unsigned char font16x32_aa[95][32][16];
+extern const unsigned char prop16[95][16][16];
+extern const unsigned char prop16b[95][16][18];
+extern const unsigned char prop24[95][24][22];
+extern const unsigned char prop24b[95][24][24];
+extern const unsigned char prop32[95][32][30];
+extern const unsigned char prop32b[95][32][33];
+
+#define UI_FACE_MONO 0      /* DejaVu Sans Mono, fixed cell - the console   */
+#define UI_FACE_SANS 1      /* DejaVu Sans, proportional - the whole desktop */
+#define UI_FACE_SANSB 2     /* the same, bold                                */
+
+/* A[] IS DERIVED, NOT DECLARED. w is the array's own last dimension, h its
+ * middle one and n its first, so the only thing written by hand per row is
+ * which array it is and which face it belongs to. `in` is 0 for the one row
+ * whose atlas is not in this image. */
+#define UI_ATLAS_ROW(a, face) \
+    { (int)(sizeof (a)[0][0]), (int)(sizeof (a)[0] / sizeof (a)[0][0]), \
+      (int)(sizeof (a) / sizeof (a)[0]), (face), 1 }
+
+static const struct { int w, h, n, face, in; } ui_atlases[] = {
+    UI_ATLAS_ROW(font8x16_aa,  UI_FACE_MONO),
+    UI_ATLAS_ROW(font16x32_aa, UI_FACE_MONO),
+    { 24, 48, 95, UI_FACE_MONO, 0 },     /* font_big.c - NOT in SOURCES     */
+    UI_ATLAS_ROW(prop16,       UI_FACE_SANS),
+    UI_ATLAS_ROW(prop16b,      UI_FACE_SANSB),
+    UI_ATLAS_ROW(prop24,       UI_FACE_SANS),
+    UI_ATLAS_ROW(prop24b,      UI_FACE_SANSB),
+    UI_ATLAS_ROW(prop32,       UI_FACE_SANS),
+    UI_ATLAS_ROW(prop32b,      UI_FACE_SANSB),
+};
+#define UI_ATLAS_N ((int)(sizeof ui_atlases / sizeof ui_atlases[0]))
+
+static int atlas_ok(int i) { return i >= 0 && i < UI_ATLAS_N; }
+
+int ui_atlas_n(void)        { return UI_ATLAS_N; }
+int ui_atlas_w(int i)       { return atlas_ok(i) ? ui_atlases[i].w    : 0; }
+int ui_atlas_h(int i)       { return atlas_ok(i) ? ui_atlases[i].h    : 0; }
+int ui_atlas_glyphs(int i)  { return atlas_ok(i) ? ui_atlases[i].n    : 0; }
+int ui_atlas_face(int i)    { return atlas_ok(i) ? ui_atlases[i].face : -1; }
+int ui_atlas_in_image(int i){ return atlas_ok(i) ? ui_atlases[i].in   : 0; }
+
+/* WHICH ATLAS A TYPE REGISTER IS DRAWING FROM RIGHT NOW, at whatever weight
+ * the caller asks for. This is a LIVE answer and it moves with the UI scale:
+ * fb_text_role_h() returns the exact pixel height the role resolves to, and
+ * the atlas is then the nearest proportional cell to it.
+ *
+ * "NEAREST BY MIDPOINT" IS fb.c's OWN RULE, RE-DERIVED RATHER THAN COPIED.
+ * prop_atlas_cell() there is written as `<=20 -> 16, <=28 -> 24, else 32`, and
+ * 20 and 28 are the midpoints of 16/24 and 24/32. Restating those three
+ * constants here would be a second copy that silently stops matching the day a
+ * fourth atlas is generated; searching this table for the smallest |cell -
+ * wanted| gives the same answer today and follows the table tomorrow.
+ * hosttest/uitest.c asserts the two agree for every role at every shipped
+ * scale, which is the only thing that makes that claim worth anything.
+ *
+ * Returns an index into the table above, or -1 if no proportional atlas is
+ * linked at all. */
+int fb_text_role_h(int role);
+
+int ui_atlas_for_role(int role, int weight)
+{
+    int want = fb_text_role_h(role);
+    int want_face = weight ? UI_FACE_SANSB : UI_FACE_SANS;
+    int best = -1, best_d = 0;
+    for (int i = 0; i < UI_ATLAS_N; i++) {
+        if (!ui_atlases[i].in) continue;
+        if (ui_atlases[i].face != want_face) continue;
+        int d = ui_atlases[i].h - want;
+        if (d < 0) d = -d;
+        if (best < 0 || d < best_d) { best = i; best_d = d; }
+    }
+    return best;
 }
 
 /* A proportional layout cannot ask "length times cell" any more - it has to

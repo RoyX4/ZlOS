@@ -56,28 +56,42 @@ extern Value zl_fn_desk_click(Value, Value, Value) __attribute__((weak));
 /* fn desk_key(code, mods) - a system key: Super, today */
 extern Value zl_fn_desk_key(Value, Value) __attribute__((weak));
 /* ---- apps that live in C --------------------------------------------------
- * Settings is written in C rather than zl for a reason that is not preference:
- * zl exposes no natives for ui_* at all, so a zl Settings app needs ~15 new
- * builtins in runtime_kernel.c before it can draw a single toggle. See the
- * header of settings.c.
+ * THERE ARE NONE LEFT, AND THIS BLOCK IS THE RECORD OF WHY.
  *
- * It is dispatched HERE because this file is already "deliberately the ONLY
- * place" that crosses between the compositor and an app. A second dispatch
- * point in wm.c would make the layering a suggestion again.
+ * Settings was written in C and dispatched from here, for a reason that was
+ * not preference: settings.c's own header states it as "zl exposes NO natives
+ * for ui_* at all, so a zl Settings app would need ~15 new builtins in
+ * runtime_kernel.c first", and it added that moving it to zl afterwards would
+ * be "a translation, not a redesign, because the widget calls map one to one".
  *
- * The id continues kernel.zl's sequence (APP_SHELL 0, APP_MONITOR 1,
- * APP_ABOUT 2), so zl and C apps share one namespace and a collision is a
- * compile-time constant to look at, not a run-time mystery. */
-/* 3 is APP_SNAKE and 5 is APP_BROWSER in kernel.zl - and this file's own
- * comment above is right that the two namespaces are one, which is exactly
- * why the collision matters: app_draw would have dispatched Snake to
- * settings_draw. 6 is the first free id. */
-#define APP_SETTINGS 6
+ * THE BLOCKER IS GONE. runtime_kernel.c answers for ui_color, ui_metric,
+ * ui_begin and the whole ui_* widget set today, plus the contrast engine the
+ * new pane needs (ui_ratio / ui_ceil_dn / ui_ceil_up) and its two live
+ * controls (ui_knock / ui_fbar). kernel.zl's app_draw now carries the
+ * APP_SETTINGS branch like every other app, so the two lines that used to
+ * intercept it here are deleted rather than commented out - an intercept that
+ * still ran would silently win over the zl branch and the zl code would be
+ * dead with no diagnostic, which is this file's whole hazard class.
+ *
+ * IT WAS NOT A TRANSLATION IN THE END. What the pane has to SAY changed
+ * completely - it is the design arguing for itself against live tokens, not a
+ * preferences dialog - so settings.c is superseded rather than ported, and the
+ * preference sinks it drove (accent, UI scale, pointer speed and acceleration,
+ * subpixel text, window animation) have NO caller now. That is a real loss and
+ * it is named here rather than left for someone to discover: those sinks still
+ * exist, settings.c still compiles and hosttest/settingstest still passes, but
+ * nothing on screen reaches them until they are re-homed - the PRESS tab is
+ * the shaped place for them, and it is the prototype's own home for exactly
+ * that kind of switch.
+ *
+ * The one rule this file states is unchanged and is why the deletion is small:
+ * this is "deliberately the ONLY place" that crosses between the compositor
+ * and an app, so removing an app from C means removing it from HERE and
+ * nowhere else. */
 
 /* ---- the shims ------------------------------------------------------------ */
 static void glue_draw(int app, int x, int y, int w, int h, int focused)
 {
-    if (app == APP_SETTINGS) { settings_draw(app, x, y, w, h, focused); return; }
     if (!zl_fn_app_draw) return;
     zl_fn_app_draw(zl_num(app), zl_num(x), zl_num(y),
                    zl_num(w), zl_num(h), zl_num(focused));
@@ -85,7 +99,6 @@ static void glue_draw(int app, int x, int y, int w, int h, int focused)
 
 static int glue_event(int app, int win, int type, int code, int x, int y)
 {
-    if (app == APP_SETTINGS) return settings_event(app, win, type, code, x, y);
     if (!zl_fn_app_event) return 0;
     Value r = zl_fn_app_event(zl_num(app), zl_num(win), zl_num(type),
                               zl_num(code), zl_num(x), zl_num(y));
@@ -125,10 +138,13 @@ static void glue_desk(int x, int y, int w, int h)
 int wm_bind_zl(void)
 {
     if (!zl_fn_app_draw) return 0;       /* nothing to composite yet */
-    /* glue_event goes in UNCONDITIONALLY now: it dispatches Settings before it
-     * looks at zl, so gating it on zl_fn_app_event would leave the C app
-     * drawable but dead. It still returns 0 for a zl app when zl defines no
-     * app_event, exactly as the conditional did. */
+    /* glue_event still goes in UNCONDITIONALLY, and the reason has changed
+     * rather than gone away. It used to be "it dispatches Settings before it
+     * looks at zl"; Settings is a zl app now and that clause is deleted with
+     * it. What remains is that glue_event returns 0 for an app zl does not
+     * handle, which is exactly what the old conditional produced, so gating it
+     * on zl_fn_app_event buys nothing and costs one more way for the two
+     * branches to disagree. */
     wm_hooks(glue_draw,
              glue_event,
              zl_fn_app_tick  ? glue_tick  : 0,

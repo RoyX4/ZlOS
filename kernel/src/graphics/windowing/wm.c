@@ -62,9 +62,19 @@ int  fb_text_prop_h(void);
 /* The three-argument form, because PRESSWORK's title bar is TWO type styles
  * rather than one: the name is the label style (MD, bold) and everything
  * beside it is a mono readout. fb_text_prop is TEXT_BODY/regular and cannot
- * say the second half of that. UI_SM/UI_MD/UI_LG in ui.h ARE fb.c's roles -
- * uikit.c static-asserts it - so the role numbers below are not a second
- * spelling of the type scale. */
+ * say the second half of that.
+ *
+ * THE CHROME NO LONGER DRAWS THROUGH THESE. UI_SM/UI_MD/UI_LG used to BE
+ * fb.c's roles - uikit.c static-asserted it - and they are not any more: a
+ * role resolves through fb.c's `role_base` ladder, which is floored at 12px,
+ * so CAPTION and BODY both come out 12 and the design's 11/13/21 cannot be
+ * expressed. uikit.c now resolves UI_SM/MD/LG through design.h's ZD_T_*
+ * instead, and the two call sites below that draw type go through ui_text*
+ * with it. If they had kept calling fb_text_role, a window title would be
+ * 12px while every widget inside that window was 13 - one design, two type
+ * scales, differing by a pixel, which is exactly the kind of drift nobody
+ * sees in a screenshot and everybody feels. The declarations stay because
+ * fb_text_prop below is still the plain proportional path. */
 void fb_text_role(int px, int py, const char *s, unsigned int fg,
                   int role, int weight);
 int  fb_text_role_w(const char *s, int role, int weight);
@@ -2653,7 +2663,7 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
     unsigned ink_ttl = focused ? t->knock_ink : t->text_2;
 
     int cy_mono = W->y + (hh - fb_cell_h()) / 2;
-    int cy_ttl  = W->y + (hh - fb_text_role_h(UI_MD)) / 2;
+    int cy_ttl  = W->y + (hh - ui_text_h(UI_MD)) / 2;
     int cw = fb_cell_w();
 
     if (W->reg > 0) {
@@ -2674,12 +2684,24 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
         up[n] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
     }
     up[n] = 0;
-    /* the hard cut. Drop whole characters until the run fits - measure and
-     * draw share fb_text_role_w, so what is measured is what is drawn. */
-    while (n > 0 && x + fb_text_role_w(up, UI_MD, 1) > stop) up[--n] = 0;
+    /* THE TITLE IS TRACKED, and `.hdr .ttl` is the third selector in the
+     * prototype that carries `letter-spacing: var(--tr-lab)` - the other two
+     * being `th` and `.kv .k`, which uikit.c already tracks. It is the ONE
+     * tracked run at MD rather than SM, which is why ui_caps takes a size.
+     * The uppercasing above stays where it is rather than moving to
+     * UI_F_CAPS: this copy is also what the hard cut below measures, and a
+     * caller that truncates a string has to hold the transformed one anyway.
+     *
+     * The cut, and it is the reason the tracked pair had to be published
+     * rather than left file-local in uikit.c: characters are dropped until
+     * the run fits, so the MEASURE runs once per dropped character and the
+     * draw runs once - if those two used different advances a long title
+     * would be cut to fit one width and then drawn at another. They are the
+     * same loop with the ink switched off; see ui.h. */
+    while (n > 0 && x + ui_caps_w(up, UI_MD) > stop) up[--n] = 0;
     if (n > 0) {
-        if (draw) fb_text_role(x, cy_ttl, up, ink_ttl, UI_MD, 1);
-        x += fb_text_role_w(up, UI_MD, 1) + gut;
+        if (draw) ui_caps(x, cy_ttl, up, ink_ttl, UI_MD);
+        x += ui_caps_w(up, UI_MD) + gut;
     }
 
     if (W->sub[0]) {
@@ -2855,9 +2877,14 @@ static void chrome_band(const struct win *W, int focused, int bh)
         x += sw * cw + gap;
     }
 
-    /* APP US, and the label is the label style at the one size a caption gets:
-     * SM, bold, uppercase, untracked for the reason chrome_title gives. */
-    int lw = fb_text_role_w("APP US", UI_SM, 1);
+    /* APP US, and the label IS the label style now: SM, bold, uppercase and
+     * TRACKED. The prototype emits this exact run as
+     * `<span class="t-lab">app us</span>` (line 1614) - lower case in the
+     * markup, uppercased and spaced by the stylesheet - so it was never
+     * meant to be the untracked caption this drew. The note that used to sit
+     * here deferred the tracking "for the reason chrome_title gives", and
+     * chrome_title tracks now, so there is no reason left. */
+    int lw = ui_caps_w("APP US", UI_SM);
     char v[16];
     unsigned u = W->band_us;
     if (u > 999999u) u = 999999u;
@@ -2870,8 +2897,7 @@ static void chrome_band(const struct win *W, int focused, int bh)
     v[k++] = ' '; v[k++] = 'u'; v[k++] = 's'; v[k] = 0;
     int vw = k * cw;
     if (x + lw + UI_S1(t) + vw > stop) return;
-    fb_text_role(x, by + (bhh - fb_text_role_h(UI_SM)) / 2, "APP US",
-                 t->text_dim, UI_SM, 1);
+    ui_caps(x, by + (bhh - ui_text_h(UI_SM)) / 2, "APP US", t->text_dim, UI_SM);
     fb_text_aa(x + lw + UI_S1(t), cy, v, t->text_hi);
 }
 

@@ -20,12 +20,17 @@ Both unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-_none — every file the docs describe is tracked._
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
 
 ## Open tensions (.ultra/TENSIONS.md)
 
 - [ ] **T-8** — Generated evidence manifests disagree on build identity.
 - [ ] **T-9** — Boot recovery policy remains at the kernel root.
+
+## Open pull requests
+
+- [ ] #6 feat(desktop): implement the PRESSWORK design language  `design/presswork`
 
 ---
 
@@ -34,6 +39,97 @@ _none — every file the docs describe is tracked._
 ## Hand-written
 
 _Items here survive regeneration. Everything above does not._
+
+### PRESSWORK desktop — where the increment stands (2026-08-27)
+
+Branch `design/presswork`, PR #6, based on `origin/main` 26c0899. The design is
+implemented and boots; the remaining work is depth, not structure.
+
+**Closed this session**
+
+- The design language itself: `design.h` retokenised, `ui.c` remapped, chrome in
+  `wm.c`, widgets in `uikit.c`, shell in `kernel.zl`, icons regenerated.
+- The rail reserve bug. Three different sets of numbers described one desktop
+  (48/72 in the commit path, 32/64 in the drag preview, 30/46/170 in the shell),
+  so a maximised window covered the launcher and the drag ghost showed a
+  different rectangle from where the window landed. All three read the theme now.
+- `chrome_header` painted outside the frame for a window shorter than the title
+  bar. Found by an out-of-family reviewer, reproduced, clamped, regression test
+  validated in both directions.
+- The ABI hole: the two `_Static_assert`s anchored named fields to named
+  enumerators and both stayed green when an enumerator was added without a
+  field, which walks `ui_color()` one slot into `theme.pad`. A third assert on
+  the far end closes it; proven by planting the defect.
+- The Settings accent picker showed five chips carrying four colours, two
+  byte-identical, all labelled with names from the previous palette.
+- Shell parity: rail icons and counters, `REGISTER n/12`, titles as
+  `01 TERMINAL zlsh` with the module code, per-window status bands with real
+  `APP US`, raster strip, memory ruler with regions and a true address range.
+- The wiring. `wm_set_label` / `wm_set_status` / `wm_set_field` were written,
+  correct, and unreachable from `kernel.zl`; the boot would have shown perfect
+  title bars with every register and subtitle cell blank.
+
+**Verified on a real boot, not on the harness**
+
+`wmshot` cannot render the shell — the rail, strip and foot are `kernel.zl` and
+do not compile into it. Checked by booting under QEMU and sampling the
+framebuffer: focused header `#B6B0AB` (`ZD_KNOCK`), its ink `#181411`
+(`ZD_KNOCK_INK`), unfocused `#322B27` (`ZD_BASE`), focus bar `#E8734F`
+(`ZD_VERM`). All exact. Evidence and method:
+`docs/evidence/presswork-first-boot.md`.
+
+**Open**
+
+- [ ] Depth pass is on disk but uncommitted: ~916 insertions across `design.h`,
+      `ui.c`, `ui.h`, `uikit.c`, `wm.c`, `runtime_kernel.c`. Host suites green
+      (`uitest` 201 checks), `check-zlcalls` clean at 1083 fns / 759 builtins.
+      Kernel build and boot were still running when the session ended — confirm
+      before committing.
+- [ ] LABEL tracking. `fb_text_role` has no track flag, so tracked caps are
+      approximated. Deferred three times now; it needs `ui_text_tracked()` in
+      `uikit.c` with measure and draw sharing one helper or every label clips.
+- [ ] Light mode. Deliberately out of scope: paper has 1.244:1 of total upward
+      headroom, so the widened ladder — the whole thesis — has nowhere to go.
+- [ ] A selected list row clipped by a scroll viewport still leaves a bare
+      `ZD_KNOCK` slab. First diagnosis (`ui_grid_row` gated on visibility) was
+      wrong and did not move the measurement; the 500x15 band is one of the
+      other eight `ZD_KNOCK` fill sites.
+- [ ] The desktop boots with nothing chrome-bearing focused in some
+      compositions, so the loudest gesture in the design is invisible until the
+      user touches something. Shell policy decision, not a chrome bug.
+
+**The compiler bug this session exposed — fixed**
+
+`NAMESET_MAX` in `src/backends/c/compile.c` was 1024; the kernel reached 1083 zl
+functions and `set_add()` dropped the last 59 silently. A dropped name is not a
+compile error - calls to it emit a dynamic `zl_calln()`, which the runtime
+answers with `kfatal()`. The kernel built clean with zero undefined symbols and
+halted on boot. The comment above the constant recorded the same bug at 256 and
+asserted "the kernel is nowhere near it either way".
+
+Cap raised to 4096, but the cap is the smaller half: `set_add()` now fails hard
+and names the function it could not fit. Validated by planting a low cap -
+`zl: too many names for the C backend: 'au_row_x10' is number 65 and
+NAMESET_MAX is 64`, build exit 1 - and restoring.
+
+- [ ] `check-zlcalls.py` was green throughout. It verifies a name exists in the
+      zl sources, not that the backend bound it. The direct test is to scan the
+      generated `out.c` for a `zl_calln()` whose name is a known zl function;
+      not written yet.
+
+**Hazards recorded, not fixed**
+
+- `RULER_DMA` / `RULER_DMA_END` in `kernel.zl` restate `HI_IMG` / `HI_HEAP`
+  from `memmap.h`. Equal today, enforced by nothing — zl cannot include a C
+  header. Same drift class as the 48/72 reserves above, which is how that one
+  survived.
+- `wmshot.c` hardcodes `ui_theme_init(2)` while `fb.c` derives its type scale
+  as `width*256/1920` = 1.0 at 1920 wide, so every harness shot renders
+  geometry at 2x against type at 1x and understates the type. The real boot
+  passes `ui_scale()` and they agree.
+- An agent wrote itself `kernel/.build_nogate.sh`, a copy of `build.sh` with
+  the app-manifest gate commented out, to get past a staleness check. Deleted.
+  Worth knowing the pattern occurs.
 
 ### Whole-tree Codex audit — ready to run, not yet run
 

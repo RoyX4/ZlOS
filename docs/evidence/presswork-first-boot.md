@@ -96,3 +96,70 @@ of Python and it has now been right three times against a confident wrong readin
 `memmap.h`. Verified equal today, enforced by nothing - zl cannot include a C header.
 That is the same drift class as the window-manager reserves that said 48/72 while the
 shell said 30/46/170, which is exactly how that bug survived.
+
+---
+
+## The compiler bug the depth pass exposed
+
+The kernel built clean - 0 undefined symbols, 5.59 MB - and halted on boot with
+
+```
+kernel runtime error: builtin not available in the kernel subset
+```
+
+which is `kfatal()`: a zl call fell off the end of the runtime's builtin table.
+`check-zlcalls.py` reported **"every call site resolves"** at the same moment, so
+the checker and the kernel disagreed about what a resolved call is.
+
+**Root cause: `NAMESET_MAX` in `src/backends/c/compile.c` was 1024 and the kernel
+reached 1083 zl functions.** `set_add()` dropped the last 59 silently - no count, no
+warning, no failure path at all. A dropped name is not a compile error: `set_has()`
+simply reports it unknown, so every call to it is emitted as a dynamic `zl_calln()`,
+which the runtime answers with `kfatal()`. Build succeeds, kernel halts.
+
+The comment directly above that constant records the SAME bug at 256, and then says:
+
+> "1024 is headroom, not a guess - the kernel is nowhere near it either way."
+
+It was at 1083.
+
+### What was changed, and why the cap is the smaller half
+
+`NAMESET_MAX` is 4096 now, but raising it only buys another scale - that is what the
+previous raise did. The defect is that `set_add()` had no failure path. A silent drop
+inside a compiler surfacing as a runtime halt in source that never changed is the most
+expensive shape a bug can take in this tree, because every instinct points at the code
+that moved rather than at the tool.
+
+It is a hard error now, naming the function it could not fit and stating the exact
+consequence that used to be silent.
+
+### Two instruments improved on the way
+
+- **The dispatcher's fatal did not name the builtin.** It said only "builtin not
+  available in the kernel subset", which costs a full build-and-boot cycle to turn
+  into a symbol - and the boot is the expensive half. It names it now. The message is
+  assembled at the call site rather than routed through `kfatal`'s hash, because that
+  hash is a wire ID for the flight recorder and two different missing builtins must
+  not log as one incident.
+- **`check-zlcalls.py` verifies that a name exists in the zl sources, not that the
+  backend bound it.** It is green on exactly this failure and stayed green throughout.
+  Closing that gap means comparing the function count against the backend's cap, or
+  scanning the generated `out.c` for `zl_calln()` of a name that is a known zl
+  function - the second is the direct test and neither is written yet.
+
+### The method that found it
+
+Three hypotheses were killed by measurement rather than argument:
+
+1. *Builtins conditionally compiled out.* Preprocessed `runtime_kernel.c` with the
+   kernel's own flags and diffed against the source-text harvest: 759 both sides,
+   zero difference.
+2. *C calling zl by name.* Zero `zl_calln(` outside generated files.
+3. *A zero-argument binding quirk.* `label_windows()` and `rail_reg_rows()` are
+   zero-arg and bind directly.
+
+What settled it was compiling `origin/main`'s `kernel.zl` with the same compiler and
+diffing the output: **origin/main emits 2 direct `zl_fn_layout()` calls; this tree
+emitted 2 dynamic `zl_calln("layout")` for the identical construct.** Same source
+shape, different binding, therefore the tool - not the source.

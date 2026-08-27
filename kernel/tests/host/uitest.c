@@ -74,7 +74,23 @@ void fb_line(int x0, int y0, int x1, int y1, unsigned rgb)
  * The real one resamples a bitmap atlas and its advances depend on the glyphs.
  * A geometry gate must not depend on that: every assertion below about where a
  * label lands would then encode the font rather than the layout. Three fixed
- * advances and three fixed heights, one per role, and a mono cell. */
+ * advances and three fixed heights, one per role, and a mono cell.
+ *
+ * IT IS SIZED IN PIXELS NOW, NOT IN ROLES. uikit.c stopped asking fb.c for a
+ * role, because a role does not resolve to three distinct sizes: fb.c floors
+ * its role ladder at 12px and the caption's base is 8, so CAPTION and BODY
+ * come out identical on a 1920-wide panel. It asks fb_text_rich for an exact
+ * height instead - design.h's ZD_T_SM/MD/LG, 11/13/21 design px - so the stub
+ * has to be a function of the SIZE rather than a three-entry table, or this
+ * gate would be measuring a scale the toolkit no longer uses.
+ *
+ * `size/2 + bold` is that function. It keeps the property the table had (a
+ * deterministic advance that is proportional to the size and one pixel wider
+ * in bold) and it holds at every UI scale, which the table never did - at
+ * ui_theme_init_q8(512) the toolkit asks for 22/26/42 and the table would have
+ * answered with the numbers for 11/13/21.
+ *
+ * The role forms stay, because fb_text_prop and wm.c still use them. */
 static const int ROLE_ADV[3] = { 6, 8, 11 };
 static const int ROLE_H[3]   = { 12, 16, 22 };
 static int rlen(const char *s) { int n = 0; if (s) while (s[n]) n++; return n; }
@@ -90,6 +106,29 @@ void fb_text_prop(int px, int py, const char *s, unsigned fg)
 { fb_text_role(px, py, s, fg, 1, 0); }
 int  fb_text_prop_w(const char *s) { return fb_text_role_w(s, 1, 0); }
 int  fb_text_prop_h(void) { return fb_text_role_h(1); }
+
+/* fb.c's FBT_BOLD, mirrored - it exports no header */
+#define RICH_BOLD 1
+int fb_text_rich_w(const char *s, int len, int size, int style)
+{
+    if (!s || len <= 0 || size <= 0) return 0;
+    return len * (size / 2 + ((style & RICH_BOLD) ? 1 : 0));
+}
+void fb_text_rich(int px, int py, const char *s, int len, unsigned fg,
+                  int size, int style)
+{
+    /* the recorder keeps the string, and a tracked label arrives here ONE
+     * GLYPH AT A TIME - so the op text is a single character and the
+     * assertions on tracking anchor on individual glyphs, which is what makes
+     * "did it track" answerable as a number rather than as "did it appear". */
+    char buf[64];
+    int n = len < (int)sizeof buf - 1 ? len : (int)sizeof buf - 1;
+    if (n < 0) n = 0;
+    memcpy(buf, s, (size_t)n);
+    buf[n] = 0;
+    rec(OP_TEXT, px, py, fb_text_rich_w(s, len, size, style), size, 0, fg,
+        255, buf);
+}
 void fb_text_aa(int px, int py, const char *s, unsigned fg)
 { rec(OP_TEXT, px, py, rlen(s) * 8, 16, 0, fg, 255, s); }
 int  fb_cell_w(void) { return 8; }
@@ -309,17 +348,35 @@ int main(void)
     printf("\n  pill button - S13.1, three sizes\n");
     {
         int hs = ui_pill_h(UI_SM), hm = ui_pill_h(UI_MD), hl = ui_pill_h(UI_LG);
-        oknum(hs == 2 * ZD_PILL_SM_PY + ROLE_H[0],
+        /* THE EXPECTED HEIGHT IS THE TOOLKIT'S OWN TYPE SIZE, not ROLE_H.
+         * ROLE_H is fb.c's role ladder and uikit.c no longer asks for a role -
+         * it asks fb_text_rich for design.h's ZD_T_* in pixels, because the
+         * ladder resolves SM and MD to the same 12px. Asserting against the
+         * old table would be asserting that the toolkit still uses a scale it
+         * deliberately left. What this still pins is the padding and WHICH
+         * size each pill takes; the ordering check below is what stops
+         * ui_text_h collapsing back into one number. */
+        oknum(hs == 2 * ZD_PILL_SM_PY + ui_text_h(UI_SM),
               "sm height is 2*3px padding + caption type", hs,
-              2 * ZD_PILL_SM_PY + ROLE_H[0]);
-        oknum(hm == 2 * ZD_PILL_MD_PY + ROLE_H[1],
+              2 * ZD_PILL_SM_PY + ui_text_h(UI_SM));
+        oknum(hm == 2 * ZD_PILL_MD_PY + ui_text_h(UI_MD),
               "md height is 2*6px padding + body type", hm,
-              2 * ZD_PILL_MD_PY + ROLE_H[1]);
+              2 * ZD_PILL_MD_PY + ui_text_h(UI_MD));
+        oknum(ui_text_h(UI_SM) == ZD_T_SM / 2 && ui_text_h(UI_MD) == ZD_T_MD / 2
+              && ui_text_h(UI_LG) == ZD_T_LG / 2,
+              "THREE sizes, and they are design.h's 11/13/21 - not fb.c's"
+              " role ladder, which gives 12/12/16 and only two of them",
+              ui_text_h(UI_SM) * 10000 + ui_text_h(UI_MD) * 100 + ui_text_h(UI_LG),
+              (ZD_T_SM / 2) * 10000 + (ZD_T_MD / 2) * 100 + ZD_T_LG / 2);
+        ok(ui_text_w("Handgloves", UI_SM, UI_F_BOLD)
+             != ui_text_w("Handgloves", UI_MD, UI_F_BOLD),
+           "control: SM and MD MEASURE differently - the old ladder gave the"
+           " same width for both, which is the defect this replaced");
         ok(hs < hm && hm < hl, "the three sizes are strictly ordered");
         int wm = ui_pill_w("Pack", UI_MD, 0);
-        oknum(wm == 2 * ZD_PILL_MD_PX + 4 * ROLE_ADV[1],
+        oknum(wm == 2 * ZD_PILL_MD_PX + ui_text_w("Pack", UI_MD, 0),
               "md width is 2*13px padding + the measured label", wm,
-              2 * ZD_PILL_MD_PX + 4 * ROLE_ADV[1]);
+              2 * ZD_PILL_MD_PX + ui_text_w("Pack", UI_MD, 0));
         ok(ui_pill_w("Pack", UI_MD, UI_F_MONO) == 2 * ZD_PILL_MD_PX + 4 * 8,
            "the mono flag measures against the fixed cell, not the atlas");
     }
@@ -450,7 +507,7 @@ int main(void)
         /* the close x lives INSIDE the tab, so a hit on it must not also
          * report a tab selection - that is the bug this asserts against */
         int pt = ZD_TAB_PAD_T, pxo = ZD_TAB_PAD_X, pr = ZD_TAB_PR, xw = ZD_TAB_X;
-        int tw0 = ZD_TAB_PL + 7 * ROLE_ADV[1] + 7 + xw + pr;
+        int tw0 = ZD_TAB_PL + ui_text_w("kernel/", UI_MD, 0) + 7 + xw + pr;
         int closex = 0 + pxo + tw0 - pr - xw + 1;
         begin_click(closex, pt + 4);
         int sel = ui_tabstrip(0, 0, 600, tabs, 1);
@@ -469,7 +526,7 @@ int main(void)
         ui_utabs(0, 0, 600, tabs, 1);
         /* the labels are the LABEL style now - SM/bold - and ui_utabs measures
          * in the same weight it draws, so tab 0's box grows by one unit a glyph */
-        int tw0 = 2 * ZD_UTAB_PX + 5 * (ROLE_ADV[1] + 1);
+        int tw0 = 2 * ZD_UTAB_PX + ui_text_w("Units", UI_MD, UI_F_BOLD);
         /* PRESSWORK: THE UNDERLINE IS ZD_LIT, NOT THE OVERPRINT. A 2dp rule is
          * thinner than ZD_FOCUS_BAR so the width rule would allow vermilion -
          * but the overprint has FOUR jobs and a tab underline is not one of
@@ -1001,7 +1058,7 @@ int main(void)
         ui_heading(0, 0, 150, "Devices");
         const struct op *g0 = find_text("D");
         const struct op *g6 = find_text("S");
-        int adv = fb_text_role_w("D", UI_SM, 1) + ZD_TR_LAB / 10;
+        int adv = ui_text_w("D", UI_SM, UI_F_BOLD) + ZD_TR_LAB / 10;
         ok(g0 && g6 && g0->x == ZD_CELL_PX && g6->x - g0->x == 6 * adv,
            "a section heading draws its label uppercased and tracked");
         begin_draw();
@@ -1254,6 +1311,100 @@ int main(void)
         ok(1, "control: cell/item/point called with no begin did not fault");
 
         ui_theme_init_q8(256);
+    }
+
+    /* ---- WHAT TYPE IS ACTUALLY IN THIS IMAGE -----------------------------
+     * The TYPE pane's whole claim is that it READS its facts rather than
+     * restating design.h's, so these assert the reading and not the numbers a
+     * comment hoped for. Every one of them is a sizeof over an array that must
+     * be in the link for this binary to exist at all.
+     *
+     * THE ONE THAT MATTERS MOST IS THE ABSENT ROW. design.h opens its type
+     * section with "THREE sizes, because there are THREE baked bitmap atlases
+     * (8x16, 16x32, 24x48)... a hard platform fact", and font_big.c is not in
+     * kernel/SOURCES. If somebody adds it, this test turns red and the pane
+     * stops saying ABSENT - which is the correct outcome in both directions. */
+    {
+        printf("\n  the atlas table - sizeof over the linked font arrays\n");
+        oknum(ui_atlas_n() == 9, "nine atlases are described", ui_atlas_n(), 9);
+
+        int present = 0, glyphs = 0;
+        for (int i = 0; i < ui_atlas_n(); i++)
+            if (ui_atlas_in_image(i)) { present++; glyphs += ui_atlas_glyphs(i); }
+        oknum(present == 8, "eight of the nine are in this image", present, 8);
+        oknum(glyphs == 760, "760 glyph cells are baked in", glyphs, 760);
+
+        /* the two mono coverage atlases - the console's face */
+        oknum(ui_atlas_w(0) == 8 && ui_atlas_h(0) == 16, "atlas 0 is the 8x16 mono cell",
+              ui_atlas_w(0) * 100 + ui_atlas_h(0), 816);
+        oknum(ui_atlas_w(1) == 16 && ui_atlas_h(1) == 32, "atlas 1 is the 16x32 mono cell",
+              ui_atlas_w(1) * 100 + ui_atlas_h(1), 1632);
+        /* ...and the one the design asked for and the link does not have */
+        oknum(ui_atlas_in_image(2) == 0, "the 24x48 atlas is NOT in this image",
+              ui_atlas_in_image(2), 0);
+        oknum(ui_atlas_w(2) == 24 && ui_atlas_h(2) == 48,
+              "it is still described, so the pane can report it absent",
+              ui_atlas_w(2) * 100 + ui_atlas_h(2), 2448);
+
+        /* the six proportional atlases - the face the whole desktop draws in */
+        int sans = 0, sansb = 0;
+        for (int i = 0; i < ui_atlas_n(); i++) {
+            if (ui_atlas_face(i) == 1) sans++;
+            if (ui_atlas_face(i) == 2) sansb++;
+        }
+        oknum(sans == 3 && sansb == 3, "three sans cells at two weights",
+              sans * 10 + sansb, 33);
+        oknum(ui_atlas_h(3) == 16 && ui_atlas_h(5) == 24 && ui_atlas_h(7) == 32,
+              "the sans cells are 16 / 24 / 32 px",
+              ui_atlas_h(3) + ui_atlas_h(5) + ui_atlas_h(7), 72);
+        /* bold is a WIDER cell at the same height, which is what makes the two
+         * separate atlases rather than one with a flag */
+        oknum(ui_atlas_w(4) > ui_atlas_w(3), "the bold cell is wider than the regular",
+              ui_atlas_w(4) - ui_atlas_w(3), 2);
+        for (int i = 0; i < ui_atlas_n(); i++)
+            if (ui_atlas_glyphs(i) != 95) {
+                oknum(0, "every atlas covers 95 glyphs", ui_atlas_glyphs(i), 95);
+                break;
+            }
+        ok(ui_atlas_glyphs(8) == 95, "every atlas covers 95 glyphs, ASCII 32..126");
+
+        /* out of range must answer with nothing rather than reading past the
+         * table - zl can call any of these with any integer */
+        oknum(ui_atlas_w(-1) == 0 && ui_atlas_w(99) == 0 && ui_atlas_face(99) == -1,
+              "an out-of-range index answers empty, not garbage",
+              ui_atlas_w(99) + ui_atlas_face(99), -1);
+
+        /* ---- THE LIVE HALF, and it is the half that could drift ----------
+         * ui_atlas_for_role() re-derives fb.c's prop_atlas_cell() rule -
+         * "nearest generated cell to the wanted height" - out of the table
+         * rather than copying its `<=20 -> 16, <=28 -> 24, else 32`. That is
+         * only worth anything if the two agree, so this asserts the agreement
+         * directly, at both shipped scales, against the stub ROLE_H above
+         * which mirrors fb.c's role ladder. */
+        static const int WANT[3] = { 12, 16, 22 };   /* == ROLE_H */
+        for (int r = 0; r < 3; r++) {
+            int want = WANT[r];
+            int expect = want <= 20 ? 16 : (want <= 28 ? 24 : 32);
+            int got = ui_atlas_for_role(r, 0);
+            oknum(got >= 0 && ui_atlas_h(got) == expect,
+                  "the register resolves to the atlas fb.c would pick",
+                  got >= 0 ? ui_atlas_h(got) : -1, expect);
+            oknum(ui_atlas_face(got) == 1, "...and to the regular weight",
+                  ui_atlas_face(got), 1);
+            int gb = ui_atlas_for_role(r, 1);
+            oknum(gb >= 0 && ui_atlas_face(gb) == 2 && ui_atlas_h(gb) == expect,
+                  "...and asking bold gets the bold cell at the same height",
+                  gb >= 0 ? ui_atlas_h(gb) : -1, expect);
+        }
+        /* THE SCALE COLLAPSE, ASSERTED. At this role ladder SM (12) and MD
+         * (16) both round to the 16px atlas, so caption and body share a face
+         * and the three-step type scale is two steps. The TYPE pane prints
+         * this; here is the check that it is true. */
+        oknum(ui_atlas_for_role(0, 0) == ui_atlas_for_role(1, 0),
+              "SM and MD share one atlas at this scale - the scale collapses",
+              ui_atlas_for_role(0, 0), ui_atlas_for_role(1, 0));
+        ok(ui_atlas_for_role(2, 0) != ui_atlas_for_role(1, 0),
+           "...and LG does not, so the pane has two faces to report, not one");
     }
 
     printf("\n%s   %d checks, %d failure%s\n",

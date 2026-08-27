@@ -80,6 +80,28 @@
 #ifndef ZL_DESIGN_H
 #define ZL_DESIGN_H
 
+/* ---- the ends of the axis, and they are NOT design colours -----------------
+ * WCAG contrast is defined lighter-over-darker against pure black and pure
+ * white, so "how much room does this surface have below it / above it" is the
+ * ratio to one endpoint or the other. ui_ceil_dn_q4 / ui_ceil_up_q4 need those
+ * two values, and the settings pane's edge table is nothing but the comparison
+ * between them.
+ *
+ * THEY ARE HERE BECAUSE OF THE RULE, NOT BECAUSE THEY ARE TOKENS. "A colour
+ * literal may appear in this file and in no other" has no clause for "unless
+ * it is only maths", and hosttest/uitest.c enforces it by SCANNING for six hex
+ * digits - which is the right way to enforce it, because a scanner cannot be
+ * argued with about intent. Written as 0x000000 in ui.c they were two literals
+ * in a file the gate says must have none, and the gate caught them.
+ *
+ * NOTHING PAINTS WITH THEM and nothing may. They are arguments to ui_ratio_q4
+ * and no role in struct ui_theme is ever assigned either one: on this ladder
+ * pure black is 1.5105:1 below the plate - louder than the groove, which is
+ * the whole downward budget - and pure white is 13.9030:1 above it, twice the
+ * knockout. Either as a surface would be off the top of the design. */
+#define ZD_AXIS_BLACK 0x000000
+#define ZD_AXIS_WHITE 0xFFFFFF
+
 /* ---- the surface ladder ---------------------------------------------------
  * EIGHT rungs, darkest first, and this is a DEPTH LADDER, not a set of greys.
  * A surface drawn on top of another is one rung lighter; the boundary between
@@ -144,6 +166,97 @@
 #define ZD_KO_EDGE    0x6F6864 /* == ZD_LIT. 2.5487:1 on ZD_KNOCK          */
 #define ZD_KNOCK_INK  0x181411 /* the title, reversed out. 8.5329:1        */
 #define ZD_KNOCK_INK2 0x46413D /* secondary on the knockout. 4.6965:1      */
+
+/* ---- the fallback the knockout is argued AGAINST --------------------------
+ * THE SETTINGS PANE'S "the knockout" TOGGLE IS A LIVE CONTROL, NOT A
+ * PARAGRAPH, and this is the surface it falls back to. The prototype states
+ * the requirement exactly: "turn the knockout off and the header returns to
+ * graphite's ZD_FOCUS_WASH ramp: same band, same area". Same band and same
+ * area is the whole comparison - if the fallback painted fewer pixels the
+ * ratio figures beside it would not be comparing anything.
+ *
+ * WHERE THE VALUE COMES FROM, and it is derived rather than picked. The
+ * prototype's fallback header is `background: var(--zd-base)` with one
+ * gradient over it whose loudest stop is
+ *
+ *     color-mix(in srgb, var(--zd-lit) 34%, transparent)
+ *
+ * i.e. ZD_LIT at alpha 0.34 composited on ZD_BASE. Per channel:
+ *     R  0x32 + 0.34*(0x6F-0x32) = 70.74 -> 0x47
+ *     G  0x2B + 0.34*(0x68-0x2B) = 63.74 -> 0x40
+ *     B  0x27 + 0.34*(0x64-0x27) = 59.74 -> 0x3C
+ *
+ * IT COMPUTES 1.3681:1 ON ZD_BASE, NOT 1.3999:1, and the difference is
+ * declared rather than smoothed over. 1.3999 is graphite's own ZD_FOCUS_WASH
+ * token; that token is not in this ladder and was never available to compute
+ * from - wm.c makes the same disclosure at chrome_header. What IS in this
+ * ladder is the ramp the prototype actually draws, and 1.3681:1 is what that
+ * ramp measures at its loudest stop. The settings pane prints the live figure
+ * and quotes 1.3999 separately, in the comparison rows, as the foreign number
+ * it is.
+ *
+ * IT IS FLAT WHERE THE PROTOTYPE RAMPS. wm.c's chrome_header paints the band
+ * with fb_rrect_grad_top(..., t->knock, t->knock) - one colour passed twice -
+ * so swapping theme.knock for this token gives a flat wash across the band
+ * rather than a horizontal ramp across it. Flat at the ramp's loudest stop is
+ * the conservative direction (it overstates the fallback, which is the side
+ * that makes the knockout look WORSE by comparison), and turning it into a
+ * real ramp is a wm.c edit, not a token. */
+#define ZD_FOCUS_WASH 0x47403C /* ZD_LIT at 34% on ZD_BASE. 1.3681:1       */
+
+/* ---- THE COMPARISON LADDER, and it is a CONTROL rather than a footnote ------
+ * The settings pane's central claim - "the knockout is safe on THIS ladder and
+ * was not safe on the one before it" - is a comparison, and a comparison needs
+ * the other side present as values rather than as prose. These four are the
+ * prototype's `--zd-ref-*` block, verbatim, and they are the ONLY colours in
+ * this file that are not PRESSWORK's: they are the parent designs' tokens,
+ * kept so the pane can compute against them instead of quoting a number.
+ *
+ * They are in this file for the same reason everything else is - a colour
+ * literal lives here and nowhere else - and they are segregated by name so no
+ * call site can reach for one by accident. NOTHING PAINTS WITH THEM. They are
+ * arguments to ui_ratio() and to nothing else, and ui_theme_init_q8 does not
+ * assign any of them to a role.
+ *
+ * What they buy, all of it computed at render time rather than quoted:
+ *   ZD_LIT on graphite's ground      1.9931:1  a LIGHTER term
+ *   ZD_LIT on PLATE's knockout       5.9822:1  a DARKER  term - 3.00x, and
+ *                                              the opposite sign. That pair
+ *                                              IS the sign inversion.
+ *   PLATE's knockout on that ground 11.9231:1  the figure this header quotes
+ *                                              at line 128, now derived
+ */
+#define ZD_REF_LIT_RAKING   0x5F5854 /* the parent's struck run             */
+#define ZD_REF_BASE_RAKING  0x322B27 /* == ZD_BASE. the ground never moved  */
+#define ZD_REF_KNOCK_PLATE  0xF2EDE4 /* PLATE's knockout, imported untouched*/
+#define ZD_REF_WASH_RAKING  0x404348 /* the parent's focus wash             */
+
+/* ...and the three that CANNOT be derived, named so that the settings pane
+ * never has to invent one. Everything else the pane prints comes out of
+ * ui_ratio() against live tokens; these measure things this ladder has no
+ * token for at all, so they are quoted, and the pane prints them in the dim
+ * ink it reserves for exactly that distinction.
+ *
+ * The plate's own pixel counts are NOT here on purpose - 16,800 is
+ * ZD_REF_PLATE_W x ZD_TITLE_H and 1,176 is the focus bar's width x the plate
+ * below the header, so the pane derives both from geometry. Only the raking
+ * design's signal is a quoted count, because its focus signal is not a
+ * rectangle this ladder knows the shape of.
+ *
+ * Contrast constants are x10^4, the same fixed point ui_ratio() returns, so a
+ * quoted figure and a computed one go through exactly one print helper and
+ * cannot drift into two different roundings. */
+#define ZD_REF_PLATE_W     600   /* the prototype's reference plate, dp      */
+#define ZD_REF_PLATE_H     420
+#define ZD_REF_RAKING_PX  1019   /* raking's focus signal on that plate      */
+#define ZD_REF_GRAPHITE_PX 17976 /* graphite's bezel + wash, same plate.   */
+                                 /* THE IDENTICAL AREA - that equality is  */
+                                 /* the comparison, and it is why the pane */
+                                 /* prints this next to a derived total.   */
+#define ZD_REF_WASH_Q4   13999   /* graphite's own ZD_FOCUS_WASH on ZD_BASE. */
+                                 /* the token is not in this ladder - see    */
+                                 /* ZD_FOCUS_WASH above for what IS.         */
+#define ZD_REF_RAKING_Q4 61900   /* raking's loudest element on a plate      */
 
 /* the ruled module grid, printed onto the desk. 12 x 8 modules, margin 16dp,
  * gutter 12dp, and it is visible only where no plate covers the field. Its job

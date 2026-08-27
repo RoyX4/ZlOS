@@ -195,6 +195,63 @@ void ui_theme_set(const struct ui_theme *t);
 unsigned ui_color(int role);            /* shared C/zl source of colour truth */
 int ui_metric(int role);
 
+/* ---- WHAT TYPE IS IN THIS IMAGE --------------------------------------------
+ * What the TYPE app is built on. Exposed rather than kept private because it
+ * must be callable from kernel.zl, and because it is a MEASUREMENT of the
+ * linked font arrays - not a table of numbers a comment claims are true. See
+ * ui.c for the derivation, and for the one thing the prototype asserted that
+ * this image does not have.
+ *
+ * Contrast itself is NOT here - ui_ratio_q4() above already is it, at the same
+ * x10^4 fixed point, and a second copy of a WCAG table is exactly the kind of
+ * drift design.h's one-file rule exists to stop. */
+int ui_atlas_n(void);              /* atlases the TYPE pane knows about      */
+int ui_atlas_w(int i);             /* cell width, px - sizeof, not typed in  */
+int ui_atlas_h(int i);             /* cell height, px                        */
+int ui_atlas_glyphs(int i);        /* coverage                               */
+int ui_atlas_face(int i);          /* 0 mono, 1 sans, 2 sans bold            */
+int ui_atlas_in_image(int i);      /* 0 == declared by the design, not linked */
+int ui_atlas_for_role(int role, int weight); /* which one, at this scale, now */
+
+/* ---- what the settings pane needs, and nothing else needs ------------------
+ * ui_ratio_q4 and the two ceilings are WCAG contrast in integer fixed point,
+ * x10^4, computed from a 256-entry sRGB table rather than from a pow() that
+ * does not exist here. See ui.c for the accuracy measurement.
+ *
+ * ui_knockout_* and ui_focus_bar_* are the two live controls the settings
+ * pane's FOCUS tab owns. Both rebuild the theme and NEITHER repaints - the
+ * caller damages afterwards, because surfaces belong to wm.c and this layer
+ * must not know about them. */
+unsigned ui_ratio_q4(unsigned a, unsigned b);
+unsigned ui_ceil_dn_q4(unsigned rgb);   /* room downward: ratio to black    */
+unsigned ui_ceil_up_q4(unsigned rgb);   /* room upward:   ratio to white    */
+int ui_knockout_get(void);              /* 1 == the knockout is on          */
+int ui_knockout_set(int on);            /* returns the state it settled on  */
+/* the focus bar's width in DESIGN px, and the prototype's own slider range. */
+#define UI_FBAR_MIN 1
+#define UI_FBAR_MAX 6
+int ui_focus_bar_dp(void);
+int ui_focus_bar_set(int n);
+
+/* THE COMPARISON LADDER, by index. design.h's ZD_REF_* block - the PARENT
+ * designs' tokens, kept so the settings pane can COMPUTE the comparison rather
+ * than quote it. Nothing paints with them; they are arguments to ui_ratio_q4.
+ * Reached through a function so that the colour literals stay in design.h,
+ * which is the rule with no exceptions. */
+enum ui_ref_color_id {
+    UI_REF_LIT_RAKING = 0, UI_REF_BASE_RAKING,
+    UI_REF_KNOCK_PLATE, UI_REF_WASH_RAKING
+};
+unsigned ui_ref_color(int which);
+/* ...and the figures that are not colours: the reference plate, the header
+ * height in DESIGN px, and the three quantities no live token can produce. */
+enum ui_ref_num_id {
+    UI_REFN_PLATE_W = 0, UI_REFN_PLATE_H, UI_REFN_TITLE_H,
+    UI_REFN_RAKING_PX, UI_REFN_GRAPHITE_PX,
+    UI_REFN_WASH_Q4, UI_REFN_RAKING_Q4
+};
+int ui_ref_num(int which);
+
 /* ---- the app contract -----------------------------------------------------
  * Three functions, NO LOOP, EVER. If you are writing `while (...)` inside an
  * app you have made a mistake - that `while` is exactly why every demo in this
@@ -496,8 +553,13 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
  * zero items; a trailing '|' is an empty item, not a terminator.
  */
 
-/* sizes - these ARE fb.c's text roles, so a widget's size and its type size
- * cannot drift apart */
+/* THE TYPE SCALE. These used to BE fb.c's text roles and are now design.h's
+ * ZD_T_SM / ZD_T_MD / ZD_T_LG - 11 / 13 / 21 design px. The numbering is
+ * unchanged so no call site moves, but the resolution is not fb.c's any more:
+ * asking fb.c for a role gets 12 / 12 / 16 on a 1920-wide panel, because its
+ * role ladder is floored at 12 and the caption's base is 8. CAPTION and BODY
+ * came out the same size. See the long note over ui_text_h in uikit.c for the
+ * measurement and for what the change costs. */
 #define UI_SM 0
 #define UI_MD 1
 #define UI_LG 2
@@ -505,6 +567,8 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
 /* flags, OR-ed */
 #define UI_F_MONO (1 << 0)   /* Roboto Mono in the reference: numbers, paths */
 #define UI_F_BOLD (1 << 1)   /* the reference's fontWeight:700              */
+#define UI_F_CAPS (1 << 2)   /* text-transform: uppercase. ASCII only, which */
+                             /* is the whole of what the three atlases carry */
 
 /* button kinds */
 #define UI_BTN_NEUTRAL 0     /* rgba(255,255,255,.07) / body text           */
@@ -526,6 +590,39 @@ unsigned ui_luminance_q16(unsigned rgb);   /* 0..65535; exposed for the gate */
 int  ui_text_w(const char *s, int size, int flags);
 int  ui_text_h(int size);
 void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
+
+/* ---- TRACKED TEXT, which is PRESSWORK's fourth type style ------------------
+ * Not a fourth SIZE - there are three baked atlases and no rasteriser, so a
+ * fourth size does not exist to be asked for. It is SM, uppercase, bold and
+ * LETTER-SPACED, and design.h has carried ZD_TR_LAB (1.4 design px) and
+ * ZD_TR_BIG (2.6) since PRESSWORK landed. ZD_TR_BIG had NO reader in the tree
+ * at all; ZD_TR_LAB had one, inside uikit.c, reachable by three widgets.
+ *
+ * fb_text_role draws a whole string in one call and has no track argument -
+ * and no flag word to put one in, which is the shape design.h predicts. It is
+ * not fb.c's job: tracking is one draw per glyph with the pen advanced by the
+ * glyph plus the track, and that is this layer. fb.c is not edited.
+ *
+ * THE MEASURE AND THE DRAW SHARE ONE LOOP, which design.h states in the same
+ * breath as the token: a label measured without the track and drawn with it
+ * clips at its right edge. `_w` and the draw are the same function with the
+ * ink switched off. The trailing track is cancelled - the prototype's own
+ * `margin-right: calc(-1 * var(--tr-lab))` - so a width is the glyphs plus
+ * (n-1) tracks, never n.
+ *
+ * `track_x10` is a design.h tracking token, i.e. design px times ten. 0 means
+ * untracked, which makes this pair the single text engine: the zl shell's
+ * `label` builtin is this with a track of 0.
+ *
+ * ui_caps and ui_display bake in one token each, so no call site spells a
+ * track and design.h stays the only place the number lives. */
+int  ui_text_tracked_w(const char *s, int size, int flags, int track_x10);
+void ui_text_tracked(int x, int y, const char *s, unsigned rgb,
+                     int size, int flags, int track_x10);
+int  ui_caps_w(const char *s, int size);      /* th / .t-lab / .sect / .kv .k */
+void ui_caps(int x, int y, const char *s, unsigned rgb, int size);
+int  ui_display_w(const char *s, int size);   /* .t-big - one reading a view  */
+void ui_display(int x, int y, const char *s, unsigned rgb, int size);
 
 /* ---- buttons - docs/reference/ui/widgets.md S13 -------------------------- */
 int  ui_pill_w(const char *s, int size, int flags);

@@ -567,6 +567,36 @@ extern void ui_theme_init(int scale);
 extern void ui_theme_init_q8(int scale_q8);
 extern unsigned ui_color(int role);
 extern int ui_metric(int role);
+/* THE SETTINGS PANE'S OWN FIVE. ui_ratio/ui_ceil_* are the contrast engine -
+ * WCAG in integer fixed point, x10^4 - and ui_knock/ui_fbar are the two live
+ * controls the FOCUS tab drives. A native with no registration is dead code
+ * and this tree has already paid for that once, so all five are registered
+ * below and check-zlcalls.py resolves every zl call site against this list. */
+extern unsigned ui_ratio_q4(unsigned a, unsigned b);
+extern unsigned ui_ceil_dn_q4(unsigned rgb);
+extern unsigned ui_ceil_up_q4(unsigned rgb);
+extern int ui_knockout_get(void);
+extern int ui_knockout_set(int on);
+extern int ui_focus_bar_dp(void);
+extern int ui_focus_bar_set(int n);
+extern unsigned ui_ref_color(int which);
+extern int ui_ref_num(int which);
+/* THE LABEL AND DISPLAY STYLES, and the ATLAS TABLE - what the SYSTEM and TYPE
+ * panes are built on. The first pair is PRESSWORK's tracked-caps style, which
+ * uikit.c owns and which nothing in kernel.zl could reach until it was
+ * registered below; the atlas seven are sizeof() over the linked font arrays,
+ * so the TYPE pane reads its own facts instead of restating design.h's. */
+extern int  ui_caps_w(const char *s, int size);
+extern void ui_caps(int x, int y, const char *s, unsigned rgb, int size);
+extern int  ui_display_w(const char *s, int size);
+extern void ui_display(int x, int y, const char *s, unsigned rgb, int size);
+extern int ui_atlas_n(void);
+extern int ui_atlas_w(int i);
+extern int ui_atlas_h(int i);
+extern int ui_atlas_glyphs(int i);
+extern int ui_atlas_face(int i);
+extern int ui_atlas_in_image(int i);
+extern int ui_atlas_for_role(int role, int weight);
 extern void ui_begin(int x, int y, int w, int h, int mode, int px, int py, int click);
 extern int  ui_fired(void);
 extern void ui_label(const char *s);
@@ -598,6 +628,27 @@ extern void ui_endrow(void);
 extern int  ui_text_w(const char *s, int size, int flags);
 extern int  ui_text_h(int size);
 extern void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags);
+/* TRACKED TEXT, and it is what the `label*` builtins below now draw through.
+ * uikit.c had the tracking and it was file-local, so three C widgets could
+ * draw PRESSWORK's label style and the entire zl shell could not - which is
+ * every uppercase run the desktop actually shows: the register rail's section
+ * heads, RASTER, ADVANCE, IDLE WAKEUPS/H, BUDGET, MEMORY, WORKSPACE. See
+ * ui.h. `ui_text_tracked` with a track of 0 is a plain draw, which is why
+ * `label` can go through it too and the whole zl side ends up on ONE text
+ * engine instead of on fb.c's role ladder. */
+extern int  ui_text_tracked_w(const char *s, int size, int flags, int track_x10);
+extern void ui_text_tracked(int x, int y, const char *s, unsigned rgb,
+                            int size, int flags, int track_x10);
+/* ui_caps / ui_display are declared with the SYSTEM and TYPE pane's externs
+ * further up; they are the same four functions and one declaration is enough.
+ *
+ * ui.h's UI_F_BOLD, mirrored. This file DECLARES the toolkit rather than
+ * including it - every ui_* here is an extern - so the one flag the label
+ * bindings need is spelled here, exactly as uikit.c mirrors fb.c's FBT_BOLD
+ * for the same reason. If ui.h's value moves, the `ui_txt` binding below
+ * breaks at the same moment, because it passes zl's own flag word straight
+ * through without ever naming it. */
+#define ZL_UI_F_BOLD 2
 extern int  ui_pill_w(const char *s, int size, int flags);
 extern int  ui_pill_h(int size);
 extern int  ui_pill(int x, int y, int w, int h, const char *s,
@@ -679,6 +730,31 @@ static const char *zl_itoa(int v)
     unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
     buf[i] = 0;
     do { buf[--i] = (char)('0' + (int)(u % 10u)); u /= 10u; } while (u && i > 1);
+    if (neg && i > 0) buf[--i] = '-';
+    return &buf[i];
+}
+
+/* THE SAME, BUT IT KEEPS THE WIDTH `label_num` ALWAYS HAD. That binding used
+ * to call console_num_role, which takes a `long` and formats the digits
+ * itself; it now formats here so the run can go through the toolkit's type
+ * scale rather than fb.c's role ladder, and going through zl_itoa above would
+ * have narrowed a 64-bit value to `int` on the ZL_64 build. kernel.zl feeds it
+ * byte counts - `fs_free() * fs_bs()` - so 2 GiB is not a theoretical ceiling.
+ *
+ * `unsigned long % 10u` is safe on BOTH targets for the reason zl_itoa's own
+ * note gives and nothing more: on the -m32 kernel `long` is 32 bits, so this
+ * is a 32-bit divide and needs no __udivmoddi4; on ZL_64 the compiler emits a
+ * native 64-bit div. console_num_role has done exactly this since it landed.
+ * The separate buffer matters - one caller may be measuring while another
+ * draws, and a shared static would hand the second the first's digits. */
+static const char *zl_ltoa(long v)
+{
+    static char buf[24];
+    int i = (int)sizeof buf - 1;
+    int neg = v < 0;
+    unsigned long u = neg ? (unsigned long)(-v) : (unsigned long)v;
+    buf[i] = 0;
+    do { buf[--i] = (char)('0' + (int)(u % 10ul)); u /= 10ul; } while (u && i > 1);
     if (neg && i > 0) buf[--i] = '-';
     return &buf[i];
 }
@@ -1319,11 +1395,35 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "con_mute"))   { console_mute((int)a[0].num); return zl_nil(); }
     /* PROPORTIONAL text, by ROLE - caption / body / title, regular or bold.
      * Everything kernel.zl drew was monospace; only wm.c's window titles were
-     * not. See console.c. */
-    if (streq(name, "label"))      { if (a[2].type==V_STR) console_text_role((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
-    if (streq(name, "label_w"))    { if (a[0].type==V_STR) return zl_num((double)console_text_role_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
-    if (streq(name, "label_h"))    return zl_num((double)console_text_role_h((int)a[0].num));
-    if (streq(name, "label_num"))  { console_num_role((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned int)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+     * not. See console.c.
+     *
+     * THEY GO THROUGH THE TOOLKIT NOW, NOT THROUGH console_text_role. Same
+     * six arguments, same T_CAPTION/T_BODY/T_TITLE numbers on the zl side,
+     * one thing changed underneath: console_text_role is a passthrough to
+     * fb_text_role, whose role ladder is floored at 12px, so T_CAPTION and
+     * T_BODY BOTH RENDERED AT 12 on the 1920-wide panel. Measured:
+     * fb_text_role_w() returns the identical width for the same string at
+     * both. The desktop's type scale was two steps, not three, and the
+     * prototype's is 11/13/21. ui_text_* resolve through design.h's ZD_T_*
+     * instead, so the shell and the widget catalogue are now one scale
+     * rather than two - see the note over ui_text_h in uikit.c.
+     *
+     * `label` is ui_text_tracked with a track of ZERO rather than ui_text,
+     * because ui_text gates on ui_mode_get() - ui.c's cursor runs a widget
+     * twice, once to hit-test and once to draw - and the shell draws OUTSIDE
+     * any cursor pass, where L.mode still holds whatever the last ui_begin()
+     * set. Going through the gated form would make the desktop's text vanish
+     * after any settings hit-test. ui_text_tracked is the ungated primitive
+     * and that is stated at its definition. */
+    if (streq(name, "label"))      { if (a[2].type==V_STR) ui_text_tracked((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num?ZL_UI_F_BOLD:0,0); return zl_nil(); }
+    if (streq(name, "label_w"))    { if (a[0].type==V_STR) return zl_num((double)ui_text_tracked_w(a[0].str,(int)a[1].num,(int)a[2].num?ZL_UI_F_BOLD:0,0)); return zl_num(0.0); }
+    if (streq(name, "label_h"))    return zl_num((double)ui_text_h((int)a[0].num));
+    if (streq(name, "label_num"))  { ui_text_tracked((int)a[0].num,(int)a[1].num,zl_ltoa((long)a[2].num),(unsigned int)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num?ZL_UI_F_BOLD:0,0); return zl_nil(); }
+    /* THE TRACKED STYLES ARE NOT REGISTERED A SECOND TIME HERE. `ui_caps` /
+     * `ui_capsw` / `ui_disp` / `ui_dispw` are bound further down with the
+     * SYSTEM and TYPE panes' builtins and are the same four functions; a
+     * second name for one thing is how a shell ends up with two label styles
+     * that drift. kernel.zl's shell calls those. */
     if (streq(name, "gradtop"))    { console_gradtop((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num,(unsigned int)(unsigned long long)a[6].num); return zl_nil(); }
     /* v10: translucency, the two gradient shapes, and the blur CACHE. The
      * blur is a cache and not a filter on purpose - one is 7.4 ms and the
@@ -1647,6 +1747,25 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_theme_q8")){ ui_theme_init_q8((int)a[0].num); return zl_nil(); }
     if (streq(name, "ui_color"))   return zl_num((double)ui_color((int)a[0].num));
     if (streq(name, "ui_metric"))  return zl_num((double)ui_metric((int)a[0].num));
+    /* CONTRAST, x10^4, so 6.4796:1 arrives as 64796. zl has no formatting and
+     * no float in the drawing path; the fixed point crosses the seam and
+     * kernel.zl's set_dec() prints it. Order-independent - the ratio is
+     * defined lighter over darker, so no caller has to know which is on top. */
+    if (streq(name, "ui_ratio"))   return zl_num((double)ui_ratio_q4((unsigned)a[0].num,(unsigned)a[1].num));
+    if (streq(name, "ui_ceil_dn")) return zl_num((double)ui_ceil_dn_q4((unsigned)a[0].num));
+    if (streq(name, "ui_ceil_up")) return zl_num((double)ui_ceil_up_q4((unsigned)a[0].num));
+    /* the two live controls. Both return the state they SETTLED on, not the
+     * state asked for, because ui_focus_bar_set clamps - a caller that echoed
+     * its own argument back into its slider would draw a thumb past the end. */
+    if (streq(name, "ui_knock"))   return zl_num((double)ui_knockout_set((int)a[0].num));
+    if (streq(name, "ui_knock_on"))return zl_num((double)ui_knockout_get());
+    if (streq(name, "ui_fbar"))    return zl_num((double)ui_focus_bar_set((int)a[0].num));
+    if (streq(name, "ui_fbar_dp")) return zl_num((double)ui_focus_bar_dp());
+    /* the comparison ladder. design.h's ZD_REF_* block by index, so kernel.zl
+     * can compute against the parent designs with no colour literal of its
+     * own - see ui.h's enum for the numbering. */
+    if (streq(name, "ui_ref"))     return zl_num((double)ui_ref_color((int)a[0].num));
+    if (streq(name, "ui_refn"))    return zl_num((double)ui_ref_num((int)a[0].num));
     if (streq(name, "ui_begin"))   { ui_begin((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
                                               (int)a[4].num,(int)a[5].num,(int)a[6].num,(int)a[7].num); return zl_nil(); }
     if (streq(name, "ui_fired"))   return zl_num((double)ui_fired());
@@ -1711,6 +1830,38 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_dot"))     { ui_dot((int)a[0].num,(int)a[1].num,(unsigned)(unsigned long long)a[2].num,(int)a[3].num); return zl_nil(); }
     if (streq(name, "ui_meter_h")) return zl_num((double)ui_meter_h());
     if (streq(name, "ui_meter"))   { ui_meter((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned)(unsigned long long)a[4].num); return zl_nil(); }
+    /* ---- THE LABEL AND DISPLAY STYLES, REACHABLE FROM zl -------------------
+     * uikit.c's own comment over text_run() says these are "registered as zl
+     * builtins" and, when the SYSTEM and TYPE panes were written against them,
+     * they were not - the three widgets inside uikit.c could draw the tracked
+     * label style and nothing in kernel.zl could. That is the exact shape of
+     * gap this file exists to close: a C function with no registration is
+     * unreachable, and an unreachable style is a style the shell does not have.
+     *
+     * ui_caps bakes in ZD_TR_LAB and uppercases; ui_disp bakes in ZD_TR_BIG.
+     * Each has a `w` twin because the measure and the draw MUST come from the
+     * same loop or a tracked label clips at its right edge - which is what
+     * design.h warns about in the same breath as the token, and what a
+     * right-flushed table cell in these two panes would hit first. */
+    if (streq(name, "ui_caps"))    { if (a[2].type==V_STR) ui_caps((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "ui_capsw"))   { if (a[0].type==V_STR) return zl_num((double)ui_caps_w(a[0].str,(int)a[1].num)); return zl_num(0.0); }
+    if (streq(name, "ui_disp"))    { if (a[2].type==V_STR) ui_display((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num); return zl_nil(); }
+    if (streq(name, "ui_dispw"))   { if (a[0].type==V_STR) return zl_num((double)ui_display_w(a[0].str,(int)a[1].num)); return zl_num(0.0); }
+    /* ---- WHAT TYPE IS IN THIS IMAGE ---------------------------------------
+     * sizeof() over the real font arrays, so a regenerated atlas moves the
+     * TYPE pane and a font dropped from kernel/SOURCES stops the link. Contrast
+     * is NOT here: ui_ratio above already is it.
+     *
+     * A native with no registration is dead code and this tree has paid for
+     * that mistake, so every one of these seven has a call site in kernel.zl's
+     * type_body(). */
+    if (streq(name, "atlas_n"))    return zl_num((double)ui_atlas_n());
+    if (streq(name, "atlas_w"))    return zl_num((double)ui_atlas_w((int)a[0].num));
+    if (streq(name, "atlas_h"))    return zl_num((double)ui_atlas_h((int)a[0].num));
+    if (streq(name, "atlas_g"))    return zl_num((double)ui_atlas_glyphs((int)a[0].num));
+    if (streq(name, "atlas_face")) return zl_num((double)ui_atlas_face((int)a[0].num));
+    if (streq(name, "atlas_in"))   return zl_num((double)ui_atlas_in_image((int)a[0].num));
+    if (streq(name, "atlas_role")) return zl_num((double)ui_atlas_for_role((int)a[0].num,(int)a[1].num));
     /* ---- the browser. Everything below is one app's policy surface. */
     /* ---- virtio-net. net_up() is the one that does the work; everything
      * else reports what happened, because a driver that fails silently is
@@ -2333,6 +2484,25 @@ Value zl_calln(const char *name, int n, ...)
         return zl_nil();
     }
 
-    kfatal("builtin not available in the kernel subset");
+    /* NAME THE BUILTIN. This said only "builtin not available in the kernel
+     * subset" and halted, which costs a whole build-and-boot cycle to turn into
+     * a symbol - and the boot is the expensive half. The message is assembled
+     * here rather than passed through kfatal's hash, because the hash is a wire
+     * ID for the flight recorder and two different missing builtins must not
+     * look like one incident.
+     *
+     * It matters more than it looks: check-zlcalls.py reported "every call site
+     * resolves" while this fired, so the checker and the kernel disagree about
+     * what a resolved call is, and without the name there is nothing to take
+     * back to the checker. */
+    {
+        static char miss[96];
+        const char *pre = "builtin not available in the kernel subset: ";
+        int i = 0;
+        while (pre[i] && i < (int)sizeof miss - 1) { miss[i] = pre[i]; i++; }
+        for (int j = 0; name[j] && i < (int)sizeof miss - 1; j++) miss[i++] = name[j];
+        miss[i] = 0;
+        kfatal(miss);
+    }
     return zl_nil();
 }

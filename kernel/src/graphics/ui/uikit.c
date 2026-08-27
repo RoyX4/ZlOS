@@ -127,6 +127,28 @@ void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 int  fb_cell_w(void);
 int  fb_cell_h(void);
 
+/* THE PIXEL-SIZED FORM, and it is why this file no longer asks for a ROLE.
+ * fb_text_role takes one of three roles and resolves them through fb.c's
+ * `role_base[3] = {8,12,16}` scaled by the UI scale and then FLOORED AT 12 -
+ * so on the 1920x1200 panel this design is drawn for, CAPTION and BODY are
+ * both 12px and the whole scale is two steps, not three. Measured, not
+ * assumed: fb_text_role_h() returns 12 / 12 / 16 at ui_theme_init_q8(256),
+ * and fb_text_role_w() gives the SAME width for the same string at CAPTION
+ * and at BODY.
+ *
+ * fb_text_rich is the same engine with the role resolution removed - it takes
+ * a height in pixels and resamples the nearest baked atlas to reach it, which
+ * is the path the browser's six heading sizes already take. So the three
+ * sizes PRESSWORK actually specifies (ZD_T_SM/MD/LG, 11/13/21 design px) are
+ * reachable without editing fb.c and without a fourth atlas. */
+int  fb_text_rich_w(const char *s, int len, int size, int style);
+void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
+                  int size, int style);
+/* fb.c exports no header, so its style bits are mirrored here. Only the bold
+ * bit is used: the oblique is synthesised and PRESSWORK has no italic, and the
+ * mono path in this file goes through fb_text_aa rather than FBT_MONO. */
+#define FBT_BOLD 1
+
 /* UI_SM/MD/LG are fb.c's TEXT_CAPTION/BODY/TITLE and UI_F_BOLD is its
  * TEXT_BOLD. Static-asserted rather than commented, because the two files are
  * compiled separately and a renumber in fb.c would otherwise shift every
@@ -189,36 +211,82 @@ static int item_at(const char *items, int idx, char *out, int cap)
 }
 
 /* ---- text ------------------------------------------------------------------
- * Three sizes, not eight. docs/reference/ui/widgets.md S1.1 counts eight font sizes
- * between 9 and 12.5 px; fb.c generates three atlases (16/24/32 at ui 2) and
- * resamples between them. Collapsing 9/9.5/10/10.5 onto SM, 11/11.5/12/12.5
- * onto MD and the display numerals onto LG is a real loss of fidelity and is
- * recorded as one - a port differs from the reference by up to 1.5 px of type.
- * The alternative is eight generated atlases in a kernel with no font server.
+ * THREE SIZES, AND UNTIL THIS CHANGE THERE WERE TWO. design.h states the scale
+ * as SM 11 / MD 13 / LG 21 design px and calls it "a hard platform fact, not a
+ * design preference" that there is no fourth. What it does not say - and what
+ * the port had quietly lost - is that asking fb.c for a ROLE does not get you
+ * three of them either. Measured at ui_theme_init_q8(256), which is the
+ * 1920x1200 panel every render in docs/design/ is taken on:
+ *
+ *     fb_text_role_h(CAPTION) = 12   fb_text_role_w(S,CAPTION,BOLD) = 318
+ *     fb_text_role_h(BODY)    = 12   fb_text_role_w(S,BODY,BOLD)    = 318
+ *     fb_text_role_h(TITLE)   = 16   fb_text_role_w(S,TITLE,BOLD)   = 452
+ *
+ * CAPTION and BODY are the SAME SIZE, byte for byte, because fb.c derives a
+ * role height from `role_base[] = {8,12,16}` times the UI scale and then
+ * floors the result at 12 - and at scale 1.0 the caption's 8 is below the
+ * floor. fb.c's own comment says so and calls the collapse deliberate: three
+ * distinct sizes inside 16 pixels "is not a type scale, it is three illegible
+ * sizes". That reasoning is about the CONSOLE CELL. It is not about this
+ * design, whose SM is 11 and whose LG is 21 - a 1.91x range that the role
+ * ladder renders as 1.33x.
+ *
+ * So the roles are not asked for any more. fb_text_rich takes a height in
+ * PIXELS and resamples the nearest baked atlas to reach it, and UI_SM/MD/LG
+ * resolve through design.h's own ZD_T_* tokens instead. After the change, same
+ * conditions, same string:
+ *
+ *     ui_text_h(UI_SM) = 11   ui_text_w(S,UI_SM,UI_F_BOLD) = 283
+ *     ui_text_h(UI_MD) = 13   ui_text_w(S,UI_MD,UI_F_BOLD) = 350
+ *     ui_text_h(UI_LG) = 21   ui_text_w(S,UI_LG,UI_F_BOLD) = 542
+ *
+ * WHAT THIS COSTS, stated rather than hidden. 11px is BELOW the floor fb.c
+ * put there, and it is reached by downsampling the 16px atlas, so SM is
+ * marginally softer than the 12px it used to be drawn at. That is the right
+ * trade for the same reason fb.c's own rich-text note gives for h1: a label
+ * that is the WRONG SIZE reads as a bug, a label half a pixel soft reads as a
+ * label. It was checked by eye at 2x before it was written, not argued from.
+ *
+ * ONE WEIGHT, AND THAT ONE WAS ALREADY RIGHT. The prototype declares
+ * font-weight:700 ten times and never declares any other value, so the design
+ * has exactly two states - inherited and 700 - and fb.c bakes exactly two
+ * atlases per size, regular and a DRAWN bold. Nothing to change; recorded here
+ * because "one weight" is easy to misread as "delete the bold".
  *
  * MONO IS ONE SIZE. fb.c's own note: "FBT_MONO routes to the fixed-cell AA
  * font, which is ONE size ... honoured for proportional text and ignored for
  * mono, consistently between the measure and the draw". Kept consistent here
  * for the same reason: a measure and a draw that disagree is a clipped label. */
+
+/* ZD_T_* are stored x2 so a half-pixel size stays an integer. The scale is
+ * applied to the DOUBLED value and halved afterwards, which is a rung more
+ * accurate at the odd scales (q8 = 341, 427) than halving first would be. */
+static const short type_x2[3] = { ZD_T_SM, ZD_T_MD, ZD_T_LG };
+
 int ui_text_h(int size)
 {
-    return fb_text_role_h(clamp(size, UI_SM, UI_LG));
+    int px = UI_DP(T, type_x2[clamp(size, UI_SM, UI_LG)]) / 2;
+    /* fb.c refuses to draw below 12 through the role path and this one has no
+     * floor at all, so the floor is here. 8px is where the 16px atlas stops
+     * resampling into something with countable strokes; SM never reaches it
+     * (11 at scale 1.0) and this only catches a scale nobody has shipped. */
+    return px < 8 ? 8 : px;
 }
 
 int ui_text_w(const char *s, int size, int flags)
 {
     if (!s) return 0;
     if (flags & UI_F_MONO) return ui_strlen(s) * fb_cell_w();
-    return fb_text_role_w(s, clamp(size, UI_SM, UI_LG),
-                          (flags & UI_F_BOLD) ? 1 : 0);
+    return fb_text_rich_w(s, ui_strlen(s), ui_text_h(size),
+                          (flags & UI_F_BOLD) ? FBT_BOLD : 0);
 }
 
 void ui_text(int x, int y, const char *s, unsigned rgb, int size, int flags)
 {
     if (!s || ui_mode_get() != UI_DRAW) return;
     if (flags & UI_F_MONO) { fb_text_aa(x, y, s, rgb); return; }
-    fb_text_role(x, y, s, rgb, clamp(size, UI_SM, UI_LG),
-                 (flags & UI_F_BOLD) ? 1 : 0);
+    fb_text_rich(x, y, s, ui_strlen(s), rgb, ui_text_h(size),
+                 (flags & UI_F_BOLD) ? FBT_BOLD : 0);
 }
 
 /* Vertically centre a line of this size inside a box of height h. */
@@ -266,48 +334,129 @@ static int text_cy(int y, int h, int size, int flags)
  * styled itself. The transform is ASCII-only, which is the whole of what the
  * three atlases carry.
  *
- * THESE TWO ARE FILE-LOCAL because publishing them is a ui.h change and ui.h
- * is not this file's to edit in this pass. Every widget in this file that
- * draws the label style uses them; an APP that wants the style still cannot
- * reach it, and the one line that would fix that is recorded in the handover
- * rather than written here. */
+ * THEY ARE NO LONGER FILE-LOCAL, and that was the whole of what was left.
+ * When this landed the pair sat static at the top of this file, so exactly
+ * three widgets could draw the style - ui_colhead, ui_heading and ui_kv - and
+ * NOTHING ELSE IN THE SYSTEM COULD. The shell is written in zl and every
+ * tracked-caps run in it (the register rail's section heads, RASTER, ADVANCE,
+ * IDLE WAKEUPS/H, BUDGET, MEMORY, WORKSPACE, the tray's NET/VOL/PWR) went
+ * through the untracked `label` builtin, which is why the shipped desktop
+ * reads tight against the prototype while a card's column heads do not. So
+ * ui_text_tracked / ui_text_tracked_w are published in ui.h and registered as
+ * zl builtins, and the three widgets below now go through the same pair the
+ * shell does. There is one tracked-text implementation in the tree.
+ *
+ * THE UPPERCASING MOVED IN HERE WITH A FLAG rather than staying a loop the
+ * caller writes. `text-transform: uppercase` sits on the SAME selector as
+ * `letter-spacing` in the prototype, so a caller that gets one and not the
+ * other has half a style; UI_F_CAPS makes them arrive together. It also means
+ * no buffer - the transform is per glyph inside the loop, so a 200-character
+ * column head is not truncated into a 48-byte scratch on its way to the pen.
+ *
+ * THE TRACK IS A PARAMETER because the design has TWO of them: ZD_TR_LAB 1.4
+ * for the label style and ZD_TR_BIG 2.6 for the one large reading per view.
+ * ZD_TR_BIG had no reader anywhere in the tree before this - `grep -rn
+ * ZD_TR_BIG src/` returned only its definition - so the display style was
+ * specified and never drawn. ui_caps() and ui_display() below bake in one
+ * token each so the numbers stay in design.h.
+ *
+ * A track of 0 IS A LEGAL ARGUMENT and means untracked, which is what makes
+ * this pair the single text engine the zl side calls for everything: one loop,
+ * one advance, one place a measure and a draw can be made to agree. */
 static char lab_upper(char c)
 {
     return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
 }
 
-/* One design-px track, in device px, floored at 1 so the style survives a
- * scale where DP(1.4) rounds to 0 - a label with no tracking at all is still
- * a label, but one whose measure and draw round differently is a clip. */
-static int lab_track(void)
+/* A tracking token (design px x10) in device px. Floored at 1 whenever the
+ * design asked for any track at all, so the style survives a scale where
+ * DP(1.4) rounds to 0 - a label with no tracking is still a label, but one
+ * whose measure and draw round differently is a clip. A token of 0 means the
+ * caller asked for no tracking and gets none. */
+static int track_dev(int track_x10)
 {
-    int tr = UI_DP(T, ZD_TR_LAB) / 10;      /* ZD_TR_LAB is tracking x10 */
+    int tr;
+    if (track_x10 <= 0) return 0;
+    tr = UI_DP(T, track_x10) / 10;
     return tr < 1 ? 1 : tr;
 }
 
-static int lab_w(const char *s)
+/* ONE PEN ADVANCE, and the measure and the draw both come through here. This
+ * is the requirement design.h states in the same breath as the token: a label
+ * measured without the track and drawn with it clips at its right edge. They
+ * cannot disagree, because there is only one loop - `draw` is what varies.
+ *
+ * THE TRAILING TRACK IS CANCELLED, and that is the prototype's own rule rather
+ * than a rounding choice: `margin-right: calc(-1 * var(--tr-lab))` sits on the
+ * same selector. CSS applies letter-spacing after EVERY glyph including the
+ * last, which pushes a right-flushed label off its own edge by one track; the
+ * negative margin takes it back. So the width is the glyphs plus (n-1) tracks,
+ * never n. */
+static int text_run(int x, int y, const char *s, unsigned rgb,
+                    int size, int flags, int track_x10, int draw)
 {
     char g[2] = { 0, 0 };
-    int w = 0, n = 0, tr = lab_track();
+    int tr = track_dev(track_x10), gflags = flags & ~UI_F_CAPS;
+    int w = 0, n = 0;
     if (!s) return 0;
     for (int i = 0; s[i]; i++) {
-        g[0] = lab_upper(s[i]);
-        w += ui_text_w(g, UI_SM, UI_F_BOLD);
+        int gw;
+        g[0] = (flags & UI_F_CAPS) ? lab_upper(s[i]) : s[i];
+        gw = ui_text_w(g, size, gflags);
+        if (draw) fb_text_rich(x + w, y, g, 1, rgb, ui_text_h(size),
+                               (gflags & UI_F_BOLD) ? FBT_BOLD : 0);
+        w += gw + tr;
         n++;
     }
-    return n ? w + (n - 1) * tr : 0;
+    return n ? w - tr : 0;
 }
+
+int ui_text_tracked_w(const char *s, int size, int flags, int track_x10)
+{
+    /* the mono path has a fixed cell and fb.c ignores a size for it, so a
+     * track would be the only thing making a mono run stop lining up with the
+     * column beside it. Refused rather than silently applied. */
+    if (flags & UI_F_MONO) return ui_text_w(s, size, flags);
+    return text_run(0, 0, s, 0, size, flags, track_x10, 0);
+}
+
+void ui_text_tracked(int x, int y, const char *s, unsigned rgb,
+                     int size, int flags, int track_x10)
+{
+    /* UNGATED, deliberately. ui_text() checks ui_mode_get() because ui.c's
+     * cursor runs the same widget code twice, once to hit-test and once to
+     * draw, and a hit-test pass must record no ink. This pair is a PRIMITIVE
+     * and the shell calls it from zl, outside any cursor pass - where L.mode
+     * still holds whatever the last ui_begin() set, which after a settings
+     * hit-test is UI_HITTEST. A gate here would make the whole desktop's text
+     * vanish depending on what the user last clicked. The widgets below gate
+     * themselves before calling in; see lab_text(). */
+    if (flags & UI_F_MONO) { ui_text(x, y, s, rgb, size, flags); return; }
+    (void)text_run(x, y, s, rgb, size, flags, track_x10, 1);
+}
+
+/* The two named styles, with design.h's tokens baked in so a call site never
+ * spells a track. `.t-lab`/`th`/`.sect`/`.kv .k` are ui_caps; `.t-big` is
+ * ui_display. */
+int  ui_caps_w(const char *s, int size)
+{ return ui_text_tracked_w(s, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_LAB); }
+
+void ui_caps(int x, int y, const char *s, unsigned rgb, int size)
+{ ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_LAB); }
+
+int  ui_display_w(const char *s, int size)
+{ return ui_text_tracked_w(s, size, UI_F_BOLD, ZD_TR_BIG); }
+
+void ui_display(int x, int y, const char *s, unsigned rgb, int size)
+{ ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD, ZD_TR_BIG); }
+
+/* the widget-side pair: the LABEL style at SM, gated for the hit-test pass */
+static int lab_w(const char *s) { return ui_caps_w(s, UI_SM); }
 
 static void lab_text(int x, int y, const char *s, unsigned rgb)
 {
-    char g[2] = { 0, 0 };
-    int tr = lab_track();
-    if (!s || ui_mode_get() != UI_DRAW) return;
-    for (int i = 0; s[i]; i++) {
-        g[0] = lab_upper(s[i]);
-        ui_text(x, y, g, rgb, UI_SM, UI_F_BOLD);
-        x += ui_text_w(g, UI_SM, UI_F_BOLD) + tr;
-    }
+    if (ui_mode_get() != UI_DRAW) return;
+    ui_caps(x, y, s, rgb, UI_SM);
 }
 
 /* ---- THE SEAT, and it replaces the neutral fill ----------------------------

@@ -642,6 +642,8 @@ fn app_ws(id) {
     if id == APP_NET     { return 2 }         # Network
     if id == APP_CLOCK   { return 2 }         # Clocks & Timers
     if id == APP_SYSINFO { return 1 }         # System Info
+    if id == APP_SYSPANE { return 1 }         # 10 SYSTEM  - beside the shell
+    if id == APP_TYPEPANE { return 1 }        # 14 TYPE    - beside it
     if id == APP_CALC    { return 2 }         # Calculator
     # The two whole categories. reg_cat() answers 1 for a utility and 2 for a
     # game, which is exactly the split the reference's two .map()s make, so
@@ -776,7 +778,7 @@ fn rail_sub(slot) {
     if slot == 6 { return "20x15" }
     if slot == 7 { return "wire" }
     if slot == 8 { return "0.3" }
-    if slot == 9 { return "theme" }
+    if slot == 9 { return "design.h" }
     if slot == 10 { return "exec" }
     return "reg"
 }
@@ -1071,7 +1073,12 @@ fn rail_sect(ry, nm, n, m) {
     fill_rgb(0, ry, rail_w(), RAIL_SECT_H * u, theme(TH_PANEL_HI))
     fill_rgb(0, ry, 1, RAIL_SECT_H * u, theme(TH_LIT))
     fill_rgb(rail_w() - 1, ry, 1, RAIL_SECT_H * u, theme(TH_CUT))
-    label(pad_d(), ry + 7 * u, nm, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    # `.sect` carries `<span class="t-lab">`, so the head is the LABEL STYLE:
+    # SM, bold, UPPERCASE and TRACKED by ZD_TR_LAB. It was label(), which is
+    # none of the last two - the caller shouted the string itself and the
+    # tracking did not exist outside uikit.c. ui_caps does the transform and
+    # the pen, so "register" and "REGISTER" now draw identically.
+    ui_caps(pad_d(), ry + 7 * u, nm, theme(TH_TEXT_DIM), T_CAPTION)
     if n >= 0 {
         # THE WHOLE FRACTION IS MEASURED BEFORE ANY OF IT IS DRAWN, then laid
         # out left to right from that one origin. Right-aligning each piece
@@ -1129,7 +1136,12 @@ fn draw_rail_static() {
     # THE IDENTITY. An operating system does not explain what it is in its own
     # chrome; it says which machine you are on. "zlos" at T_TITLE and the build
     # line under it in mono, which is the prototype's `.ident .w` / `.ident .b`.
-    label(pad_d(), 11 * u, "zlos", theme(TH_TEXT_HI), T_TITLE, W_BOLD)
+    # `.ident .w` is `t-big`: LG, bold, UPPERCASE, tracked by ZD_TR_BIG. This
+    # is the ONLY .t-big in the prototype's shell and ZD_TR_BIG had no reader
+    # anywhere in the tree before it, so the display style was specified and
+    # never once drawn. The string stays lower case for the same reason the
+    # section heads' do - the transform belongs to the style.
+    ui_disp(pad_d(), 11 * u, "zlos", theme(TH_TEXT_HI), T_TITLE)
     text_aa(pad_d(), 11 * u + 24 * u, "0.3 x86_64", theme(TH_TEXT_DIM))
     ry = RAIL_IDENT_H * u
     ry = rail_rule2(ry)
@@ -1241,7 +1253,9 @@ fn rail_st_word(sy, nm, word, dotc, wordc) {
     u = ui()
     rw = rail_w()
     ty = sy + (RAIL_STROW_H * u - label_h(T_CAPTION)) / 2
-    label(pad_d(), ty, nm, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    # the key is `.t-lab` in the prototype's `.strow`; the WORD beside it is
+    # `.strow .w`, which is MONO and untracked, so only the key moves here.
+    ui_caps(pad_d(), ty, nm, theme(TH_TEXT_DIM), T_CAPTION)
     # the word first, measured, then the dot placed against its left edge - one
     # origin, so the dot cannot drift when "UP" becomes "DOWN".
     ww = label_w(word, T_CAPTION, W_BOLD)
@@ -1682,12 +1696,12 @@ fn budget_w() {
 fn strip_rd_w() {
     cw = cell_w()
     g = RD_GAP * ui()
-    w = label_w("ADVANCE", T_CAPTION, W_BOLD)
+    w = ui_capsw("ADVANCE", T_CAPTION)
     w = w + g + RD_ADV_CELLS * cw
     w = w + g + 9 * cw                                  # "composite"
-    w = w + g + label_w("IDLE WAKEUPS/H", T_CAPTION, W_BOLD)
+    w = w + g + ui_capsw("IDLE WAKEUPS/H", T_CAPTION)
     w = w + g + cw                                      # the zero
-    w = w + g + label_w("BUDGET", T_CAPTION, W_BOLD)
+    w = w + g + ui_capsw("BUDGET", T_CAPTION)
     w = w + g + budget_w()
     return w
 }
@@ -1702,7 +1716,7 @@ fn strip_rd_on() {
     return 0
 }
 fn raster_x0() {
-    return rail_w() + pad_d() + label_w("RASTER", T_CAPTION, W_BOLD) + RASTER_GAP * ui()
+    return rail_w() + pad_d() + ui_capsw("RASTER", T_CAPTION) + RASTER_GAP * ui()
 }
 fn raster_x1() {
     if strip_rd_on() == 1 {
@@ -1732,8 +1746,8 @@ fn draw_strip_rd(rx, sh) {
     lab = theme(TH_TEXT_2)
     val = theme(TH_TEXT)
     dim = theme(TH_TEXT_DIM)
-    label(rx, ly, "ADVANCE", lab, T_CAPTION, W_BOLD)
-    rx = rx + label_w("ADVANCE", T_CAPTION, W_BOLD) + g
+    ui_caps(rx, ly, "ADVANCE", lab, T_CAPTION)
+    rx = rx + ui_capsw("ADVANCE", T_CAPTION) + g
     # LEFT aligned inside a FIXED field, which is the pairing that matters: the
     # field's width never changes, so "composite" and everything right of it
     # cannot shuffle when the machine passes ten thousand; and the number sits
@@ -1746,8 +1760,8 @@ fn draw_strip_rd(rx, sh) {
     rx = rx + RD_ADV_CELLS * cw + g
     text_aa(rx, ny, "composite", val)
     rx = rx + 9 * cw + g
-    label(rx, ly, "IDLE WAKEUPS/H", lab, T_CAPTION, W_BOLD)
-    rx = rx + label_w("IDLE WAKEUPS/H", T_CAPTION, W_BOLD) + g
+    ui_caps(rx, ly, "IDLE WAKEUPS/H", lab, T_CAPTION)
+    rx = rx + ui_capsw("IDLE WAKEUPS/H", T_CAPTION) + g
     # THE ONE FIGURE HERE THAT IS NOT A MEASUREMENT, and it is printed anyway
     # because it is the reading that justifies the whole re-clocking. The strip
     # arms no timer: raster_tick() is edge-triggered on wm_painted() and returns
@@ -1762,8 +1776,8 @@ fn draw_strip_rd(rx, sh) {
     # that always answers zero would hide the fact.
     text_aa(rx, ny, "0", val)
     rx = rx + cw + g
-    label(rx, ly, "BUDGET", lab, T_CAPTION, W_BOLD)
-    rx = rx + label_w("BUDGET", T_CAPTION, W_BOLD) + g
+    ui_caps(rx, ly, "BUDGET", lab, T_CAPTION)
+    rx = rx + ui_capsw("BUDGET", T_CAPTION) + g
     bg = wm_budget()
     hi = idiv(bg, 1000)
     num_aa(rx, ny, hi, dim)
@@ -1863,9 +1877,9 @@ fn draw_strip() {
         # the label rides OVER the columns at the left, on the strip's own
         # ground, because a legend that the data can draw through is not a
         # legend. Same move the desk's grid legend makes.
-        lw = label_w("RASTER", T_CAPTION, W_BOLD) + 2 * pad_d()
+        lw = ui_capsw("RASTER", T_CAPTION) + 2 * pad_d()
         fill_rgb(sx + 1, 1, lw, sh - 2, theme(TH_CUT))
-        label(sx + pad_d(), (sh - label_h(T_CAPTION)) / 2, "RASTER", theme(TH_TEXT_2), T_CAPTION, W_BOLD)
+        ui_caps(sx + pad_d(), (sh - label_h(T_CAPTION)) / 2, "RASTER", theme(TH_TEXT_2), T_CAPTION)
         if strip_rd_on() == 1 {
             draw_strip_rd(px_w() - pad_d() - strip_rd_w(), sh)
         }
@@ -2206,8 +2220,8 @@ fn draw_foot_ruler() {
     fy = foot_y()
     ry = fy + 3 * u
     fill_rgb(fx + 1, ry - 3 * u, fw - 2, foot_h() - band_h() - 3 * u, theme(TH_PANEL_HI))
-    label(fx + pad_d(), ry + 2 * u, "MEMORY", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-    bx = fx + pad_d() + label_w("MEMORY", T_CAPTION, W_BOLD) + 9 * u
+    ui_caps(fx + pad_d(), ry + 2 * u, "MEMORY", theme(TH_TEXT_DIM), T_CAPTION)
+    bx = fx + pad_d() + ui_capsw("MEMORY", T_CAPTION) + 9 * u
     # the readout is right-aligned and fixed-width, so the bar's right edge does
     # not move as the numbers change - the same fixed-cell rule as the clock
     cw = cell_w()
@@ -2294,7 +2308,7 @@ fn draw_foot_ruler() {
 # so the two cannot disagree about where the bar starts; only the trailing
 # width is decided here.
 fn ruler_rd_cells() {
-    room = px_w() - rail_w() - 2 * pad_d() - label_w("MEMORY", T_CAPTION, W_BOLD) - 18 * ui()
+    room = px_w() - rail_w() - 2 * pad_d() - ui_capsw("MEMORY", T_CAPTION) - 18 * ui()
     if room - RULER_RD_FULL * cell_w() >= RULER_MIN_BAR * ui() { return RULER_RD_FULL }
     if room - RULER_RD_ADDR * cell_w() >= RULER_MIN_BAR * ui() { return RULER_RD_ADDR }
     return 0
@@ -4818,6 +4832,988 @@ fn about_body(ax, ay, aw, ah) {
     return 0
 }
 
+# =============================================================================
+# 10 SYSTEM and 14 TYPE - the two panes that grade the machine and the type
+#
+# THESE TWO ARE THE PROTOTYPE'S ARGUMENT, NOT ITS DECORATION. Everything else
+# in PRESSWORK asserts: design.h says a ratio, a comment says an atlas exists.
+# These two RECOMPUTE. The SYSTEM pane's contrast table runs WCAG against
+# whatever ui_theme() resolved a moment ago, so turning the knockout off in 11
+# SETTINGS moves four of its fourteen rows while you watch; the TYPE pane reads
+# the font arrays' own dimensions with sizeof and reports what is in the image
+# rather than what the design asked for. Where those two disagree - and they
+# do, once - the pane prints the disagreement.
+#
+# NO NEW ARITHMETIC LIVES HERE. Contrast is ui_ratio(), which is uikit's
+# ui_ratio_q4 - one WCAG table in the tree, x10^4 across the seam. The atlas
+# facts are the atlas_* seven. This file's job is layout and honesty about
+# units, and every number it prints arrives from one of those calls.
+#
+# WHY A TABLE ENGINE IN zl AT ALL. uikit.c has ui_colhead/ui_grid_row and they
+# are not registered as zl builtins; registering six more widgets to draw two
+# tables would be a wider seam than two panes are worth, and the prototype's
+# `td` is four numbers deep - 15 of leading, 2+2 of padding, a 1px groove. So
+# the rows are drawn from primitives here and the four numbers come from
+# design.h through the constants below.
+# =============================================================================
+
+# The type scale and flag word, mirroring ui.h's UI_SM / UI_MD / UI_LG and
+# UI_F_MONO / UI_F_BOLD / UI_F_CAPS. Prefixed rather than named UI_* because
+# this file already carries T_CAPTION/T_BODY/T_TITLE for fb.c's OTHER scale and
+# two unprefixed families one letter apart is how a call site ends up passing
+# the wrong ladder's constant to the right-looking argument.
+PW_SM   = 0
+PW_MD   = 1
+PW_LG   = 2
+PW_MONO = 1
+PW_BOLD = 2
+
+# ZD_LISTROW_H / ZD_COLHEAD_H / ZD_CELL_PX / ZD_KV_H / ZD_STAT_PY / ZD_STAT_PX
+# / ZD_STAT_GAP, in design px. Duplicated here for the same stated reason the
+# four band sizes above are: design.h owns them, this is the copy, and it says
+# so. There is no ui_metric role for a table cell.
+PW_ROWH    = 20
+PW_HEADH   = 20
+PW_CELLPX  = 6
+PW_KVH     = 20
+PW_CARDPY  = 7
+PW_CARDPX  = 9
+PW_CARDGAP = 1                     # the 1px gap over ZD_CUT IS the hairline
+PW_DOT     = 6                     # ZD_DOT - the verdict swatch
+
+fn pw_rowh()   { return PW_ROWH * ui() }
+fn pw_headh()  { return PW_HEADH * ui() }
+fn pw_cellpx() { return PW_CELLPX * ui() }
+fn pw_kvh()    { return PW_KVH * ui() }
+
+# THE GROOVE IS THE ROW'S LAST PIXEL, not a gap after it. `td` carries
+# border-bottom: 1px solid var(--zd-cut), so the run belongs to the row it
+# closes and the next row starts immediately under it - which is what makes
+# consecutive grooves land exactly PW_ROWH apart with no drift.
+fn pw_row_rule(rx, ry, rw) {
+    fill_rgb(rx, ry + pw_rowh() - 1, rw, 1, theme(TH_CUT))
+    return ry + pw_rowh()
+}
+
+# A cell's text baseline, centred in the row above its own groove. Two of
+# them, because a proportional run and a mono run are different heights and a
+# table with both in it lines up on neither if only one is measured.
+fn pw_celly(ry)  { return ry + (pw_rowh() - 1 - ui_th(PW_SM)) / 2 }
+fn pw_mcelly(ry) { return ry + (pw_rowh() - 1 - cell_h()) / 2 }
+
+# COLUMNS ARE PERCENTAGES OF THE TABLE, exactly as the prototype's TBL() takes
+# them, so a table keeps its proportions when a window is dragged wider instead
+# of leaving a ragged gutter on the right.
+fn pw_colx(tx, tw, pct) { return tx + tw * pct / 100 }
+fn pw_colw(tw, pct)     { return tw * pct / 100 }
+
+# Right-flush inside a column. The prototype's numeric cells are `class="r"`,
+# and the pad is the SAME ZD_CELL_PX the left edge uses - a right-flushed
+# number that sits on the column boundary reads as belonging to the next one.
+fn pw_right(cx, cw, w) { return cx + cw - pw_cellpx() - w }
+
+# ---- FIXED POINT, DRAWN --------------------------------------------------
+# zl has no formatting and no float in the drawing path, so a ratio crosses
+# the seam from ui_ratio() as an integer times 10^4 and is drawn digit by
+# digit here. THE FRACTION IS ZERO PADDED and that is not cosmetic: label_num
+# prints 4 for 4, so 9.04:1 drawn without the pad reads 9.4:1, which is a
+# different and wrong number in a column headed RATIO.
+#
+# MONO IS THE TABLES' FACE. The prototype's numeric cells are .t-num, its mono
+# class, and both panes' columns carry it. The card values are LG and
+# PROPORTIONAL, which is why the walk below measures every digit rather than
+# multiplying by a cell.
+fn pw_pow10(dp) {
+    if dp == 1 { return 10 }
+    if dp == 2 { return 100 }
+    if dp == 3 { return 1000 }
+    if dp == 4 { return 10000 }
+    return 1
+}
+
+# ONE LOOP, MEASURED AND DRAWN, and it is the same discipline uikit.c's
+# tracked text follows for the same reason: a right-flushed number whose
+# measure and draw disagree overhangs its column. `draw` is the only thing that
+# varies between the two entry points below - the pen advance is written once.
+#
+# It walks DIGIT BY DIGIT rather than handing the whole number to ui_txtn,
+# because the fraction needs its leading zeros and because at LG the face is
+# proportional: a '1' and a '0' are different widths there, so a width computed
+# as "digits times a cell" would be wrong by several pixels on any number
+# containing a 1. In mono every advance is cell_w() and this reduces to that.
+fn pw_dec_run(dx, dy, v, dp, col, size, flags, draw) {
+    pv_sc = pw_pow10(dp)
+    pv_w = v / pv_sc
+    pv_f = v - pv_w * pv_sc
+    pv_x = dx
+    if draw == 1 { ui_txtn(pv_x, dy, pv_w, col, size, flags) }
+    pv_x = pv_x + ui_tnw(pv_w, size, flags)
+    if draw == 1 { ui_txt(pv_x, dy, ".", col, size, flags) }
+    pv_x = pv_x + ui_tw(".", size, flags)
+    pv_p = pv_sc / 10
+    while pv_p >= 1 {
+        pv_d = (pv_f / pv_p) % 10
+        if draw == 1 { ui_txtn(pv_x, dy, pv_d, col, size, flags) }
+        pv_x = pv_x + ui_tnw(pv_d, size, flags)
+        pv_p = pv_p / 10
+    }
+    return pv_x - dx
+}
+
+fn pw_decgw(v, dp, size, flags) { return pw_dec_run(0, 0, v, dp, 0, size, flags, 0) }
+fn pw_decg(dx, dy, v, dp, col, size, flags) {
+    return dx + pw_dec_run(dx, dy, v, dp, col, size, flags, 1)
+}
+
+# The two the tables use: SM, mono, because .t-num is the prototype's mono
+# class and every numeric cell in both panes carries it.
+fn pw_decw(v, dp) { return pw_decgw(v, dp, PW_SM, PW_MONO) }
+fn pw_dec(dx, dy, v, dp, col) { return pw_decg(dx, dy, v, dp, col, PW_SM, PW_MONO) }
+
+# A ratio, as the prototype prints one: two decimals and the ":1" that says
+# what kind of number it is. ui_ratio() answers x10^4, so the rounding to two
+# places happens here and once.
+fn pw_ratw(q4) { return pw_decw((q4 + 50) / 100, 2) + ui_tw(":1", PW_SM, PW_MONO) }
+fn pw_rat(dx, dy, q4, col) {
+    pr_x = pw_dec(dx, dy, (q4 + 50) / 100, 2, col)
+    ui_txt(pr_x, dy, ":1", col, PW_SM, PW_MONO)
+    return pr_x + ui_tw(":1", PW_SM, PW_MONO)
+}
+
+# ---- THE VERDICT SWATCH --------------------------------------------------
+# A ZD_DOT square in the state colour and the word beside it, which is the
+# prototype's `sw()`. A SQUARE, not a disc: ZD_DOT_R is ZD_R_CHIP at 2 design
+# px and at ui 1 that rounds to nothing, and a 6px disc drawn with a 2px radius
+# is a 6px square with four pixels missing. Drawn as what it is.
+fn pw_sw(sx, sy, word, col) {
+    ps_d = PW_DOT * ui()
+    fill_rgb(sx, sy + (ui_th(PW_SM) - ps_d) / 2, ps_d, ps_d, col)
+    ui_txt(sx + ps_d + pw_cellpx(), sy, word, col, PW_SM, 0)
+    return 0
+}
+fn pw_sww(word) { return PW_DOT * ui() + pw_cellpx() + ui_tw(word, PW_SM, 0) }
+
+# ---- A SECTION BAND, AND A KEY/VALUE ROW ---------------------------------
+# The section head is the LABEL style - SM, uppercase, bold, tracked - with a
+# 2px ZD_LIT rule over it, which is PRESSWORK's second and last rule weight.
+# uikit.c owns the tracking; ui_caps is that, reachable from here now.
+fn pw_sect(sx, sy, sw2, nm, note, unit) {
+    fill_rgb(sx, sy, sw2, RULE_H * ui(), theme(TH_LIT))
+    ps_y = sy + RULE_H * ui() + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(sx, ps_y, nm, theme(TH_TEXT_HI), PW_SM)
+    # The count is measured BACKWARDS from the right edge, number then unit,
+    # because the number is the part whose width changes. Laying it out
+    # forwards from a guessed x is how a right-flushed reading ends up one
+    # glyph over the boundary the day it gains a digit.
+    ps_uw = ui_tw(unit, PW_SM, PW_MONO)
+    ps_nw = ui_tnw(note, PW_SM, PW_MONO)
+    ui_txtn(sx + sw2 - ps_uw - ps_nw, ps_y, note, theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    ui_txt(sx + sw2 - ps_uw, ps_y, unit, theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    return sy + RULE_H * ui() + pw_headh()
+}
+
+# =============================================================================
+# 10 SYSTEM - the machine, and then the design grading itself
+#
+# THE TABLE AT THE BOTTOM IS THE POINT. Everything above it is an inventory and
+# every other pane in the system could carry it; "MEASURED CONTRAST, THIS
+# LADDER, RIGHT NOW" is the one thing PRESSWORK does that its parents did not,
+# and it only means anything because the numbers are computed rather than
+# quoted. ui_ratio() reads the LIVE theme, so:
+#
+#   * turn the knockout off in 11 SETTINGS and rows 5, 6, 10 and 12 move -
+#     theme.knock goes to ZD_FOCUS_WASH and the two inks and the foot edge go
+#     with it, which is four of fourteen and visibly so.
+#   * a token edited in design.h moves its rows on the next boot with no edit
+#     here at all.
+#
+# WHY THE RATIOS ARE NOT A TABLE IN design.h. WCAG needs pow(x, 2.4) on a
+# linearised channel and this drawing path has no floating point, so the
+# arithmetic had to go somewhere. It went to ui_ratio_q4() in ui.c - a
+# 256-entry sRGB table and integer fixed point, x10^4 - and NOT into a table of
+# answers here, because a table of answers cannot follow the knockout switch
+# and would therefore be asserting on a screen headed MEASURED. Proven against
+# known values rather than trusted: every ratio design.h quotes in prose was
+# recomputed in float64 first, all fifteen agreed, and the integer path
+# reproduces all fifteen, all fourteen printed here, and the 1.1682:1 smallest
+# surface step exactly.
+#
+# THE FOURTEEN PAIRS ARE FOUR PARALLEL TABLES walked by one index, which is the
+# same shape rail_app/rail_name/rail_icon/rail_sub take a thousand lines up and
+# for the same reason: zl has no record type, so the four are kept adjacent and
+# a row added to one is visibly missing from the others.
+# =============================================================================
+SYSG_N = 14
+
+fn sysg_name(i) {
+    if i == 0  { return "text 1 on base" }
+    if i == 1  { return "text 1 on float" }
+    if i == 2  { return "text 2 on float" }
+    if i == 3  { return "text 3 on float" }
+    if i == 4  { return "title on knockout" }
+    if i == 5  { return "sub on knockout" }
+    if i == 6  { return "ink on vermilion" }
+    if i == 7  { return "edge over on float" }
+    if i == 8  { return "edge over on base" }
+    if i == 9  { return "knockout on base" }
+    if i == 10 { return "lit on base" }
+    if i == 11 { return "ko edge on knockout" }
+    if i == 12 { return "cut on base" }
+    return "grid on void"
+}
+
+# THE INK OF THE PAIR. theme(), never a literal - the rule is that a colour
+# literal may appear in design.h and nowhere else, and a pane that spelled
+# #DAD4CB to grade #DAD4CB would be grading its own copy.
+fn sysg_fg(i) {
+    if i == 0  { return theme(TH_TEXT) }
+    if i == 1  { return theme(TH_TEXT) }
+    if i == 2  { return theme(TH_TEXT_2) }
+    if i == 3  { return theme(TH_TEXT_DIM) }
+    if i == 4  { return theme(TH_KNOCK_INK) }
+    if i == 5  { return theme(TH_KNOCK_INK2) }
+    if i == 6  { return theme(TH_INK_ON) }
+    if i == 7  { return theme(TH_EDGE_OVER) }
+    if i == 8  { return theme(TH_EDGE_OVER) }
+    if i == 9  { return theme(TH_KNOCK) }
+    if i == 10 { return theme(TH_LIT) }
+    if i == 11 { return theme(TH_KO_EDGE) }
+    if i == 12 { return theme(TH_CUT) }
+    return theme(TH_GRID)
+}
+
+fn sysg_bg(i) {
+    if i == 0  { return theme(TH_PANEL) }
+    if i == 1  { return theme(TH_SURF_5) }
+    if i == 2  { return theme(TH_SURF_5) }
+    if i == 3  { return theme(TH_SURF_5) }
+    if i == 4  { return theme(TH_KNOCK) }
+    if i == 5  { return theme(TH_KNOCK) }
+    if i == 6  { return theme(TH_ACCENT) }
+    if i == 7  { return theme(TH_SURF_5) }
+    if i == 8  { return theme(TH_PANEL) }
+    if i == 9  { return theme(TH_PANEL) }
+    if i == 10 { return theme(TH_PANEL) }
+    if i == 11 { return theme(TH_KNOCK) }
+    if i == 12 { return theme(TH_PANEL) }
+    return theme(TH_BG)
+}
+
+# THE FLOOR, x100, and 0 means THIS PAIR IS NOT TEXT AND NOT A BOUNDARY.
+# 450 is WCAG AA for body text; 300 is the floor the occlusion rule puts on a
+# window boundary, because under overlap the upper plate's bottom and right
+# edge is the only thing saying which plate is on top. The last four rows carry
+# 0 and are reported as `structure` rather than PASS: ZD_LIT, ZD_KO_EDGE,
+# ZD_CUT and ZD_GRID are 1px runs and ruling. Grading a groove against a text
+# floor would manufacture four failures out of four things working correctly,
+# and a table with four permanent red rows is a table nobody reads.
+fn sysg_floor(i) {
+    if i < 7  { return 450 }
+    if i < 10 { return 300 }
+    return 0
+}
+
+# HOW MANY OF THE GRADED PAIRS ARE FAILING RIGHT NOW. Drives the OK/FAIL badge
+# on the HOST line, so the pane's own headline is its own verdict rather than a
+# word somebody typed. Counted, not cached: the theme can change under it.
+fn sysg_fails() {
+    sf_i = 0
+    sf_n = 0
+    while sf_i < SYSG_N {
+        sf_fl = sysg_floor(sf_i)
+        if sf_fl > 0 {
+            if (ui_ratio(sysg_fg(sf_i), sysg_bg(sf_i)) + 50) / 100 < sf_fl { sf_n = sf_n + 1 }
+        }
+        sf_i = sf_i + 1
+    }
+    return sf_n
+}
+
+# ---- the three stat cards ---------------------------------------------------
+# ZD_STAT_GAP is 1 and the gap is over ZD_CUT, so the hairline between two
+# cards IS the gap - there is no border token on a stat cell. Drawn as three
+# ZD_RAISE faces with the plate's own groove showing through between them.
+fn sys_card(cx, cy, cw, ch, k, vnum, vdec, cap) {
+    fill_rgb(cx, cy, cw, ch, theme(TH_PANEL_HI))
+    fill_rgb(cx, cy, cw, 1, theme(TH_LIT))              # the struck top run
+    fill_rgb(cx, cy + ch - 1, cw, 1, theme(TH_CUT))     # the cut foot groove
+    sc_x = cx + PW_CARDPX * ui()
+    sc_y = cy + PW_CARDPY * ui()
+    ui_caps(sc_x, sc_y, k, theme(TH_TEXT_DIM), PW_SM)
+    sc_y = sc_y + ui_th(PW_SM) + 3 * ui()
+    # ONE LARGE READING PER CARD, at LG - the only place in this pane where the
+    # big atlas is used, which is what "the one large reading per view" means
+    # when a view has three cards in it.
+    if vdec > 0 {
+        pw_decg(sc_x, sc_y, vnum, vdec, theme(TH_TEXT_HI), PW_LG, 0)
+    } else {
+        ui_txtn(sc_x, sc_y, vnum, theme(TH_TEXT_HI), PW_LG, 0)
+    }
+    sc_y = sc_y + ui_th(PW_LG) + 3 * ui()
+    ui_txt(sc_x, sc_y, cap, theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    return 0
+}
+
+# THE PANEL REFRESH IS MEASURED ONCE, AND NOT HERE. intel_refresh_mhz() counts
+# frames across 500 ms of the PIT - read intel.c:699 - so calling it from a
+# draw would stall the compositor for half a second on every repaint of this
+# window. It is called from open_syspane() instead, once per open, and cached.
+# On anything that is not a live Intel pipe it returns 0 immediately, which is
+# QEMU, BGA and virtio-gpu; the card says so rather than printing a rate this
+# machine cannot measure.
+sys_hz = 0
+
+fn sys_cards(cx, cy, cw) {
+    sd_h = PW_CARDPY * 2 * ui() + ui_th(PW_SM) * 2 + ui_th(PW_LG) + 6 * ui()
+    sd_g = PW_CARDGAP * ui()
+    sd_w = (cw - 2 * sd_g) / 3
+    sys_card(cx, cy, sd_w, sd_h, "cpu", cpu_thr(), 0, "logical, hyperthreaded")
+    # MiB, not GiB: ruler_mapped() is the memory map this kernel actually
+    # mapped, and dividing it to one decimal of a gibibyte would round away the
+    # thing the number is for. The foot's ruler prints the same figure.
+    sys_card(cx + sd_w + sd_g, cy, sd_w, sd_h, "memory", ruler_mapped() / 1048576, 0, "MiB mapped, no swap")
+    if sys_hz > 0 {
+        sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", sys_hz, 3, "Hz, measured")
+    } else {
+        sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", wm_frame(), 0, "composites, no panel clock")
+    }
+    return cy + sd_h
+}
+
+# ---- the six inventory rows -------------------------------------------------
+# THE VALUE IS RIGHT FLUSHED, AND THAT IS WHY EACH ROW IS RUN TWICE. The
+# prototype's kv() puts the key hard left and the value hard right, and a value
+# here is not a string - zl's kernel subset has no string values, so
+# "1920 x 1200 x 32" is four pieces walked with an x cursor. There is no width
+# to subtract from the right edge until the pieces have been walked.
+#
+# So sys_row_val() walks them with the ink switched off to get a width, and
+# again from (right - width) to draw. ONE FUNCTION, TWO PASSES, which is the
+# same measure/draw contract uikit.c's tracked text keeps and enforced the same
+# way: there is only one list of pieces, so the measure cannot describe a row
+# the draw does not lay down. A second function that added up widths would be
+# the copy that silently stops matching.
+#
+# ONE FUNCTION AND A SELECTOR rather than six functions, because six functions
+# would need six pairs of call sites and the pairing is the thing that has to
+# be right.
+fn sys_rowk(rx, ry, k) {
+    ui_caps(rx, ry + (pw_kvh() - 1 - ui_th(PW_SM)) / 2, k, theme(TH_TEXT_2), PW_SM)
+    return 0
+}
+fn sys_rowend(rx, ry, rw) {
+    fill_rgb(rx, ry + pw_kvh() - 1, rw, 1, theme(TH_CUT))
+    return ry + pw_kvh()
+}
+fn sys_valy(ry) { return ry + (pw_kvh() - 1 - cell_h()) / 2 }
+
+# The three pen advances. `dr` 0 measures and 0 draws; every one returns the x
+# it ended at, so a row is a chain and its total width is the last x minus the
+# first. TH_TEXT for a reading and TH_TEXT_DIM for the words between readings,
+# which is the DATA/LABEL split applied inside a single line.
+fn sys_vn(vx, vy, n, dr) {
+    if dr == 1 { ui_txtn(vx, sys_valy(vy), n, theme(TH_TEXT_HI), PW_SM, PW_MONO) }
+    return vx + ui_tnw(n, PW_SM, PW_MONO)
+}
+fn sys_vs(vx, vy, s, dr) {
+    if dr == 1 { ui_txt(vx, sys_valy(vy), s, theme(TH_TEXT_DIM), PW_SM, PW_MONO) }
+    return vx + ui_tw(s, PW_SM, PW_MONO)
+}
+fn sys_vt(vx, vy, s, dr) {
+    if dr == 1 { ui_txt(vx, sys_valy(vy), s, theme(TH_TEXT), PW_SM, PW_MONO) }
+    return vx + ui_tw(s, PW_SM, PW_MONO)
+}
+
+SYS_ROWS_N = 6
+
+fn sys_rowk_name(i) {
+    if i == 0 { return "display" }
+    if i == 1 { return "framebuffer" }
+    if i == 2 { return "arena" }
+    if i == 3 { return "storage" }
+    if i == 4 { return "input" }
+    return "ladder"
+}
+
+# THE SIX VALUES. Every branch here is a READ - intel_supported(), fs_mounted(),
+# xhci_kbd_ready() - and there is no row whose content is a sentence somebody
+# typed. That is why the prototype's FIRMWARE row is not among them: nothing in
+# this image reports the UEFI revision or the secure-boot state to zl, so that
+# row could only have been prose wearing a value's clothes. ARENA replaces it,
+# and the arena is a thing this kernel actually has and can count.
+fn sys_row_val(vx, vy, i, dr) {
+    sv_x = vx
+    if i == 0 {
+        # DISPLAY - who is driving the panel. intel_supported() is the real
+        # modesetting driver, virtio_gpu_present() is the QEMU path, and
+        # anything else is a framebuffer the firmware handed us and we did not
+        # program. Three different truths, never one hopeful string.
+        if intel_ok() == 1 {
+            sv_x = sys_vt(sv_x, vy, "intel gen9, pipe ", dr)
+            sv_x = sys_vn(sv_x, vy, intel_pipe(), dr)
+        }
+        if intel_ok() == 0 {
+            if vg_ok() == 1 { sv_x = sys_vt(sv_x, vy, "virtio-gpu", dr) }
+            if vg_ok() == 0 { sv_x = sys_vt(sv_x, vy, "firmware framebuffer", dr) }
+        }
+        sv_x = sys_vs(sv_x, vy, ", ", dr)
+        sv_x = sys_vn(sv_x, vy, px_w(), dr)
+        sv_x = sys_vs(sv_x, vy, " x ", dr)
+        sv_x = sys_vn(sv_x, vy, px_h(), dr)
+        sv_x = sys_vs(sv_x, vy, " x 32", dr)
+        return sv_x
+    }
+    if i == 1 {
+        # FRAMEBUFFER - both figures derived from the mode rather than from a
+        # constant, so a resolution change moves them.
+        sv_x = sys_vn(sv_x, vy, ruler_fb() / 1024, dr)
+        sv_x = sys_vs(sv_x, vy, " KiB, stride ", dr)
+        sv_x = sys_vn(sv_x, vy, px_w() * 4, dr)
+        sv_x = sys_vs(sv_x, vy, " B, no gpu blitter", dr)
+        return sv_x
+    }
+    if i == 2 {
+        sv_x = sys_vn(sv_x, vy, arena_used() / 1024, dr)
+        sv_x = sys_vs(sv_x, vy, " KiB used, ", dr)
+        sv_x = sys_vn(sv_x, vy, arena_free() / 1024, dr)
+        sv_x = sys_vs(sv_x, vy, " KiB free, refusals ", dr)
+        sv_x = sys_vn(sv_x, vy, arena_refused(), dr)
+        return sv_x
+    }
+    if i == 3 {
+        # STORAGE - the controller and the volume are asked separately, because
+        # a working controller with nothing mounted and no controller at all are
+        # different failures and a single "no storage" would hide which.
+        if nv_ok() == 1 {
+            sv_x = sys_vt(sv_x, vy, "nvme, ", dr)
+            sv_x = sys_vn(sv_x, vy, nv_bsize(), dr)
+            sv_x = sys_vs(sv_x, vy, " B blocks, ", dr)
+        }
+        if nv_ok() == 0 { sv_x = sys_vt(sv_x, vy, "no nvme, ", dr) }
+        if fs_ok() == 1 {
+            sv_x = sys_vt(sv_x, vy, "zlfs mounted, ", dr)
+            sv_x = sys_vn(sv_x, vy, fs_n(), dr)
+            sv_x = sys_vs(sv_x, vy, " files", dr)
+        }
+        if fs_ok() == 0 { sv_x = sys_vt(sv_x, vy, "no volume mounted", dr) }
+        return sv_x
+    }
+    if i == 4 {
+        # INPUT - and this row is the one that has caught a real bug. The USB
+        # boot keyboard and the PS/2 controller are different devices with
+        # different scancode paths, and an image reporting "usb hid" while
+        # running on PS/2 is the exact confusion that made Enter do nothing in
+        # the terminal on the ThinkPad's own keyboard. Asked, not assumed.
+        if usb_kbd_ok() == 1 { sv_x = sys_vt(sv_x, vy, "usb boot keyboard", dr) }
+        if usb_kbd_ok() == 0 { sv_x = sys_vt(sv_x, vy, "ps/2 keyboard", dr) }
+        if ptr_driver() == 1 { sv_x = sys_vt(sv_x, vy, ", usb boot mouse", dr) }
+        if ptr_driver() == 0 { sv_x = sys_vt(sv_x, vy, ", ps/2 mouse", dr) }
+        return sv_x
+    }
+    # LADDER - which ladder is resolved right now and what its smallest surface
+    # step measures. FOUR decimals, because the whole widening thesis is the
+    # difference between 1.0728 and 1.1682 and two decimals prints 1.07 and
+    # 1.17 - a gap that looks like rounding rather than like the argument.
+    if ui_knock_on() == 1 { sv_x = sys_vt(sv_x, vy, "presswork, widened, knockout on", dr) }
+    if ui_knock_on() == 0 { sv_x = sys_vt(sv_x, vy, "presswork, KNOCKOUT OFF", dr) }
+    sv_x = sys_vs(sv_x, vy, ". smallest surface step ", dr)
+    if dr == 1 { pw_dec(sv_x, sys_valy(vy), ui_ratio(theme(TH_PANEL_HI), theme(TH_SURF_5)), 4, theme(TH_TEXT_HI)) }
+    sv_x = sv_x + pw_decw(ui_ratio(theme(TH_PANEL_HI), theme(TH_SURF_5)), 4)
+    return sys_vs(sv_x, vy, ":1", dr)
+}
+
+fn sys_rows(rx, ry, rw) {
+    sr_i = 0
+    sr_y = ry
+    while sr_i < SYS_ROWS_N {
+        sys_rowk(rx, sr_y, sys_rowk_name(sr_i))
+        sr_w = sys_row_val(0, sr_y, sr_i, 0)
+        sys_row_val(rx + rw - sr_w, sr_y, sr_i, 1)
+        sr_y = sys_rowend(rx, sr_y, rw)
+        sr_i = sr_i + 1
+    }
+    return sr_y
+}
+
+# ---- MEASURED CONTRAST, THIS LADDER, RIGHT NOW ------------------------------
+# PAIR 44 / RATIO 18 / FLOOR 16 / VERDICT 22, which are the prototype's own
+# TBL() widths. The header row is the LABEL style over a 1px ZD_LIT rule; every
+# data row closes with a 1px ZD_CUT groove.
+fn sysg_head(hx, hy, hw) {
+    sh_y = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), sh_y, "pair", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 44), pw_colw(hw, 18), ui_capsw("ratio", PW_SM)), sh_y, "ratio", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 62), pw_colw(hw, 16), ui_capsw("floor", PW_SM)), sh_y, "floor", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 78) + pw_cellpx(), sh_y, "verdict", theme(TH_TEXT_DIM), PW_SM)
+    fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
+    return hy + pw_headh()
+}
+
+# Returns the y it stopped at. IT DRAWS ONLY THE ROWS THAT FIT, and the caller
+# reports how many that was - a table that silently ends at row nine on a short
+# window is a table that has lied about its own verdict.
+fn sysg_rows(gx, gy, gw, gmax) {
+    sg_i = 0
+    sg_y = gy
+    while sg_i < SYSG_N {
+        if sg_y + pw_rowh() > gmax { return sg_y }
+        sg_q = ui_ratio(sysg_fg(sg_i), sysg_bg(sg_i))
+        sg_fl = sysg_floor(sg_i)
+        ui_txt(pw_colx(gx, gw, 0) + pw_cellpx(), pw_celly(sg_y), sysg_name(sg_i), theme(TH_TEXT), PW_SM, 0)
+        pw_rat(pw_right(pw_colx(gx, gw, 44), pw_colw(gw, 18), pw_ratw(sg_q)), pw_mcelly(sg_y), sg_q, theme(TH_TEXT_HI))
+        if sg_fl > 0 {
+            pw_dec(pw_right(pw_colx(gx, gw, 62), pw_colw(gw, 16), pw_decw(sg_fl, 2)), pw_mcelly(sg_y), sg_fl, 2, theme(TH_TEXT_DIM))
+            if (sg_q + 50) / 100 >= sg_fl {
+                pw_sw(pw_colx(gx, gw, 78) + pw_cellpx(), pw_celly(sg_y), "PASS", theme(TH_OK))
+            } else {
+                pw_sw(pw_colx(gx, gw, 78) + pw_cellpx(), pw_celly(sg_y), "FAIL", theme(TH_DANGER))
+            }
+        } else {
+            # A DASH, NOT A ZERO. "0.00" in a FLOOR column reads as a floor of
+            # zero, which is a claim; the dash says the question does not apply.
+            ui_txt(pw_right(pw_colx(gx, gw, 62), pw_colw(gw, 16), ui_tw("-", PW_SM, PW_MONO)), pw_mcelly(sg_y), "-", theme(TH_SURF_7), PW_SM, PW_MONO)
+            ui_txt(pw_colx(gx, gw, 78) + pw_cellpx(), pw_celly(sg_y), "structure", theme(TH_TEXT_DIM), PW_SM, 0)
+        }
+        sg_y = pw_row_rule(gx, sg_y, gw)
+        sg_i = sg_i + 1
+    }
+    return sg_y
+}
+
+# The HOST line's value, on the same measure-then-draw contract as the six
+# inventory rows. wm_n() is in it because the number of open windows is the one
+# fact about this host that changes while you are looking at the pane.
+fn sys_host_val(hx, hy, dr) {
+    sv_hx = sys_vt(hx, hy, "zlos 0.3, x86_64, single image, ", dr)
+    sv_hx = sys_vn(sv_hx, hy, wm_n(), dr)
+    return sys_vs(sv_hx, hy, " windows", dr)
+}
+
+fn sys_body(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    # See type_body: ui_text() gates on ui_mode_get() and ui_text_tracked()
+    # does not, so the mode is set explicitly before either is used.
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    sb_x = ax + pad_d()
+    sb_w = aw - 2 * pad_d()
+    sb_y = ay + pad_d()
+    sb_bot = ay + ah - pad_d()
+
+    # THE HOST LINE, and its badge is the table's own verdict rather than a
+    # word. If any graded pair drops below its floor this reads FAIL, on the
+    # first line of the window, without anybody scrolling to find out.
+    ui_caps(sb_x, sb_y + (pw_kvh() - 1 - ui_th(PW_SM)) / 2, "host", theme(TH_TEXT_2), PW_SM)
+    sb_f = sysg_fails()
+    # The badge is measured first because the value has to stop short of it,
+    # then the value is measured, then both are drawn from the right edge in.
+    sb_bw = pw_sww("OK")
+    if sb_f > 0 { sb_bw = pw_sww("FAIL") }
+    sb_hw = sys_host_val(0, sb_y, 0)
+    sys_host_val(sb_x + sb_w - sb_bw - 2 * pad_d() - sb_hw, sb_y, 1)
+    if sb_f == 0 {
+        pw_sw(sb_x + sb_w - sb_bw, sb_y + (pw_kvh() - 1 - ui_th(PW_SM)) / 2, "OK", theme(TH_OK))
+    } else {
+        pw_sw(sb_x + sb_w - sb_bw, sb_y + (pw_kvh() - 1 - ui_th(PW_SM)) / 2, "FAIL", theme(TH_DANGER))
+    }
+    sb_y = sys_rowend(sb_x, sb_y, sb_w) + PW_CARDGAP * ui()
+
+    sb_y = sys_cards(sb_x, sb_y, sb_w) + PW_CARDGAP * ui()
+    sb_y = sys_rows(sb_x, sb_y, sb_w)
+
+    sb_y = pw_sect(sb_x, sb_y + pad_d(), sb_w, "measured contrast, this ladder, right now", SYSG_N, " pairs")
+    sb_y = sysg_head(sb_x, sb_y, sb_w)
+    sb_shown = (sb_bot - sb_y) / pw_rowh()
+    if sb_shown > SYSG_N { sb_shown = SYSG_N }
+    # A window dragged short enough leaves no room at all and this goes
+    # negative; `-3 of 14 rows fit` is a worse readout than `0 of 14`.
+    if sb_shown < 0 { sb_shown = 0 }
+    sb_y = sysg_rows(sb_x, sb_y, sb_w, sb_bot)
+    # WHAT DID NOT FIT IS STATED. The prototype scrolls this table; this window
+    # does not scroll yet, so the honest substitute is to say how many rows the
+    # window had room for. Silently ending at row nine would make the pane's
+    # own verdict depend on the window height, which is the failure this line
+    # exists to make impossible.
+    if sb_shown < SYSG_N {
+        # BOTH counts come from SYSG_N and the loop, never from a literal in
+        # the sentence. " of 14 rows" written out is a second copy of SYSG_N
+        # and would go stale the day a fifteenth pair is added - which is
+        # exactly the drift this pane exists to catch elsewhere.
+        sb_nw = ui_tw(" of ", PW_SM, PW_MONO) + ui_tnw(SYSG_N, PW_SM, PW_MONO) + ui_tw(" rows fit - make the window taller", PW_SM, PW_MONO)
+        sb_nx = sb_x + sb_w - sb_nw - ui_tnw(sb_shown, PW_SM, PW_MONO)
+        sb_nx = sys_vn(sb_nx, sb_y, sb_shown, 1)
+        sb_nx = sys_vs(sb_nx, sb_y, " of ", 1)
+        sb_nx = sys_vn(sb_nx, sb_y, SYSG_N, 1)
+        sys_vs(sb_nx, sb_y, " rows fit - make the window taller", 1)
+    }
+    return 0
+}
+
+# =============================================================================
+# 14 TYPE - the three registers at their real sizes, and every atlas in the
+#           image
+#
+# THE PANE READS ITS OWN FACTS. atlas_n / atlas_w / atlas_h / atlas_g are
+# sizeof() over the linked font arrays in ui.c, and atlas_role asks which one a
+# type register is drawing from at the scale in force this second. Nothing
+# below is typed in, which matters here more than anywhere else in the system:
+# the design's stated type facts and the image's actual type facts DISAGREE,
+# and a pane that quoted design.h would have reported the disagreement as
+# agreement.
+#
+# THE DISAGREEMENT, stated plainly because the pane prints it. design.h's type
+# section opens "THREE sizes, because there are THREE baked bitmap atlases
+# (8x16, 16x32, 24x48)... This is a hard platform fact", and the prototype's
+# TYPE table has exactly those three rows, all three marked OK. TWO OF THE
+# THREE ARE IN THIS IMAGE. font_big.c holds a real 24x48 coverage atlas and is
+# NOT in kernel/SOURCES, so no target links it - fb.c's own note says why, and
+# says it in the past tense: "the 24x48 huge font was removed - unused, and its
+# 109 KiB pushed the raw kernel past the 640 KiB low-memory limit our own
+# bootloader loads into". The LG register is resampled from the 16x32 atlas.
+# The row is drawn and marked ABSENT.
+#
+# AND THERE ARE SIX MORE THAN EITHER DOCUMENT COUNTS. The mono atlases are the
+# CONSOLE's. Every label, title, column head and row in this desktop is drawn
+# by fb_text_role out of font_prop.inc's PROPORTIONAL atlases - three cells at
+# two weights, DejaVu Sans - which no version of the three-row table mentions
+# at all. Nine rows, because nine is how many there are.
+#
+# TRACKING IS NO LONGER UNPRICED, AND THE PANE MEASURES IT RATHER THAN SAYING
+# SO. The prototype's own note calls letter-spacing "the one unpriced item in
+# this direction" and design.h repeats it. uikit.c's ui_text_tracked now draws
+# it, so the TRACKING row below reports the DEVICE pixels actually inserted
+# between two glyphs - ui_capsw("WW") minus twice ui_capsw("W") - which is a
+# measurement of the shipped behaviour and not a reading of the token.
+# =============================================================================
+
+TY_MONO = 0                        # atlas_face(): DejaVu Sans Mono, fixed cell
+TY_SANS = 1                        # DejaVu Sans, proportional
+TY_SANSB = 2                       # the same, bold
+
+fn ty_face(f) {
+    if f == TY_MONO { return "mono" }
+    if f == TY_SANSB { return "sans bold" }
+    return "sans"
+}
+
+fn ty_reg(r) {
+    if r == PW_SM { return "SM" }
+    if r == PW_MD { return "MD" }
+    return "LG"
+}
+
+# HOW MANY ATLASES ARE REALLY HERE. Counted from atlas_in() rather than from
+# atlas_n(), because atlas_n() includes the row the design asked for and the
+# link does not have - and "three atlases" printed over a table with an ABSENT
+# row in it would be the pane contradicting itself in two adjacent lines.
+fn ty_present() {
+    tp_i = 0
+    tp_n = 0
+    while tp_i < atlas_n() {
+        if atlas_in(tp_i) == 1 { tp_n = tp_n + 1 }
+        tp_i = tp_i + 1
+    }
+    return tp_n
+}
+
+# TOTAL COVERAGE, which is the headline reading this pane is entitled to: the
+# number of glyph cells actually baked into the running image. It is the one
+# figure here that is genuinely large and genuinely the type system's own.
+fn ty_glyphs() {
+    tg_i = 0
+    tg_n = 0
+    while tg_i < atlas_n() {
+        if atlas_in(tg_i) == 1 { tg_n = tg_n + atlas_g(tg_i) }
+        tg_i = tg_i + 1
+    }
+    return tg_n
+}
+
+# THE TRACK, MEASURED. Two glyphs minus twice one glyph is exactly the space
+# uikit.c inserted between them, in device pixels, after UI_DP rounding and
+# after the floor that keeps a track from rounding to nothing. 'W' because it
+# is the widest cell in the atlas and therefore the one where a per-glyph
+# rounding error would be most visible if there were one.
+fn ty_track_lab() { return ui_capsw("WW", PW_SM) - 2 * ui_capsw("W", PW_SM) }
+fn ty_track_big() { return ui_dispw("WW", PW_LG) - 2 * ui_dispw("W", PW_LG) }
+
+# ---- the specimen -----------------------------------------------------------
+# The three registers at their real sizes, one under the other, which is the
+# only way a type specimen means anything: LG as the display style with
+# ZD_TR_BIG on it, LG again as a plain reading, MD as prose, SM as the tracked
+# uppercase label doing structural work. A card, because it is one object.
+fn ty_specimen(cx, cy, cw) {
+    tp_p = pad_d()
+    tp_h = 2 * tp_p + ui_th(PW_LG) * 2 + ui_th(PW_MD) + ui_th(PW_SM) + 12 * ui()
+    fill_rgb(cx, cy, cw, tp_h, theme(TH_SURF_5))
+    fill_rgb(cx, cy, cw, 1, theme(TH_LIT))
+    fill_rgb(cx, cy + tp_h - 1, cw, 1, theme(TH_CUT))
+    tp_x = cx + tp_p
+    tp_y = cy + tp_p
+    # THE LITERAL IS ALREADY UPPERCASE and that is a workaround, not a style
+    # choice. The prototype's `.t-big` carries text-transform:uppercase on the
+    # same rule as its letter-spacing (line 349), but uikit.c's ui_display()
+    # passes UI_F_BOLD without UI_F_CAPS - so the display style tracks and does
+    # not case, and a lowercase argument would come out lowercase. Passing the
+    # caps in fixes the pixels here without editing another agent's file; the
+    # missing flag is reported rather than patched around silently.
+    ui_disp(tp_x, tp_y, "PRESSWORK", theme(TH_TEXT_HI), PW_LG)
+    tp_y = tp_y + ui_th(PW_LG) + 4 * ui()
+    # The one large reading per view, and it is a real one: every glyph cell
+    # baked into this image, summed across the atlases that are in it.
+    ui_txtn(tp_x, tp_y, ty_glyphs(), theme(TH_TEXT_HI), PW_LG, 0)
+    ui_txt(tp_x + ui_tnw(ty_glyphs(), PW_LG, 0), tp_y, " glyph cells, baked", theme(TH_TEXT), PW_LG, 0)
+    tp_y = tp_y + ui_th(PW_LG) + 4 * ui()
+    ui_txt(tp_x, tp_y, "The root size. Everything a person reads as prose.", theme(TH_TEXT), PW_MD, 0)
+    tp_y = tp_y + ui_th(PW_MD) + 4 * ui()
+    ui_caps(tp_x, tp_y, "label, uppercase and tracked, doing structural work", theme(TH_TEXT_2), PW_SM)
+    return cy + tp_h
+}
+
+# ---- the atlas table --------------------------------------------------------
+# ATLAS 32 / ROLE 14 / SIZE 14 / COVERAGE 20 / STATE 20. Column 0 carries the
+# cell AND the face name - "16 x 32   sans bold" - so it is the widest, and it
+# was measured against the longest of the three face names rather than picked:
+# at ui 1 that run is 6 mono cells + a 2-cell gap + 9 more, 136 px, against
+# 32% of a 580 px table, 185 px.
+fn ty_head(hx, hy, hw) {
+    th_y = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), th_y, "atlas", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 32) + pw_cellpx(), th_y, "role", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 46), pw_colw(hw, 14), ui_capsw("size", PW_SM)), th_y, "size", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 60), pw_colw(hw, 20), ui_capsw("coverage", PW_SM)), th_y, "coverage", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 80) + pw_cellpx(), th_y, "state", theme(TH_TEXT_DIM), PW_SM)
+    fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
+    return hy + pw_headh()
+}
+
+# WHICH REGISTERS ARE ON THIS ATLAS RIGHT NOW, drawn as up to three tokens.
+# More than one can land on the same atlas and that is not a bug: at ui 1
+# fb.c's role ladder resolves SM, MD and LG to 12, 12 and 16 device px and
+# prop_atlas_cell rounds all three to the 16px atlas, so all three registers
+# share one face and the type scale collapses. Reading that off the screen is
+# the whole reason this column asks the running system instead of design.h,
+# which says 11 / 13 / 21 and is describing the design rather than the panel.
+# Returns the x it stopped at, so the SIZE column can be right-flushed after.
+fn ty_roles(rx, ry, i) {
+    tr_r = 0
+    tr_x = rx
+    while tr_r < 3 {
+        if atlas_role(tr_r, 0) == i {
+            ui_txt(tr_x, ry, ty_reg(tr_r), theme(TH_TEXT), PW_SM, PW_MONO)
+            tr_x = tr_x + ui_tw(ty_reg(tr_r), PW_SM, PW_MONO) + cell_w()
+        }
+        tr_r = tr_r + 1
+    }
+    # A bold atlas is not a register of its own - it is the same three at
+    # W_BOLD - so it is marked as the weight rather than given a fourth name.
+    if atlas_face(i) == TY_SANSB {
+        ui_txt(tr_x, ry, "bold", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        tr_x = tr_x + ui_tw("bold", PW_SM, PW_MONO)
+    }
+    # The console's own cell, which is a face nothing in the desktop's type
+    # scale reaches: term.c and the raster strip draw from it directly.
+    if atlas_face(i) == TY_MONO {
+        if cell_h() == atlas_h(i) {
+            ui_txt(tr_x, ry, "DATA", theme(TH_TEXT), PW_SM, PW_MONO)
+            tr_x = tr_x + ui_tw("DATA", PW_SM, PW_MONO)
+        } else {
+            ui_txt(tr_x, ry, "-", theme(TH_SURF_7), PW_SM, PW_MONO)
+            tr_x = tr_x + ui_tw("-", PW_SM, PW_MONO)
+        }
+    }
+    if tr_x == rx {
+        ui_txt(tr_x, ry, "-", theme(TH_SURF_7), PW_SM, PW_MONO)
+        tr_x = tr_x + ui_tw("-", PW_SM, PW_MONO)
+    }
+    return tr_x
+}
+
+fn ty_rows(gx, gy, gw, gmax) {
+    tw_i = 0
+    tw_y = gy
+    while tw_i < atlas_n() {
+        if tw_y + pw_rowh() > gmax { return tw_y }
+        tw_c = theme(TH_TEXT)
+        if atlas_in(tw_i) == 0 { tw_c = theme(TH_TEXT_DIM) }
+        # ATLAS - the cell, w x h, both out of sizeof.
+        tw_x = pw_colx(gx, gw, 0) + pw_cellpx()
+        ui_txtn(tw_x, pw_mcelly(tw_y), atlas_w(tw_i), tw_c, PW_SM, PW_MONO)
+        tw_x = tw_x + ui_tnw(atlas_w(tw_i), PW_SM, PW_MONO)
+        ui_txt(tw_x, pw_mcelly(tw_y), " x ", tw_c, PW_SM, PW_MONO)
+        tw_x = tw_x + ui_tw(" x ", PW_SM, PW_MONO)
+        ui_txtn(tw_x, pw_mcelly(tw_y), atlas_h(tw_i), tw_c, PW_SM, PW_MONO)
+        tw_x = tw_x + ui_tnw(atlas_h(tw_i), PW_SM, PW_MONO) + 2 * cell_w()
+        ui_txt(tw_x, pw_mcelly(tw_y), ty_face(atlas_face(tw_i)), theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        # ROLE - live.
+        ty_roles(pw_colx(gx, gw, 32) + pw_cellpx(), pw_mcelly(tw_y), tw_i)
+        # SIZE - the atlas cell in px, which is the size it is actually baked
+        # at. The DESIGN sizes (11 / 13 / 21) are in the SIZES row below and
+        # are deliberately not repeated here: this column reads the image.
+        pw_dec(pw_right(pw_colx(gx, gw, 46), pw_colw(gw, 14), pw_decw(atlas_h(tw_i) * 10, 1)), pw_mcelly(tw_y), atlas_h(tw_i) * 10, 1, tw_c)
+        # COVERAGE.
+        tw_cx = pw_right(pw_colx(gx, gw, 60), pw_colw(gw, 20), ui_tnw(atlas_g(tw_i), PW_SM, PW_MONO) + ui_tw(" glyphs", PW_SM, PW_MONO))
+        ui_txtn(tw_cx, pw_mcelly(tw_y), atlas_g(tw_i), tw_c, PW_SM, PW_MONO)
+        ui_txt(tw_cx + ui_tnw(atlas_g(tw_i), PW_SM, PW_MONO), pw_mcelly(tw_y), " glyphs", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        # STATE.
+        if atlas_in(tw_i) == 1 {
+            pw_sw(pw_colx(gx, gw, 80) + pw_cellpx(), pw_celly(tw_y), "OK", theme(TH_OK))
+        } else {
+            pw_sw(pw_colx(gx, gw, 80) + pw_cellpx(), pw_celly(tw_y), "ABSENT", theme(TH_WARN))
+        }
+        tw_y = pw_row_rule(gx, tw_y, gw)
+        tw_i = tw_i + 1
+    }
+    return tw_y
+}
+
+# ---- the four statements, and two of them carry a measurement ---------------
+# Same measure-then-draw contract as the SYSTEM pane's rows, and index 0 is the
+# FACES line's right-hand count so all five composed runs in this pane go
+# through one function.
+#
+# SIZES READS THE LIVE PIXELS, not design.h's 11 / 13 / 21, and prints both so
+# the gap is visible. At ui 1 fb.c's role ladder resolves all three registers
+# to 12, 12 and 16 device px - caption and body come out the SAME SIZE and the
+# three-step scale is two - which is a fact about the panel in front of you and
+# is exactly what a type pane is for.
+TY_ROWS_N = 4
+
+fn ty_rowk_name(i) {
+    if i == 1 { return "sizes" }
+    if i == 2 { return "styles" }
+    if i == 3 { return "tracking" }
+    return "hierarchy"
+}
+
+fn ty_row_val(vx, vy, i, dr) {
+    tv_x = vx
+    if i == 0 {
+        tv_x = sys_vn(tv_x, vy, ty_present(), dr)
+        return sys_vs(tv_x, vy, " atlases in this image, no rasteriser", dr)
+    }
+    if i == 1 {
+        tv_x = sys_vs(tv_x, vy, "three, live: SM ", dr)
+        tv_x = sys_vn(tv_x, vy, ui_th(PW_SM), dr)
+        tv_x = sys_vs(tv_x, vy, " / MD ", dr)
+        tv_x = sys_vn(tv_x, vy, ui_th(PW_MD), dr)
+        tv_x = sys_vs(tv_x, vy, " / LG ", dr)
+        tv_x = sys_vn(tv_x, vy, ui_th(PW_LG), dr)
+        return sys_vs(tv_x, vy, " px. design.h asks 11 / 13 / 21", dr)
+    }
+    if i == 2 { return sys_vt(tv_x, vy, "four. DATA mono / LABEL tracked caps / BODY / PLATE", dr) }
+    if i == 3 {
+        # THE ONE THE PROTOTYPE PRINTS AS UNPRICED, and it is priced now. These
+        # two numbers are not tokens read back - they are ui_capsw("WW") minus
+        # twice ui_capsw("W"), i.e. the device pixels uikit.c actually inserted
+        # between two glyphs after UI_DP rounding and after the floor that stops
+        # a track rounding to nothing. If the tracking ever silently stops being
+        # drawn, these read 0 on screen.
+        tv_x = sys_vs(tv_x, vy, "DRAWN, measured: LABEL +", dr)
+        tv_x = sys_vn(tv_x, vy, ty_track_lab(), dr)
+        tv_x = sys_vs(tv_x, vy, " px, PLATE +", dr)
+        tv_x = sys_vn(tv_x, vy, ty_track_big(), dr)
+        return sys_vs(tv_x, vy, " px between glyphs", dr)
+    }
+    return sys_vt(tv_x, vy, "case, weight and rule weight. never size", dr)
+}
+
+fn type_body(ax, ay, aw, ah) {
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    # ui_begin PUTS THE TOOLKIT BACK IN DRAW MODE, and it is not decoration.
+    # ui_text() gates on ui_mode_get() while ui_text_tracked() deliberately
+    # does not, so a pane that mixed the two after some other window's
+    # hit-test pass had left L.mode at UI_HITTEST would draw its tracked
+    # labels and none of its values. One call, and both halves agree.
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    tb_x = ax + pad_d()
+    tb_w = aw - 2 * pad_d()
+    tb_y = ay + pad_d()
+    tb_bot = ay + ah - pad_d()
+
+    # FACES, and the count on the right is the number of atlases that are IN
+    # this image, not the number the design named.
+    ui_caps(tb_x, tb_y + (pw_kvh() - 1 - ui_th(PW_SM)) / 2, "faces", theme(TH_TEXT_2), PW_SM)
+    ui_txt(tb_x + pw_colw(tb_w, 18), tb_y + (pw_kvh() - 1 - cell_h()) / 2, "DejaVu Sans + DejaVu Sans Mono", theme(TH_TEXT), PW_SM, PW_MONO)
+    tb_fw = ty_row_val(0, tb_y, 0, 0)
+    ty_row_val(tb_x + tb_w - tb_fw, tb_y, 0, 1)
+    tb_y = sys_rowend(tb_x, tb_y, tb_w) + PW_CARDGAP * ui()
+
+    tb_y = ty_specimen(tb_x, tb_y, tb_w) + PW_CARDGAP * ui()
+
+    tb_y = pw_sect(tb_x, tb_y + pad_d(), tb_w, "every atlas linked into this image", atlas_n(), " rows")
+    tb_y = ty_head(tb_x, tb_y, tb_w)
+    tb_y = ty_rows(tb_x, tb_y, tb_w, tb_bot)
+
+    # ---- the four statements, and each one carries a measurement ------------
+    # SIZES reads the LIVE px of the three registers, not design.h's 11/13/21,
+    # so on a panel where the ladder collapses the row says so.
+    if tb_y + 4 * pw_kvh() + pad_d() < tb_bot {
+        tb_y = tb_y + pad_d()
+        tb_i = 1
+        while tb_i < TY_ROWS_N {
+            ui_caps(tb_x, tb_y + (pw_kvh() - 1 - ui_th(PW_SM)) / 2, ty_rowk_name(tb_i), theme(TH_TEXT_2), PW_SM)
+            tb_rw = ty_row_val(0, tb_y, tb_i, 0)
+            ty_row_val(tb_x + tb_w - tb_rw, tb_y, tb_i, 1)
+            tb_y = sys_rowend(tb_x, tb_y, tb_w)
+            tb_i = tb_i + 1
+        }
+    }
+    return 0
+}
+
+# ---- the two windows --------------------------------------------------------
+# IDS 71 AND 72, ABOVE THE REGISTRY RANGE, which is where APP_CATALOG (70)
+# already lives and for the same reason: 15..50 belongs to apps_registry.zl and
+# its five slices, and a kernel-owned id inside that range is a collision
+# waiting for the next app somebody adds there. app_draw and app_name test
+# these BEFORE their `id >= REG_FIRST` fall-through, exactly as they do for the
+# catalog. check-appids.py reads both numbers out of this file.
+APP_SYSPANE  = 71
+APP_TYPEPANE = 72
+
+syspane_win  = 0 - 1
+typepane_win = 0 - 1
+
+# THE PANEL REFRESH IS MEASURED HERE AND NOWHERE ELSE. intel_refresh_mhz()
+# counts frames across 500 ms of the PIT (intel.c:699), so it is a HALF SECOND
+# of wall clock every time it is called - which is fine once, on a window the
+# user just asked for, and ruinous inside app_draw, where it would run on every
+# repaint of a window that is repainted whenever anything overlaps it. It
+# returns 0 immediately when the pipe is not enabled, so on QEMU, BGA and
+# virtio-gpu this costs nothing and the card falls back to the compositor's own
+# count. Measured once per OPEN rather than once per boot because a mode change
+# between opens would leave a stale rate on screen wearing the word "measured".
+fn syspane_measure() {
+    sys_hz = gpu_hz()
+    return sys_hz
+}
+
+fn open_syspane() {
+    op_u = ui()
+    if syspane_win >= 0 { if wm_open_p(syspane_win) == 1 {
+        wm_setfocus(syspane_win)  wm_raise(syspane_win)  return 1
+    }}
+    syspane_measure()
+    # 560 x 620 design px is the height the fourteen graded rows need on top of
+    # the cards and the six inventory rows; anything shorter and sys_body says
+    # on screen how many rows it had room for rather than quietly truncating.
+    syspane_win = wm_open(APP_SYSPANE, "System", desk_x(96), desk_y(56), 560 * op_u, 620 * op_u)
+    if syspane_win < 0 { return 0 }
+    wm_report(syspane_win)
+    return 1
+}
+
+fn open_typepane() {
+    ot_u = ui()
+    if typepane_win >= 0 { if wm_open_p(typepane_win) == 1 {
+        wm_setfocus(typepane_win)  wm_raise(typepane_win)  return 1
+    }}
+    typepane_win = wm_open(APP_TYPEPANE, "Type", desk_x(140), desk_y(96), 600 * ot_u, 520 * ot_u)
+    if typepane_win < 0 { return 0 }
+    wm_report(typepane_win)
+    return 1
+}
+
 # ---- THE APP CONTRACT ------------------------------------------------------
 # Three functions, no loop, ever. wm.c calls these through wmglue.c, which
 # reaches them as zl_fn_app_* because zl compiles TO C. See ui.h and
@@ -5781,11 +6777,1389 @@ browser_win = 0 - 1
 settings_win = 0 - 1
 files_win = 0 - 1
 
+# ==============================================================================
+# 11 SETTINGS - "design.h, live". The design explaining itself.
+# ==============================================================================
+#
+# THIS PANE IS NOT A PREFERENCES DIALOG AND IT IS NOT A STYLE GUIDE. The
+# prototype's own header on it says what it is: "THIS PANE IS WHERE THE DESIGN
+# ARGUES FOR ITSELF, and it argues by recomputing rather than by asserting."
+# Every ratio on screen is computed at draw time from the tokens that are
+# actually loaded, through ui_ratio() - the integer WCAG engine in ui.c - and
+# not one of them is a string somebody typed after reading design.h.
+#
+# WHY THAT DISTINCTION IS THE WHOLE POINT. design.h's own header ends with "do
+# not trust this comment - run it". A pane that printed the same figures as
+# quoted constants would be the comment again, in a window, and it would go
+# stale the first time a token moved by one byte - silently, in the optimistic
+# direction, because nobody re-checks a number that is already on screen. A
+# pane that recomputes cannot: change ZD_KNOCK and the table says something
+# different on the next repaint.
+#
+# WHAT IS *NOT* COMPUTED, AND IT IS SAID OUT LOUD RATHER THAN DRESSED UP. Three
+# figures measure ladders this system does not carry - graphite's own focus
+# wash at 1.3999:1, the raking design's loudest element at 6.19:1, and the
+# 1,019 px its focus signal covered. There is no token here to compute them
+# from. They come from design.h's ZD_REF_*_Q4 block, they are printed in the
+# dim ink this pane reserves for a quoted figure, and they sit in the table's
+# comparison rows where the eye already reads them as somebody else's numbers.
+# Everything drawn in the live inks was computed.
+#
+# THE TWO CONTROLS ARE LIVE, NOT ILLUSTRATIONS. "the knockout" rebuilds the
+# theme with the four knockout roles swapped for graphite's wash and its
+# ordinary inks, so every focused header in the system - including this pane's
+# own selected tab - falls back while you watch, and the table's first row
+# changes from a computed 6.4796:1 to a computed 1.3681:1 in the same repaint.
+# "focus bar" sets theme.focus_bar in design px, so the vermilion run down the
+# left of every focused plate gets wider and the pixel arithmetic in the table
+# follows it. A control that changed a number without changing the screen would
+# be exactly the assertion this pane exists to avoid.
+#
+# WHY IT IS IN zl AND NOT IN C. It used to be in C - settings.c - and that
+# file's header gives the reason: "zl exposes NO natives for ui_* at all, so a
+# zl Settings app would need ~15 new builtins in runtime_kernel.c first". That
+# is no longer true; runtime_kernel.c answers for ui_color, ui_metric and the
+# whole ui_* widget set today. The same header says the move would then be "a
+# translation, not a redesign". It was not a translation in the end, because
+# what this pane has to say changed completely, but the blocker it named is
+# gone and policy belongs in zl.
+#
+# ---- THE FOUR TABS ----------------------------------------------------------
+#   LADDER    the one structural decision - why the steps were widened, what
+#             the ladder resolves to right now, and what the widening cost
+#   FOCUS     the knockout, the sign inversion it used to cause, which side an
+#             edge goes on, and the pixel/ratio arithmetic on a 600x420 plate
+#   BOUNDARY  the occluder draws the border - and the ceiling that forces it
+#   PRESS     what came across from the printed document, and what it cost
+#
+# FOCUS is the tab this opens on. That is the prototype's own choice for the
+# `#settings` scene (it sets setTab = 1 and nothing else), and it is the right
+# one: the knockout is the departure the rest of the design was rearranged to
+# make room for, so it is the argument to lead with.
+
+SET_LADDER   = 0
+SET_FOCUS    = 1
+SET_BOUNDARY = 2
+SET_PRESS    = 3
+SET_TABS     = 4
+
+# ---- geometry, in DESIGN px, read off the prototype's stylesheet --------------
+# Not picked by eye. .wbody padding 6/9, .row height 26 and gap 8, .seg > span
+# height 20 and padding 0 9, .sw2 34 x 17 with a 13 square knob, .r2 2px,
+# .kv .k 132 wide, the slider label column 146 and its value column 62, and the
+# settings slider's own 11px mtrack override. Everything else is measured at
+# run time from label_h()/cell_h() rather than assumed, because the atlas a
+# role lands on is fb.c's decision and not this file's.
+SET_PADX   = 9
+SET_PADY   = 6
+SET_ROWH   = 26
+SET_SEGH   = 20
+SET_SEGPX  = 9
+SET_GAP    = 8
+SET_R2     = 2
+SET_SWW    = 34
+SET_SWH    = 17
+SET_KNOB   = 13
+SET_TRKH   = 11
+SET_LABW   = 146
+SET_VALW   = 62
+SET_KVKW   = 132
+SET_WELLPX = 8
+SET_WELLPY = 6
+SET_TDPX   = 6
+SET_TDPY   = 2
+SET_STACK  = 5                     # .stack gap - the space between blocks
+SET_SCRLSTEP = 40                  # design px per scroll gesture
+
+# ---- ui.c's two published index spaces --------------------------------------
+# ui.h's enum ui_ref_color_id and enum ui_ref_num_id. Numbered here because zl
+# has no way to include a C header; the check that they still agree is that
+# every figure below reproduces design.h's own prose, which is stated with each
+# one at its call site.
+SET_REF_LIT_RAKING  = 0
+SET_REF_BASE_RAKING = 1
+SET_REF_KNOCK_PLATE = 2
+SET_REF_WASH_RAKING = 3
+SET_RN_PLATE_W   = 0
+SET_RN_PLATE_H   = 1
+SET_RN_TITLE_H   = 2
+SET_RN_RAKING_PX   = 3
+SET_RN_GRAPHITE_PX = 4
+SET_RN_WASH_Q4     = 5
+SET_RN_RAKING_Q4   = 6
+
+set_tab = 1                        # SET_FOCUS. see the note above.
+set_scroll = 0                     # px already scrolled off the top
+set_conth = 0                      # content height, LEARNED from the last draw
+set_viewh = 0                      # the scroll viewport's height, likewise
+# The scroll clamp is deliberately fed by the previous frame rather than by a
+# measure pass. A second pass that walked the same layout to total it up is a
+# second copy of the layout, and this file has uikit.c's warning in front of it:
+# a measure/draw disagreement is a clipped label. Learning the height from the
+# draw that just happened cannot disagree with that draw, and the one frame of
+# lag is invisible - it costs an over-scroll that snaps back on the next
+# repaint, and only on the frame you change tabs.
+
+# ---- FIXED POINT, BECAUSE THERE IS NO FLOAT IN THE DRAWING PATH ---------------
+# ui_ratio() hands a contrast across the seam as an integer x10^4, so 6.4796:1
+# arrives as 64796. These print it. set_q() rescales with ROUNDING - the
+# prototype's toFixed(2) rounds, and truncating turns 6.4796 into "6.47", which
+# is a different number in the only place anyone checks.
+fn set_q(v, dec) {
+    setq_p = 1
+    setq_i = dec
+    while setq_i < 4 { setq_p = setq_p * 10  setq_i = setq_i + 1 }
+    return idiv(v + idiv(setq_p, 2), setq_p)
+}
+fn set_decw(v, dec) {
+    setdw_p = 1
+    setdw_i = 0
+    while setdw_i < dec { setdw_p = setdw_p * 10  setdw_i = setdw_i + 1 }
+    return s3_numw(idiv(v, setdw_p)) + (dec + 1) * cell_w()
+}
+# v is already scaled to `dec` decimals. The fraction is ZERO PADDED, which is
+# the whole reason this is not two num_aa calls with a dot between them: 6.0796
+# printed that way reads "6.796", one decimal place short and wrong by a factor
+# of ten, and it looks entirely plausible.
+fn set_dec(x, y, v, dec, col) {
+    setd_p = 1
+    setd_i = 0
+    while setd_i < dec { setd_p = setd_p * 10  setd_i = setd_i + 1 }
+    setd_ip = idiv(v, setd_p)
+    setd_fr = v - setd_ip * setd_p
+    num_aa(x, y, setd_ip, col)
+    setd_x = x + s3_numw(setd_ip)
+    text_aa(setd_x, y, ".", col)
+    setd_x = setd_x + cell_w()
+    setd_p = idiv(setd_p, 10)
+    while setd_p >= 1 {
+        num_aa(setd_x, y, idiv(setd_fr, setd_p) % 10, col)
+        setd_x = setd_x + cell_w()
+        setd_p = idiv(setd_p, 10)
+    }
+    return setd_x
+}
+# A CONTRAST, "6.4796:1", right aligned on xr. Right aligned because a column
+# of ratios is read by comparing magnitudes, and left-aligned figures of
+# different integer widths put the decimal points in different places.
+fn set_rat_r(xr, y, v4, dec, col) {
+    setrr_v = set_q(v4, dec)
+    setrr_x = xr - set_decw(setrr_v, dec) - 2 * cell_w()
+    setrr_x = set_dec(setrr_x, y, setrr_v, dec, col)
+    text_aa(setrr_x, y, ":1", col)
+    return 0
+}
+fn set_pct_r(xr, y, v4, dec, col) {
+    setpr_v = set_q(v4, dec)
+    setpr_x = xr - set_decw(setpr_v, dec) - 2 * cell_w()
+    setpr_x = set_dec(setpr_x, y, setpr_v, dec, col)
+    text_aa(setpr_x, y, " %", col)
+    return 0
+}
+# A PIXEL COUNT WITH A THOUSANDS SEPARATOR - "16,800". The prototype prints
+# every one of these through toLocaleString and the grouping is what makes a
+# five figure count readable at a glance in a column beside a percentage.
+fn set_thouw(v) {
+    if v < 1000 { return s3_numw(v) }
+    return s3_numw(idiv(v, 1000)) + 4 * cell_w()
+}
+fn set_thou_r(xr, y, v, col) {
+    setth_x = xr - set_thouw(v)
+    if v < 1000 {
+        num_aa(setth_x, y, v, col)
+        return 0
+    }
+    setth_hi = idiv(v, 1000)
+    num_aa(setth_x, y, setth_hi, col)
+    setth_x = setth_x + s3_numw(setth_hi)
+    text_aa(setth_x, y, ",", col)
+    num3(setth_x + cell_w(), y, v - setth_hi * 1000, col)
+    return 0
+}
+
+# ---- the recipes, one function each ------------------------------------------
+# THE MEASURE AND THE DRAW SHARE THE HELPER. uikit.c already documents why: a
+# measure/draw disagreement is a clipped label, and here it would be worse - a
+# hit test that lands on the row above the one you clicked. Every control's
+# rectangle comes out of one of these, and app_event calls exactly the same
+# functions app_draw does rather than re-deriving the same arithmetic.
+fn set_rowh() { return SET_ROWH * ui() }
+fn set_tdh()  { return cell_h() + 2 * SET_TDPY * ui() + 1 }
+fn set_thh()  { return label_h(T_CAPTION) + 2 * SET_TDPY * ui() + SET_R2 * ui() }
+fn set_kvh()  { return cell_h() + 2 * ui() + 1 }
+fn set_lineh() { return cell_h() }
+fn set_headh() { return label_h(T_CAPTION) + SET_STACK * ui() }
+
+# A HARD RULE, and there are exactly two weights. design.h's depth rank inside
+# a plate: ZD_CUT at 1dp for rows, cells and group edges; ZD_LIT at 2dp for
+# regions, table heads and bands. There is no third rank, and nesting never
+# changes a value - which is the rule the BOUNDARY tab prints as a table.
+fn set_rule1(x, y, w) { fill_rgb(x, y, w, 1, theme(TH_CUT))  return y + 1 }
+fn set_rule2(x, y, w) { fill_rgb(x, y, w, SET_R2 * ui(), theme(TH_LIT))  return y + SET_R2 * ui() }
+
+# A SECTION CAPTION. LABEL style: SM, uppercase, bold, ZD_TEXT_3. It is NOT
+# tracked, and that is the one item on the PRESS tab's own bill: fb_text_role
+# cannot letterspace without a UI_F_TRACK flag on the existing flag word, and
+# measure and draw must share the helper or a tracked label clips. The
+# prototype gets tracking free from CSS; here it is unpriced work, and the
+# caption reads flatter without it. Named rather than hidden.
+fn set_head(x, y, s) {
+    label(x, y, s, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    return y + set_headh()
+}
+
+# SUNKEN. The .well recipe: ZD_WELL ground, ZD_R_INSET corner, a ZD_CUT ring,
+# and the seat's two inset runs WITH THE SIGN FLIPPED - cut along the top
+# inside edge, ZD_LITSOFT along the bottom. That inversion is the whole reason
+# a well reads as a hole and a card reads as a raise: the light still comes
+# from upper left, so a surface below the plane is dark where a surface above
+# it is bright. Same lamp, opposite geometry.
+fn set_wellh(lines) { return 2 * SET_WELLPY * ui() + lines * set_lineh() }
+fn set_well(x, y, w, lines) {
+    setwl_u = ui()
+    setwl_h = set_wellh(lines)
+    rrect(x, y, w, setwl_h, R_INSET_D * setwl_u, theme(TH_CUT))
+    rrect(x + 1, y + 1, w - 2, setwl_h - 2, R_INSET_D * setwl_u - 1, theme(TH_SURF_WELL))
+    fill_rgb(x + 1, y + 1, w - 2, 1, theme(TH_CUT))
+    fill_rgb(x + 1, y + setwl_h - 2, w - 2, 1, theme(TH_LITSOFT))
+    return y + setwl_h + SET_STACK * ui()
+}
+# The baseline of line `n` inside a well. A caller lays a paragraph out by
+# COUNTING LINES rather than by carrying a cursor - which matters because a zl
+# local is not scoped to its function, so a cursor held across a call to
+# another drawing helper is a cursor that helper can move out from under it.
+fn set_wly(y, n) { return y + SET_WELLPY * ui() + n * set_lineh() }
+
+# ---- table furniture ---------------------------------------------------------
+# A column head is LABEL on the plate with a 2dp ZD_LIT rule under it; a body
+# cell is DATA mono at ZD_TEXT_2 with a 1dp ZD_CUT rule under it. Two rule
+# weights, no borders, no zebra - the ruling IS the table.
+fn set_th(x, y, s) {
+    label(x + SET_TDPX * ui(), y + SET_TDPY * ui(), s, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    return 0
+}
+fn set_th_r(xr, y, s) {
+    label(xr - SET_TDPX * ui() - label_w(s, T_CAPTION, W_BOLD), y + SET_TDPY * ui(), s, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    return 0
+}
+fn set_thead(x, y, w) {
+    fill_rgb(x, y + set_thh() - SET_R2 * ui(), w, SET_R2 * ui(), theme(TH_LIT))
+    return y + set_thh()
+}
+fn set_trow(x, y, w) {
+    fill_rgb(x, y + set_tdh() - 1, w, 1, theme(TH_CUT))
+    return y + set_tdh()
+}
+fn set_tdy(y) { return y + SET_TDPY * ui() }
+fn set_td(x, y, s, col) { text_aa(x + SET_TDPX * ui(), set_tdy(y), s, col)  return 0 }
+fn set_tdl(x, y, s, col) { label(x + SET_TDPX * ui(), set_tdy(y), s, col, T_CAPTION, W_BOLD)  return 0 }
+
+# A KEY/VALUE LINE. LABEL on the left in a fixed 132dp column, DATA mono right
+# aligned, a 1dp groove under. The fixed key column is what lets a run of them
+# be read as a list rather than as sentences.
+fn set_kv(x, y, w, k) {
+    label(x, y + 1 * ui(), k, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
+    fill_rgb(x, y + set_kvh() - 1, w, 1, theme(TH_CUT))
+    return y + set_kvh()
+}
+fn set_kvvx(x) { return x + SET_KVKW * ui() }
+
+# ---- the segmented tab bar ---------------------------------------------------
+# THE SELECTED TAB IS THE KNOCKOUT. Not a second idea and not an accent: the
+# same value flip the focused window header uses, on one segment. A reader who
+# has learned it on a window reads it here for free - and when the FOCUS tab's
+# toggle switches the knockout off, THIS BAR FALLS BACK TOO, which is the most
+# direct demonstration of the control there is.
+fn set_tabname(i) {
+    if i == SET_LADDER   { return "LADDER" }
+    if i == SET_FOCUS    { return "FOCUS" }
+    if i == SET_BOUNDARY { return "BOUNDARY" }
+    return "PRESS"
+}
+fn set_tabw(i) { return label_w(set_tabname(i), T_CAPTION, W_BOLD) + 2 * SET_SEGPX * ui() }
+fn set_tabx(x, i) {
+    settx_x = x + 1
+    settx_j = 0
+    while settx_j < i {
+        settx_x = settx_x + set_tabw(settx_j) + 1
+        settx_j = settx_j + 1
+    }
+    return settx_x
+}
+fn set_segw() {
+    setsw_w = 2
+    setsw_i = 0
+    while setsw_i < SET_TABS {
+        setsw_w = setsw_w + set_tabw(setsw_i) + 1
+        setsw_i = setsw_i + 1
+    }
+    return setsw_w - 1
+}
+fn set_segh() { return SET_SEGH * ui() }
+fn set_segbar(x, y) {
+    # the 1px ZD_CUT ring and the separators between segments are ONE fill with
+    # the segments punched out of it. A border drawn as four fills per segment
+    # would double every internal rule and land 2px where the recipe says 1.
+    fill_rgb(x, y, set_segw(), set_segh(), theme(TH_CUT))
+    setsg_i = 0
+    while setsg_i < SET_TABS {
+        setsg_x = set_tabx(x, setsg_i)
+        setsg_w = set_tabw(setsg_i)
+        setsg_bg = theme(TH_PANEL_HI)
+        setsg_ink = theme(TH_TEXT_DIM)
+        if setsg_i == set_tab {
+            setsg_bg = theme(TH_KNOCK)
+            setsg_ink = theme(TH_KNOCK_INK)
+        }
+        fill_rgb(setsg_x, y + 1, setsg_w, set_segh() - 2, setsg_bg)
+        label(setsg_x + SET_SEGPX * ui(), y + (set_segh() - label_h(T_CAPTION)) / 2, set_tabname(setsg_i), setsg_ink, T_CAPTION, W_BOLD)
+        setsg_i = setsg_i + 1
+    }
+    return 0
+}
+# Which segment a pointer landed on, from the same two functions that drew it.
+# -1 for a miss, and a miss is not "the nearest one" - a settings pane that
+# switches tabs when you click beside the bar is a settings pane you cannot
+# scroll without changing what you are reading.
+fn set_tab_at(x, y, ex, ey) {
+    if ey < y { return 0 - 1 }
+    if ey >= y + set_segh() { return 0 - 1 }
+    setta_i = 0
+    while setta_i < SET_TABS {
+        if ex >= set_tabx(x, setta_i) {
+            if ex < set_tabx(x, setta_i) + set_tabw(setta_i) { return setta_i }
+        }
+        setta_i = setta_i + 1
+    }
+    return 0 - 1
+}
+
+# ---- the toggle --------------------------------------------------------------
+# .sw2: 34 x 17 with a 13 square knob. OFF is a ZD_WELL trough with a ZD_CUT
+# ring and the knob in ZD_TEXT_INERT - the structure-only rung, which is legal
+# here precisely because a knob is a FILL and never a glyph. ON is solid
+# ZD_KNOCK, ring included, with the knob reversed out in ZD_KNOCK_INK. So the
+# control that switches the knockout off is itself drawn with the knockout, and
+# switching it off changes the control you just pressed.
+fn set_togw() { return SET_SWW * ui() }
+fn set_togh() { return SET_SWH * ui() }
+fn set_toggle(x, y, on) {
+    settg_k = SET_KNOB * ui()
+    if on == 1 {
+        fill_rgb(x, y, set_togw(), set_togh(), theme(TH_KNOCK))
+        fill_rgb(x + set_togw() - settg_k - 1, y + 1, settg_k, settg_k, theme(TH_KNOCK_INK))
+    } else {
+        fill_rgb(x, y, set_togw(), set_togh(), theme(TH_CUT))
+        fill_rgb(x + 1, y + 1, set_togw() - 2, set_togh() - 2, theme(TH_SURF_WELL))
+        fill_rgb(x + 1, y + 1, settg_k, settg_k, theme(TH_SURF_7))
+    }
+    return 0
+}
+# The whole ROW is the hit target, not the 34px switch. A 17px tall control is
+# a 17px tall control at ui 1 and the pointer is not that accurate; the
+# prototype makes the row the target for the same reason.
+fn set_hit_row(x, y, w, ex, ey) {
+    if ex < x { return 0 }
+    if ex >= x + w { return 0 }
+    if ey < y { return 0 }
+    if ey >= y + set_rowh() { return 0 }
+    return 1
+}
+
+# ---- the slider --------------------------------------------------------------
+# .mtrack with the settings pane's own 11px height override. THE FILL IS STEEL
+# AND THAT IS A RULE, NOT A CHOICE: ZD_STEEL is the machine's own reading and
+# appears inside an instrument and nowhere else, while ZD_VERM is an ink laid
+# on a surface for the one thing to act on. A vermilion track fill would be the
+# overprint doing an instrument's job, which is exactly the discipline the
+# PRESS tab warns turns this direction into a generic two-accent dark UI.
+fn set_trkh() { return SET_TRKH * ui() }
+fn set_slider(x, y, w, v, lo, hi) {
+    fill_rgb(x, y, w, set_trkh(), theme(TH_CUT))
+    fill_rgb(x + 1, y + 1, w - 2, set_trkh() - 2, theme(TH_SURF_WELL))
+    setsl_f = 0
+    if hi > lo { setsl_f = (v - lo) * (w - 2) / (hi - lo) }
+    if setsl_f > w - 2 { setsl_f = w - 2 }
+    if setsl_f > 0 { fill_rgb(x + 1, y + 1, setsl_f, set_trkh() - 2, theme(TH_STEEL)) }
+    return 0
+}
+# The value a click at ex asks for. Rounded to the nearest step rather than
+# truncated: with six steps across the track, truncation makes the top value
+# reachable only on the single rightmost pixel column.
+fn set_slider_v(x, w, lo, hi, ex) {
+    if w <= 1 { return lo }
+    setsv_n = hi - lo
+    setsv_v = lo + idiv((ex - x) * setsv_n * 2 + w, 2 * w)
+    if setsv_v < lo { setsv_v = lo }
+    if setsv_v > hi { setsv_v = hi }
+    return setsv_v
+}
+
+# ---- the scroll viewport ------------------------------------------------------
+# The pane is taller than any window it fits in - the FOCUS tab alone runs to
+# about 1,100 px at ui 1 - so the body scrolls. wm.c already scissors the client
+# rect ("an app physically cannot draw over its own title bar no matter what it
+# does"), so a straddling row is clipped for free and this only has to decide
+# what NOT to bother drawing. set_c0/set_c1 are that window in absolute pixels.
+set_c0 = 0
+set_c1 = 0
+fn set_vis(y, h) {
+    if y + h <= set_c0 { return 0 }
+    if y >= set_c1 { return 0 }
+    return 1
+}
+fn set_cx(x, w, pc) { return x + idiv(w * pc, 100) }
+
+# ---- live figures, every one of them recomputed -------------------------------
+# theme(TH_*) is the LOADED value, not design.h's - which is exactly the point,
+# because the FOCUS tab's toggle changes four of them while you watch and every
+# figure below has to follow. ui_ratio() returns WCAG contrast x10^4.
+fn set_r_knock()   { return ui_ratio(theme(TH_KNOCK), theme(TH_PANEL)) }
+fn set_r_verm()    { return ui_ratio(theme(TH_ACCENT), theme(TH_PANEL)) }
+fn set_r_koedge()  { return ui_ratio(theme(TH_KO_EDGE), theme(TH_KNOCK)) }
+fn set_r_lit()     { return ui_ratio(theme(TH_LIT), theme(TH_PANEL)) }
+fn set_r_cut()     { return ui_ratio(theme(TH_CUT), theme(TH_PANEL)) }
+# The two ceilings: how much room a surface has below it and above it. They are
+# what decides which side an edge goes on, and they are properties of the
+# GROUND alone - the loudest darker term against a surface is its ratio to pure
+# black, the loudest lighter term is its ratio to pure white.
+fn set_dn(c) { return ui_ceil_dn(c) }
+fn set_up(c) { return ui_ceil_up(c) }
+
+# THE COMPARISON LADDER, computed rather than quoted. design.h's ZD_REF_* block
+# reached by index so no colour literal appears in this file. These three
+# reproduce the prototype's own figures exactly - 1.9931, 5.9822 and 11.9231 -
+# and design.h's header states the third at line 128, so a disagreement here is
+# a real signal rather than a rounding argument.
+fn set_ref_lit_ground() { return ui_ratio(ui_ref(SET_REF_LIT_RAKING), ui_ref(SET_REF_BASE_RAKING)) }
+fn set_ref_lit_ko()     { return ui_ratio(ui_ref(SET_REF_LIT_RAKING), ui_ref(SET_REF_KNOCK_PLATE)) }
+fn set_ref_ko_plate()   { return ui_ratio(ui_ref(SET_REF_KNOCK_PLATE), ui_ref(SET_REF_BASE_RAKING)) }
+
+# THE SKEW - the widening's central claim in one number. The edge run has to
+# compute the SAME ratio against the knockout as against the ground, or the
+# light inverts its loudness when the header inverts.
+#
+# EVERYTHING THIS PANE PRINTS IS x10^4 AND THERE IS NO SECOND FIXED POINT.
+# These two are percentages rather than ratios, and the first version of them
+# returned x10^2 "because two decimals is all a percentage needs" - which meant
+# the print helper, which rescales FROM q4, divided them by a hundred again and
+# drew "0.00 %" where 0.25 % belongs. A plausible-looking zero, in the one
+# figure the whole widening argument rests on. One fixed point, everywhere,
+# and the helpers do the rescaling: a percentage is x10^4 like everything else.
+fn set_skew_q4() {
+    setsk_a = set_r_lit()
+    setsk_b = set_r_koedge()
+    if setsk_a <= 0 { return 0 }
+    # absolute, because with the knockout switched OFF the foot rule is the
+    # groove and the difference runs the other way - a negative here would go
+    # through set_dec and come out as a digit salad.
+    if setsk_b < setsk_a { setsk_b = setsk_a + (setsk_a - setsk_b) }
+    return idiv((setsk_b - setsk_a) * 1000000, setsk_a)
+}
+# ...and the reference skew's multiplier: how many times louder the same token
+# reads on PLATE's header than on graphite's ground. 3.00x, opposite sign.
+fn set_ref_x_q4() { return idiv(set_ref_lit_ko() * 10000, set_ref_lit_ground()) }
+
+# ---- the 600 x 420 dp reference plate ----------------------------------------
+# THE PIXEL COUNTS ARE DERIVED, NOT QUOTED, and that is the difference between
+# a table and a caption. 16,800 is the plate's width times ZD_TITLE_H - the
+# header band, whether it carries the knockout or the wash, because the two
+# cover THE IDENTICAL AREA and that is the comparison's whole premise. 1,176 is
+# the focus bar's width in dp times the plate below the header, so it moves the
+# instant the slider moves. Only the raking design's 1,019 is quoted: its focus
+# signal is not a rectangle this ladder knows the shape of.
+fn set_plate_w()  { return ui_refn(SET_RN_PLATE_W) }
+fn set_plate_h()  { return ui_refn(SET_RN_PLATE_H) }
+fn set_plate_th() { return ui_refn(SET_RN_TITLE_H) }
+fn set_plate_a()  { return set_plate_w() * set_plate_h() }
+fn set_px_hdr()   { return set_plate_w() * set_plate_th() }
+fn set_px_bar()   { return ui_fbar_dp() * (set_plate_h() - set_plate_th()) }
+fn set_px_tot()   { return set_px_hdr() + set_px_bar() }
+# percent of plate, x10^4 so it goes through the same print helper as a ratio.
+fn set_pct_q4(v) { return idiv(v * 1000000, set_plate_a()) }
+
+# ---- FOCUS: the two controls -------------------------------------------------
+# Their geometry is a function because app_event calls the same functions to
+# decide what was clicked. The alternative - re-deriving the row's y in the
+# event handler - is the exact shape of bug uikit.c documents: the two copies
+# agree until one of them is edited.
+fn set_row1_y(y) { return y }
+fn set_row2_y(y) { return y + set_rowh() }
+fn set_trk_x(x)  { return x + SET_LABW * ui() }
+fn set_trk_w(x, w) { return w - SET_LABW * ui() - SET_VALW * ui() - SET_GAP * ui() }
+
+fn set_focus_ctl(x, y, w) {
+    setfc_u = ui()
+    # ROW 1 - the knockout. The row is the hit target; see set_hit_row.
+    setfc_y = set_row1_y(y)
+    if set_vis(setfc_y, set_rowh()) == 1 {
+        set_toggle(x, setfc_y + (set_rowh() - set_togh()) / 2, ui_knock_on())
+        label(x + set_togw() + SET_GAP * setfc_u, setfc_y + (set_rowh() - label_h(T_BODY)) / 2, "the knockout", theme(TH_TEXT), T_BODY, W_REG)
+        # the caption is the prototype's, verbatim, and it is a STATEMENT OF
+        # WHAT THE CONTROL DOES rather than a description of the setting.
+        text_aa(x + w - 46 * cell_w(), setfc_y + (set_rowh() - cell_h()) / 2, "off falls back to graphite's wash in the same band", theme(TH_TEXT_DIM))
+    }
+    # ROW 2 - the focus bar, 1..6 dp. UI_FBAR_MIN/MAX in ui.h are the clamp and
+    # these are the same two numbers; ui_fbar() returns the value it SETTLED
+    # on, so the thumb can never be drawn past the end of its own track.
+    setfc_y = set_row2_y(y)
+    if set_vis(setfc_y, set_rowh()) == 1 {
+        label(x, setfc_y + (set_rowh() - label_h(T_BODY)) / 2, "focus bar", theme(TH_TEXT), T_BODY, W_REG)
+        set_slider(set_trk_x(x), setfc_y + (set_rowh() - set_trkh()) / 2, set_trk_w(x, w), ui_fbar_dp(), 1, 6)
+        num_aa(x + w - 3 * cell_w() - s3_numw(ui_fbar_dp()), setfc_y + (set_rowh() - cell_h()) / 2, ui_fbar_dp(), theme(TH_TEXT_HI))
+        text_aa(x + w - 3 * cell_w(), setfc_y + (set_rowh() - cell_h()) / 2, " dp", theme(TH_TEXT_HI))
+    }
+    return y + 2 * set_rowh()
+}
+
+# ---- mono prose inside a well -------------------------------------------------
+# A prose line is placed BY COLUMN, not by measuring the text that precedes it.
+# text_aa is fixed advance (fb.c: cell_w for every glyph), so a column is an
+# exact multiple of cell_w() and a figure spliced into a sentence lands where
+# the layout says rather than where the previous word happened to end. The
+# columns below were counted by a generator, not by eye - a miscount here is a
+# number drawn on top of a word, which reads as a rendering fault.
+#
+# THE FIGURE IS RIGHT ALIGNED INTO ITS FIELD. Not because it is prettier: a
+# left-aligned figure whose integer part gains a digit pushes the rest of the
+# sentence sideways, and these figures CHANGE - the knockout toggle moves four
+# of them. Right aligned into a fixed field, the sentence around them cannot
+# move no matter what the tokens do.
+fn set_wc(x, c) { return x + SET_WELLPX * ui() + c * cell_w() }
+fn set_wlc(x, y, n, c, s) { text_aa(set_wc(x, c), set_wly(y, n), s, theme(TH_TEXT_2))  return 0 }
+# A COUNT rather than a figure. set_wnum_r rescales its argument from x10^4,
+# which is right for every ratio and percentage in this pane and wrong for a
+# pixel count - 17,976 through that path comes out "2.". Separate function, so
+# the two cannot be confused at a call site.
+fn set_wthou_r(x, y, n, endc, v) {
+    set_thou_r(set_wc(x, endc), set_wly(y, n), v, theme(TH_TEXT_HI))
+    return 0
+}
+fn set_wnum_r(x, y, n, endc, v4, dec) {
+    setwr_v = set_q(v4, dec)
+    set_dec(set_wc(x, endc) - set_decw(setwr_v, dec), set_wly(y, n), setwr_v, dec, theme(TH_TEXT_HI))
+    return 0
+}
+
+# ---- a contrast with a trailing word -----------------------------------------
+# "6.48:1 max" and "1.400:1 wash", right aligned as one run. The suffix is
+# measured in CHARACTER CELLS by the caller rather than by a strlen this
+# language does not have; the count is beside the literal at every call site.
+fn set_rat_sfx_r(xr, y, v4, dec, ncs, s, col) {
+    text_aa(xr - ncs * cell_w(), y, s, col)
+    set_rat_r(xr - ncs * cell_w(), y, v4, dec, col)
+    return 0
+}
+
+# ==============================================================================
+# FOCUS - the knockout, and everything it had to be true for.
+# ==============================================================================
+fn set_focus_body(x, y, w) {
+    setfb_x = x
+    setfb_y = y
+    setfb_w = w
+    setfb_u = ui()
+
+    # --- the two controls -----------------------------------------------------
+    setfb_y = set_focus_ctl(setfb_x, setfb_y, setfb_w)
+    setfb_y = set_rule2(setfb_x, setfb_y + SET_STACK * setfb_u, setfb_w) + SET_STACK * setfb_u
+
+    # --- the argument ---------------------------------------------------------
+    setfb_y = set_head(setfb_x, setfb_y, "THE KNOCKOUT, AND THE SIGN INVERSION IT USED TO CAUSE")
+    if set_vis(setfb_y, set_wellh(23)) == 1 {
+        set_well(setfb_x, setfb_y, setfb_w, 23)
+        set_wlc(setfb_x, setfb_y, 0, 0, "deciding.md C2 says a knockout on graphite's ladder breaks two")
+        set_wlc(setfb_x, setfb_y, 1, 0, "measurable things. both are checked here against LIVE tokens.")
+        set_wlc(setfb_x, setfb_y, 3, 0, "1  THE LIGHT INVERTS SIGN. ZD_LIT is the struck top edge - the")
+        set_wlc(setfb_x, setfb_y, 4, 0, "   light itself. on graphite's ground it computes ")
+        set_wnum_r(setfb_x, setfb_y, 4, 56, set_ref_lit_ground(), 4)
+        set_wlc(setfb_x, setfb_y, 4, 56, ":1 as a")
+        set_wlc(setfb_x, setfb_y, 5, 0, "   LIGHTER term. on PLATE's knockout it computes ")
+        set_wnum_r(setfb_x, setfb_y, 5, 55, set_ref_lit_ko(), 4)
+        set_wlc(setfb_x, setfb_y, 5, 55, ":1")
+        set_wlc(setfb_x, setfb_y, 6, 0, "   as a DARKER one. same token, ")
+        set_wnum_r(setfb_x, setfb_y, 6, 36, set_ref_x_q4(), 2)
+        set_wlc(setfb_x, setfb_y, 6, 36, "x the loudness, opposite")
+        set_wlc(setfb_x, setfb_y, 7, 0, "   sign: the recipe says raised and the pixels say cut.")
+        set_wlc(setfb_x, setfb_y, 9, 0, "2  SUB THRESHOLD STEPS STOP BEING READ next to a full inversion.")
+        set_wlc(setfb_x, setfb_y, 11, 0, "PRESSWORK FIXES 1 BY ARITHMETIC RATHER THAN BY RULE. pick ZD_KNOCK")
+        set_wlc(setfb_x, setfb_y, 12, 0, "so that the edge run computes the SAME ratio against the knockout")
+        set_wlc(setfb_x, setfb_y, 13, 0, "as against the ground, and there is nothing left to remap:")
+        set_wlc(setfb_x, setfb_y, 15, 0, "     ZD_LIT      on ZD_BASE     ")
+        set_wnum_r(setfb_x, setfb_y, 15, 38, set_r_lit(), 4)
+        set_wlc(setfb_x, setfb_y, 15, 38, ":1   lighter term, top edge")
+        set_wlc(setfb_x, setfb_y, 16, 0, "     ZD_KO_EDGE  on ZD_KNOCK    ")
+        set_wnum_r(setfb_x, setfb_y, 16, 38, set_r_koedge(), 4)
+        set_wlc(setfb_x, setfb_y, 16, 38, ":1   darker  term, foot edge")
+        set_wlc(setfb_x, setfb_y, 17, 0, "     skew                       ")
+        set_wnum_r(setfb_x, setfb_y, 17, 36, set_skew_q4(), 2)
+        set_wlc(setfb_x, setfb_y, 17, 36, " %")
+        # THE LAST PARAGRAPH IS STATE DEPENDENT, and it has to be: with the
+        # knockout switched off the two figures above stop being a mirrored
+        # pair, and a paragraph that still claimed "ONE VALUE, TWO GEOMETRIES"
+        # would be the pane asserting something its own table contradicts.
+        if ui_knock_on() == 1 {
+            set_wlc(setfb_x, setfb_y, 19, 0, "in this ladder ZD_KO_EDGE resolves to ZD_LIT's own value. ONE")
+            set_wlc(setfb_x, setfb_y, 20, 0, "VALUE, TWO GEOMETRIES, ONE LOUDNESS. the run is not remapped and")
+            set_wlc(setfb_x, setfb_y, 21, 0, "the knockout carries no extra token - it moves to the side the")
+            set_wlc(setfb_x, setfb_y, 22, 0, "headroom is on, which is what the raking light was always doing.")
+        } else {
+            set_wlc(setfb_x, setfb_y, 19, 0, "THE KNOCKOUT IS OFF. the header is an ordinary surface again, the")
+            set_wlc(setfb_x, setfb_y, 20, 0, "foot rule is back to the groove, and the two figures above are no")
+            set_wlc(setfb_x, setfb_y, 21, 0, "longer a mirrored pair - which is the state this pane exists to")
+            set_wlc(setfb_x, setfb_y, 22, 0, "let you compare against, not a fault.")
+        }
+    }
+    setfb_y = setfb_y + set_wellh(23) + SET_STACK * setfb_u
+
+    # --- which side the edge goes on ------------------------------------------
+    setfb_y = set_head(setfb_x, setfb_y, "WHICH SIDE THE EDGE GOES ON, DECIDED BY CEILING")
+    setfb_y = set_edge_table(setfb_x, setfb_y, setfb_w)
+    if set_vis(setfb_y, set_wellh(5)) == 1 {
+        set_well(setfb_x, setfb_y, setfb_w, 5)
+        set_wlc(setfb_x, setfb_y, 0, 0, "the alternative was a new token for the knockout's own struck run,")
+        set_wlc(setfb_x, setfb_y, 1, 0, "and it is arithmetically capped: pure white on the knockout reaches")
+        set_wlc(setfb_x, setfb_y, 2, 0, "only ")
+        set_wnum_r(setfb_x, setfb_y, 2, 10, set_up(theme(TH_KNOCK)), 3)
+        set_wlc(setfb_x, setfb_y, 2, 10, ":1, against ")
+        set_wnum_r(setfb_x, setfb_y, 2, 27, set_dn(theme(TH_KNOCK)), 3)
+        set_wlc(setfb_x, setfb_y, 2, 27, ":1 available downward. so the")
+        set_wlc(setfb_x, setfb_y, 3, 0, "second resolution costs a token AND lands quieter. that is why it")
+        set_wlc(setfb_x, setfb_y, 4, 0, "lost.")
+    }
+    setfb_y = setfb_y + set_wellh(5) + SET_STACK * setfb_u
+
+    # --- the arithmetic on a 600 x 420 dp plate -------------------------------
+    setfb_y = set_head(setfb_x, setfb_y, "MEASURED, ON A 600 X 420 DP PLATE")
+    setfb_y = set_measured_table(setfb_x, setfb_y, setfb_w)
+    if set_vis(setfb_y, set_wellh(11)) == 1 {
+        set_well(setfb_x, setfb_y, setfb_w, 11)
+        set_wlc(setfb_x, setfb_y, 0, 0, "THE AREA DID NOT CHANGE. graphite's bezel plus wash covered")
+        set_wthou_r(setfb_x, setfb_y, 1, 6, ui_refn(SET_RN_GRAPHITE_PX))
+        set_wlc(setfb_x, setfb_y, 1, 6, " px of this plate and this ladder's header covers the")
+        set_wlc(setfb_x, setfb_y, 2, 0, "same band. WHAT MOVED IS THE RATIO INSIDE IT: graphite's own wash")
+        set_wlc(setfb_x, setfb_y, 3, 0, "was ")
+        set_wnum_r(setfb_x, setfb_y, 3, 10, ui_refn(SET_RN_WASH_Q4), 4)
+        set_wlc(setfb_x, setfb_y, 3, 10, ":1, this header is ")
+        set_wnum_r(setfb_x, setfb_y, 3, 35, set_r_knock(), 4)
+        set_wlc(setfb_x, setfb_y, 3, 35, ":1.")
+        set_wlc(setfb_x, setfb_y, 5, 0, "ON A PLATE is not a hedge, it is the boundary of the claim. the")
+        set_wlc(setfb_x, setfb_y, 6, 0, "two instrument bands sit outside the plate ladder on purpose:")
+        set_wlc(setfb_x, setfb_y, 7, 0, "ZD_STEEL on the strip's ZD_CUT ground computes ")
+        set_wnum_r(setfb_x, setfb_y, 7, 51, ui_ratio(theme(TH_STEEL), theme(TH_CUT)), 2)
+        set_wlc(setfb_x, setfb_y, 7, 51, ":1, louder")
+        set_wlc(setfb_x, setfb_y, 8, 0, "than the knockout, because a plotted measurement has to read as")
+        set_wlc(setfb_x, setfb_y, 9, 0, "data and not as furniture. that is the one place Datum's two")
+        set_wlc(setfb_x, setfb_y, 10, 0, "material law is taken.")
+    }
+    setfb_y = setfb_y + set_wellh(11) + SET_STACK * setfb_u
+
+    # --- the five readings ----------------------------------------------------
+    return set_focus_kv(setfb_x, setfb_y, setfb_w)
+}
+
+# ---- FOCUS table 1: which side the edge goes on -------------------------------
+# THREE SURFACES AND THE ARITHMETIC THAT DECIDES THEIR EDGES. Not an
+# illustration of a rule - the rule itself, evaluated. "the ground decides
+# which direction has the headroom" is a claim about two ceilings, and the two
+# ceilings are in the two middle columns; the verdict column is the comparison
+# between them and nothing else. ZD_BASE and ZD_VOID have room upward, so their
+# edges are the struck run on the TOP; ZD_KNOCK has room downward, so the
+# focused header's edge is a groove on its FOOT. Same lamp, other side, and the
+# table is what makes that a measurement instead of a preference.
+#
+# Column widths 24 / 22 / 22 / 32 percent. The verdict column is the widest
+# because "DOWN, bottom + right" is the longest cell in the table and a mono
+# column that ellipsises its own verdict is a column carrying no verdict.
+fn set_edge_row(x, y, w, nm, c) {
+    setet_dn = set_dn(c)
+    setet_up = set_up(c)
+    set_td(x, y, nm, theme(TH_TEXT_2))
+    set_rat_r(set_cx(x, w, 46) - SET_TDPX * ui(), set_tdy(y), setet_dn, 3, theme(TH_TEXT_2))
+    set_rat_r(set_cx(x, w, 68) - SET_TDPX * ui(), set_tdy(y), setet_up, 3, theme(TH_TEXT_2))
+    if setet_dn > setet_up {
+        set_td(set_cx(x, w, 68), y, "DOWN, bottom + right", theme(TH_TEXT_HI))
+    } else {
+        set_td(set_cx(x, w, 68), y, "UP, top and left", theme(TH_TEXT_HI))
+    }
+    return set_trow(x, y, w)
+}
+fn set_edge_table(x, y, w) {
+    setea_y = y
+    if set_vis(setea_y, set_thh()) == 1 {
+        set_th(x, setea_y, "SURFACE")
+        set_th_r(set_cx(x, w, 46), setea_y, "ROOM DOWNWARD")
+        set_th_r(set_cx(x, w, 68), setea_y, "ROOM UPWARD")
+        set_th(set_cx(x, w, 68), setea_y, "EDGE GOES")
+    }
+    setea_y = set_thead(x, setea_y, w)
+    if set_vis(setea_y, set_tdh()) == 1 { set_edge_row(x, setea_y, w, "ZD_BASE", theme(TH_PANEL)) }
+    setea_y = setea_y + set_tdh()
+    if set_vis(setea_y, set_tdh()) == 1 { set_edge_row(x, setea_y, w, "ZD_VOID", theme(TH_BG)) }
+    setea_y = setea_y + set_tdh()
+    if set_vis(setea_y, set_tdh()) == 1 { set_edge_row(x, setea_y, w, "ZD_KNOCK", theme(TH_KNOCK)) }
+    setea_y = setea_y + set_tdh()
+    return setea_y + SET_STACK * ui()
+}
+
+# ---- FOCUS table 2: measured, on a 600 x 420 dp plate -------------------------
+# THE TOP THREE ROWS ARE THIS SYSTEM'S AND ARE COMPUTED. The bottom three are
+# the parent designs' and are QUOTED - they are drawn in TH_TEXT_DIM, which is
+# the ink this pane reserves for a figure it did not derive, and the last of
+# them in TH_WARN because 11.92:1 is the failure the widening exists to avoid
+# rather than a neutral comparison.
+#
+# Every pixel count in the live rows comes out of geometry: the header band is
+# the plate's width times ZD_TITLE_H, the focus bar is its width in dp times
+# the plate below the header. Move the slider and the second and third rows
+# change on the next repaint, which is the point of putting a slider on a table.
+fn set_meas_row(x, y, w, px, ratq4, dec, ncs, sfx, ink, dim) {
+    set_thou_r(set_cx(x, w, 60) - SET_TDPX * ui(), set_tdy(y), px, dim)
+    set_pct_r(set_cx(x, w, 76) - SET_TDPX * ui(), set_tdy(y), set_pct_q4(px), 3, dim)
+    set_rat_sfx_r(x + w - SET_TDPX * ui(), set_tdy(y), ratq4, dec, ncs, sfx, ink)
+    return set_trow(x, y, w)
+}
+fn set_measured_table(x, y, w) {
+    setmt_y = y
+    if set_vis(setmt_y, set_thh()) == 1 {
+        set_th(x, setmt_y, "COMPONENT")
+        set_th_r(set_cx(x, w, 60), setmt_y, "PIXELS")
+        set_th_r(set_cx(x, w, 76), setmt_y, "OF PLATE")
+        set_th_r(x + w, setmt_y, "CONTRAST")
+    }
+    setmt_y = set_thead(x, setmt_y, w)
+
+    # 1 - the header band. THE SAME PIXELS EITHER WAY, which is the whole
+    # comparison: with the knockout on it is a solid light plate at 6.4796:1,
+    # with it off it is graphite's wash in the same band at 1.3681:1, and not
+    # one pixel of area moves between the two states.
+    if set_vis(setmt_y, set_tdh()) == 1 {
+        if ui_knock_on() == 1 {
+            set_td(x, setmt_y, "header knockout", theme(TH_TEXT_2))
+        } else {
+            set_td(x, setmt_y, "header wash, this ladder", theme(TH_TEXT_2))
+        }
+        set_meas_row(x, setmt_y, w, set_px_hdr(), set_r_knock(), 4, 0, "", theme(TH_TEXT_2), theme(TH_TEXT_2))
+    }
+    setmt_y = setmt_y + set_tdh()
+
+    # 2 - the overprint. It stops at the foot of the header and never crosses
+    # it, because vermilion ON the knockout computes about 1.40:1 and would
+    # disappear - the figure is in the readings at the bottom of this tab.
+    if set_vis(setmt_y, set_tdh()) == 1 {
+        set_td(x, setmt_y, "vermilion focus bar", theme(TH_TEXT_2))
+        set_meas_row(x, setmt_y, w, set_px_bar(), set_r_verm(), 4, 0, "", theme(TH_TEXT_2), theme(TH_TEXT_2))
+    }
+    setmt_y = setmt_y + set_tdh()
+
+    # 3 - the total, in emphasis ink. The one row a reader is meant to carry
+    # away, so it is the only row on the plate at TH_TEXT_HI.
+    if set_vis(setmt_y, set_tdh()) == 1 {
+        set_tdl(x, setmt_y, "PRESSWORK, TOTAL", theme(TH_TEXT_HI))
+        set_meas_row(x, setmt_y, w, set_px_tot(), set_r_knock(), 2, 4, " max", theme(TH_TEXT_HI), theme(TH_TEXT_HI))
+    }
+    setmt_y = setmt_y + set_tdh()
+
+    # 4..6 - the comparison rows. Quoted, and drawn as quoted.
+    if set_vis(setmt_y, set_tdh()) == 1 {
+        set_td(x, setmt_y, "graphite bezel + wash, same plate", theme(TH_TEXT_DIM))
+        set_meas_row(x, setmt_y, w, ui_refn(SET_RN_GRAPHITE_PX), ui_refn(SET_RN_WASH_Q4), 3, 5, " wash", theme(TH_TEXT_DIM), theme(TH_TEXT_DIM))
+    }
+    setmt_y = setmt_y + set_tdh()
+    if set_vis(setmt_y, set_tdh()) == 1 {
+        set_td(x, setmt_y, "raking, same plate", theme(TH_TEXT_DIM))
+        set_meas_row(x, setmt_y, w, ui_refn(SET_RN_RAKING_PX), ui_refn(SET_RN_RAKING_Q4), 2, 4, " max", theme(TH_TEXT_DIM), theme(TH_TEXT_DIM))
+    }
+    setmt_y = setmt_y + set_tdh()
+    if set_vis(setmt_y, set_tdh()) == 1 {
+        set_td(x, setmt_y, "PLATE knockout, graphite ladder", theme(TH_TEXT_DIM))
+        set_meas_row(x, setmt_y, w, set_px_hdr(), set_ref_ko_plate(), 2, 4, " max", theme(TH_WARN), theme(TH_TEXT_DIM))
+    }
+    setmt_y = setmt_y + set_tdh()
+    return setmt_y + SET_STACK * ui()
+}
+
+# ---- FOCUS: the five readings -------------------------------------------------
+# A kv line is the shape this pane uses for a figure that has no column to
+# belong to. All five are computed; the two floors are WCAG's 4.50, which is a
+# constant of the standard rather than of this design and is printed as text.
+fn set_focus_kv(x, y, w) {
+    setfk_y = y
+    setfk_u = ui()
+    setfk_r = x + w - SET_TDPX * setfk_u
+    if set_vis(setfk_y, set_kvh()) == 1 {
+        set_kv(x, setfk_y, w, "KNOCKOUT OF CEILING")
+        # 46.6 % of 13.903:1 - the knockout as a fraction of everything the
+        # plate has upward. The point of the figure is that it is UNDER half:
+        # the widening bought headroom and the knockout deliberately does not
+        # spend it all, which is what leaves room for ZD_EDGE_OVER above it.
+        setfk_p = idiv(set_r_knock() * 1000, set_up(theme(TH_PANEL)))
+        setfk_c = set_q(set_up(theme(TH_PANEL)), 3)
+        setfk_w = set_decw(setfk_p, 1) + 6 * cell_w() + set_decw(setfk_c, 3) + 2 * cell_w()
+        setfk_x = setfk_r - setfk_w
+        setfk_x = set_dec(setfk_x, setfk_y + 1 * setfk_u, setfk_p, 1, theme(TH_TEXT_HI))
+        text_aa(setfk_x, setfk_y + 1 * setfk_u, " % of ", theme(TH_TEXT_HI))
+        setfk_x = set_dec(setfk_x + 6 * cell_w(), setfk_y + 1 * setfk_u, setfk_c, 3, theme(TH_TEXT_HI))
+        text_aa(setfk_x, setfk_y + 1 * setfk_u, ":1", theme(TH_TEXT_HI))
+    }
+    setfk_y = setfk_y + set_kvh()
+    if set_vis(setfk_y, set_kvh()) == 1 {
+        set_kv(x, setfk_y, w, "TITLE ON THE KNOCKOUT")
+        set_rat_sfx_r(setfk_r, setfk_y + 1 * setfk_u, ui_ratio(theme(TH_KNOCK_INK), theme(TH_KNOCK)), 2, 12, ", floor 4.50", theme(TH_TEXT_HI))
+    }
+    setfk_y = setfk_y + set_kvh()
+    if set_vis(setfk_y, set_kvh()) == 1 {
+        set_kv(x, setfk_y, w, "SUB ON THE KNOCKOUT")
+        set_rat_sfx_r(setfk_r, setfk_y + 1 * setfk_u, ui_ratio(theme(TH_KNOCK_INK2), theme(TH_KNOCK)), 2, 12, ", floor 4.50", theme(TH_TEXT_HI))
+    }
+    setfk_y = setfk_y + set_kvh()
+    if set_vis(setfk_y, set_kvh()) == 1 {
+        set_kv(x, setfk_y, w, "VERMILION ON IT")
+        set_rat_sfx_r(setfk_r, setfk_y + 1 * setfk_u, ui_ratio(theme(TH_ACCENT), theme(TH_KNOCK)), 2, 30, " - so the bar stops at the foot", theme(TH_TEXT_HI))
+    }
+    setfk_y = setfk_y + set_kvh()
+    if set_vis(setfk_y, set_kvh()) == 1 {
+        set_kv(x, setfk_y, w, "THE EDGE RUN, BOTH WAYS")
+        # the skew, and it is the widening's central claim in one line.
+        setfk_s = set_q(set_skew_q4(), 2)
+        setfk_x = setfk_r - set_decw(setfk_s, 2) - 28 * cell_w()
+        setfk_x = set_dec(setfk_x, setfk_y + 1 * setfk_u, setfk_s, 2, theme(TH_TEXT_HI))
+        text_aa(setfk_x, setfk_y + 1 * setfk_u, " % apart, mirrored, one lamp", theme(TH_TEXT_HI))
+    }
+    return setfk_y + set_kvh()
+}
+
+# ==============================================================================
+# LADDER - the one structural decision.
+# ==============================================================================
+# WHAT IS NOT HERE AND WHY. The prototype's step table carries a GRAPHITE
+# column - 1.1028 / 1.0728 / 1.1257 / 1.0893 / 1.0771 - beside the presswork
+# one. Those are the parent ladder's step ratios and there is no token in this
+# system to compute them from; design.h quotes four of the five in its header
+# and not the fifth. Rather than paste five numbers this file cannot check, the
+# comparison is made the way the arithmetic already supports it: every step is
+# measured against the 1.15 perceptual threshold, and the summary row states
+# the smallest one, which is the number the whole widening is about. The
+# omission is the honest half of "prototype parity" and it is named rather than
+# quietly dropped.
+fn set_hexchar(d) {
+    if d < 10 { return 48 + d }
+    return 55 + d                          # uppercase, as the prototype prints
+}
+fn set_hex6(x, y, v, col) {
+    text_aa(x, y, "#", col)
+    sethx_i = 5
+    while sethx_i >= 0 {
+        char_aa(x + (6 - sethx_i) * cell_w(), y, set_hexchar(band(shr(v, sethx_i * 4), 15)), col)
+        sethx_i = sethx_i - 1
+    }
+    return 0
+}
+# One rung. The VALUE column is the loaded hex, so the two knockout rows change
+# hex while you watch when the FOCUS tab's toggle is thrown - which is the most
+# literal demonstration available that this table is reading the theme and not
+# a copy of design.h.
+fn set_rung(x, y, w, nm, c, role) {
+    set_td(x, y, nm, theme(TH_TEXT_2))
+    set_hex6(set_cx(x, w, 34), set_tdy(y), c, theme(TH_TEXT_HI))
+    set_rat_r(set_cx(x, w, 62) - SET_TDPX * ui(), set_tdy(y), ui_ratio(c, theme(TH_PANEL)), 4, theme(TH_TEXT_2))
+    set_td(set_cx(x, w, 62), y, role, theme(TH_TEXT_DIM))
+    return 0
+}
+fn set_rung_row(x, y, w, nm, c, role) {
+    if set_vis(y, set_tdh()) == 1 { set_rung(x, y, w, nm, c, role) }
+    return set_trow(x, y, w)
+}
+# One step between adjacent rungs. THE THRESHOLD IS 1.15 and it is the whole
+# verdict: below it a step is not seen as a step, which is the finding the
+# widening answers.
+fn set_step_row(x, y, w, nm, a, b) {
+    if set_vis(y, set_tdh()) == 1 {
+        setsr_v = ui_ratio(a, b)
+        set_td(x, y, nm, theme(TH_TEXT_2))
+        set_rat_r(set_cx(x, w, 66) - SET_TDPX * ui(), set_tdy(y), setsr_v, 4, theme(TH_TEXT_HI))
+        if setsr_v >= 11500 {
+            set_td(set_cx(x, w, 66), y, "above threshold", theme(TH_OK))
+        } else {
+            set_td(set_cx(x, w, 66), y, "sub threshold", theme(TH_WARN))
+        }
+    }
+    return set_trow(x, y, w)
+}
+fn set_ladder_body(x, y, w) {
+    setlb_x = x
+    setlb_y = y
+    setlb_w = w
+    setlb_u = ui()
+    setlb_y = set_head(setlb_x, setlb_y, "RESOLUTION 1 - WIDEN THE LADDER")
+    if set_vis(setlb_y, set_wellh(9)) == 1 {
+        setfb_x = setlb_x
+        setfb_y = setlb_y
+        set_well(setlb_x, setlb_y, setlb_w, 9)
+        set_wlc(setfb_x, setfb_y, 0, 0, "graphite spent its entire separation budget on 1px runs and said")
+        set_wlc(setfb_x, setfb_y, 1, 0, "so: four surface steps every one below perceptual threshold. that")
+        set_wlc(setfb_x, setfb_y, 2, 0, "is why its focus signal was weak.")
+        set_wlc(setfb_x, setfb_y, 4, 0, "THE WIDENING IS ASYMMETRIC BECAUSE THE ARITHMETIC IS. below the")
+        set_wlc(setfb_x, setfb_y, 5, 0, "ground the total room to pure black is")
+        set_wnum_r(setfb_x, setfb_y, 5, 45, set_dn(theme(TH_PANEL)), 4)
+        set_wlc(setfb_x, setfb_y, 5, 45, ":1 and three rungs")
+        set_wlc(setfb_x, setfb_y, 6, 0, "must share it. above it the room is")
+        set_wnum_r(setfb_x, setfb_y, 6, 43, set_up(theme(TH_PANEL)), 4)
+        set_wlc(setfb_x, setfb_y, 6, 43, ":1. presswork spends")
+        set_wlc(setfb_x, setfb_y, 7, 0, "downward the little that exists and takes the rest upward.")
+        set_wlc(setfb_x, setfb_y, 8, 0, "ZD_BASE ITSELF IS UNTOUCHED - the ground never moved.")
+    }
+    setlb_y = setlb_y + set_wellh(9) + SET_STACK * setlb_u
+
+    setlb_y = set_head(setlb_x, setlb_y, "THE LADDER, AS RESOLVED RIGHT NOW")
+    if set_vis(setlb_y, set_thh()) == 1 {
+        set_th(setlb_x, setlb_y, "TOKEN")
+        set_th(set_cx(setlb_x, setlb_w, 34), setlb_y, "VALUE")
+        set_th_r(set_cx(setlb_x, setlb_w, 62), setlb_y, "ON BASE")
+        set_th(set_cx(setlb_x, setlb_w, 62), setlb_y, "ROLE")
+    }
+    setlb_y = set_thead(setlb_x, setlb_y, setlb_w)
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_CUT", theme(TH_CUT), "groove, strip")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_WELL", theme(TH_SURF_WELL), "sunken")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_VOID", theme(TH_BG), "the desk")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_BASE", theme(TH_PANEL), "the plate")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_RAISE", theme(TH_PANEL_HI), "on a plate, rail")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_FLOAT", theme(TH_SURF_5), "off the plane")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_LITSOFT", theme(TH_LITSOFT), "grazed left")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_LIT", theme(TH_LIT), "struck top")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_EDGE_OVER", theme(TH_EDGE_OVER), "the occluder")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_KNOCK", theme(TH_KNOCK), "focused header")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_KO_EDGE", theme(TH_KO_EDGE), "the knockout edge")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_0", theme(TH_TEXT_HI), "emphasis")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_1", theme(TH_TEXT), "body")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_2", theme(TH_TEXT_2), "secondary")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_3", theme(TH_TEXT_DIM), "label")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_INERT", theme(TH_SURF_7), "structure only")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_STEEL", theme(TH_STEEL), "instruments only")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_VERM", theme(TH_ACCENT), "the overprint")
+    setlb_y = setlb_y + SET_STACK * setlb_u
+
+    setlb_y = set_head(setlb_x, setlb_y, "THE STEPS, AND WHETHER THEY ARE SEEN")
+    if set_vis(setlb_y, set_thh()) == 1 {
+        set_th(setlb_x, setlb_y, "STEP")
+        set_th_r(set_cx(setlb_x, setlb_w, 66), setlb_y, "PRESSWORK")
+        set_th(set_cx(setlb_x, setlb_w, 66), setlb_y, "READ, FLOOR 1.15")
+    }
+    setlb_y = set_thead(setlb_x, setlb_y, setlb_w)
+    setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "cut to well", theme(TH_CUT), theme(TH_SURF_WELL))
+    setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "well to void", theme(TH_SURF_WELL), theme(TH_BG))
+    setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "void to base, desk to plate", theme(TH_BG), theme(TH_PANEL))
+    setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "base to raise", theme(TH_PANEL), theme(TH_PANEL_HI))
+    setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "raise to float", theme(TH_PANEL_HI), theme(TH_SURF_5))
+    if set_vis(setlb_y, set_tdh()) == 1 {
+        set_tdl(setlb_x, setlb_y, "CUT TO BASE, THE WHOLE DOWNWARD BUDGET", theme(TH_TEXT_HI))
+        set_rat_r(set_cx(setlb_x, setlb_w, 66) - SET_TDPX * setlb_u, set_tdy(setlb_y), set_r_cut(), 4, theme(TH_TEXT_HI))
+        # ...of a hard ceiling. There is no fifth dark rung to be had later,
+        # and that is a cost rather than a footnote.
+        set_td(set_cx(setlb_x, setlb_w, 66), setlb_y, "of a ceiling of", theme(TH_TEXT_DIM))
+        set_rat_r(setlb_x + setlb_w - SET_TDPX * setlb_u, set_tdy(setlb_y), set_dn(theme(TH_PANEL)), 4, theme(TH_TEXT_DIM))
+    }
+    setlb_y = set_trow(setlb_x, setlb_y, setlb_w) + SET_STACK * setlb_u
+
+    if set_vis(setlb_y, set_kvh()) == 1 {
+        set_kv(setlb_x, setlb_y, setlb_w, "INK RAMP")
+        text_aa(setlb_x + setlb_w - SET_TDPX * setlb_u - 34 * cell_w(), setlb_y + setlb_u, "four rungs. the fifth no longer clears", theme(TH_TEXT_HI))
+    }
+    setlb_y = setlb_y + set_kvh()
+    if set_vis(setlb_y, set_kvh()) == 1 {
+        set_kv(setlb_x, setlb_y, setlb_w, "ACCENT SATURATION")
+        text_aa(setlb_x + setlb_w - SET_TDPX * setlb_u - 34 * cell_w(), setlb_y + setlb_u, "LOCKED. two inks, and no third one", theme(TH_TEXT_HI))
+    }
+    return setlb_y + set_kvh()
+}
+
+# ==============================================================================
+# BOUNDARY - the occluder draws the border.
+# ==============================================================================
+# THE 3:1 FLOOR IS THE ONLY REASON ZD_EDGE_OVER EXISTS. Under overlap the sole
+# thing saying which plate is on top is the upper plate's bottom and right edge
+# lying on the lower plate's body, so that edge carries information and has to
+# clear an information floor. The table proves the darker direction cannot: the
+# ZD_CUT column is every one of those edges measured, and every one of them
+# fails. That is not a design preference, it is a ceiling.
+fn set_bound_row(x, y, w, nm, ground) {
+    if set_vis(y, set_tdh()) == 1 {
+        setbr_c = ui_ratio(theme(TH_CUT), ground)
+        setbr_e = ui_ratio(theme(TH_EDGE_OVER), ground)
+        set_td(x, y, nm, theme(TH_TEXT_2))
+        set_rat_r(set_cx(x, w, 44) - SET_TDPX * ui(), set_tdy(y), setbr_c, 2, theme(TH_WARN))
+        set_rat_r(set_cx(x, w, 68) - SET_TDPX * ui(), set_tdy(y), setbr_e, 3, theme(TH_TEXT_HI))
+        # MARGIN OVER THE 3:1 FLOOR, as a percent in the same x10^4 fixed point
+        # everything else here uses. The floor is 30000 in q4, so the margin is
+        # (e - 30000) / 30000 as a fraction, x10^6 to land in percent-q4:
+        # (e - 30000) * 1000000 / 30000, which reduces to (e - 30000) * 100 / 3
+        # and stays inside 31 bits for every value ui_ratio can return.
+        #
+        # THE NEGATIVE CASE IS NOT DRAWN RATHER THAN DRAWN NEGATIVE. set_dec
+        # splits a value into an integer part and a zero-padded fraction, and
+        # neither split is meaningful below zero - a failing margin would print
+        # as a digit salad, which reads as a rendering fault instead of as the
+        # failure it is. The verdict column already carries that news.
+        if setbr_e >= 30000 {
+            set_pct_r(set_cx(x, w, 86) - SET_TDPX * ui(), set_tdy(y), idiv((setbr_e - 30000) * 100, 3), 1, theme(TH_TEXT_2))
+            set_td(set_cx(x, w, 86), y, "PASS", theme(TH_OK))
+        } else {
+            text_aa(set_cx(x, w, 86) - SET_TDPX * ui() - cell_w(), set_tdy(y), "-", theme(TH_TEXT_2))
+            set_td(set_cx(x, w, 86), y, "FAIL", theme(TH_DANGER))
+        }
+    }
+    return set_trow(x, y, w)
+}
+fn set_bound_body(x, y, w) {
+    setbb_x = x
+    setbb_y = y
+    setbb_w = w
+    setbb_u = ui()
+    setbb_y = set_head(setbb_x, setbb_y, "THE OCCLUDER DRAWS THE BORDER, NEVER THE OCCLUDED")
+    if set_vis(setbb_y, set_wellh(9)) == 1 {
+        setfb_x = setbb_x
+        setfb_y = setbb_y
+        set_well(setbb_x, setbb_y, setbb_w, 9)
+        set_wlc(setfb_x, setfb_y, 0, 0, "free floating windows put a 3:1 floor on the window boundary,")
+        set_wlc(setfb_x, setfb_y, 1, 0, "because under overlap the only thing saying which plate is on top")
+        set_wlc(setfb_x, setfb_y, 2, 0, "is the upper plate's bottom and right edge lying on the lower")
+        set_wlc(setfb_x, setfb_y, 3, 0, "plate's body.")
+        set_wlc(setfb_x, setfb_y, 5, 0, "THE CEILING ON A DARKER EDGE IS FIXED BY THE GROUND ALONE. on the")
+        set_wlc(setfb_x, setfb_y, 6, 0, "plate it is")
+        set_wnum_r(setfb_x, setfb_y, 6, 18, set_dn(theme(TH_PANEL)), 4)
+        set_wlc(setfb_x, setfb_y, 6, 18, ":1 in total, so the downward direction is")
+        set_wlc(setfb_x, setfb_y, 7, 0, "arithmetically shut and the occluding edge has to be the LIGHT.")
+        set_wlc(setfb_x, setfb_y, 8, 0, "same rule, and the ground decides which way it points.")
+    }
+    setbb_y = setbb_y + set_wellh(9) + SET_STACK * setbb_u
+
+    if set_vis(setbb_y, set_thh()) == 1 {
+        set_th(setbb_x, setbb_y, "EDGE ON")
+        set_th_r(set_cx(setbb_x, setbb_w, 44), setbb_y, "ZD_CUT")
+        set_th_r(set_cx(setbb_x, setbb_w, 68), setbb_y, "ZD_EDGE_OVER")
+        set_th_r(set_cx(setbb_x, setbb_w, 86), setbb_y, "MARGIN ON 3.00")
+        set_th(set_cx(setbb_x, setbb_w, 86), setbb_y, "FLOOR")
+    }
+    setbb_y = set_thead(setbb_x, setbb_y, setbb_w)
+    setbb_y = set_bound_row(setbb_x, setbb_y, setbb_w, "ZD_BASE", theme(TH_PANEL))
+    setbb_y = set_bound_row(setbb_x, setbb_y, setbb_w, "ZD_RAISE", theme(TH_PANEL_HI))
+    setbb_y = set_bound_row(setbb_x, setbb_y, setbb_w, "ZD_FLOAT", theme(TH_SURF_5))
+    setbb_y = set_bound_row(setbb_x, setbb_y, setbb_w, "ZD_VOID", theme(TH_BG))
+    setbb_y = set_bound_row(setbb_x, setbb_y, setbb_w, "ZD_WELL", theme(TH_SURF_WELL))
+    setbb_y = setbb_y + SET_STACK * setbb_u
+
+    setbb_y = set_head(setbb_x, setbb_y, "DEPTH RANK INSIDE A PLATE - TWO RULE WEIGHTS, NO THIRD")
+    if set_vis(setbb_y, set_thh()) == 1 {
+        set_th(setbb_x, setbb_y, "RANK")
+        set_th(set_cx(setbb_x, setbb_w, 46), setbb_y, "TOKEN")
+        set_th_r(set_cx(setbb_x, setbb_w, 74), setbb_y, "WEIGHT")
+        set_th_r(setbb_x + setbb_w, setbb_y, "ON BASE")
+    }
+    setbb_y = set_thead(setbb_x, setbb_y, setbb_w)
+    if set_vis(setbb_y, set_tdh()) == 1 {
+        set_td(setbb_x, setbb_y, "rows, cells, group edges", theme(TH_TEXT_2))
+        set_td(set_cx(setbb_x, setbb_w, 46), setbb_y, "ZD_CUT", theme(TH_TEXT_2))
+        text_aa(set_cx(setbb_x, setbb_w, 74) - SET_TDPX * setbb_u - 4 * cell_w(), set_tdy(setbb_y), "1 dp", theme(TH_TEXT_2))
+        set_rat_r(setbb_x + setbb_w - SET_TDPX * setbb_u, set_tdy(setbb_y), set_r_cut(), 3, theme(TH_TEXT_HI))
+    }
+    setbb_y = set_trow(setbb_x, setbb_y, setbb_w)
+    if set_vis(setbb_y, set_tdh()) == 1 {
+        set_td(setbb_x, setbb_y, "regions, table heads, bands", theme(TH_TEXT_2))
+        set_td(set_cx(setbb_x, setbb_w, 46), setbb_y, "ZD_LIT", theme(TH_TEXT_2))
+        text_aa(set_cx(setbb_x, setbb_w, 74) - SET_TDPX * setbb_u - 4 * cell_w(), set_tdy(setbb_y), "2 dp", theme(TH_TEXT_2))
+        set_rat_r(setbb_x + setbb_w - SET_TDPX * setbb_u, set_tdy(setbb_y), set_r_lit(), 3, theme(TH_TEXT_HI))
+    }
+    setbb_y = set_trow(setbb_x, setbb_y, setbb_w)
+    if set_vis(setbb_y, set_tdh()) == 1 {
+        set_td(setbb_x, setbb_y, "a third rank", theme(TH_TEXT_DIM))
+        set_td(set_cx(setbb_x, setbb_w, 46), setbb_y, "none", theme(TH_TEXT_DIM))
+        text_aa(set_cx(setbb_x, setbb_w, 74) - SET_TDPX * setbb_u - cell_w(), set_tdy(setbb_y), "-", theme(TH_TEXT_DIM))
+        text_aa(setbb_x + setbb_w - SET_TDPX * setbb_u - 30 * cell_w(), set_tdy(setbb_y), "nesting never changes a value", theme(TH_TEXT_DIM))
+    }
+    setbb_y = set_trow(setbb_x, setbb_y, setbb_w) + SET_STACK * setbb_u
+
+    if set_vis(setbb_y, set_kvh()) == 1 {
+        set_kv(setbb_x, setbb_y, setbb_w, "DRAG CUE")
+        set_rat_sfx_r(setbb_x + setbb_w - SET_TDPX * setbb_u, setbb_y + setbb_u, ui_ratio(theme(TH_EDGE_OVER), theme(TH_PANEL)), 2, 20, ", perimeter, no lift", theme(TH_TEXT_HI))
+    }
+    setbb_y = setbb_y + set_kvh()
+    if set_vis(setbb_y, set_kvh()) == 1 {
+        set_kv(setbb_x, setbb_y, setbb_w, "FOCUS AND BOUNDARY")
+        text_aa(setbb_x + setbb_w - SET_TDPX * setbb_u - 40 * cell_w(), setbb_y + setbb_u, "separated. the header says which is on top", theme(TH_TEXT_HI))
+    }
+    return setbb_y + set_kvh()
+}
+
+# ==============================================================================
+# PRESS - what came across from the printed document, and what it cost.
+# ==============================================================================
+fn set_press_body(x, y, w) {
+    setpb_x = x
+    setpb_y = y
+    setpb_w = w
+    setpb_u = ui()
+    setpb_y = set_head(setpb_x, setpb_y, "WHAT CAME ACROSS FROM PAPER, AND WHAT IT COST")
+    if set_vis(setpb_y, set_wellh(12)) == 1 {
+        setfb_x = setpb_x
+        setfb_y = setpb_y
+        set_well(setpb_x, setpb_y, setpb_w, 12)
+        set_wlc(setfb_x, setfb_y, 0, 0, "the numbered register, the ruled module grid, LABEL type, hard")
+        set_wlc(setfb_x, setfb_y, 1, 0, "rules, the printer's slug, the vermilion overprint and three")
+        set_wlc(setfb_x, setfb_y, 2, 0, "instruments. six of the seven are free riders: text, digits and")
+        set_wlc(setfb_x, setfb_y, 3, 0, "1px fills that touch no surface value, no boundary token, no")
+        set_wlc(setfb_x, setfb_y, 4, 0, "radius and no focus signal.")
+        set_wlc(setfb_x, setfb_y, 6, 0, "TWO ARE NOT FREE AND BOTH ARE PRICED HERE.")
+        set_wlc(setfb_x, setfb_y, 7, 0, "  TRACKING. fb_text_role cannot letterspace without UI_F_TRACK on")
+        set_wlc(setfb_x, setfb_y, 8, 0, "  the existing flag word, and measure and draw must share the")
+        set_wlc(setfb_x, setfb_y, 9, 0, "  helper or a label clips. EVERY LABEL IN THIS PANE IS UNTRACKED")
+        set_wlc(setfb_x, setfb_y, 10, 0, "  and reads flatter for it. the prototype gets it free from CSS.")
+        set_wlc(setfb_x, setfb_y, 11, 0, "  PER WINDOW MICROSECONDS. wm.c measures app_us in AGGREGATE only.")
+    }
+    setpb_y = setpb_y + set_wellh(12) + SET_STACK * setpb_u
+
+    setpb_y = set_head(setpb_x, setpb_y, "THE TWO INKS, AND THE CONTRACT BETWEEN THEM")
+    if set_vis(setpb_y, set_thh()) == 1 {
+        set_th(setpb_x, setpb_y, "INK")
+        set_th(set_cx(setpb_x, setpb_w, 20), setpb_y, "JOBS")
+        set_th_r(set_cx(setpb_x, setpb_w, 76), setpb_y, "ON BASE")
+        set_th(set_cx(setpb_x, setpb_w, 76), setpb_y, "MAY CARRY TEXT")
+    }
+    setpb_y = set_thead(setpb_x, setpb_y, setpb_w)
+    if set_vis(setpb_y, set_tdh()) == 1 {
+        set_td(setpb_x, setpb_y, "ZD_STEEL", theme(TH_TEXT_2))
+        set_td(set_cx(setpb_x, setpb_w, 20), setpb_y, "raster columns, meter fills, ruler", theme(TH_TEXT_2))
+        set_rat_r(set_cx(setpb_x, setpb_w, 76) - SET_TDPX * setpb_u, set_tdy(setpb_y), ui_ratio(theme(TH_STEEL), theme(TH_PANEL)), 2, theme(TH_TEXT_HI))
+        set_td(set_cx(setpb_x, setpb_w, 76), setpb_y, "no - instrument", theme(TH_TEXT_DIM))
+    }
+    setpb_y = set_trow(setpb_x, setpb_y, setpb_w)
+    if set_vis(setpb_y, set_tdh()) == 1 {
+        set_td(setpb_x, setpb_y, "ZD_VERM", theme(TH_TEXT_2))
+        set_td(set_cx(setpb_x, setpb_w, 20), setpb_y, "focus bar, register mark, crop marks", theme(TH_TEXT_2))
+        set_rat_r(set_cx(setpb_x, setpb_w, 76) - SET_TDPX * setpb_u, set_tdy(setpb_y), set_r_verm(), 2, theme(TH_TEXT_HI))
+        set_td(set_cx(setpb_x, setpb_w, 76), setpb_y, "no - a fill or mark", theme(TH_TEXT_DIM))
+    }
+    setpb_y = set_trow(setpb_x, setpb_y, setpb_w) + SET_STACK * setpb_u
+
+    if set_vis(setpb_y, set_wellh(7)) == 1 {
+        setfb_x = setpb_x
+        setfb_y = setpb_y
+        set_well(setpb_x, setpb_y, setpb_w, 7)
+        set_wlc(setfb_x, setfb_y, 0, 0, "two chromatic inks is more than either parent allowed and the risk")
+        set_wlc(setfb_x, setfb_y, 1, 0, "is real: two inks on warm graphite starts to look decorative. the")
+        set_wlc(setfb_x, setfb_y, 2, 0, "mitigation is a WIDTH rule - vermilion never fills an area wider")
+        set_wlc(setfb_x, setfb_y, 3, 0, "than the focus bar except one button per view - and a PLACEMENT")
+        set_wlc(setfb_x, setfb_y, 4, 0, "rule: steel appears inside an instrument and nowhere else.")
+        set_wlc(setfb_x, setfb_y, 6, 0, "if that discipline slips this becomes a generic two accent dark UI.")
+    }
+    setpb_y = setpb_y + set_wellh(7) + SET_STACK * setpb_u
+
+    # THE LIVE READINGS. app_us is what wm.c actually measured for the last
+    # draw of this window - the same figure its own foot band prints - so the
+    # bottom of this tab is the cost of the top of it.
+    if set_vis(setpb_y, set_kvh()) == 1 {
+        set_kv(setpb_x, setpb_y, setpb_w, "THIS PANE, LAST DRAW")
+        setpb_v = wm_us()
+        text_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 3 * cell_w(), setpb_y + setpb_u, " us", theme(TH_TEXT_HI))
+        num_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 3 * cell_w() - s3_numw(setpb_v), setpb_y + setpb_u, setpb_v, theme(TH_TEXT_HI))
+    }
+    setpb_y = setpb_y + set_kvh()
+    if set_vis(setpb_y, set_kvh()) == 1 {
+        set_kv(setpb_x, setpb_y, setpb_w, "TYPE SIZES")
+        text_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 40 * cell_w(), setpb_y + setpb_u, "three, landing exactly on the three atlases", theme(TH_TEXT_HI))
+    }
+    setpb_y = setpb_y + set_kvh()
+    if set_vis(setpb_y, set_kvh()) == 1 {
+        set_kv(setpb_x, setpb_y, setpb_w, "TYPE STYLES")
+        text_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 32 * cell_w(), setpb_y + setpb_u, "four. DATA, LABEL, BODY, PLATE", theme(TH_TEXT_HI))
+    }
+    setpb_y = setpb_y + set_kvh()
+    if set_vis(setpb_y, set_kvh()) == 1 {
+        set_kv(setpb_x, setpb_y, setpb_w, "GLYPH RASTERISER")
+        text_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 34 * cell_w(), setpb_y + setpb_u, "none. three baked atlases, no runtime", theme(TH_TEXT_HI))
+    }
+    return setpb_y + set_kvh()
+}
+
+# ==============================================================================
+# THE PANE - chrome, the scroll viewport, and the two entry points wm.c calls.
+# ==============================================================================
+# THE HEADER LINE IS "design.h - live" AND IT IS A CLAIM. Every figure under it
+# was computed from the loaded theme this repaint, so the line is either true
+# or the pane is broken; there is no third state where it is decorative.
+SET_TABROW = 24                    # the tab row's own height, .row at 24dp
+
+fn set_tabrow_y(ay) { return ay + SET_PADY * ui() }
+fn set_seg_y(ay)    { return set_tabrow_y(ay) + (SET_TABROW * ui() - set_segh()) / 2 }
+# WHERE THE SCROLLING BODY STARTS. Shared by the draw and by the hit test for
+# the two FOCUS controls, so the two cannot disagree about which row was
+# clicked - the failure mode uikit.c documents and the reason none of this
+# arithmetic is written twice.
+fn set_body_y(ay) {
+    return set_tabrow_y(ay) + SET_TABROW * ui() + SET_R2 * ui() + SET_STACK * ui()
+}
+fn set_ctl_y(ay)  { return set_body_y(ay) - set_scroll }
+fn set_body_x(ax) { return ax + SET_PADX * ui() }
+fn set_body_w(aw) { return aw - 2 * SET_PADX * ui() }
+
+fn set_tab_body(x, y, w) {
+    if set_tab == SET_LADDER   { return set_ladder_body(x, y, w) }
+    if set_tab == SET_FOCUS    { return set_focus_body(x, y, w) }
+    if set_tab == SET_BOUNDARY { return set_bound_body(x, y, w) }
+    return set_press_body(x, y, w)
+}
+
+fn settings_body(ax, ay, aw, ah) {
+    setb_u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    setb_x = set_body_x(ax)
+    setb_w = set_body_w(aw)
+
+    # --- the tab row ----------------------------------------------------------
+    set_segbar(setb_x, set_seg_y(ay))
+    # "design.h - live", DATA mono, right margin. The prototype separates the
+    # two words with a middle dot; the console atlas is ASCII, so it is a hyphen
+    # and that is a substitution rather than a design decision - said here
+    # because an unexplained difference from the prototype is a bug report
+    # waiting to be filed against a deliberate choice.
+    text_aa(setb_x + setb_w - 15 * cell_w(), set_tabrow_y(ay) + (SET_TABROW * setb_u - cell_h()) / 2, "design.h - live", theme(TH_TEXT_DIM))
+    set_rule2(setb_x, set_tabrow_y(ay) + SET_TABROW * setb_u, setb_w)
+
+    # --- the scrolling body ---------------------------------------------------
+    # set_c0/set_c1 are the viewport in absolute pixels and every block tests
+    # itself against them before drawing. wm.c's client scissor is what makes
+    # the block STRADDLING the edge safe - "an app physically cannot draw over
+    # its own title bar no matter what it does" - so this only decides what is
+    # not worth drawing, never what is allowed to.
+    set_c0 = set_body_y(ay)
+    set_c1 = ay + ah
+    setb_end = set_tab_body(setb_x, set_ctl_y(ay), setb_w)
+    # WHAT THE DRAW JUST LEARNED, fed to the next one. The content height is
+    # taken from the draw that produced it rather than from a second pass that
+    # walks the same layout to total it up; a second pass is a second copy of
+    # the layout and the two diverge the first time one is edited.
+    set_conth = setb_end - set_ctl_y(ay)
+    set_viewh = set_c1 - set_c0
+    set_clamp_scroll()
+
+    # THE TRIM. A pane that scrolls cuts its last row wherever the pane ends,
+    # and against the window's own foot band that chop reads as a rendering
+    # fault. The cut lands on a 2dp ZD_LIT rule - the same rule weight every
+    # other rank break uses - so the half row above it reads as a column
+    # continuing past the trim, which is what it is.
+    if set_conth > set_viewh { set_rule2(setb_x, set_c1 - SET_R2 * setb_u, setb_w) }
+    return 0
+}
+
+# The clamp is separate because three callers need it: the draw (after
+# learning the height), the wheel, and the tab switch. One copy.
+fn set_clamp_scroll() {
+    setcs_max = set_conth - set_viewh
+    if setcs_max < 0 { setcs_max = 0 }
+    if set_scroll > setcs_max { set_scroll = setcs_max }
+    if set_scroll < 0 { set_scroll = 0 }
+    return 0
+}
+
+# ---- the events ---------------------------------------------------------------
+# A CONTROL THAT CHANGES A NUMBER WITHOUT CHANGING THE SCREEN IS AN ASSERTION,
+# which is the thing this pane exists not to be. Both controls call into ui.c,
+# which rebuilds the theme, and then damage EVERY window - because the theme is
+# global and each window's client surface is retained, so a window that is not
+# repainted keeps the old header until something else happens to touch it. That
+# is the same "finished-looking code with no caller" shape this tree keeps
+# catching, one layer up: the setting would be correct and invisible.
+fn settings_event(win, ety, ecode, ex, ey) {
+    setev_ax = wm_cx(win)
+    setev_ay = wm_cy(win)
+    setev_aw = wm_cw(win)
+    setev_x = set_body_x(setev_ax)
+    setev_w = set_body_w(setev_aw)
+
+    # THE WHEEL. Scroll goes to what is under the pointer and wm.c already
+    # routed it here, so there is nothing to hit test - the whole client is the
+    # scroll region. The notch count is SIGNED and arrives as it was counted.
+    if ety == 5 {
+        set_scroll = set_scroll - ecode * SET_SCRLSTEP * ui()
+        set_clamp_scroll()
+        wm_dmg(win)
+        return 1
+    }
+
+    if ety == 4 {
+        # bit 0 of the mask is the left button. Without this check every
+        # pointer MOVE across the pane would toggle the knockout, which is the
+        # bug the browser's click path already paid for once.
+        if band(ecode, 1) == 0 { return 0 }
+        setev_t = set_tab_at(setev_x, set_seg_y(setev_ay), ex, ey)
+        if setev_t >= 0 {
+            if setev_t != set_tab {
+                set_tab = setev_t
+                # A NEW TAB STARTS AT THE TOP. Carrying the scroll across means
+                # landing in the middle of a shorter tab with nothing above the
+                # fold, which reads as an empty pane.
+                set_scroll = 0
+            }
+            wm_dmg(win)
+            return 1
+        }
+        # The two live controls are on the FOCUS tab only, and they are the
+        # first two rows of its scrolling body - so their y moves with the
+        # scroll and the hit test asks the same functions the draw did.
+        if set_tab == SET_FOCUS {
+            if set_hit_row(setev_x, set_row1_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
+                ui_knock(1 - ui_knock_on())
+                wm_damage_win_all()
+                return 1
+            }
+            if set_hit_row(setev_x, set_row2_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
+                ui_fbar(set_slider_v(set_trk_x(setev_x), set_trk_w(setev_x, setev_w), 1, 6, ex))
+                wm_damage_win_all()
+                return 1
+            }
+        }
+        return 0
+    }
+
+    # Keys, so the pane is usable with no pointer at all - which is not a
+    # nicety here: this machine has booted with a keyboard and no mouse more
+    # than once, and a design document you cannot scroll is a design document
+    # you cannot read.
+    if ety == 1 {
+        if ecode == K_UP    { set_scroll = set_scroll - SET_SCRLSTEP * ui()  set_clamp_scroll()  wm_dmg(win)  return 1 }
+        if ecode == K_DOWN  { set_scroll = set_scroll + SET_SCRLSTEP * ui()  set_clamp_scroll()  wm_dmg(win)  return 1 }
+        if ecode == K_HOME  { set_scroll = 0  wm_dmg(win)  return 1 }
+        if ecode == K_END   { set_scroll = set_conth  set_clamp_scroll()  wm_dmg(win)  return 1 }
+        if ecode == K_LEFT  { set_tab = (set_tab + SET_TABS - 1) % SET_TABS  set_scroll = 0  wm_dmg(win)  return 1 }
+        if ecode == K_RIGHT { set_tab = (set_tab + 1) % SET_TABS  set_scroll = 0  wm_dmg(win)  return 1 }
+        if ecode == K_TAB   { set_tab = (set_tab + 1) % SET_TABS  set_scroll = 0  wm_dmg(win)  return 1 }
+    }
+    if ety == 3 {
+        # the two live controls, from the keyboard. `k` is the toggle; `[` and
+        # `]` step the focus bar, which is what a slider is when there is no
+        # pointer to drag.
+        if ecode == 107 { ui_knock(1 - ui_knock_on())  wm_damage_win_all()  return 1 }
+        if ecode == 91  { ui_fbar(ui_fbar_dp() - 1)  wm_damage_win_all()  return 1 }
+        if ecode == 93  { ui_fbar(ui_fbar_dp() + 1)  wm_damage_win_all()  return 1 }
+    }
+    return 0
+}
+
 fn app_draw(id, ax, ay, aw, ah, afocus) {
     if id == APP_MONITOR { return sysmon_body(ax, ay, aw, ah) }
     if id == APP_ABOUT   { return about_body(ax, ay, aw, ah) }
     if id == APP_SNAKE   { return sn_draw(ax, ay, aw, ah) }
     if id == APP_MENU    { return menu_draw(ax, ay, aw, ah) }
+    # 10 SYSTEM and 14 TYPE. Tested BEFORE the `id >= REG_FIRST` fall-through
+    # at the foot of this chain, because 71 and 72 are above the registry range
+    # and would otherwise be handed to reg_draw, which has never heard of them
+    # and would draw nothing at all - the silent-fallback failure this file
+    # keeps catching. Same placement APP_CATALOG needs and for the same reason.
+    if id == APP_SYSPANE  { return sys_body(ax, ay, aw, ah) }
+    if id == APP_TYPEPANE { return type_body(ax, ay, aw, ah) }
+    # 11 SETTINGS. It used to be dispatched in wmglue.c straight to settings.c
+    # because zl had no ui_* natives; it does now, and policy belongs here with
+    # every other app rather than in the seam. See settings_body's header.
+    if id == APP_SETTINGS { return settings_body(ax, ay, aw, ah) }
     # THE BROWSER'S ENTIRE POLICY SURFACE IS THIS LINE. The parse, the box
     # model and the paint are C - a tokenizer is string handling, and the zl
     # kernel subset has string literals but no string values. Same split the
@@ -5878,6 +8252,7 @@ fn nav_to_char(ecode) {
 
 fn app_event(id, win, ety, ecode, ex, ey) {
     if id == APP_SNAKE { return sn_event(ety, ecode) }
+    if id == APP_SETTINGS { return settings_event(win, ety, ecode, ex, ey) }
     if id == APP_MENU  { return menu_event(ety, ecode, ex, ey, win) }
     # BEFORE the nav_to_char translation below, like Snake and the browser -
     # not after it. That block turns an untranslatable EV_KEY_DOWN (anything
@@ -6385,15 +8760,53 @@ fn desk_ground() {
 # the 46% the prototype's stylesheet asks for is not 46% here, and computing it
 # from the sRGB formula would have given 117 and a visibly too-bright desk.
 #
-# WHAT DOES NOT SURVIVE THE TRANSLATION, said plainly: the CSS ramp has TWO
-# segments (46% at the centre, 16% at 34%, transparent at 72%) and fb_glow has
-# ONE. Anchored on the centre with design.h's stop of 100, the single ramp reads
-# 85 * (100 - 34) / 100 = 56 at the 34% stop where the CSS reads 26, so the
-# middle of the desk is brighter here than in the prototype. Fixing that needs a
-# two-stop radial in fb.c, and fb.c is not this change's to edit. The two ends
-# are right and the middle is one segment short.
-WALL_GLOW_A = 85                   # measured: ZD_LITSOFT over ZD_VOID -> ZD_WALL_0
-WALL_GLOW_OUT = 0                  # ZD_WALL_GLOW_OUT
+# THE TWO SEGMENTS ARE TWO CALLS, and this is where the note above used to
+# give up. It said: the CSS ramp has TWO segments (46% at the centre, 16% at
+# 34%, transparent at 72%) and fb_glow has ONE; anchored on the centre with a
+# stop of 100 the single ramp reads 85 * (100 - 34) / 100 = 56 at the 34% stop
+# where the CSS reads 26, so the middle of the desk is brighter than the
+# prototype's - and it concluded "fixing that needs a two-stop radial in fb.c,
+# and fb.c is not this change's to edit."
+#
+# THE DIAGNOSIS WAS RIGHT AND THE CONCLUSION WAS WRONG. fb_glow takes a stop,
+# so a two-segment ramp is a two-segment ramp: an OUTER call that carries the
+# 34%-to-72% tail and an INNER one that adds the extra light back over the
+# first 34%. They composite because glow_px blends the same colour twice, so
+# the effective coverage is 1 - (1 - a1)(1 - a2) rather than a1 + a2 - which is
+# also why WALL_GLOW_IN is not 85 - 49. fb.c is untouched; the desk is two
+# calls instead of one.
+#
+# THE FIGURES ARE SWEPT, NOT DERIVED, for the same reason the 85 above was: fb.c
+# blends in LINEAR LIGHT and the CSS mixes in sRGB, so no closed form on paper
+# is the number this renders. hosttest built the desk at 1920x1200 both ways
+# and read back seven points, against the prototype's own two-segment ramp
+# evaluated at each point's radius. Worst channel error, one stop vs two:
+#
+#   point           d       target    1 call      2 calls
+#   top-left      0.154    #362F2B   #3A3430  5  #362F2C  1
+#   top-mid       0.471    #2A231F   #332D29 10  #2A2420  1
+#   top-right     0.826    #241D19   #29231F  6  #241D19  0
+#   mid-left      0.494    #29221E   #322C28 10  #29231F  1
+#   centre        0.665    #251E1A   #2E2724 10  #251E1B  1
+#   bottom-left   0.850    #241D19   #28221E  5  #241D19  0
+#   bottom-right  1.175    #241D19   #241D19  0  #241D19  0
+#
+# The worst error goes from 10 code values to 1. The two points that were
+# already exact stay exact, which is the control: a change that moved those
+# would be a change to the lamp rather than to its falloff. Note the shape of
+# the old error - the desk was TOO BRIGHT everywhere except at the very far
+# corner, and most wrong in the middle, which is exactly what one linear ramp
+# stretched over a curve that has a knee in it does.
+#
+# The centre itself cannot be sampled: the lamp is at (-w/8, -h/6), off the
+# panel, so the smallest radius any real pixel has is 0.154. The 85 in the
+# comment above is still the anchor the sweep was solved against - it is just
+# not a pixel anyone can see.
+WALL_GLOW_OUT_A = 49               # swept: the 34%-to-72% tail
+WALL_GLOW_IN_A  = 42               # swept: the extra light over the first 34%
+WALL_GLOW_OUT_STOP = 72            # the CSS ramp's `transparent 72%`
+WALL_GLOW_IN_STOP  = 34            # ...and its middle stop
+WALL_GLOW_OUT = 0                  # ZD_WALL_GLOW_OUT - both ramps end at nothing
 fn draw_wallpaper() {
     ww = px_w()
     wh = px_h()
@@ -6402,7 +8815,15 @@ fn draw_wallpaper() {
     # are plates lit by their own 1px runs - letting the glow wash over them
     # would put a second, contradictory light source on the same chrome.
     clip(field_x(), field_y(), field_w(), field_h())
-    glow(0 - idiv(ww, 8), 0 - idiv(wh, 6), ww * 11 / 8, wh * 11 / 8, theme(TH_LITSOFT), WALL_GLOW_A, WALL_GLOW_OUT, 100)
+    gx = 0 - idiv(ww, 8)
+    gy = 0 - idiv(wh, 6)
+    grx = ww * 11 / 8
+    gry = wh * 11 / 8
+    # ORDER DOES NOT MATTER but the OUTER one is written first, because it is
+    # the ramp that reaches the whole field and the inner one is a correction
+    # over its first third.
+    glow(gx, gy, grx, gry, theme(TH_LITSOFT), WALL_GLOW_OUT_A, WALL_GLOW_OUT, WALL_GLOW_OUT_STOP)
+    glow(gx, gy, grx, gry, theme(TH_LITSOFT), WALL_GLOW_IN_A, WALL_GLOW_OUT, WALL_GLOW_IN_STOP)
     clipoff()
     draw_grid()
     return 0
@@ -6513,6 +8934,8 @@ fn app_name(app) {
     if app == APP_FILES   { return "Files" }
     if app == APP_EDIT    { return "Text Editor" }
     if app == APP_CATALOG { return "All Applications" }
+    if app == APP_SYSPANE  { return "System" }
+    if app == APP_TYPEPANE { return "Type" }
     # Every app-suite window falls through to the same registry the catalog
     # reads, so a new app's taskbar chip needs no entry here at all.
     if app >= REG_FIRST { return reg_name(app) }
@@ -6639,7 +9062,13 @@ fn reopen_browser() {
 fn reopen_settings() {
     u = ui()
     if settings_win >= 0 { if wm_open_p(settings_win) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
-    settings_win = wm_open(APP_SETTINGS, "Settings", desk_x(218), desk_y(120), 486 * u, 332 * u)
+    # 660 x 720 dp, and both numbers are the CONTENT's, not a taste. 660 is
+    # what the widest mono line in the pane needs: 67 characters at cell_w
+    # plus the well's 8dp padding either side, plus the body's 9dp margins,
+    # plus the plate's 1px ring and the focus bar's gutter. A narrower window
+    # ellipsises a paragraph that is an argument. 720 is the prototype's own
+    # settings window height; the body scrolls past it either way.
+    settings_win = wm_open(APP_SETTINGS, "Settings", desk_x(120), desk_y(40), 660 * u, 720 * u)
     wm_setfocus(settings_win)
     wm_raise(settings_win)
     return 0
@@ -6684,7 +9113,14 @@ fn reopen_files() {
 # 10 rows now: the original 8 plus Settings and All Applications, both of
 # which existed already (settings.c; the catalog above) and had no caller
 # anywhere on the running desktop until this brief.
-MENU_ROWS = 10
+# TWELVE, and the two new rows are 10 SYSTEM and 14 TYPE. THIS IS A TEMPORARY
+# HOME FOR THEM. In the prototype both are REGISTER rows - system at 10, type
+# at 14 - and the register is where they belong; the register table here is
+# still the shipped twelve and renumbering it to the prototype's fourteen is
+# the shell's own piece of work, being done separately. Until it lands, a menu
+# row is what keeps these two reachable, and an app with no launch route is
+# dead code in exactly the way a native with no registration is.
+MENU_ROWS = 12
 menu_win = 0 - 1
 
 fn menu_label(idx) {
@@ -6696,7 +9132,9 @@ fn menu_label(idx) {
     if idx == 5 { return "Paint" }
     if idx == 6 { return "Editor" }
     if idx == 7 { return "Settings" }
-    if idx == 8 { return "All Applications" }
+    if idx == 8 { return "System" }
+    if idx == 9 { return "Type" }
+    if idx == 10 { return "All Applications" }
     return "Halt"
 }
 
@@ -6709,8 +9147,10 @@ fn menu_pick(idx) {
     # dispatched its draw/event since it was written - it just had nothing
     # anywhere that called wm_open(APP_SETTINGS, ...). This is that call.
     if idx == 7 { return reg_open(APP_SETTINGS) }
-    if idx == 8 { return reg_open(APP_CATALOG) }
-    if idx == 9 { wm_stop()  return 0 }
+    if idx == 8 { return open_syspane() }
+    if idx == 9 { return open_typepane() }
+    if idx == 10 { return reg_open(APP_CATALOG) }
+    if idx == 11 { wm_stop()  return 0 }
     raise_shell()
     if idx == 4 { run_command(118, 0) }
     if idx == 5 { run_command(100, 0) }
