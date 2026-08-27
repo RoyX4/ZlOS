@@ -48,7 +48,12 @@ void fb_clip_none(void);
 void wm_snap_key(int win, int dir);
 void snap_reset(void);
 int  snap_state(int win);
+int  ui_status_h(void);
+void wm_client(int win, int *x, int *y, int *w, int *h);
 void snap_rect(int z, int sw, int sh, int rt, int rb, int *x, int *y, int *w, int *h);
+/* the form that knows about side furniture - see the note at the snap oracle */
+void snap_rect_lr(int z, int sw, int sh, int rt, int rb, int rl, int rr,
+                  int *x, int *y, int *w, int *h);
 
 /* ---- notify.c ------------------------------------------------------------ */
 void        notify_reset(void);
@@ -84,8 +89,26 @@ void zl_putc_pub(char c) { (void)c; }
 #define BG_ADDR   0x08000000UL
 #define SP_ADDR   0x0A000000UL
 #define BACK_ADDR 0x0C000000UL
-#define TOP_H     (48 * 2)          /* wm.c RESERVE_TOP, at scale 2 */
-#define DOCK_H    (72 * 2)          /* wm.c RESERVE_BOT, at scale 2 */
+/* THE RESERVES ARE ASKED FOR, NOT RESTATED.
+ *
+ * These were `(48 * 2)` and `(72 * 2)` with a comment pointing at wm.c, and
+ * they went wrong the moment wm.c stopped holding those numbers: RESERVE_TOP
+ * and RESERVE_BOT read the THEME now - strip_h and foot_h, ZD_STRIP_H 30 and
+ * ZD_FOOT_H 46 - so at scale 2 the real reserves are 60 and 92 against the 96
+ * and 144 asserted here. Eight checks failed, all of them measuring a desktop
+ * that no longer exists.
+ *
+ * This was the FOURTH copy of these two numbers. The other three were a rail
+ * that reserved one width, a snap that reserved another and a chrome that drew
+ * a third; those were fixed by making wm.c derive them from the theme, and this
+ * file was missed because it is a test and the tests were green - it had been
+ * compiled with the old values baked in.
+ *
+ * A number a test restates is a number that can disagree with the thing it is
+ * testing, and the test will lose that argument silently. ui_theme_init(2) is
+ * already called below, so both are available for the asking. */
+#define TOP_H     ui_metric(UI_METRIC_STRIP_H)
+#define DOCK_H    ui_metric(UI_METRIC_FOOT_H)
 
 /* the app paints its whole client area one flat colour, so anything that is
  * NOT that colour inside a window is something else drawing on top */
@@ -204,16 +227,37 @@ int main(void)
      * appears on top of a window" and not "it appears on empty wallpaper" */
     int tx, ty, tw, th;
     notify_rect(W, H, DOCK_H, 2, &tx, &ty, &tw, &th);
+    /* IT HAS TO CLEAR THE CHROME AT BOTH ENDS. This added title_h + 16 at the
+     * top and a bare 16 at the bottom, which was a complete description of a
+     * window until every window grew a status foot - "01 APP US 1254 us ... ws
+     * 01" - along the bottom edge. The cover was then 36 px short, the last 36
+     * rows of the toast rectangle sat on that foot rather than on the client,
+     * and three checks that mean "is the toast the only thing here" failed
+     * against chrome that was supposed to be underneath it.
+     *
+     * 15 120 of the rectangle's 58 800 pixels, which is exactly 36 rows of 420. */
     const struct ui_theme *cover_theme = ui_theme();
     int cover_top = cover_theme->title_h + 16;
+    int cover_bot = ui_status_h() + 16;
     int win = wm_open(1, "cover", tx - 60, ty - cover_top,
-                      tw + 120, th + cover_top + 16);
+                      tw + 120, th + cover_top + cover_bot);
     /* zwin is 200 ms at the compositor's 100 Hz clock. This used to wait
      * eight ticks, so it sampled a half-open window after the motion duration
      * was corrected from 160 ms to the design system's 200 ms. */
     for (int i = 0; i < EASE_MS_WIN / 10 + 2; i++) frame();
 
     ok("the covering window has focus to start with", wm_focused() == win);
+    /* AND IT REALLY DOES COVER IT. The three checks below all mean "the toast
+     * is the only thing drawn here", and every one of them fails the same way
+     * if the cover is simply too small - which is what happened. Asserting the
+     * containment directly names that cause instead of leaving it to be
+     * inferred from three unrelated-looking failures. */
+    {
+        int cx, cy, cw, ch;
+        wm_client(win, &cx, &cy, &cw, &ch);
+        ok("...and its CLIENT contains the whole toast rectangle",
+           cx <= tx && cy <= ty && cx + cw >= tx + tw && cy + ch >= ty + th);
+    }
     ok("...and nothing foreign is drawn where the toast will go",
        foreign_px(tx, ty, tx + tw, ty + th) == 0);
 
@@ -297,8 +341,22 @@ int main(void)
     pointer(2, 400, 0);                             /* drop                   */
     frame();
 
+    /* THE ORACLE HAS TO MODEL THE DESKTOP THE COMPOSITOR ACTUALLY BUILT.
+     *
+     * This called snap_rect(), whose four-reserve form means "no side
+     * furniture" - and that was a complete description of the shell until it
+     * grew a 170 dp register rail down the left edge. wm.c snaps through
+     * snap_set_side_reserves(RESERVE_LEFT(t), 0) now, so the window under test
+     * lands at x = rail_w while the expectation was still computed from x = 0.
+     * The window was in the right place and the oracle was in the old one.
+     *
+     * snap_rect_lr is the form that knows about sides, and it is what the
+     * shell calls. Asking the theme for the width rather than writing 340 keeps
+     * this from becoming yet another copy of a number - which is the mistake
+     * the TOP_H / DOCK_H defines above already made once. */
+    const int RL = ui_metric(UI_METRIC_RAIL_W);
     int ex, ey, ew, eh;
-    snap_rect(SNAP_LEFT, W, H, RT, RB, &ex, &ey, &ew, &eh);
+    snap_rect_lr(SNAP_LEFT, W, H, RT, RB, RL, 0, &ex, &ey, &ew, &eh);
     wm_geometry(s0, &gx, &gy, &gw, &gh);
     ok("dropping it at the left edge SNAPS it", snap_state(s0) == SNAP_LEFT);
     ok("...to exactly the left half of the work area",

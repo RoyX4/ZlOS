@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "d1586a33d5b0efeb35156f4d21c96160beba356b"
+    "head": "7f42013c53f4d5d0f15e1c6e80593e6a7aff5ddb"
   },
-  "identity_sha256": "c4445df1c4ec16b465e2c917f19a967a2a1ae17b5339f0499504203d12742124",
+  "identity_sha256": "690882a957a72d8ac07f38499fe650785b398e07c752cff5d512023de5d87cf8",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -119,7 +119,7 @@
     "kernel/src/graphics/windowing/clip.c": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886",
     "kernel/src/graphics/windowing/term.c": "d59be51be3dfc534729bca4fd3467146410096b268c1d67fa5a44257ddc8adce",
     "kernel/src/graphics/windowing/userwin.c": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
-    "kernel/src/graphics/windowing/wm.c": "0716e497d9c685ff9a6d7eaade7fde94e300ce1f09d91036f800dd2583fe2634",
+    "kernel/src/graphics/windowing/wm.c": "b73c1b349be3b3b4c40b9e96ca9354cb982e7f4542a06ef900f1a682f3f160a0",
     "kernel/src/graphics/windowing/wmglue.c": "0dbea309de2b1fbc2847d23c8ba6b8d9ebceb27f536c67007eeabf28527db578",
     "kernel/src/kernel.zl": "0b1abf6c99e6a12db1a9f40b2e2cf6e595fe37f760430a87e11c71282d77b56b",
     "kernel/src/net/crypto.c": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",

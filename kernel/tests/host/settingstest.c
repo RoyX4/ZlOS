@@ -155,6 +155,27 @@ int  fb_cell_h(void){ return (16 * ui_metric(UI_METRIC_SCALE_Q8) + 128) / 256; }
 void fb_clip(int x,int y,int w,int h){(void)x;(void)y;(void)w;(void)h;}
 void fb_clip_none(void){}
 void fb_clip_get(int*a,int*b,int*c,int*d){ if(a)*a=0; if(b)*b=0; if(c)*c=1280; if(d)*d=800; }
+
+/* THE RICH-TEXT PAIR, and this test could not LINK without them.
+ *
+ * uikit.c started calling fb_text_rich / fb_text_rich_w at 3b8692b - the depth
+ * pass that gave chips, tabs, menus and the segmented control a real
+ * proportional measure - and settingstest's stub set never followed. It has not
+ * built since, which means it has not RUN since, and nothing said so: the host
+ * build.sh carries on past a link failure and prints its next line, so a
+ * green-looking run had one binary silently missing from it.
+ *
+ * That is docs/GUARDS-THAT-DID-NOT-GUARD.md exactly, with the twist that the
+ * gate did not go quiet on its own - a change of mine put it out and the
+ * failure was three lines above where anyone was reading.
+ *
+ * Measured the same way ui_text_w's stub is, so widths stay hand-checkable:
+ * half an em per character at the size asked for. */
+int  fb_text_rich_w(const char *s, int len, int size, int style)
+{ (void)s; (void)style; return len * size / 2; }
+void fb_text_rich(int px, int py, const char *s, int len, unsigned int fg,
+                  int size, int style)
+{ (void)px; (void)py; (void)s; (void)len; (void)fg; (void)size; (void)style; }
 void input_set_speed(int p){ (void)p; }
 void input_set_accel(int o){ (void)o; }
 void wm_set_anim(int o){ (void)o; }

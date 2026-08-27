@@ -7,6 +7,51 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(term): break the shell's wrap on words, and hang the continuation (7f42013)
+
+`design/presswork` · 8 files changed, 311 insertions(+), 51 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `docs/evidence/truncation-incident-2026-08-27.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/kernel.zl`
+- `kernel/tests/host/termwrap.c`
+
+</details>
+
+## 2026-08-27 — fix(files): stop drawing the window's own name, and design the empty state (d1586a3)
+
+`design/presswork` · 5 files changed, 36 insertions(+), 13 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>5 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-27 — docs: fix a dangling link and refresh the checks capsule (b49158f)
 
 `design/presswork` · 3 files changed, 67 insertions(+), 1 deletion(-)
