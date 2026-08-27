@@ -7,6 +7,31 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — chore: refresh rail gate provenance (f1256f9)
+
+`codex/presswork-local-closure` · 9 files changed, 97 insertions(+), 85 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+- `kernel/metadata/wrapper-registry.json`
+
+</details>
+
 ## 2026-08-28 — test: gate the presswork rail route (25ec889)
 
 `codex/presswork-local-closure` · 3 files changed, 16 insertions(+), 3 deletions(-)
