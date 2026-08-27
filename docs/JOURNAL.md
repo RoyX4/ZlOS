@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(evidence): bind final artifacts before release joins (26b912b)
+
+`codex/presswork-close` · 37 files changed, 737 insertions(+), 673 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>37 file(s)</summary>
+
+- `gates/land-gate.sh`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- _…and 25 more_
+
+</details>
+
 ## 2026-08-28 — fix(gates): repair executable and inventory closure (3edcae4)
 
 `codex/presswork-close` · 41 files changed, 853 insertions(+), 601 deletions(-)
