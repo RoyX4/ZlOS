@@ -1237,7 +1237,16 @@ int main(void)
         frame(); frame();
 
         int tx, ty, tw, thh;
-        notify_rect(W, H, 72 * th->scale, th->scale, &tx, &ty, &tw, &thh);
+        /* THE SAME RESERVE wm.c's toast_rect() USES, asked for rather than
+         * retyped. This was `72 * th->scale`, which was the dock's height back
+         * when there was a dock; the shell has a 46 dp ZD_FOOT_H foot now, so
+         * this located the toast 26 dp above where it is actually drawn and the
+         * body probe landed on the wallpaper. The fade check then compared two
+         * pixels neither of which was the toast.
+         *
+         * Sixth copy of this number in the tree, and the third that had to be
+         * found by watching a test fail rather than by reading it. */
+        notify_rect(W, H, ui_metric(UI_METRIC_FOOT_H), th->scale, &tx, &ty, &tw, &thh);
         int probe_x = tx + tw / 2;
         int scan0 = ty - 40, scan1 = ty + thh;
 

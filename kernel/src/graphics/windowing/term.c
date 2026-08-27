@@ -493,16 +493,93 @@ int term_arg(void) { return pending_arg; }
  * read it here; zl only ever sees the int. */
 const char *term_argstr(void) { return argstr; }
 
+/* THE HANGING INDENT for continuation rows.
+ *
+ * `help` prints a two-column table - a command, a gutter of spaces, then the
+ * description - and a continuation row starting at column 0 reads as a NEW
+ * command rather than as the rest of the previous sentence. That is what put
+ * "back", "l" and "LPSS I2C)" at the left margin: three orphaned fragments of
+ * three different descriptions, each looking like a command with no help text.
+ *
+ * The description column is the first non-space after the first run of two or
+ * more spaces that follows a non-space character. A line with no such run -
+ * ordinary prose, a banner, an echoed command - keeps its OWN leading indent
+ * instead, so nothing that is not a table acquires a table's shape.
+ *
+ * Capped at a third of the width, because a deeply indented table in a narrow
+ * window would otherwise leave almost no room for the text being indented. */
+static int hang_indent(const char *s, int cols)
+{
+    int i = 0;
+    while (s[i] == ' ') i++;
+    int lead = i;
+    for (; s[i]; i++) {
+        if (s[i] == ' ' && s[i + 1] == ' ') {
+            int j = i;
+            while (s[j] == ' ') j++;
+            if (s[j]) lead = j;
+            break;
+        }
+    }
+    int cap = cols / 3;
+    if (lead > cap) lead = cap;
+    return lead;
+}
+
+/* ONE display row of `s` starting at byte `off`, with `room` columns to fill.
+ * Returns how many bytes to DRAW, and sets *next to where the following row
+ * begins - which steps over the spaces the break consumed, so a wrapped table
+ * never opens its continuation with the tail of the gutter.
+ *
+ * IT BREAKS ON A WORD. The old code chopped at exactly `cols`, mid-word,
+ * because "does it fit" was the only question being asked.
+ *
+ * A single token longer than the row still hard-breaks: the alternative is
+ * drawing past the client edge and letting the scissor cut a glyph in half,
+ * which is the defect this entire path exists to prevent.
+ *
+ * *next is always > off while off < n, so no caller can stall on it. */
+static int seg_len(const char *s, int n, int off, int room, int *next)
+{
+    if (n - off <= room) { *next = n; return n - off; }
+    int brk = -1;
+    for (int p = off + room; p > off; p--)
+        if (s[p] == ' ') { brk = p; break; }
+    if (brk < 0) { *next = off + room; return room; }   /* one long token */
+    int nx = brk;
+    while (s[nx] == ' ') nx++;
+    *next = nx;
+    int len = brk - off;
+    while (len > 0 && s[off + len - 1] == ' ') len--;   /* no trailing gutter */
+    return len;
+}
+
 /* How many display rows one stored line needs at `cols` columns. An EMPTY line
  * still needs one - it is a blank row on screen, not an absence - and that is
  * what keeps this in step with the drawing loop below, which also emits one
- * (blank) row for it. */
+ * (blank) row for it.
+ *
+ * THIS MUST SEGMENT IDENTICALLY TO THE DRAWING LOOP, which is why both now go
+ * through seg_len and hang_indent rather than each doing their own arithmetic.
+ * The count here is what bottom-anchors the view; if it disagrees with what is
+ * actually drawn, the newest line slides off the bottom edge by the difference. */
 static int wrapped_rows(const char *s, int cols)
 {
     int n = 0;
     while (s[n]) n++;
     if (n <= cols) return 1;
-    return (n + cols - 1) / cols;
+    int ind = hang_indent(s, cols);
+    int rows = 0, off = 0;
+    do {
+        int room = rows ? cols - ind : cols;
+        if (room < 1) room = 1;
+        int next;
+        seg_len(s, n, off, room, &next);
+        rows++;
+        if (next <= off) break;
+        off = next;
+    } while (off < n);
+    return rows ? rows : 1;
 }
 
 /* ---- drawing ---------------------------------------------------------------
@@ -587,10 +664,13 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
         const char *line = scroll[(first + r) % TERM_ROWS];
         int n = 0;
         while (line[n]) n++;
-        int off = 0;
+        int ind = hang_indent(line, cols);
+        int off = 0, si = 0;
         do {
-            int len = n - off;
-            if (len > cols) len = cols;
+            int room = si ? cols - ind : cols;
+            if (room < 1) room = 1;
+            int next;
+            int len = seg_len(line, n, off, room, &next);
             if (skip > 0) {                  /* above the band - not drawn, and
                                               * ty must NOT advance for it */
                 skip--;
@@ -598,11 +678,13 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
                 if (len > 0 && ty + lh > c_top && ty < c_bot) {
                     for (int i = 0; i < len; i++) seg[i] = line[off + i];
                     seg[len] = 0;
-                    fb_text_aa(x, ty, seg, dim);
+                    fb_text_aa(x + (si ? ind * cw : 0), ty, seg, dim);
                 }
                 ty += lh;
             }
-            off += cols;
+            si++;
+            if (next <= off) break;
+            off = next;
         } while (off < n);
     }
 

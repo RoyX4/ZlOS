@@ -3172,14 +3172,44 @@ static int shell_compose(int win, int focused,
                                  sw, sh, sx, sy);
 }
 
-/* Where the toast sits. The dock is desktop furniture drawn by hook_desk and
- * wm.c does not know how tall it is, so this asks for the same reserve the
- * policy layer uses - 72 * scale, matching kernel.zl's dock_y(). A toast that
- * lands under the dock is a toast you cannot read or click. */
+/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
+ *
+ * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
+ * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
+ * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
+ * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
+ * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
+ * maximised window was drawn from x = 0 straight over the launcher.
+ *
+ * Numbers that describe the shell belong to the theme, which is where the
+ * shell reads them from too; two copies of 48 in two files is how the first
+ * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
+ * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
+ * scaled by the same q8 as everything else here. */
+#define RESERVE_TOP(t)   ((t)->strip_h)
+#define RESERVE_BOT(t)   ((t)->foot_h)
+#define RESERVE_LEFT(t)  ((t)->rail_w)
+
+/* Where the toast sits. The foot is desktop furniture drawn by hook_desk and
+ * wm.c does not know how tall it is, so this asks for the same reserve every
+ * other edge of the field asks for. A toast that lands under the foot is a
+ * toast you cannot read or click.
+ *
+ * IT WAS `72 * t->scale`, AND IT CITED A FUNCTION THAT NO LONGER EXISTS. The
+ * comment said "matching kernel.zl's dock_y()"; kernel.zl calls that "the OLD
+ * dock_y()" in the one place it still names it, because the dock became the
+ * 46 dp ZD_FOOT_H band. So the toast was being held 26 dp clear of a piece of
+ * furniture with different dimensions - a gap that is not a margin, sized by a
+ * number whose justification had been deleted out from under it.
+ *
+ * This was the FIFTH hardcoded copy of a reserve in this desktop. The rail, the
+ * snap and the chrome were the first three, toasttest.c the fourth. Each one
+ * looked right on its own and only disagreed with the others. RESERVE_BOT(t) is
+ * the single place that answers this now. */
 static void toast_rect(int *x, int *y, int *w, int *h)
 {
     const struct ui_theme *t = ui_theme();
-    notify_rect((int)fb_pxw(), (int)fb_pxh(), 72 * t->scale, t->scale, x, y, w, h);
+    notify_rect((int)fb_pxw(), (int)fb_pxh(), RESERVE_BOT(t), t->scale, x, y, w, h);
 }
 
 /* How far a toast still has to RISE, in device pixels.
@@ -3719,23 +3749,6 @@ static int in_title_control(int win, int which, int x, int y)
 static int in_closebox(int win, int x, int y)
 { return in_title_control(win, TITLE_CLOSE, x, y); }
 
-/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
- *
- * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
- * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
- * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
- * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
- * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
- * maximised window was drawn from x = 0 straight over the launcher.
- *
- * Numbers that describe the shell belong to the theme, which is where the
- * shell reads them from too; two copies of 48 in two files is how the first
- * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
- * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
- * scaled by the same q8 as everything else here. */
-#define RESERVE_TOP(t)   ((t)->strip_h)
-#define RESERVE_BOT(t)   ((t)->foot_h)
-#define RESERVE_LEFT(t)  ((t)->rail_w)
 
 /* Show, move or clear the drag preview. Called on every pointer motion during
  * a frame drag, so it does nothing at all when the zone has not changed - the

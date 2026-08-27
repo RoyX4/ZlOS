@@ -124,20 +124,75 @@ static int widest(void)
     return max;
 }
 
-/* 2. the segments of the target line, in the order drawn, concatenate back to
- *    it - i.e. the wrap moved the tail down rather than dropping it */
-static int reassembles(const char *want)
+/* 2. the segments of the target line carry ALL of its content, in order - i.e.
+ *    the wrap moved the tail down rather than dropping it.
+ *
+ *    THIS USED TO CONCATENATE BYTE FOR BYTE and that question stopped being the
+ *    right one when the wrap started breaking on words: a word wrap CONSUMES the
+ *    space it breaks on, so the exact original can no longer come back. Spaces
+ *    are therefore ignored on both sides and the check is that no visible
+ *    character was lost, gained or reordered. */
+static int content_kept(const char *want)
 {
-    char got[512] = "";
-    for (int i = 0; i < n_drawn; i++) {
-        /* a segment belongs to `want` if want starts with it at the offset we
-         * have accumulated so far */
-        size_t at = strlen(got);
-        size_t n  = strlen(drawn[i].s);
-        if (n && at + n <= strlen(want) && strncmp(want + at, drawn[i].s, n) == 0)
-            strcat(got, drawn[i].s);
+    char got[512] = "", exp[512] = "";
+    int g = 0, e = 0;
+    for (int i = 0; i < n_drawn && g < 500; i++) {
+        const char *t = drawn[i].s;
+        /* only segments that occur in `want` belong to it - the banner rows and
+         * the prompt are drawn too */
+        if (!strstr(want, t) || !*t) continue;
+        for (int k = 0; t[k] && g < 500; k++) if (t[k] != ' ') got[g++] = t[k];
     }
-    return strcmp(got, want) == 0;
+    for (int k = 0; want[k] && e < 500; k++) if (want[k] != ' ') exp[e++] = want[k];
+    got[g] = 0; exp[e] = 0;
+    return strcmp(got, exp) == 0;
+}
+
+/* 3. NO BREAK FALLS INSIDE A WORD. This is the defect the fix is about: the old
+ *    chop chopped at exactly `cols`, so `help` came out with "back", "l" and
+ *    "LPSS I2C)" stranded at the left margin - three fragments of three
+ *    different descriptions, each shaped exactly like a command with no help
+ *    text next to it.
+ *
+ *    For each consecutive pair of segments of the target, the character that
+ *    FOLLOWS the first one in the original must be a space. A segment holding no
+ *    space at all is exempt: it is a single token longer than the row, it has
+ *    nothing to break on, and hard-breaking it is the only alternative to
+ *    drawing past the client edge. */
+static int no_word_split(const char *want)
+{
+    int cursor = 0, prev_end = -1;
+    for (int i = 0; i < n_drawn; i++) {
+        const char *seg = drawn[i].s;
+        if (!*seg) continue;
+        const char *hit = strstr(want + cursor, seg);
+        if (!hit) continue;
+        int st = (int)(hit - want), en = st + (int)strlen(seg);
+        if (prev_end >= 0 && want[prev_end] != ' ') {
+            const char *pv = drawn[i - 1].s;
+            if (strchr(pv, ' ')) return 0;       /* it COULD have broken - fail */
+        }
+        prev_end = en; cursor = en;
+    }
+    return 1;
+}
+
+/* 4. a wrapped table CONTINUES UNDER ITS DESCRIPTION, not at the left margin.
+ *    The expected column is read out of the data - where "I2C-HID" actually
+ *    starts in the line - so this does not just restate hang_indent's own
+ *    arithmetic back to itself. */
+static int hangs_under_description(const char *want, int term_x, int cell_w)
+{
+    const char *desc = strstr(want, "I2C-HID");
+    if (!desc) return 0;
+    int want_x = term_x + (int)(desc - want) * cell_w;
+    int seen = 0;
+    for (int i = 0; i < n_drawn; i++) {
+        if (!*drawn[i].s || !strstr(want, drawn[i].s)) continue;
+        seen++;
+        if (seen > 1 && drawn[i].x != want_x) return 0;   /* a continuation row */
+    }
+    return seen > 1;
 }
 
 int main(void)
@@ -222,8 +277,11 @@ int main(void)
     printf("\n");
 
     ok(widest() <= COLS, "no segment is wider than the window");
-    ok(reassembles(LONGEST), "the long line reassembles from its segments - "
-                             "wrapped, not truncated");
+    ok(content_kept(LONGEST), "the long line keeps all its content - wrapped, "
+                              "not truncated");
+    ok(no_word_split(LONGEST), "the break falls between words, not inside one");
+    ok(hangs_under_description(LONGEST, TERM_X, CELL_W),
+       "the continuation row hangs under the description, not at the margin");
 
     int prompt_y = TERM_Y + TERM_H - CELL_H;
 
@@ -321,18 +379,45 @@ int main(void)
     n_drawn = 0;
     fb_text_aa(TERM_X, TERM_Y, LONGEST, 0x96A5C3);
     int ctl_wide = (widest() <= COLS);
-    int ctl_reas = reassembles(LONGEST);
-    printf("\n  negative control - the pre-fix emission, one %d-column call:\n",
+    int ctl_keep = content_kept(LONGEST);
+    printf("\n  control A - the pre-WRAP emission, one %d-column call:\n",
            (int)strlen(LONGEST));
-    printf("      width check  %s\n", ctl_wide ? "PASSED (bad)" : "rejected it");
-    printf("      reassembly   %s\n", ctl_reas ? "PASSED" : "rejected it");
-    ok(!ctl_wide, "the width check REJECTS the pre-fix emission - it can fail");
-    /* reassembly deliberately still passes: one segment equal to the whole line
-     * does concatenate back to it. That is why the width check is the one that
-     * catches this, and why both are asserted rather than just the reassembly -
-     * on its own it would have been green against the bug. */
-    ok(ctl_reas, "...while reassembly alone would NOT have - it is green on the "
-                 "pre-fix emission, so it is not sufficient by itself");
+    printf("      width check    %s\n", ctl_wide ? "PASSED (bad)" : "rejected it");
+    printf("      content check  %s\n", ctl_keep ? "PASSED" : "rejected it");
+    ok(!ctl_wide, "the width check REJECTS the over-wide emission - it can fail");
+    /* content deliberately still passes: one segment equal to the whole line
+     * does carry all of it. That is why the width check is the one that catches
+     * this, and why both are asserted rather than just content - on its own it
+     * would have been green against the bug. */
+    ok(ctl_keep, "...while the content check alone would NOT have - it is green "
+                 "on the over-wide emission, so it is not sufficient by itself");
+
+    /* ---- CONTROL B - the emission this commit actually replaced --------------
+     * The width check was already green on the character chop: it never drew
+     * past the edge, it just broke words to stay inside. So the two checks above
+     * are BOTH blind to the defect being fixed here, and a checker that cannot
+     * see the bug it was written for is decoration. Rebuild the chop by hand -
+     * 77 columns, then the remaining 5 at the left margin - and require the two
+     * new checks to reject it. */
+    n_drawn = 0;
+    {
+        char a[128];
+        int cut = COLS;
+        snprintf(a, sizeof a, "%.*s", cut, LONGEST);
+        fb_text_aa(TERM_X, TERM_Y, a, 0x96A5C3);
+        fb_text_aa(TERM_X, TERM_Y + CELL_H, LONGEST + cut, 0x96A5C3);
+    }
+    int ctlb_wide  = (widest() <= COLS);
+    int ctlb_split = no_word_split(LONGEST);
+    int ctlb_hang  = hangs_under_description(LONGEST, TERM_X, CELL_W);
+    printf("\n  control B - the CHARACTER CHOP this commit replaced, %d + %d cols:\n",
+           COLS, (int)strlen(LONGEST) - COLS);
+    printf("      width check    %s\n", ctlb_wide ? "PASSED - blind to it" : "rejected it");
+    printf("      word check     %s\n", ctlb_split ? "PASSED (bad)" : "rejected it");
+    printf("      indent check   %s\n", ctlb_hang ? "PASSED (bad)" : "rejected it");
+    ok(ctlb_wide, "the chop is INSIDE the window - so width alone never saw this bug");
+    ok(!ctlb_split, "the word check REJECTS the character chop - it can fail");
+    ok(!ctlb_hang, "the indent check REJECTS the margin-anchored continuation");
 
     printf("\n%s (%d failure%s)\n", fails ? "FAILED" : "all passed",
            fails, fails == 1 ? "" : "s");

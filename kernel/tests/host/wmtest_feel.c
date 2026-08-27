@@ -788,17 +788,32 @@ int main(void)
     pointer(dx0 + 60, tby, 1);
     pointer(dx0 + 60, tby, 0);
     int mx, my, mw, mh;
-    int work_y = UI_DP(th, 48);
-    int work_h = H - work_y - UI_DP(th, 72);
+    /* THE WORK AREA, FROM THE THEME. These were UI_DP(th, 48) and
+     * UI_DP(th, 72) - the top bar and the dock, two pieces of furniture the
+     * shell no longer has. It has a 30 dp raster strip, a 46 dp foot, and a
+     * 170 dp REGISTER RAIL down the left that nothing here accounted for at
+     * all: every expectation below said gx == 0 and gw == W, so a window
+     * correctly snapped beside the rail read as a failure.
+     *
+     * Nine checks, in two clusters that look unrelated - double-click maximise
+     * and Super+arrow snapping - and one cause under both. */
+    int work_x = ui_metric(UI_METRIC_RAIL_W);
+    int work_y = ui_metric(UI_METRIC_STRIP_H);
+    int work_w = W - work_x;
+    int work_h = H - work_y - ui_metric(UI_METRIC_FOOT_H);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("double-clicking the title bar MAXIMISES",
-       mx == 0 && my == work_y && mw == W && mh == work_h);
+       mx == work_x && my == work_y && mw == work_w && mh == work_h);
 
     /* ...and again restores the exact rect it had */
-    pointer(60, work_y + th->title_h / 2, 1);
-    pointer(60, work_y + th->title_h / 2, 0);
-    pointer(60, work_y + th->title_h / 2, 1);
-    pointer(60, work_y + th->title_h / 2, 0);
+    /* x = work_x + 60, NOT x = 60. A MAXIMISED window starts at the rail's
+     * right edge now, so a click 60 px from the SCREEN's left edge lands on the
+     * register rail and never reaches the title bar at all. Every one of these
+     * pairs is meant to hit the title bar of an already-maximised window. */
+    pointer(work_x + 60, work_y + th->title_h / 2, 1);
+    pointer(work_x + 60, work_y + th->title_h / 2, 0);
+    pointer(work_x + 60, work_y + th->title_h / 2, 1);
+    pointer(work_x + 60, work_y + th->title_h / 2, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("...and doing it again RESTORES the exact rect",
        mx == dx0 && my == dy0 && mw == dw0 && mh == dh0);
@@ -842,9 +857,9 @@ int main(void)
     pointer(dx0 + 60, tby, 1); pointer(dx0 + 60, tby, 0);
     wm_geometry(dw, &mx, &my, &mw, &mh);
     ok("a TRIPLE click maximises once, it does not toggle twice",
-       mx == 0 && my == work_y && mw == W && mh == work_h);
-    pointer(60, work_y + th->title_h / 2, 1); pointer(60, work_y + th->title_h / 2, 0);
-    pointer(60, work_y + th->title_h / 2, 1); pointer(60, work_y + th->title_h / 2, 0);
+       mx == work_x && my == work_y && mw == work_w && mh == work_h);
+    pointer(work_x + 60, work_y + th->title_h / 2, 1); pointer(work_x + 60, work_y + th->title_h / 2, 0);
+    pointer(work_x + 60, work_y + th->title_h / 2, 1); pointer(work_x + 60, work_y + th->title_h / 2, 0);
 
     /* the app is told, as a bit in the button mask */
     wm_geometry(dw, &dx0, &dy0, &dw0, &dh0);
@@ -980,20 +995,20 @@ int main(void)
     int gx, gy, gw, gh;
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("Super+Left snaps to the left half",
-       gx == 0 && gy == work_y && gw == W / 2 && gh == work_h);
+       gx == work_x && gy == work_y && gw == work_w / 2 && gh == work_h);
 
     send_key(0x111, MOD_SUPER);                       /* Super+Right */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("Super+Right from the left half passes through maximised",
-       gx == 0 && gy == work_y && gw == W && gh == work_h);
+       gx == work_x && gy == work_y && gw == work_w && gh == work_h);
     send_key(0x111, MOD_SUPER);                       /* Super+Right again */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
     ok("...and the next Right reaches the right half",
-       gx == W / 2 && gy == work_y && gw == W - W / 2 && gh == work_h);
+       gx == work_x + work_w / 2 && gy == work_y && gw == work_w - work_w / 2 && gh == work_h);
 
     send_key(0x112, MOD_SUPER);                       /* Super+Up */
     wm_geometry(sn, &gx, &gy, &gw, &gh);
-    ok("Super+Up maximises", gx == 0 && gy == work_y && gw == W && gh == work_h);
+    ok("Super+Up maximises", gx == work_x && gy == work_y && gw == work_w && gh == work_h);
 
     /* THE SAVED RECT MUST SURVIVE THREE SNAPS. Capturing it on every snap
      * instead of only the first is the bug every naive version has: restore

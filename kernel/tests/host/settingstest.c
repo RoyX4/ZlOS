@@ -159,6 +159,7 @@ int  fb_cell_h(void){ return (16 * ui_metric(UI_METRIC_SCALE_Q8) + 128) / 256; }
 void fb_clip(int x,int y,int w,int h){(void)x;(void)y;(void)w;(void)h;}
 void fb_clip_none(void){}
 void fb_clip_get(int*a,int*b,int*c,int*d){ if(a)*a=0; if(b)*b=0; if(c)*c=1280; if(d)*d=800; }
+
 void input_set_speed(int p){ (void)p; }
 void input_set_accel(int o){ (void)o; }
 void wm_set_anim(int o){ (void)o; }

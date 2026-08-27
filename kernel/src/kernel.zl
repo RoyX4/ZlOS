@@ -6134,32 +6134,56 @@ fn files_draw(ax, ay, aw, ah) {
     fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     files_u = ui()
     files_rh = FILES_ROW * files_u
-
-    # THE APP NO LONGER DRAWS ITS OWN NAME. The chrome prints "02 FILES rd0"
+    # THE APP NO LONGER PRINTS ITS OWN NAME. The chrome writes "02 FILES rd0"
     # across the title bar - register number, name in tracked caps, volume as
     # the subtitle - so a second "Files" 8 dp inside the client was the same
-    # word twice, 30 dp apart, in two different sizes. It read as a heading for
-    # the list rather than as a duplicate, which is why it survived the parity
-    # pass; the chrome only grew the register and subtitle after it.
+    # word twice, 30 dp apart, in two sizes and two weights. It survived every
+    # earlier pass because it read as a heading for the list; it only became a
+    # duplicate when the title bar grew the register and the subtitle.
     if fs_ok() == 0 {
-        # THE EMPTY STATE IS A STATE, NOT A GAP. It used to be two stranded
-        # labels adrift in a full-size plate. A window that has nothing to show
-        # still has to say WHAT it has nothing of, WHY, and what to do - and it
-        # has to look like the rest of the system while doing it, which here
-        # means a column head, a rule, and the same LABEL register every other
-        # table uses.
+        # THE EMPTY STATE IS A STATE, NOT A GAP. This was two stranded labels
+        # adrift in a full-size plate. A window with nothing to show still has
+        # to say what it has nothing OF, why, and what acts on it - and it has
+        # to look like the rest of the system while doing it, which here means
+        # the same tracked LABEL column head, the same 1px ZD_CUT rule and the
+        # same caption register every other table uses.
+        #
+        # The cause is stated precisely. QEMU does attach an NVMe image and a
+        # USB stick, so fs_ok() == 0 means the volume is UNFORMATTED, not
+        # absent, and the old copy did not distinguish those.
         files_ex = ax + 12 * files_u
-        ui_caps(files_ex, ay + 10 * files_u, "VOLUME", theme(TH_TEXT_2), T_CAPTION)
-        fill_rgb(ax, ay + 26 * files_u, aw, 1, theme(TH_CUT))
-        label(files_ex, ay + 38 * files_u, "no zlfs volume is mounted", theme(TH_TEXT_HI), T_BODY, W_REG)
-        label(files_ex, ay + 62 * files_u, "the disk is present and unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        ui_caps(files_ex, ay + 92 * files_u, "R", theme(TH_TEXT_2), T_CAPTION)
-        label(files_ex + 24 * files_u, ay + 92 * files_u, "retry the mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        ui_caps(files_ex, ay + 112 * files_u, "SHIFT F", theme(TH_TEXT_2), T_CAPTION)
-        label(files_ex + 78 * files_u, ay + 112 * files_u, "format - twice to confirm", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # IT IS PLACED, NOT DROPPED AT THE TOP. The redone empty state was
+        # correct copy in the wrong position: a 120 dp block pinned to the top
+        # of a 550 dp client, with 430 dp of nothing under it. Four lines
+        # stranded against a ceiling read as a window that failed to finish
+        # loading, which is the opposite of what an empty state is for.
+        #
+        # OPTICALLY centred, at 45% rather than 50%. A block on the true
+        # vertical centre reads as sitting low, because the eye takes the
+        # centre of a field to be above its midpoint - the same reason a
+        # framed picture is hung high. The 5% is the standard correction.
+        files_eh = 120 * files_u
+        files_ey = ay + (ah - files_eh) * 45 / 100
+        if files_ey < ay + 10 * files_u { files_ey = ay + 10 * files_u }
+        # BOUNDED MEASURE. The rule used to span the full client - a 1 px hair
+        # 940 dp wide over four short lines, joined to nothing at its right end.
+        # A rule is only a rule if it is the width of what it heads.
+        files_ew = aw - 24 * files_u
+        if files_ew > 400 * files_u { files_ew = 400 * files_u }
+        ui_caps(files_ex, files_ey, "VOLUME", theme(TH_TEXT_2), T_CAPTION)
+        fill_rgb(files_ex, files_ey + 16 * files_u, files_ew, 1, theme(TH_CUT))
+        label(files_ex, files_ey + 28 * files_u, "no zlfs volume is mounted", theme(TH_TEXT_HI), T_BODY, W_REG)
+        label(files_ex, files_ey + 52 * files_u, "the disk is present and unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        ui_caps(files_ex, files_ey + 82 * files_u, "R", theme(TH_TEXT_2), T_CAPTION)
+        label(files_ex + 78 * files_u, files_ey + 82 * files_u, "retry the mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        ui_caps(files_ex, files_ey + 102 * files_u, "SHIFT F", theme(TH_TEXT_2), T_CAPTION)
+        label(files_ex + 78 * files_u, files_ey + 102 * files_u, "format - twice to confirm", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # ONE key column, so the two descriptions align. They were indented to
+        # their own key's width - 24 dp and 78 dp - which set the two hints on
+        # two different left edges and made the pair read as unrelated.
         if files_format == 1 {
-            rrect(files_ex, ay + 136 * files_u, aw - 24 * files_u, 24 * files_u, 2 * files_u, theme(TH_DANGER))
-            label(files_ex + 8 * files_u, ay + 141 * files_u, "SHIFT F again ERASES this disk", theme(TH_INK_ON), T_CAPTION, W_BOLD)
+            rrect(files_ex, files_ey + 126 * files_u, files_ew, 24 * files_u, 2 * files_u, theme(TH_DANGER))
+            label(files_ex + 8 * files_u, files_ey + 131 * files_u, "SHIFT F again ERASES this disk", theme(TH_INK_ON), T_CAPTION, W_BOLD)
         }
         return 0
     }

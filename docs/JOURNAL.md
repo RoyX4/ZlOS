@@ -36,6 +36,95 @@ the part that makes a change legible later, and the part nobody writes down.
 
 </details>
 
+## 2026-08-27 — fix(gates): a host test that stopped LINKING stopped RUNNING, and nothing said so (116b88a)
+
+`design/presswork` · 9 files changed, 300 insertions(+), 46 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>9 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/tests/host/run-all.sh`
+- `kernel/tests/host/settingstest.c`
+- `kernel/tests/host/toasttest.c`
+- `kernel/tests/host/wmtest.c`
+- `kernel/tests/host/wmtest_feel.c`
+
+</details>
+
+## 2026-08-27 — fix(term): break the shell's wrap on words, and hang the continuation (7f42013)
+
+`design/presswork` · 8 files changed, 311 insertions(+), 51 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `docs/evidence/truncation-incident-2026-08-27.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/kernel.zl`
+- `kernel/tests/host/termwrap.c`
+
+</details>
+
+## 2026-08-27 — fix(files): stop drawing the window's own name, and design the empty state (d1586a3)
+
+`design/presswork` · 5 files changed, 36 insertions(+), 13 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>5 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-27 — docs: fix a dangling link and refresh the checks capsule (b49158f)
+
+`design/presswork` · 3 files changed, 67 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/design/desktop-deciding.md`
+- `kernel/tools/checks/README.md`
+
+</details>
+
 ## 2026-08-27 — docs: record pull request status fix (a27cd74)
 
 `main` · 1 file changed, 23 insertions(+)
