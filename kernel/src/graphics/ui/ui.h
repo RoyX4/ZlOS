@@ -275,6 +275,16 @@ typedef int  (*app_tick_fn)(int app, int win);
  * overlapped, and never in the z-order. Only the start menu becomes a real
  * window, because it has to appear on top of things. */
 typedef void (*desk_draw_fn)(int x, int y, int w, int h);
+/* THE OVERLAY LAYER - drawn after every window and after the toast, clipped to
+ * the damage rectangle like everything else. It is what a MODAL is made of: the
+ * prototype has five surfaces that live above the whole desktop rather than in
+ * a window - activities, the command palette, the context and window menus, and
+ * the lock sheet - and none of them is a window, because a window would appear
+ * in the register, take focus, and be listed by the thing it is drawn over.
+ *
+ * The rectangle passed is the DAMAGE rect, not the screen: an overlay that
+ * ignores it repaints the whole screen for a one-row menu highlight. */
+typedef void (*overlay_draw_fn)(int x0, int y0, int x1, int y1);
 
 /* ...and what happens when the pointer is pressed on it. The dock is drawn by
  * desk_draw and is not in the z-order, so wm_at() finds nothing there and the
@@ -297,6 +307,11 @@ typedef void (*desk_key_fn)(int code, int mods);
 
 void wm_init(void);
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk);
+/* Register the modal layer. Separate from wm_hooks for the reason snap_rect_lr
+ * is separate from snap_rect: the existing callers mean "the four layers this
+ * desktop had", and widening the signature would edit each of them to pass 0
+ * and prove nothing. */
+void wm_overlay(overlay_draw_fn f);
 void wm_desk_click(desk_click_fn f);
 void wm_desk_key(desk_key_fn f);
 

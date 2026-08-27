@@ -708,9 +708,9 @@ fn draw_hhmm(cx, cy, cell, role, col) {
 #      rail_slot_at walk that tail in the same order for the same reason
 #      draw_tasklist and task_slot_at had to: a hit test that counts a different
 #      set of rows than the draw does hands the click to the row next door.
-REG_N = 11
-REG_CATALOG = 11                   # the row past the register: "ALL APPS"
-REG_ROWS = 12                      # fixed rows drawn, register + catalog
+REG_N = 14                         # the prototype's fourteen, slot for slot
+REG_CATALOG = 14                   # the row past the register: "ALL APPS"
+REG_ROWS = 15                      # fixed rows drawn, register + catalog
 
 # THE NAMES ARE LOWERCASE, which is a correction rather than a preference. The
 # prototype's rows are `01 [icon] terminal 1119`: LABEL caps carry the NUMBER
@@ -739,18 +739,37 @@ REG_ROWS = 12                      # fixed rows drawn, register + catalog
 # steps there, and says why), so at the size this ships at the two are
 # indistinguishable and T_CAPTION is the one that keeps its promise on a panel
 # where they diverge.
+# THE REGISTER IS THE PROTOTYPE'S, SLOT FOR SLOT. It used to be twelve rows of
+# whatever this file had reached for first - browser, paint, snake, cube, about,
+# run - against the prototype's fourteen, so the one surface a person reads
+# before anything else disagreed with the design in eleven of twelve rows.
+#
+# Every one of the fourteen ALREADY EXISTS in this OS. The registry carries 63
+# named implementations and the prototype names fourteen; thirteen matched by
+# name (Kernel Log, Hex Viewer, Calculator, Network, Clocks & Timers, Disk
+# Usage, System, Type ...) and the fourteenth, its `13 registers  pipe A`, is
+# this tree's System Info. So this was never missing apps. It was a table
+# pointing at the wrong ones.
+#
+# The catalogue row survives as row 15. The prototype had fourteen apps and
+# needed no way to reach a fifteenth; this OS has forty-nine more, and dropping
+# the row that reaches them to match a mock would be deleting a capability, not
+# matching a design.
 fn rail_name(slot) {
     if slot == 0 { return "terminal" }
     if slot == 1 { return "files" }
     if slot == 2 { return "monitor" }
-    if slot == 3 { return "browser" }
-    if slot == 4 { return "editor" }
-    if slot == 5 { return "paint" }
-    if slot == 6 { return "snake" }
-    if slot == 7 { return "cube" }
-    if slot == 8 { return "about" }
-    if slot == 9 { return "settings" }
-    if slot == 10 { return "run" }
+    if slot == 3 { return "editor" }
+    if slot == 4 { return "kernel log" }
+    if slot == 5 { return "hex" }
+    if slot == 6 { return "calculator" }
+    if slot == 7 { return "network" }
+    if slot == 8 { return "clocks" }
+    if slot == 9 { return "system" }
+    if slot == 10 { return "settings" }
+    if slot == 11 { return "disk usage" }
+    if slot == 12 { return "registers" }
+    if slot == 13 { return "type" }
     return "all apps"
 }
 
@@ -772,14 +791,19 @@ fn rail_sub(slot) {
     if slot == 0 { return "zlsh" }
     if slot == 1 { return "rd0" }
     if slot == 2 { return "1 Hz" }
-    if slot == 3 { return "http" }
-    if slot == 4 { return "buf" }
-    if slot == 5 { return "rgba" }
-    if slot == 6 { return "20x15" }
-    if slot == 7 { return "wire" }
-    if slot == 8 { return "0.3" }
-    if slot == 9 { return "design.h" }
-    if slot == 10 { return "exec" }
+    if slot == 3 { return "fb.c" }
+    if slot == 4 { return "dmesg" }
+    if slot == 5 { return "rd0 s0" }
+    if slot == 6 { return "int64" }
+    if slot == 7 { return "enp0s31f6" }
+    if slot == 8 { return "monotonic" }
+    # "0.3" is the VERSION, and check-version.py checks it against version.h
+    # along with every other version literal in this file.
+    if slot == 9 { return "0.3" }
+    if slot == 10 { return "design.h" }
+    if slot == 11 { return "zlfs" }
+    if slot == 12 { return "pipe A" }
+    if slot == 13 { return "DejaVu" }
     return "reg"
 }
 
@@ -810,14 +834,17 @@ fn rail_icon(slot) {
     if slot == 0 { return 0 }        # terminal
     if slot == 1 { return 7 }        # files
     if slot == 2 { return 4 }        # monitor
-    if slot == 3 { return 20 }       # browser
-    if slot == 4 { return 3 }        # editor
-    if slot == 5 { return 2 }        # paint
-    if slot == 6 { return 1 }        # snake
-    if slot == 7 { return 6 }        # cube3d
-    if slot == 8 { return 5 }        # about
-    if slot == 9 { return 8 }        # settings
-    if slot == 10 { return 42 }      # play - the RUN row launches a command
+    if slot == 3 { return 3 }        # editor
+    if slot == 4 { return 44 }       # log
+    if slot == 5 { return 46 }       # hex
+    if slot == 6 { return 49 }       # calc
+    if slot == 7 { return 17 }       # network
+    if slot == 8 { return 16 }       # clock
+    if slot == 9 { return 55 }       # chip - the SYSTEM pane
+    if slot == 10 { return 8 }       # settings
+    if slot == 11 { return 51 }      # disk
+    if slot == 12 { return 53 }      # binary - the REGISTERS pane
+    if slot == 13 { return 50 }      # font - the TYPE pane
     return 19                        # grid - ALL APPS
 }
 
@@ -1574,18 +1601,24 @@ fn rail_tail_win(ri) {
 # composition opens Terminal, Files and Monitor, and a register whose first
 # three rows are not the three windows on screen is a register that does not
 # refer to the machine.
+# The registry id IS the app id - APP_EDIT is 12 and the manifest's Text Editor
+# is entry 12 - so the nine registry apps below are addressed by their manifest
+# number directly. app_draw's `id >= REG_FIRST` fall-through already routes them.
 fn rail_app(slot) {
     if slot == 0 { return APP_SHELL }
     if slot == 1 { return APP_FILES }
     if slot == 2 { return APP_MONITOR }
-    if slot == 3 { return APP_BROWSER }
-    if slot == 4 { return APP_EDIT }
-    if slot == 5 { return APP_PAINT }
-    if slot == 6 { return APP_SNAKE }
-    if slot == 7 { return APP_CUBE }
-    if slot == 8 { return APP_ABOUT }
-    if slot == 9 { return APP_SETTINGS }
-    if slot == 10 { return APP_RUN }
+    if slot == 3 { return APP_EDIT }
+    if slot == 4 { return 40 }        # Kernel Log
+    if slot == 5 { return 42 }        # Hex Viewer
+    if slot == 6 { return 33 }        # Calculator
+    if slot == 7 { return 50 }        # Network
+    if slot == 8 { return 31 }        # Clocks & Timers
+    if slot == 9 { return APP_SYSPANE }
+    if slot == 10 { return APP_SETTINGS }
+    if slot == 11 { return 46 }       # Disk Usage
+    if slot == 12 { return 32 }       # System Info - the prototype's 13 registers
+    if slot == 13 { return APP_TYPEPANE }
     return 0 - 1
 }
 
@@ -1613,11 +1646,10 @@ fn rail_running(slot) {
     return wm_open_p(rwn)
 }
 
-fn rail_cmd(slot) {
-    if slot == 4 { return 105 }  # editor
-    if slot == 5 { return 100 }  # paint
-    return 0
-}
+# rail_cmd() was here: a slot-keyed table mapping 4 -> editor and 5 -> paint.
+# Deleted rather than updated. It was the fifth table keyed by register position
+# and the only one that was ever wrong, because the other four are read on every
+# frame and this one only on a click.
 
 # ---- THE RASTER STRIP --------------------------------------------------------
 # Datum's instrument, with graphite's re-clocking kept, and the re-clocking is
@@ -4539,6 +4571,20 @@ fn run_command(cmd, arg) {
     # version of any of them - they were all full-screen graphical loops.
     if cmd == 118 { return needs_wm("the 3D cube") }
     if cmd == 119 { return wm_session() }    # w - the real compositor (wm.c)
+    # THE COMMAND PALETTE, and it needs the compositor: an overlay is drawn by
+    # the compositor's paint walk, so in text mode there is nothing to draw it
+    # onto. Saying so is better than opening a modal nobody can see.
+    if cmd == 203 {
+        if wm_run() == 0 { return needs_wm("the command palette") }
+        ov_mode = OV_PALETTE
+        ov_sel = 0
+        # THE WHOLE SCREEN, because a modal scrims all of it. wm_damage takes
+        # x,y,w,h - there is no wm_damage_all, and inventing one is a runtime
+        # halt in zl rather than a compile error, which is how five invented
+        # names once got as far as a boot.
+        wm_damage(0, 0, px_w(), px_h())
+        return 0
+    }
     # x, a, d, i: apps-in-windows turned these four full-screen demos into
     # WINDOWED apps and deleted the full-screen bodies, so the old entry points
     # have nothing left to call. They open windows now, and refuse the same way
@@ -8730,6 +8776,149 @@ fn app_tick(id, win) {
 # So the furniture is drawn only when the rectangle it is being asked about
 # actually overlaps it. That is not an optimisation of the drawing; it is
 # noticing that desk_draw was handed a rectangle and ignored it.
+# ==== THE OVERLAY LAYER =======================================================
+# The prototype has five surfaces that live above the whole desktop rather than
+# inside a window: activities, the command palette, the context and window
+# menus, and the lock sheet. None of them is a window, and that is the point -
+# a window would appear in the register, take focus, and be listed by the very
+# thing it is drawn over.
+#
+# wm.c gained one hook for them (wm_overlay), called after every window AND
+# after the toast, inside the same damage rectangle. Last in, last drawn: a
+# modal a toast can cover is not modal.
+OV_NONE   = 0
+OV_PALETTE = 1
+OV_ACTIVITIES = 2
+OV_MENU   = 3
+OV_LOCK   = 4
+ov_mode = 0
+ov_sel  = 0                        # the highlighted row, per surface
+
+# THE SCRIM IS A SHADE, NOT A FILL. `shade` reads each pixel back and scales
+# it, so what is under the modal stays legible as shape while losing its claim
+# on attention. A flat fill at any alpha would need the blend this drawing path
+# does not have, and a solid panel would say "the desktop is gone" rather than
+# "the desktop is behind this".
+#
+# 5/8 is the prototype's own `.scrim { background: rgba(0,0,0,.38) }` - 1-0.38
+# is 0.62, and 5/8 is 0.625. The nearest eighth, because this is integer maths
+# and an eighth is exact in binary.
+OV_SCRIM_NUM = 5
+OV_SCRIM_DEN = 8
+
+fn ov_active() { if ov_mode == OV_NONE { return 0 }  return 1 }
+
+# THE SHEET a modal sits on: centred, bounded, and never wider than its measure.
+OV_SHEET_W = 520                   # design units, the prototype's .sheet
+OV_SHEET_MAXH = 420
+fn ov_sheet_x() { return (px_w() - OV_SHEET_W * ui()) / 2 }
+fn ov_sheet_y() { return (px_h() - OV_SHEET_MAXH * ui()) / 3 }
+
+# ---- the command palette -----------------------------------------------------
+# The prototype's CMDS table is fourteen rows of `label, kind, target`. This is
+# the same list, and the kinds are the prototype's own words.
+OV_PAL_N = 10
+fn ov_pal_label(i) {
+    if i == 0 { return "open 03 monitor" }
+    if i == 1 { return "open 02 files" }
+    if i == 2 { return "open 11 settings" }
+    if i == 3 { return "open 05 kernel log" }
+    if i == 4 { return "open 13 registers" }
+    if i == 5 { return "zlfs fsck rd0" }
+    if i == 6 { return "dmesg --level warn" }
+    if i == 7 { return "tile onto the module" }
+    if i == 8 { return "workspace 02" }
+    return "lock session"
+}
+fn ov_pal_kind(i) {
+    if i < 5 { return "window" }
+    if i < 7 { return "shell" }
+    if i < 9 { return "wm" }
+    return "session"
+}
+# WHAT EACH ROW ACTUALLY DOES. A palette whose rows are labels and nothing else
+# is a picture of a palette - the same distinction probe-dock.py draws about the
+# dock, and the reason this returns an app id rather than a string.
+fn ov_pal_app(i) {
+    if i == 0 { return APP_MONITOR }
+    if i == 1 { return APP_FILES }
+    if i == 2 { return APP_SETTINGS }
+    if i == 3 { return 40 }
+    if i == 4 { return 32 }
+    return 0 - 1
+}
+
+fn ov_draw_palette(u) {
+    sx = ov_sheet_x()
+    sy = ov_sheet_y()
+    sw = OV_SHEET_W * u
+    rowh = 22 * u
+    sh = 66 * u + OV_PAL_N * rowh + 24 * u
+    # the plate, its struck top edge and its cut groove - the same depth the
+    # rest of the system uses, because a modal is a plate like any other
+    fill_rgb(sx, sy, sw, sh, theme(TH_PANEL))
+    fill_rgb(sx, sy, sw, 1, theme(TH_LIT))
+    fill_rgb(sx, sy + sh - 1, sw, 1, theme(TH_CUT))
+    # the header: "COMMAND  zlsh builtin        N of M"
+    ui_caps(sx + 13 * u, sy + 9 * u, "COMMAND", theme(TH_TEXT_2), T_CAPTION)
+    label(sx + 92 * u, sy + 9 * u, "zlsh builtin", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(sx + sw - 52 * u, sy + 9 * u, OV_PAL_N, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(sx + sw - 34 * u, sy + 9 * u, "of", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(sx + sw - 20 * u, sy + 9 * u, OV_PAL_N, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    fill_rgb(sx, sy + 26 * u, sw, 1, theme(TH_CUT))
+    # the input line: "RUN" and a caret. There is no typed query yet - the row
+    # list is the whole surface - and a fake one would be a picture of an input.
+    ui_caps(sx + 13 * u, sy + 34 * u, "RUN", theme(TH_TEXT_2), T_CAPTION)
+    fill_rgb(sx + 52 * u, sy + 33 * u, 2 * u, cell_h(), theme(TH_ACCENT))
+    fill_rgb(sx, sy + 54 * u, sw, 1, theme(TH_CUT))
+    # the rows
+    pi = 0
+    while pi < OV_PAL_N {
+        ry = sy + 62 * u + pi * rowh
+        if pi == ov_sel {
+            fill_rgb(sx, ry, sw, rowh, theme(TH_PANEL_HI))
+            fill_rgb(sx, ry, focus_bar(), rowh, theme(TH_ACCENT))
+        }
+        label_num(sx + 13 * u, ry + 4 * u, pi + 1, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(sx + 38 * u, ry + 4 * u, ov_pal_label(pi), theme(TH_TEXT_HI), T_BODY, W_REG)
+        ui_caps(sx + sw - 76 * u, ry + 5 * u, ov_pal_kind(pi), theme(TH_TEXT_2), T_CAPTION)
+        pi = pi + 1
+    }
+    # the footer, the prototype's three key hints
+    fy = sy + 62 * u + OV_PAL_N * rowh + 6 * u
+    fill_rgb(sx, fy, sw, 1, theme(TH_CUT))
+    ui_caps(sx + 13 * u, fy + 7 * u, "ENTER", theme(TH_TEXT_2), T_CAPTION)
+    label(sx + 58 * u, fy + 7 * u, "run", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    ui_caps(sx + 96 * u, fy + 7 * u, "UP DOWN", theme(TH_TEXT_2), T_CAPTION)
+    label(sx + 158 * u, fy + 7 * u, "select", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    ui_caps(sx + 208 * u, fy + 7 * u, "ESC", theme(TH_TEXT_2), T_CAPTION)
+    label(sx + 240 * u, fy + 7 * u, "dismiss", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+# THE ONE ENTRY POINT the compositor calls. x0,y0,x1,y1 is the DAMAGE rect, in
+# the same form wm.c's paint walk carries it.
+fn overlay_draw(ox0, oy0, ox1, oy1) {
+    if ov_mode == OV_NONE { return 0 }
+    ou = ui()
+    # the scrim covers the whole screen, clipped to the damage rectangle - a
+    # modal whose scrim stops at the desk leaves the rail at full brightness,
+    # which the prototype's own comment calls out as the bug it had.
+    sx0 = ox0
+    sy0 = oy0
+    sx1 = ox1
+    sy1 = oy1
+    if sx0 < 0 { sx0 = 0 }
+    if sy0 < 0 { sy0 = 0 }
+    if sx1 > px_w() { sx1 = px_w() }
+    if sy1 > px_h() { sy1 = px_h() }
+    if sx1 > sx0 { if sy1 > sy0 {
+        shade(sx0, sy0, sx1 - sx0, sy1 - sy0, OV_SCRIM_NUM, OV_SCRIM_DEN)
+    }}
+    if ov_mode == OV_PALETTE { return ov_draw_palette(ou) }
+    return 0
+}
+
 fn desk_draw(dx, dy, dw, dh) {
     # THE CHROME'S TWO SHELL FACTS, refreshed before anything is painted.
     # wm_set_field tells wm.c where the module grid's origin is, so a window
@@ -9048,12 +9237,27 @@ fn rail_launch(slot) {
     if da == APP_SETTINGS { return reopen_settings() }
     if da == APP_FILES { return reopen_files() }
     if da == APP_RUN { return open_run_window() }
-    dl = rail_cmd(slot)
-    if dl > 0 {
+    # THE EDITOR OPENS THROUGH THE SHELL, and it is keyed off the APP rather
+    # than the slot number. This used to be rail_cmd(slot), a second table that
+    # said "slot 4 is the editor, slot 5 is paint" - and the moment the register
+    # became the prototype's fourteen, slot 4 was the kernel log and slot 5 was
+    # hex, so clicking the log launched the editor. A table keyed by position,
+    # sitting beside four other tables keyed by the same position, is the same
+    # defect this branch spent the day removing: one fact in two places, and the
+    # copy nobody edits wins silently.
+    if da == APP_EDIT {
         raise_shell()
-        run_command(dl, 0)
+        run_command(105, 0)
         wm_damage_win_all()
+        return 0
     }
+    # EVERYTHING ELSE IN THE REGISTER IS A REGISTRY APP, addressed by its
+    # manifest id - the id IS the app number, so no lookup is needed. reg_open
+    # is the click path: it raises the window if the app is already open, and
+    # otherwise opens it WITH focus, which is what a click should do. open_app
+    # would be wrong here; it deliberately restores the previous focus because
+    # the shell calls it mid-command-line.
+    if da > 0 { return reg_open(da) }
     return 0
 }
 
