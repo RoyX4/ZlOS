@@ -20,7 +20,7 @@ Absolute pointer events, because zlOS prefers the usb-tablet when present and
 sending relative events into an absolute device is how probe-drag.py once
 reported a working drag as a no-op.
 """
-import os, subprocess, sys, tempfile, re, time
+import argparse, os, subprocess, sys, tempfile, re, time
 
 PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.abspath(os.path.join(PROBE_DIR, "..", ".."))
@@ -141,7 +141,11 @@ def rail_app_of_slot(slot):
 
 
 def main():
-    build(False)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-build", action="store_true")
+    args = parser.parse_args()
+    if not args.no_build:
+        build(False)
     tmp = tempfile.mkdtemp(prefix="zlos-rail-")
     ser_path, qmp_path = os.path.join(tmp, "ser"), os.path.join(tmp, "qmp")
     proc = subprocess.Popen(qemu_argv(tmp, False, ser_path, qmp_path),

@@ -56,6 +56,8 @@ REQUIRED_SNIPPETS = (
     'run "final canonical ISO"',
     'run "CPU fault capture QEMU"',
     'run "app routes QEMU"',
+    'run "rail register QEMU"',
+    'python3 tools/probes/probe-rail.py --no-build',
     'run "47-app lifecycle QEMU"',
     'run "Run route QEMU"',
     'python3 tools/probes/probe-run.py --no-build',
@@ -168,6 +170,10 @@ def selftest(source: str) -> None:
         ),
         "deleted-final-graph-rebind",
     )
+    expect_failure(
+        source.replace('run "rail register QEMU"', '# removed rail gate', 1),
+        "deleted-rail-gate",
+    )
     expect_failure(source.replace("exit $FAIL", "exit 0", 1), "masked-final-exit")
     expect_failure(
         source.replace(
@@ -180,7 +186,8 @@ def selftest(source: str) -> None:
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
         "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
-        "deleted-final-graph-rebind, masked-final-exit and masked-child-failure"
+        "deleted-final-graph-rebind, deleted-rail-gate, masked-final-exit and "
+        "masked-child-failure"
     )
 
 
