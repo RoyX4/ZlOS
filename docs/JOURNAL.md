@@ -7,6 +7,29 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix: preserve unverified pull request status (ed210af)
+
+`codex/full-program` · 7 files changed, 35 insertions(+), 21 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>7 file(s)</summary>
+
+- `.github/workflows/docs.yml`
+- `TODO.md`
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `kernel/metadata/evidence-registry.json`
+- `kernel/metadata/wrapper-registry.json`
+- `tools/todo.sh`
+
+</details>
+
 ## 2026-08-27 — docs: record whole-tree audit closure (2d7ea8a)
 
 `main` · 1 file changed, 29 insertions(+)
