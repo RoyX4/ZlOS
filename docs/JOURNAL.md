@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — chore: refresh presswork application manifest (57931c2)
+
+`codex/presswork-local-closure` · 2 files changed, 2 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>2 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/metadata/app-manifest.json`
+
+</details>
+
 ## 2026-08-28 — test: record green presswork landing gate (1c9a8a8)
 
 `codex/presswork-close` · 34 files changed, 466 insertions(+), 456 deletions(-)
