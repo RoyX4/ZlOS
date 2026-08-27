@@ -3,7 +3,7 @@
   "result": "PASS_WITH_OPEN_GAPS",
   "source_catalogue_sha256": "646202b87733eaab09a1c81ac39964bca99e7e937ee19bbf7d0da783b29cb57b",
   "feature_map_sha256": "fe170e7242556db051e3cf50f096b5d6e9434307032ede6ea1fe7b2920ca4047",
-  "implementation_evidence_registry_sha256": "aa926f1ba1cc5570f79dd88b98e65102ca5b7f910245d78e8b8a3e227cf0d6cd",
+  "implementation_evidence_registry_sha256": "539c95845bdb1db0524d95874afd5f6282d18a1f05ed8f64e260756e97cfc54e",
   "decision_ledger_sha256": "1d3c57e5dd51ccdd96aa461bb5ccc4f6c99310573eb3aae0a8812cf48ae64f63",
   "release_notes_sha256": "4f057145393b16f5ef1e5eeca4ef5189fb5aaa99dd08670a8133d888e7a7a036",
   "provenance_viewer_sha256": "d16f4dbb474dbbe18a6c5426fc772fb475a63aa865dc500660daff0e6e57c591",
@@ -388,7 +388,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/wrapper-registry.json",
-          "sha256": "5b43a7f6e6156654754f2f90f89adee821f566ddd137384cb8958d4ae4bef20a",
+          "sha256": "c1b15101d7fa5795fe80e6be902e1fdd01d1465bcfaa81e35b2119ae77c7c821",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },
@@ -479,7 +479,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/evidence-registry.json",
-          "sha256": "aa926f1ba1cc5570f79dd88b98e65102ca5b7f910245d78e8b8a3e227cf0d6cd",
+          "sha256": "539c95845bdb1db0524d95874afd5f6282d18a1f05ed8f64e260756e97cfc54e",
           "schema": "zlos.evidence-registry.v1",
           "result": "PASS_CURRENT_INDEX_WITH_MIXED_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }

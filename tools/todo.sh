@@ -154,20 +154,25 @@ fi
 # ---- 6. open PRs ------------------------------------------------------------
 if command -v gh >/dev/null 2>&1; then
     prs=""
-    while IFS=$'\t' read -r number title head oid; do
-        [ -z "$number" ] && continue
-        if [ -n "$oid" ] && git merge-base --is-ancestor "$oid" origin/main 2>/dev/null; then
-            line="- [ ] close #$number administratively — its \`$head\` head is already an ancestor of \`origin/main\`"
-        else
-            line="- [ ] #$number $title  \`$head\`"
-        fi
-        prs="${prs}${prs:+$'\n'}${line}"
-    done < <(timeout 20 gh pr list --limit 20 \
+    if pr_rows=$(timeout 20 gh pr list --limit 20 \
         --json number,title,headRefName,headRefOid \
         --jq '.[] | [.number, .title, .headRefName, .headRefOid] | @tsv' \
-        2>/dev/null || true)
-    if [ -n "$prs" ]; then
-        echo "## Open pull requests"; echo; echo "$prs"; echo
+        2>/dev/null); then
+        while IFS=$'\t' read -r number title head oid; do
+            [ -z "$number" ] && continue
+            if [ -n "$oid" ] && git merge-base --is-ancestor "$oid" origin/main 2>/dev/null; then
+                line="- [ ] close #$number administratively — its \`$head\` head is already an ancestor of \`origin/main\`"
+            else
+                line="- [ ] #$number $title  \`$head\`"
+            fi
+            prs="${prs}${prs:+$'\n'}${line}"
+        done <<< "$pr_rows"
+        if [ -n "$prs" ]; then
+            echo "## Open pull requests"; echo; echo "$prs"; echo
+        fi
+    else
+        echo "## Open pull requests"; echo
+        echo "_unverified — the GitHub query failed; do not infer that no pull requests are open._"; echo
     fi
 fi
 
