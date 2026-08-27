@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — docs: journal for 2c09b16 (2bf82c0)
+
+`design/presswork` · 1 file changed, 19 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-27 — docs: the 64-bit BIOS boot route is broken and no gate watches it (2c09b16)
 
 `design/presswork` · 3 files changed, 119 insertions(+)

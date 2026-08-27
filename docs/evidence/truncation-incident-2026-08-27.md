@@ -27,6 +27,56 @@ obvious candidate and would have meant more damage was coming. `dmesg` shows no
 I/O or filesystem errors in the window. No agent was running at the time. The
 mechanism is not established, so nothing here claims one.
 
+## IT ALSO HIT `.git`, and that was not discovered for five hours
+
+This document originally said the event zeroed "about 125 tracked files". That
+was incomplete. In the **same minute**, 15:47, it also zeroed:
+
+```
+.git/refs/stash                 0 bytes
+.git/logs/refs/stash            0 bytes
+.git/objects/2d/c42231…         0 bytes   } seven loose
+.git/objects/47/f2c673…         0 bytes   } objects, all
+.git/objects/54/c293f8…         0 bytes   } orphaned, all
+.git/objects/78/0350a6…         0 bytes   } at 15:47
+.git/objects/9c/d512ae…         0 bytes   }
+.git/objects/cc/d3ca4b…         0 bytes   }
+.git/objects/eb/472218…         0 bytes   }
+```
+
+Note that this is the SHARED repository - `zl-linux-presswork` is a linked
+worktree, so `.git` here is a file pointing at
+`/home/roy/Documents/repos/zl-linux/.git`. The corruption therefore affected
+every worktree on that repo, including other sessions'.
+
+**How it surfaced: a `git push` that produced no output at all.** Not an error,
+not a rejection - a zero-byte log file. `git fetch` was more forthcoming:
+
+```
+fatal: bad object refs/stash
+error: … did not send all necessary objects
+```
+
+`git fsck` found nine problems and, importantly, **zero broken links** - no
+reachable commit, tree or blob depended on any of the seven objects. They were
+orphans.
+
+**An empty object file is worse than a missing one.** Git finds it, fails to
+mmap it, and errors - instead of falling through to a pack or refetching. So
+seven files containing no bytes at all were enough to break push and fetch for
+the whole repository.
+
+The fix was to move all nine into `.git/quarantine-truncation-2026-08-27/`
+rather than delete them - reversible, though since every one is zero bytes there
+is no data in them to lose. `git fsck` then exits 0 and push and fetch work.
+
+**The lesson is about the shape of the evidence, not the bytes.** The working-tree
+damage was loud: a hundred source files at zero bytes, and a doc-check that went
+red. The `.git` damage was silent for five hours and then presented as a command
+that printed nothing. When a git operation produces NO output where it should
+produce some, suspect the repository, not the network - and run `git fsck`
+before assuming the tree is the only casualty.
+
 ## Recovery
 
 Everything was in git. `6763c0d` - the commit before the damage - was whole, and

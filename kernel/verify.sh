@@ -52,11 +52,15 @@ if [ ! -f "$GOLDEN" ]; then
 fi
 
 MANIFEST_SHA=$(sha256sum metadata/app-manifest.json | awk '{print $1}')
+# Derived, like the three identity fields below it. This was `entries=62` in two
+# places in this file while the kernel printed 64 - the gate and the thing it
+# gates disagreeing about a number both of them could have just looked up.
+MANIFEST_N=$(python3 -c 'import json; print(len(json.load(open("metadata/app-manifest.json"))["entries"]))')
 BUILD_ID=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
 BUILD_HEAD=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
 BUILD_DIRTY=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
 for marker in \
-    "app-manifest: schema=1 entries=62 sha256=$MANIFEST_SHA" \
+    "app-manifest: schema=1 entries=$MANIFEST_N sha256=$MANIFEST_SHA" \
     "build-identity: schema=1 id=$BUILD_ID" \
     "build-source: head=$BUILD_HEAD dirty=$BUILD_DIRTY"; do
     [ "$(grep -Fc "$marker" "$OUT")" -eq 1 ] || {
@@ -66,7 +70,7 @@ for marker in \
 done
 
 sed -E \
-    -e 's/(app-manifest: schema=1 entries=62 sha256=)[0-9a-f]{64}/\1<CURRENT>/' \
+    -e "s/(app-manifest: schema=1 entries=$MANIFEST_N sha256=)[0-9a-f]{64}/\1<CURRENT>/" \
     -e 's/(build-identity: schema=1 id=)[0-9a-f]{64}/\1<CURRENT>/' \
     -e 's/(build-source: head=)[0-9a-f]{40} dirty=[01]/\1<CURRENT>/' \
     "$OUT" > "$NORMALIZED"

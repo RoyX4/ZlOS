@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "c5ed98509bd9e9ccad61708e0ed6775430a41a9a"
+    "head": "2bf82c0ac477214394995cfee2754b3b17f08e41"
   },
-  "identity_sha256": "65ef93c4235a09fd4731661dc53dbc0f58645bf55bc144b6030600d7b936b4c9",
+  "identity_sha256": "de5ead2873f0969c99e8a175f312b2a8a2ef07d6f7094be9504770f90c9d09f3",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -153,7 +153,7 @@
     "kernel/src/web/js.h": "cc66d41d0742f4fa46ca46fac6fe45bfcd340df155b208d77f9823ea8469897d",
     "kernel/src/web/layout.c": "2f53f72060bd232a5d2223bc9f5430e6d0dd2159723ccde28db7030c4581f402",
     "kernel/src/web/layout.h": "e47c0405a97d13b57418c004e18e9c8d6518d8437ba29ba2e7f0735096b27718",
-    "kernel/tools/generators/gen-app-manifest.py": "f4acd93285537593e9ebcc1905dfc00f876ef12782855c20f2009bf3641d13bc",
+    "kernel/tools/generators/gen-app-manifest.py": "29ae2293a3878378f64d08c68311696444e6fc13a5ce2d98b1050c6d808e56ad",
     "kernel/tools/generators/gen-boot-media-ids.py": "6ed01003b30635419ffdafad31a8a3026d2861d14215a20e29f8439b9a8f5eb1",
     "kernel/tools/generators/gen-build-identity.py": "f4f23edded6e87182d6e30f1922b0c749a9e92cb39334f2736284184fe492620",
     "kernel/tools/images/mkdisk.sh": "afe1a1fc7cc781090f0d48b7443725040ec283e6404c9216272ccf2faa57d9ea",
