@@ -1,8 +1,8 @@
 {
   "schema": "zlos.feature-status.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "source_catalogue_sha256": "646202b87733eaab09a1c81ac39964bca99e7e937ee19bbf7d0da783b29cb57b",
-  "feature_map_sha256": "fe170e7242556db051e3cf50f096b5d6e9434307032ede6ea1fe7b2920ca4047",
+  "source_catalogue_sha256": "d549b87987531e449eb3e76c4f87e3d81ef979bd51df6c26b29b13475d9208ee",
+  "feature_map_sha256": "2e9aeb57899da20a073a0bb07f04bfa544013c37b047b3ea77390901a21289bf",
   "implementation_evidence_registry_sha256": "539c95845bdb1db0524d95874afd5f6282d18a1f05ed8f64e260756e97cfc54e",
   "decision_ledger_sha256": "1d3c57e5dd51ccdd96aa461bb5ccc4f6c99310573eb3aae0a8812cf48ae64f63",
   "release_notes_sha256": "4f057145393b16f5ef1e5eeca4ef5189fb5aaa99dd08670a8133d888e7a7a036",
@@ -10,12 +10,12 @@
   "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
   "implementation_tree": {
     "path": ".",
-    "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+    "build_identity": "3bb959e7aada0a9da4e7d18a919c3c6b488723beed90e51035eef236bf3fdf28",
     "generation_git_context": {
-      "branch": "codex/full-program",
-      "dirty": true,
+      "branch": "codex/presswork-close",
+      "dirty": false,
       "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-      "head": "528a21f5f7fe8061b9e86c377d075529a433a558"
+      "head": "3262ef9b8028bfadf3ae8890b8a25a425ed111ed"
     },
     "evidence_ceiling": "build-input generation context, not current checkout or artifact commit attestation"
   },
@@ -95,7 +95,7 @@
         {
           "root": "plan",
           "path": "docs/program/FEATURE-MAP.md",
-          "sha256": "fe170e7242556db051e3cf50f096b5d6e9434307032ede6ea1fe7b2920ca4047",
+          "sha256": "2e9aeb57899da20a073a0bb07f04bfa544013c37b047b3ea77390901a21289bf",
           "schema": null,
           "result": "SOURCE"
         }
@@ -145,7 +145,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 148 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
+      "weakest_evidence": "all 149 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
     },
     {
       "id": "EV-003",
@@ -177,7 +177,7 @@
       ],
       "known_gaps": [
         "0 license files",
-        "148 inputs lack an established redistribution grant"
+        "149 inputs lack an established redistribution grant"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
@@ -354,7 +354,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 148 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"
+      "weakest_evidence": "all 149 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"
     },
     {
       "id": "EV-008",
@@ -437,7 +437,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/app-evidence.json",
-          "sha256": "0ee8160d65d510f1be3d3292cc616200ed4416ff78661a77849b3b59ae301a7d",
+          "sha256": "cded3ce54c4e64395e056a7b1fb423b7f09d6ee2abc0cccf529d181abfd15fee",
           "schema": "zlos.application-evidence-registry.v1",
           "result": null
         }
@@ -513,7 +513,7 @@
         {
           "root": "plan",
           "path": "docs/program/FEATURE-MAP.md",
-          "sha256": "fe170e7242556db051e3cf50f096b5d6e9434307032ede6ea1fe7b2920ca4047",
+          "sha256": "2e9aeb57899da20a073a0bb07f04bfa544013c37b047b3ea77390901a21289bf",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1061,7 +1061,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1110,7 +1110,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1162,7 +1162,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1217,7 +1217,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1232,7 +1232,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "self-contained host viewer projects 9 artifacts, 62 apps, 17 security claims and 11 health areas; it remains static and untrusted as a release attestation"
+      "weakest_evidence": "self-contained host viewer projects the generated application manifest alongside 9 artifacts, 17 security claims and 11 health areas; it remains static and untrusted as a release attestation"
     },
     {
       "id": "BT-001",
@@ -24602,7 +24602,7 @@
   ],
   "generator": {
     "path": "tools/gen_feature_status.py",
-    "sha256": "e6add1ed7d9c35074a4c4c4462f17daf5080db0f904a2097dc20bc48c134b99c"
+    "sha256": "447a34e48e04397d2ab65f8ebf6c687c61bd603f8c27a83a91ee5260ad955bea"
   },
   "evidence_ceiling": "conservative plan-to-current-evidence join; unlisted current assets are not promoted"
 }

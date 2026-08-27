@@ -2,9 +2,9 @@
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
     "branch": "codex/presswork-close",
-    "dirty": true,
+    "dirty": false,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "e4c3be5e9cdab60989b71bf899a1e64fd70659d4"
+    "head": "3262ef9b8028bfadf3ae8890b8a25a425ed111ed"
   },
   "identity_sha256": "3bb959e7aada0a9da4e7d18a919c3c6b488723beed90e51035eef236bf3fdf28",
   "routes": [

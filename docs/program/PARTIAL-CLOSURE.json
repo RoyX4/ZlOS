@@ -1,7 +1,7 @@
 {
   "schema": "zlos.partial-closure.v1",
   "result": "PASS_WITH_EXTERNAL_GATES",
-  "feature_status_sha256": "08935d8c5e2481363211ec12fd447339c6458a0a3bed49efb292c4b8ff6dbc7c",
+  "feature_status_sha256": "a8e4b94f7bcbae435400d349ccd2bd9d6e137492df3584bf34c41d8ebb172369",
   "counts": {
     "total": 23,
     "proved_current": 1,
@@ -91,7 +91,7 @@
       ],
       "current_known_gaps": [
         "0 license files",
-        "148 inputs lack an established redistribution grant"
+        "149 inputs lack an established redistribution grant"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "X1_EXTERNAL_AUTHORITY",
@@ -928,7 +928,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -983,7 +983,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1044,7 +1044,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
@@ -1114,7 +1114,7 @@
         {
           "root": "plan",
           "path": "docs/program/VALIDATION-RECEIPT.md",
-          "sha256": "0978e2f3042306a71fd7ed58a52ad5640de56cbb044fdcc90b128483cd5fb443",
+          "sha256": "869b8f8f5ebc8da18d395cfb902962d3d219edc8592fe1129220eb4cd443305f",
           "schema": null,
           "result": "SOURCE"
         }
