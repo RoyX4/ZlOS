@@ -7,6 +7,33 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(gates): a crashed emulator was reported as a failed kernel, by all five (144941c)
+
+`design/presswork` · 11 files changed, 254 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/qemu-segfaults-2026-08-27.md`
+- `kernel/HANDOFF.md`
+- `kernel/tools/checks/qemu-crash-selftest.sh`
+- `kernel/tools/checks/qemu-crash.sh`
+- `kernel/tools/checks/verify-64.sh`
+- `kernel/tools/checks/verify-efi.sh`
+- `kernel/tools/checks/verify-iso.sh`
+- `kernel/tools/checks/verify-raw.sh`
+- `kernel/verify.sh`
+- `tools/hazard-scan.sh`
+
+</details>
+
 ## 2026-08-27 — fix(gates): normalise the app count in the golden transcript, not just the sha (f469db8)
 
 `design/presswork` · 4 files changed, 78 insertions(+), 2 deletions(-)
