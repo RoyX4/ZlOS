@@ -1,7 +1,7 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "cc920413744a060dea0a0b8f39a1b9906fabdd81967de0bb4bbc9dbd970596ef",
+  "build_identity": "dbd515c04103e2717ae882e88613ba2ee34e32a668de5347530502343bb0d61f",
   "landing_gate_sha256": "c8438bcb78fb83ef978d24bf9e9e1c6f41c1b494c6d989eab9fe886e7fd282ee",
   "wrappers": [
     {
@@ -534,8 +534,8 @@
     },
     {
       "path": "kernel/tools/checks/check-shell-layout.py",
-      "sha256": "b43454527958cc5391cce1d4f3fdbea34e97f9f33eb9e6df81739f2a642bf44b",
-      "bytes": 11197,
+      "sha256": "95c12821d2cfa25a7933bad50d139c677a6f638a36b3d3efec0384e19a222a8c",
+      "bytes": 15688,
       "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1216,8 +1216,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-app-lifecycle.py",
-      "sha256": "615832a6ced66c3641bc4a3707ec449b4b58338c6315d0b21b1b6cc273e466e6",
-      "bytes": 13236,
+      "sha256": "c6cedd4f5d2bad3bc069fcd77d8e878733856ae769401dd9ccc3dfe5be012a1a",
+      "bytes": 14037,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1227,8 +1227,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-app-routes.py",
-      "sha256": "e24857ac43bd82c6b6657479e814ebf47d67ac355b4f495fd5e57d841baacd60",
-      "bytes": 15831,
+      "sha256": "11e0da061a7f2ca429e9f5ae3f8773bd123ca3b852ee1415126a9c8cad7bf6b2",
+      "bytes": 16341,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",

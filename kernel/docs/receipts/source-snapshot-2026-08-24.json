@@ -1,9 +1,9 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "031a4848f695622e10501c5187017ae467c97ef821e9c2bbab995c5152adb20e",
+  "build_identity": "dbd515c04103e2717ae882e88613ba2ee34e32a668de5347530502343bb0d61f",
   "git": {
-    "head": "83875705a7ddf69a3c094424d300309c76b09903",
+    "head": "057990e2cd8e569029af22ce24b58cc9f3c3ce0e",
     "branch": "codex/presswork-local-closure",
     "dirty": false,
     "canonical_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -14,7 +14,7 @@
     "path": "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar",
     "format": "deterministic POSIX ustar; sorted paths; uid/gid/mtime zero",
     "bytes": 7874560,
-    "sha256": "06b1afbaa1f5c48b679c203f4042122134e512137bddf8fd5da1f454d6d74026",
+    "sha256": "3fa6553692d531ef308df32a280ffafce412cffe84df27f4630cc22fa0c3d915",
     "members": 149
   },
   "counts": {
@@ -44,7 +44,7 @@
       "path": "kernel/app_manifest_embed.zl",
       "bytes": 270,
       "mode": 436,
-      "sha256": "477d8de32fa50a725eba24943a17b6d22faa80dda7089f6ef79142413ed68fe8"
+      "sha256": "55481eacc878796cd40802210a14ff11a60b6f11010d151a444a52026f4aaa0a"
     },
     {
       "path": "kernel/apps/apps_common.zl",
@@ -200,7 +200,7 @@
       "path": "kernel/metadata/app-manifest.json",
       "bytes": 21926,
       "mode": 436,
-      "sha256": "e9aba30166dd52acc3d2f1baa1d835ef00057af3c9faa95483f133ab8b480eca"
+      "sha256": "963aa38fe36fa3ff05b5b908caffddf02511f48d50620fa5fe7599298a67faa4"
     },
     {
       "path": "kernel/src/arch/x86/apic.c",
@@ -684,9 +684,9 @@
     },
     {
       "path": "kernel/src/kernel.zl",
-      "bytes": 502275,
+      "bytes": 502344,
       "mode": 436,
-      "sha256": "fdb07843b32f1b72a9d85917099ee6a20e67713607d1377869327edfda2f7784"
+      "sha256": "a73f4746be111c317deac47d8c04dbe4d2e3ffc24491aec1023b2a60be5eceee"
     },
     {
       "path": "kernel/src/net/crypto.c",

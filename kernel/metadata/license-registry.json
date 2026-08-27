@@ -1,7 +1,7 @@
 {
   "schema": "zlos.license-provenance-registry.v1",
   "result": "PASS_WITH_RELEASE_BLOCK",
-  "build_identity": "031a4848f695622e10501c5187017ae467c97ef821e9c2bbab995c5152adb20e",
+  "build_identity": "dbd515c04103e2717ae882e88613ba2ee34e32a668de5347530502343bb0d61f",
   "license_files": [],
   "inputs": [
     {
@@ -27,7 +27,7 @@
     },
     {
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "477d8de32fa50a725eba24943a17b6d22faa80dda7089f6ef79142413ed68fe8",
+      "sha256": "55481eacc878796cd40802210a14ff11a60b6f11010d151a444a52026f4aaa0a",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -209,7 +209,7 @@
     },
     {
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "e9aba30166dd52acc3d2f1baa1d835ef00057af3c9faa95483f133ab8b480eca",
+      "sha256": "963aa38fe36fa3ff05b5b908caffddf02511f48d50620fa5fe7599298a67faa4",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"
@@ -776,7 +776,7 @@
     },
     {
       "path": "kernel/src/kernel.zl",
-      "sha256": "fdb07843b32f1b72a9d85917099ee6a20e67713607d1377869327edfda2f7784",
+      "sha256": "a73f4746be111c317deac47d8c04dbe4d2e3ffc24491aec1023b2a60be5eceee",
       "origin_status": "REPOSITORY_LOCAL_INPUT_AUTHORSHIP_NOT_INFERRED",
       "license_status": "UNDECLARED_IN_REPOSITORY",
       "redistribution_grant": "NOT_ESTABLISHED"

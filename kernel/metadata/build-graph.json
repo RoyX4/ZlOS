@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
   "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
-  "build_identity": "031a4848f695622e10501c5187017ae467c97ef821e9c2bbab995c5152adb20e",
+  "build_identity": "dbd515c04103e2717ae882e88613ba2ee34e32a668de5347530502343bb0d61f",
   "artifact_snapshot": {
     "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "current_build_bound": false,
     "evidence_ceiling": "exact historical artifact/QEMU registry; recipe edges do not promote those bytes as outputs of the current source identity"
   },
   "artifact_registry_sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
-  "toolchain_manifest_sha256": "474935440227575e7b586f870f846c0b8be22f3eb56db658b9e92b19f5112562",
+  "toolchain_manifest_sha256": "e6869e2666ee6d5088b85703a694bfdcc82b9a34b64cfadb5415b0ea4c03b712",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -2176,7 +2176,7 @@
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "477d8de32fa50a725eba24943a17b6d22faa80dda7089f6ef79142413ed68fe8",
+      "sha256": "55481eacc878796cd40802210a14ff11a60b6f11010d151a444a52026f4aaa0a",
       "suffix": ".zl"
     },
     {
@@ -2358,7 +2358,7 @@
       "id": "source:kernel/metadata/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "e9aba30166dd52acc3d2f1baa1d835ef00057af3c9faa95483f133ab8b480eca",
+      "sha256": "963aa38fe36fa3ff05b5b908caffddf02511f48d50620fa5fe7599298a67faa4",
       "suffix": ".json"
     },
     {
@@ -2925,7 +2925,7 @@
       "id": "source:kernel/src/kernel.zl",
       "kind": "source-input",
       "path": "kernel/src/kernel.zl",
-      "sha256": "fdb07843b32f1b72a9d85917099ee6a20e67713607d1377869327edfda2f7784",
+      "sha256": "a73f4746be111c317deac47d8c04dbe4d2e3ffc24491aec1023b2a60be5eceee",
       "suffix": ".zl"
     },
     {
