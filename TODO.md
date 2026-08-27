@@ -29,10 +29,6 @@ Both unboxed backends sit on the far side of the scoping decision in
 - [ ] **T-8** — Generated evidence manifests disagree on build identity.
 - [ ] **T-9** — Boot recovery policy remains at the kernel root.
 
-## Open pull requests
-
-- [ ] #6 feat(desktop): implement the PRESSWORK design language  `design/presswork`
-
 ---
 
 <!-- BEGIN HAND-WRITTEN -->

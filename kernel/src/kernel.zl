@@ -4570,6 +4570,12 @@ fn run_command(cmd, arg) {
     # The context menu at a fixed point, for rendering and for gates. It opens
     # a third of the way across the field so it is clear of the rail and of the
     # boot composition's windows.
+    if cmd == 206 {
+        if wm_run() == 0 { return needs_wm("the lock sheet") }
+        ov_mode = OV_LOCK
+        wm_damage(0, 0, px_w(), px_h())
+        return 0
+    }
     if cmd == 205 {
         if wm_run() == 0 { return needs_wm("activities") }
         ov_mode = OV_ACTIVITIES
@@ -9190,6 +9196,80 @@ fn ov_draw_activities(u) {
     return 0
 }
 
+# ---- the lock sheet ----------------------------------------------------------
+# The prototype's #lock: a plate whose header is KNOCKED OUT - the same inversion
+# a focused window's header uses, for the same reason. This is the one surface
+# that owns the whole screen, so it takes the strongest mark the system has.
+#
+# EVERY FIGURE ON IT IS ONE THIS MACHINE KNOWS. The prototype prints uptime,
+# workspaces and plates held, the display mode, and the storage generation, and
+# all four exist here: ticks()/100, WS_N and wm_n(), px_w() x px_h(), and
+# fs_ok()/fs_n(). Where the prototype prints something this OS cannot measure it
+# is left out rather than invented - the same line the parity pass drew when it
+# refused to print LOAD 0.58.
+#
+# THE PASSPHRASE FIELD IS EMPTY, and that is the honest version. The prototype
+# draws eleven bullets, which is a mock of a typed secret; nothing has been
+# typed here and there is no authentication behind it. The field and its caret
+# are drawn - they say what the surface is for - and the bullets are not.
+OV_LOCK_W = 460
+fn ov_draw_lock(u) {
+    lw = OV_LOCK_W * u
+    lh = 250 * u
+    lx = (px_w() - lw) / 2
+    ly = (px_h() - lh) / 3
+    hh = 30 * u
+    # the plate
+    fill_rgb(lx, ly, lw, lh, theme(TH_PANEL))
+    fill_rgb(lx, ly + lh - 1, lw, 1, theme(TH_CUT))
+    # THE KNOCKED-OUT HEADER, solid, with its ink reversed out of it
+    fill_rgb(lx, ly, lw, hh, theme(TH_KNOCK))
+    ui_caps(lx + 13 * u, ly + 9 * u, "SESSION LOCKED", theme(TH_KNOCK_INK), T_CAPTION)
+    label(lx + 150 * u, ly + 9 * u, "tty1 seat0", theme(TH_KNOCK_INK), T_CAPTION, W_REG)
+    # the overprint bar under the header, as a focused window carries
+    fill_rgb(lx, ly + hh, lw, focus_bar(), theme(TH_ACCENT))
+    by = ly + hh + 14 * u
+    # the clock, at the largest cell the system draws
+    draw_hhmm(lx + 13 * u, by, CLOCK_CELL_LG * u, T_TITLE, theme(TH_TEXT_HI))
+    ui_caps(lx + 150 * u, by + 4 * u, "OPERATOR", theme(TH_TEXT_2), T_CAPTION)
+    label(lx + 150 * u, by + 20 * u, "root", theme(TH_TEXT_HI), T_BODY, W_REG)
+    by = by + 46 * u
+    fill_rgb(lx + 13 * u, by, lw - 26 * u, 1, theme(TH_CUT))
+    by = by + 10 * u
+    # the readings, each one measured
+    ui_caps(lx + 13 * u, by, "UPTIME", theme(TH_TEXT_2), T_CAPTION)
+    label_num(lx + 110 * u, by, idiv(ticks(), 100), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(lx + 150 * u, by, "s", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    by = by + 18 * u
+    ui_caps(lx + 13 * u, by, "WORKSPACES", theme(TH_TEXT_2), T_CAPTION)
+    label_num(lx + 110 * u, by, WS_N, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label_num(lx + 150 * u, by, wm_n(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(lx + 178 * u, by, "plates held", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    by = by + 18 * u
+    ui_caps(lx + 13 * u, by, "DISPLAY", theme(TH_TEXT_2), T_CAPTION)
+    label_num(lx + 110 * u, by, px_w(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(lx + 150 * u, by, "x", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(lx + 162 * u, by, px_h(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    by = by + 18 * u
+    ui_caps(lx + 13 * u, by, "STORAGE", theme(TH_TEXT_2), T_CAPTION)
+    if fs_ok() == 1 {
+        label_num(lx + 110 * u, by, fs_n(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        label(lx + 150 * u, by, "files on rd0", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        label(lx + 110 * u, by, "rd0 unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    by = by + 26 * u
+    # the passphrase well: the field and its caret, and nothing pretending to be
+    # in it
+    rrect(lx + 13 * u, by, lw - 26 * u, 24 * u, R_INSET_D * u, theme(TH_PANEL_HI))
+    ui_caps(lx + 21 * u, by + 6 * u, "PASSPHRASE", theme(TH_TEXT_2), T_CAPTION)
+    fill_rgb(lx + 110 * u, by + 5 * u, 2 * u, cell_h(), theme(TH_ACCENT))
+    by = by + 32 * u
+    ui_caps(lx + 13 * u, by, "ESC", theme(TH_TEXT_2), T_CAPTION)
+    label(lx + 46 * u, by, "dismiss", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
 # THE ONE ENTRY POINT the compositor calls. x0,y0,x1,y1 is the DAMAGE rect, in
 # the same form wm.c's paint walk carries it.
 fn overlay_draw(ox0, oy0, ox1, oy1) {
@@ -9212,6 +9292,7 @@ fn overlay_draw(ox0, oy0, ox1, oy1) {
     if ov_mode == OV_PALETTE { return ov_draw_palette(ou) }
     if ov_mode == OV_MENU { return ov_draw_menu(ou) }
     if ov_mode == OV_ACTIVITIES { return ov_draw_activities(ou) }
+    if ov_mode == OV_LOCK { return ov_draw_lock(ou) }
     return 0
 }
 

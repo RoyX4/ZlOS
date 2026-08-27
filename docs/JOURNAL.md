@@ -7,6 +7,33 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — feat(desktop): activities, with real box-filtered window previews (4a6151c)
+
+`design/presswork` · 11 files changed, 302 insertions(+), 15 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/ui.h`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/graphics/windowing/wmglue.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-27 — feat(desktop): the context menu, and the zl constraint that shaped it (c6dcb8e)
 
 `design/presswork` · 7 files changed, 247 insertions(+), 10 deletions(-)
