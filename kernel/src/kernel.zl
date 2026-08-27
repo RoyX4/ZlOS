@@ -451,27 +451,13 @@ RAIL_SLOT_GAP = 7                # between the number and the icon, and again
                                  # between the icon and the name
 RAIL_STROW_H = 19                # one reading row inside the stat block
 
-# THE STAT BLOCK GREW FROM 44 TO 63 BECAUSE IT HAS THREE ROWS NOW, not two.
-# 3 + three 19 dp rows + 3 = 63. Read that against rail_bot_h(): the register
-# band loses 19 dp, and the bill is COUNTED rather than waved off. Run
-# check-shell-layout.py against this file before and after and rail_reg_fit()
-# on its four panel sizes goes
-#
-#   800x600 ui1   13 -> 13     the smallest panel, and the binding one:
-#                              rail_bot_h() 155 -> 174, the band 358 -> 339 px,
-#                              idiv(339, 26) is still 13
-#   1280x800 ui1  21 -> 20
-#   1920x1080 ui2 11 -> 10
-#   2560x1440 ui2 18 -> 17
-#
-# One row off the CEILING on three of the four, none off the smallest, and the
-# ceiling is what a tail window uses - the fixed twelve are untouched at every
-# size the shipped ui scale actually produces. The 1920x1080 line is the one to
-# read twice: it is already under REG_ROWS at 11, and it was before this change.
-# That case is the checker's own assumption of ui 2 at 1920. fb.c computes
-# ui_scale_q8 as width*256/1920 clamped at 256, so 1920 is ui 1 on the machine,
-# where the band is 819 px and fits 31 rows - and 1920x1200 fits 36. Nothing
-# ships clipped there.
+# THE STAT BLOCK IS 63 BECAUSE IT HAS THREE ROWS: 3 + three 19 dp rows + 3.
+# The whole bill is measured by check-shell-layout.py against fb.c's actual
+# continuous and integer scales. With the fifteen fixed rows now shipped, the
+# supported modes expose 15 / 20 / 31 / 33 rows at 800x600, 1280x800,
+# 1920x1080 and 2560x1440. The smallest mode is the binding one: its 339 px band
+# cannot hold fifteen normal 26 px rows, so rail_row_h() compacts this band to
+# 22 px and the fixed register remains complete. Larger modes keep row_h().
 #
 # THE STATUS ROWS DO NOT CARRY THE PROTOTYPE'S ICON, and this is the one place
 # the icon column could not be reproduced. `.strow` puts a 13 dp glyph before
@@ -491,7 +477,7 @@ RAIL_STROW_H = 19                # one reading row inside the stat block
 #
 # Sizing the block to absorb that needs RAIL_STAT_H >= 150 (the worst q8/trunc
 # ratio approaches 2), which is 150 px of a 600 px panel spent on three
-# readings. The register row escapes the same trap only because its height is
+# readings. The register row escapes the same trap because its normal height is
 # row_h() - a THEME metric, computed in C by ui.c's dp() with proper rounding -
 # where the stat block's is not, and it cannot be: check-shell-layout.py asserts
 # `stat_y + RAIL_STAT_H * u + rule1 == clock_top` against a constant it parses
@@ -715,7 +701,7 @@ REG_ROWS = 15                      # fixed rows drawn, register + catalog
 # THE NAMES ARE LOWERCASE, which is a correction rather than a preference. The
 # prototype's rows are `01 [icon] terminal 1119`: LABEL caps carry the NUMBER
 # and the section captions, and the app's own name is set lowercase at fs-md
-# (`.slot .nm`). This file had every name in caps, so the rail read as twelve
+# (`.slot .nm`). This file had every name in caps, so the rail read as fourteen
 # headings with nothing under them - caps everywhere is caps meaning nothing,
 # and the caption rung stops separating "REGISTER" from "terminal".
 #
@@ -818,10 +804,10 @@ fn rail_sub(slot) {
 # Once per frame rather than once per open, because a window can be closed and
 # reopened into the same slot and because the rail table is the authority - a
 # row added there should not need a second edit at some wm_open site to show
-# up in the chrome. Twelve iterations of two stores is not worth caching.
+# up in the chrome. REG_N iterations of two stores is not worth caching.
 fn label_windows() {
     ls = 0
-    while ls < 12 {
+    while ls < REG_N {
         lw = rail_win(ls)
         if lw >= 0 {
             if wm_is_open(lw) == 1 { wm_set_label(lw, ls + 1, rail_sub(ls)) }
@@ -934,10 +920,22 @@ fn rail_sect_y()   { return RAIL_IDENT_H * ui() + RULE_H * ui() }
 fn rail_dmg_y()    { return rail_sect_y() }
 fn rail_dmg_h()    { return rail_reg_y() + rail_reg_h() - rail_sect_y() }
 fn rail_reg_h()  { rh = px_h() - rail_top_h() - rail_bot_h()  if rh < 0 { rh = 0 }  return rh }
-# HOW MANY ROWS FIT, derived from the space rather than asserted. On a 480-tall
-# panel at ui 1 this is 9 and the register is 12 rows long, so the tail is
-# clipped - stated here rather than discovered on the machine that has one.
-fn rail_reg_fit() { return idiv(rail_reg_h(), row_h()) }
+# THE REGISTER ROW HEIGHT. The fixed register is navigation, so every fixed row
+# has to remain reachable before the optional open-window tail gets any space.
+# The 800x600 BIOS fallback has 339 px here: fifteen 26 px rows need 390. Compact
+# only this band to 22 px there; every larger supported mode keeps row_h(). The
+# console line still fits, and draw_rail_row omits the fixed 24 px icon whenever
+# it would cross the row groove. On still shorter unsupported modes, cell_h()
+# remains the readability floor and rail_reg_rows honestly reports the clipping.
+fn rail_row_h() {
+    rh = row_h()
+    cap = idiv(rail_reg_h(), REG_ROWS)
+    if cap < rh { rh = cap }
+    if rh < cell_h() { rh = cell_h() }
+    return rh
+}
+# HOW MANY ROWS FIT, derived from the exact height used by drawing and hit tests.
+fn rail_reg_fit() { return idiv(rail_reg_h(), rail_row_h()) }
 
 # ---- one register row --------------------------------------------------------
 # THE FOUR STATES, and each is a value on the ladder rather than an effect:
@@ -966,7 +964,7 @@ fn rail_reg_fit() { return idiv(rail_reg_h(), row_h()) }
 fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
     u = ui()
     rw = rail_w()
-    rh = row_h()
+    rh = rail_row_h()
     ground = theme(TH_PANEL_HI)
     ncol = theme(TH_TEXT_DIM)
     tcol = theme(TH_TEXT_DIM)
@@ -1001,11 +999,15 @@ fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
     # THE ICON, then the name, off one running x. The icon's ink follows the
     # NUMBER's rung rather than the name's: it is the row's address in picture
     # form, structure beside a glyph, and putting it on the name's rung made
-    # twelve marks compete with twelve words at the same value.
+    # fourteen marks compete with fourteen words at the same value. At 800x600
+    # the compact row is shorter than this fixed-size primitive, so the icon is
+    # omitted rather than crossing the next row's groove; number and name remain.
     tx = RAIL_SLOT_PL * u + 2 * cell_w() + RAIL_SLOT_GAP * u
     iw = rail_ico_w()
-    icon(tx, ry + (rh - iw) / 2, ico, ncol)
-    tx = tx + iw + RAIL_SLOT_GAP * u
+    if iw <= rh {
+        icon(tx, ry + (rh - iw) / 2, ico, ncol)
+        tx = tx + iw + RAIL_SLOT_GAP * u
+    }
     label(tx, ry + (rh - label_h(T_CAPTION)) / 2, nm, tcol, T_CAPTION, wgt)
     # THE FIGURE, on running rows only, right-aligned against the rail's own
     # inset. `.slot .us` is `margin-left: auto` and absent when the app is not
@@ -1026,14 +1028,14 @@ fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
 # ITS NAME STAYS TITLE CASE where the fixed register's are lowercase, and that
 # is a real divergence rather than an oversight. The label is app_name(), which
 # is the same function wm.c's window titles and the catalog's list read; the
-# register's twelve are literals in rail_name() and cost nothing to set
+# register's fourteen are literals in rail_name() and cost nothing to set
 # lowercase, but lowercasing app_name() would lowercase every window title in
 # the system. Closing it needs a second name table for the rail, which is the
 # kind of duplicate table the register's own comment above warns about.
 fn draw_rail_win(ry, num, win, hovered) {
     u = ui()
     rw = rail_w()
-    rh = row_h()
+    rh = rail_row_h()
     focused = 0
     if wm_focus() == win { focused = 1 }
     ground = theme(TH_PANEL_HI)
@@ -1058,8 +1060,10 @@ fn draw_rail_win(ry, num, win, hovered) {
     }
     tx = RAIL_SLOT_PL * u + 2 * cell_w() + RAIL_SLOT_GAP * u
     iw = rail_ico_w()
-    icon(tx, ry + (rh - iw) / 2, app_icon(wm_app(win)), ncol)
-    tx = tx + iw + RAIL_SLOT_GAP * u
+    if iw <= rh {
+        icon(tx, ry + (rh - iw) / 2, app_icon(wm_app(win)), ncol)
+        tx = tx + iw + RAIL_SLOT_GAP * u
+    }
     label(tx, ry + (rh - label_h(T_CAPTION)) / 2, app_name(wm_app(win)), tcol, T_CAPTION, wgt)
     # A tail row exists ONLY because its window is open, so it is running by
     # construction and the figure is unconditional here where it is guarded on
@@ -1127,7 +1131,7 @@ fn rail_sect(ry, nm, n, m) {
 
 # ---- how many register rows are showing --------------------------------------
 # The count the REGISTER caption prints, and it is the number of RUNNING rows
-# rather than the number of rows - a register of twelve rows that always says 12
+# rather than the number of rows - a register of fourteen rows that always says 14
 # is a label, not a reading. The tail rows count too: a tail row exists only
 # because its window is open, so every one of them is running by construction.
 fn rail_running_n() {
@@ -1515,7 +1519,7 @@ fn draw_rail_reg() {
             }
             hov = 0
             if rail_hover == rs { hov = 1 }
-            draw_rail_row(ry + drawn * row_h(), rs + 1, rail_name(rs), rail_icon(rs), rkpx, run, foc, hov)
+            draw_rail_row(ry + drawn * rail_row_h(), rs + 1, rail_name(rs), rail_icon(rs), rkpx, run, foc, hov)
             drawn = drawn + 1
         }
         rs = rs + 1
@@ -1529,7 +1533,7 @@ fn draw_rail_reg() {
                 if drawn < fit {
                     hov = 0
                     if rail_hover == drawn { hov = 1 }
-                    draw_rail_win(ry + drawn * row_h(), drawn + 1, tw, hov)
+                    draw_rail_win(ry + drawn * rail_row_h(), drawn + 1, tw, hov)
                     drawn = drawn + 1
                 }
             }
@@ -1537,7 +1541,7 @@ fn draw_rail_reg() {
         ti = ti + 1
     }
     # the unused tail of the band is the rail's own ground, not a hole
-    used = drawn * row_h()
+    used = drawn * rail_row_h()
     if used < rail_reg_h() {
         fill_rgb(0, ry + used, rail_w(), rail_reg_h() - used, theme(TH_PANEL_HI))
         fill_rgb(0, ry + used, 1, rail_reg_h() - used, theme(TH_LIT))
@@ -1553,7 +1557,7 @@ fn draw_rail_reg() {
 fn rail_slot_at(cx, cy) {
     if cx >= rail_w() { return 0 - 1 }
     if cy < rail_reg_y() { return 0 - 1 }
-    ri = idiv(cy - rail_reg_y(), row_h())
+    ri = idiv(cy - rail_reg_y(), rail_row_h())
     if ri >= rail_reg_fit() { return 0 - 1 }
     if ri >= rail_reg_rows() { return 0 - 1 }
     return ri
@@ -1626,17 +1630,16 @@ fn rail_app(slot) {
 # row both need this, and before it existed "is this app running" and "is this
 # app focused" were two different walks that could disagree.
 fn rail_win(slot) {
-    if slot == 0 { return shell_win }
-    if slot == 1 { return files_win }
-    if slot == 2 { return mon_win }
-    if slot == 3 { return browser_win }
-    if slot == 4 { return edit_win }
-    if slot == 5 { return paint_win }
-    if slot == 6 { return snake_win }
-    if slot == 7 { return cube_win }
-    if slot == 8 { return about_win }
-    if slot == 9 { return settings_win }
-    if slot == 10 { return run_win }
+    rwa = rail_app(slot)
+    if rwa < 0 { return 0 - 1 }
+    rwi = 0
+    while rwi < wm_n() {
+        rww = wm_zat(rwi)
+        if wm_app(rww) == rwa {
+            if wm_open_p(rww) == 1 { return rww }
+        }
+        rwi = rwi + 1
+    }
     return 0 - 1
 }
 
@@ -9360,9 +9363,10 @@ fn desk_menu_at(mx, my) {
 # window I opened from the catalog" should never have been a second, differently
 # shaped control next to the first one.
 #
-# The register absorbs it. draw_rail_reg walks the twelve fixed rows and then
+# The register absorbs it. draw_rail_reg walks the fifteen fixed rows (fourteen
+# launchers plus All Applications) and then
 # any open window with no fixed row, numbering straight on, and rail_slot_at
-# walks the same list in the same order. So a catalog app appears as row 13 in
+# walks the same list in the same order. So an open catalog app appears at row 16
 # the same column, with the same mark, and is raised by the same click. TASK_W,
 # TASK_PITCH, task_x0, task_room, draw_tasklist and task_slot_at are all gone;
 # what survives is the predicate that decides which windows are in the tail.
@@ -9441,6 +9445,8 @@ fn rail_launch(slot) {
     if da == APP_SETTINGS { return reopen_settings() }
     if da == APP_FILES { return reopen_files() }
     if da == APP_RUN { return open_run_window() }
+    if da == APP_SYSPANE { return open_syspane() }
+    if da == APP_TYPEPANE { return open_typepane() }
     # THE EDITOR OPENS THROUGH THE SHELL, and it is keyed off the APP rather
     # than the slot number. This used to be rail_cmd(slot), a second table that
     # said "slot 4 is the editor, slot 5 is paint" - and the moment the register
@@ -9456,7 +9462,10 @@ fn rail_launch(slot) {
         return 0
     }
     # EVERYTHING ELSE IN THE REGISTER IS A REGISTRY APP, addressed by its
-    # manifest id - the id IS the app number, so no lookup is needed. reg_open
+    # manifest id - the id IS the app number, so no lookup is needed. System
+    # and Type are kernel-owned IDs above the registry and were dispatched to
+    # their explicit owners above; sending either through reg_open is a refusal.
+    # reg_open
     # is the click path: it raises the window if the app is already open, and
     # otherwise opens it WITH focus, which is what a click should do. open_app
     # would be wrong here; it deliberately restores the previous focus because
@@ -9582,13 +9591,10 @@ fn reopen_files() {
 # 10 rows now: the original 8 plus Settings and All Applications, both of
 # which existed already (settings.c; the catalog above) and had no caller
 # anywhere on the running desktop until this brief.
-# TWELVE, and the two new rows are 10 SYSTEM and 14 TYPE. THIS IS A TEMPORARY
-# HOME FOR THEM. In the prototype both are REGISTER rows - system at 10, type
-# at 14 - and the register is where they belong; the register table here is
-# still the shipped twelve and renumbering it to the prototype's fourteen is
-# the shell's own piece of work, being done separately. Until it lands, a menu
-# row is what keeps these two reachable, and an app with no launch route is
-# dead code in exactly the way a native with no registration is.
+# TWELVE, and rows 10 SYSTEM and 14 TYPE remain redundant keyboard/menu routes
+# for the same windows their fixed register rows own. Keeping both surfaces is
+# intentional: the menu is keyboard-addressable, while the register is the
+# persistent pointer route.
 MENU_ROWS = 12
 menu_win = 0 - 1
 

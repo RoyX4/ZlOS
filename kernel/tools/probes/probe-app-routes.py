@@ -2,7 +2,7 @@
 """Exercise every current non-catalogue application launch surface in QEMU.
 
 The registry-app sweep owns IDs 15..69. This probe owns boot-open identities,
-all eleven register slots, every shell-word application, Menu, System, Type,
+all fourteen register slots, every shell-word application, Menu, System, Type,
 and All Applications. Run/exec also has its own deeper workflow probe.
 """
 
@@ -43,14 +43,17 @@ REGISTER = [
     (0, 0, "Terminal"),
     (1, 13, "Files"),
     (2, 1, "System Monitor"),
-    (3, 5, "Browser"),
-    (4, 12, "Text Editor"),
-    (5, 8, "Paint"),
-    (6, 3, "Snake"),
-    (7, 9, "3D"),
-    (8, 2, "About"),
-    (9, 6, "Settings"),
-    (10, 7, "Run"),
+    (3, 12, "Text Editor"),
+    (4, 40, "Kernel Log"),
+    (5, 42, "Hex Viewer"),
+    (6, 33, "Calculator"),
+    (7, 50, "Network"),
+    (8, 31, "Clocks & Timers"),
+    (9, 71, "System"),
+    (10, 6, "Settings"),
+    (11, 46, "Disk Usage"),
+    (12, 32, "System Info"),
+    (13, 72, "Type"),
 ]
 WORDS = [
     ("snake", 3, "Snake"),
@@ -238,8 +241,14 @@ def source_register_routes():
         if app is None:
             fail(f"rail_app has unresolved token {token}")
         routes.append((int(slot), app))
-    if len(routes) != 11 or len({slot for slot, _ in routes}) != 11:
-        fail(f"rail_app defines {len(routes)} non-unique routes, expected 11")
+    if len(routes) != len(REGISTER) or len({slot for slot, _ in routes}) != len(REGISTER):
+        fail(f"rail_app defines {len(routes)} non-unique routes, expected {len(REGISTER)}")
+    launch = gen.function_body(kernel, "rail_launch")
+    for app, owner in (("APP_SYSPANE", "open_syspane"),
+                       ("APP_TYPEPANE", "open_typepane")):
+        seam = f"if da == {app} {{ return {owner}() }}"
+        if seam not in launch:
+            fail(f"rail_launch does not route kernel-owned {app} through {owner}")
     return routes
 
 
@@ -309,7 +318,7 @@ def run(receipt_path, no_build, timeout):
         catalogue = simple_pointer_cycle(machine, geometry["catalogue"], 70, timeout)
         result["surface"].append({"route": "rail:all-apps", "id": 70,
                                   "name": "All Applications", **catalogue})
-        print("[rail 11] All Applications  open-ready-close PASS")
+        print(f"[rail {len(REGISTER):02d}] All Applications  open-ready-close PASS")
 
     iso = os.path.join(KERNEL_ROOT, "zlOS.iso")
     receipt = {

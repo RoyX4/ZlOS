@@ -2,11 +2,11 @@
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
     "branch": "codex/presswork-local-closure",
-    "dirty": false,
+    "dirty": true,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "83875705a7ddf69a3c094424d300309c76b09903"
+    "head": "5801bd51ac6157de345ef639cfc261a34ff91492"
   },
-  "identity_sha256": "031a4848f695622e10501c5187017ae467c97ef821e9c2bbab995c5152adb20e",
+  "identity_sha256": "dbd515c04103e2717ae882e88613ba2ee34e32a668de5347530502343bb0d61f",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -18,7 +18,7 @@
     "freestanding/runtime_kernel.c": "09480f71df8576a9bde15d903ecd7936699c3cf199e0f360a91dcaf0d6996e1c",
     "freestanding/zl_freestanding.h": "5be9db332d6666dd6332643a05b31774b14f3f93c85546f8dbac18144ef7a843",
     "kernel/SOURCES": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
-    "kernel/app_manifest_embed.zl": "477d8de32fa50a725eba24943a17b6d22faa80dda7089f6ef79142413ed68fe8",
+    "kernel/app_manifest_embed.zl": "55481eacc878796cd40802210a14ff11a60b6f11010d151a444a52026f4aaa0a",
     "kernel/apps/apps_common.zl": "dc15b6174f21e45a4c51aaa055fa61e56a27f8245e0c4ea99b0a545214bc5df2",
     "kernel/apps/apps_games1.zl": "e64d44bde4aff81bf1b2c8adea2593d99cc5f08c77e931a43effdda7fc884ce1",
     "kernel/apps/apps_games2.zl": "8756a9d4a5159d3628eb41493a071ac51b2bac76f510059a990480ee89fff077",
@@ -44,7 +44,7 @@
     "kernel/build.sh": "ed63792c70b9d2491e46aec11e79ef0b8b98f2185d6e8ea960b7cce3e598d5f1",
     "kernel/build64.sh": "01a1476a9c0089f7f430a54af521ac9fde84c73b75671f75ca686913afeffde0",
     "kernel/buildefi.sh": "cf8abf6f91ac9a9cdb2e7d9208645b2087d0d8397f75c4ae217ff05d6645ee80",
-    "kernel/metadata/app-manifest.json": "e9aba30166dd52acc3d2f1baa1d835ef00057af3c9faa95483f133ab8b480eca",
+    "kernel/metadata/app-manifest.json": "963aa38fe36fa3ff05b5b908caffddf02511f48d50620fa5fe7599298a67faa4",
     "kernel/src/arch/x86/apic.c": "25232a3ed83a29da00b4a54ec097acb0c977b93827ce2d800010fd7de2f4da01",
     "kernel/src/arch/x86/cpu.c": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa",
     "kernel/src/arch/x86/divmod.c": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
@@ -125,7 +125,7 @@
     "kernel/src/graphics/windowing/userwin.c": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
     "kernel/src/graphics/windowing/wm.c": "8d5a1e6a5d4429581a7a2e891ff05b350870050df85413db8afa4ad29ccbd536",
     "kernel/src/graphics/windowing/wmglue.c": "e9650d97407672ee07542b9b0893380765069e30bf6798c369354d17d507c20d",
-    "kernel/src/kernel.zl": "fdb07843b32f1b72a9d85917099ee6a20e67713607d1377869327edfda2f7784",
+    "kernel/src/kernel.zl": "a73f4746be111c317deac47d8c04dbe4d2e3ffc24491aec1023b2a60be5eceee",
     "kernel/src/net/crypto.c": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",
     "kernel/src/net/crypto.h": "48e7b2e3020c9edccebd7be063646dcbebc753d36c99c1cfef2408cfe34eddaa",
     "kernel/src/net/dhcp.c": "7e3115d9b3334ab7520556c15ec8427fafd488e51238f91f0ecf26798ce33fbb",
