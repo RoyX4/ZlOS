@@ -7,6 +7,30 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(desktop): complete presswork register routes (63b9e6f)
+
+`codex/presswork-local-closure` · 8 files changed, 289 insertions(+), 148 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/checks/check-shell-layout.py`
+- `kernel/tools/probes/probe-app-lifecycle.py`
+- `kernel/tools/probes/probe-app-routes.py`
+
+</details>
+
 ## 2026-08-28 — chore: refresh raw loader provenance (02e4110)
 
 `codex/presswork-local-closure` · 8 files changed, 38 insertions(+), 38 deletions(-)
