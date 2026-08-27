@@ -7,6 +7,17 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — Merge pull request #6 from RoyX4/design/presswork (682b802)
+
+`main` · 148 files changed, 25192 insertions(+), 9092 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
 ## 2026-08-28 — test: record green presswork landing gate (1c9a8a8)
 
 `codex/presswork-close` · 34 files changed, 466 insertions(+), 456 deletions(-)
