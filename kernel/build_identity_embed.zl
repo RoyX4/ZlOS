@@ -2,6 +2,6 @@
 # Route-neutral input identity; target/artifact identity is a receipt.
 fn build_identity_report() {
     print("  build-identity: schema=1 id=33a6a0c9b933944fa25d5a332c2a7f4d5fa03128f4dd3724768846ca07dcec43")
-    print("  build-source: head=78ee0218a7c8d35988cf25738daefd8a2d972ecb dirty=1")
+    print("  build-source: head=54b0bd474895368f41661899027726a8b4c27687 dirty=0")
     return 0
 }
