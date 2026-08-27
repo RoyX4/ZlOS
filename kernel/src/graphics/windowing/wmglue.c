@@ -47,6 +47,10 @@ extern Value zl_fn_app_tick(Value, Value) __attribute__((weak));
 
 /* fn desk_draw(x, y, w, h) - wallpaper, header bar, dock */
 extern Value zl_fn_desk_draw(Value, Value, Value, Value) __attribute__((weak));
+/* fn overlay_draw(x0, y0, x1, y1) - the modal layer, above windows AND toasts.
+ * Weak like the rest: a tree whose kernel.zl has not grown it simply does not
+ * register the layer, and the compositor never calls it. */
+extern Value zl_fn_overlay_draw(Value, Value, Value, Value) __attribute__((weak));
 
 /* fn desk_click(x, y, btn) - a pointer event on the dock, the start button or
  * the tray. Every event, not just presses: a dock with no hover state reads as
@@ -130,6 +134,16 @@ static void glue_desk(int x, int y, int w, int h)
     zl_fn_desk_draw(zl_num(x), zl_num(y), zl_num(w), zl_num(h));
 }
 
+/* THE RECTANGLE IS THE DAMAGE RECT, and it arrives as x0,y0,x1,y1 rather than
+ * x,y,w,h because that is the form the compositor's paint walk carries and the
+ * form every clip test in wm.c is written against. Converting here would mean
+ * converting back on the zl side to clip anything. */
+static void glue_overlay(int x0, int y0, int x1, int y1)
+{
+    if (!zl_fn_overlay_draw) return;
+    zl_fn_overlay_draw(zl_num(x0), zl_num(y0), zl_num(x1), zl_num(y1));
+}
+
 /* ---- binding ---------------------------------------------------------------
  * Returns 1 if the compositor now has apps to call, 0 if kernel.zl has not
  * grown them yet. A caller that ignores the answer and starts the frame loop
@@ -149,6 +163,7 @@ int wm_bind_zl(void)
              glue_event,
              zl_fn_app_tick  ? glue_tick  : 0,
              zl_fn_desk_draw ? glue_desk  : 0);
+    if (zl_fn_overlay_draw) wm_overlay(glue_overlay);
     if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
     if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
     return 1;

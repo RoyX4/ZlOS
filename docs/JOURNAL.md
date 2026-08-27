@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix(gates): wire up the memmap mirror hazard that was written down and left there (c621c55)
+
+`design/presswork` · 14 files changed, 258 insertions(+), 31 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>14 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/evidence/one-fact-many-copies-2026-08-27.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/boot-media-ids.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/checks/README.md`
+- `kernel/tools/checks/check-memmap-mirror-selftest.sh`
+- _…and 2 more_
+
+</details>
+
 ## 2026-08-27 — chore: boot receipts and build identity from the verified gate runs (d6c860d)
 
 `design/presswork` · 6 files changed, 53 insertions(+), 26 deletions(-)

@@ -33,6 +33,7 @@ Core kernel services shared across boot routes and subsystems.
 - `heap.c`
 - `sched.c`
 - `telemetry.h`
+- `version.h`
 - `zllog.c`
 - `zllog.h`
 

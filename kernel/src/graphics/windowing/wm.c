@@ -469,6 +469,7 @@ static app_draw_fn  hook_draw;
 static app_event_fn hook_event;
 static app_tick_fn  hook_tick;
 static desk_draw_fn hook_desk;
+static overlay_draw_fn hook_overlay;      /* above the windows AND the toast */
 extern int userwin_is_app(int app) __attribute__((weak));
 extern void userwin_draw_app(int app, int x, int y, int w, int h, int focused)
     __attribute__((weak));
@@ -1725,6 +1726,12 @@ void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
     hook_draw = d; hook_event = e; hook_tick = t; hook_desk = desk;
 }
+
+/* Registered separately from wm_hooks() rather than added as a fifth parameter,
+ * for the reason snap_rect_lr exists: wm_hooks has callers that mean "the four
+ * layers this desktop had", and widening the signature would edit every one of
+ * them to pass 0 and prove nothing. */
+void wm_overlay(overlay_draw_fn f) { hook_overlay = f; }
 
 static void title_copy(char *dst, const char *src)
 {
@@ -3545,6 +3552,21 @@ void wm_repaint(void)
         /* ...and the toast on top of all of them, still inside this damage
          * rectangle. Added, not woven in: the loop above is unchanged. */
         toast_draw(rx0, ry0, rx1, ry1);
+
+        /* ...and the overlay above even that. Last in, last drawn: a modal that
+         * a toast can cover is not modal. Same damage rectangle, so a menu
+         * repaint costs the menu and not the screen.
+         *
+         * RESTORE THE SCISSOR FIRST - the window loop above narrows it to each
+         * window's frame and then to its client, and leaves it there. ghost_draw
+         * and toast_draw survive that because each sets its own clip; an
+         * overlay that does not would be clipped to whichever window happened
+         * to be painted last. That is not a hypothetical: the command palette
+         * drew only across the Terminal, and the System Monitor beside it
+         * appeared to be ON TOP of a modal. Same fix, and the same reason, as
+         * the `sweep_draw narrowed it` restore at the top of this loop. */
+        fb_clip(rx0, ry0, rx1 - rx0, ry1 - ry0);
+        if (hook_overlay) hook_overlay(rx0, ry0, rx1, ry1);
         paint_end(&paint_effect_cycles, phase_started);
     }
     fb_clip_none();

@@ -339,6 +339,9 @@ static const struct cmd table[] = {
     { "smp",      42 }, { "cores",    42 },
     { "frame",    70 }, { "fps",      70 },
     { "windows", 119 }, { "wm",      119 },
+    /* The prototype's command palette. It is a MODAL, not a window - see the
+     * overlay layer in kernel.zl - so it has no register slot to open from. */
+    { "palette", 203 }, { "cmdp",    203 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
