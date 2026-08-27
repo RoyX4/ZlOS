@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — feat(desktop): integrate presswork shell with current main (5fc72be)
+
+`codex/presswork-close` · 152 files changed, 8805 insertions(+), 6956 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>64 file(s)</summary>
+
+- `.github/scripts/render-desktop.sh`
+- `.github/workflows/desktop-shot.yml`
+- `.ultra/TENSIONS.md`
+- `TODO.md`
+- `docs/PROJECT-STATUS.md`
+- `docs/evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md`
+- `docs/program/APPLICATIONS.md`
+- `docs/program/FEATURE-MAP.md`
+- `docs/program/PHASES.md`
+- `docs/program/PRODUCT-IMPLEMENTATION-ORDER.md`
+- `docs/program/README.md`
+- `docs/program/VALIDATION-RECEIPT.md`
+- _…and 52 more_
+
+</details>
+
 ## 2026-08-27 — docs: record pull request status fix (a27cd74)
 
 `main` · 1 file changed, 23 insertions(+)
