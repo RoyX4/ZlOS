@@ -4570,6 +4570,15 @@ fn run_command(cmd, arg) {
     # The context menu at a fixed point, for rendering and for gates. It opens
     # a third of the way across the field so it is clear of the rail and of the
     # boot composition's windows.
+    # The register's apps by name, so each can be put on screen for checking.
+    # reg_open is the click path - raise if open, else open with focus.
+    if cmd == 210 { if wm_run() == 0 { return needs_wm("the kernel log") }  return reg_open(40) }
+    if cmd == 211 { if wm_run() == 0 { return needs_wm("the hex viewer") }  return reg_open(42) }
+    if cmd == 212 { if wm_run() == 0 { return needs_wm("the calculator") }  return reg_open(33) }
+    if cmd == 213 { if wm_run() == 0 { return needs_wm("the network pane") }  return reg_open(50) }
+    if cmd == 214 { if wm_run() == 0 { return needs_wm("clocks") }  return reg_open(31) }
+    if cmd == 215 { if wm_run() == 0 { return needs_wm("disk usage") }  return reg_open(46) }
+    if cmd == 216 { if wm_run() == 0 { return needs_wm("system info") }  return reg_open(32) }
     if cmd == 206 {
         if wm_run() == 0 { return needs_wm("the lock sheet") }
         ov_mode = OV_LOCK

@@ -148,21 +148,51 @@ fn kl_time(i) {
     return 372
 }
 
+# THE SUBSYSTEM IS ITS OWN COLUMN, as the reference has it. It was already in
+# the data - every message below began "gdt: ", "apic: ", "nvme: " - so this
+# splits a compound field rather than inventing one, and kl_msg drops the prefix
+# it no longer has to carry.
+fn kl_sub(i) {
+    if i == 0 { return "multiboot" }
+    if i == 1 { return "gdt" }
+    if i == 2 { return "idt" }
+    if i == 3 { return "cpu" }
+    if i == 4 { return "apic" }
+    if i == 5 { return "smp" }
+    if i == 6 { return "pci" }
+    if i == 7 { return "fb" }
+    if i == 8 { return "xhci" }
+    if i == 9 { return "input" }
+    if i == 10 { return "nvme" }
+    if i == 11 { return "virtio-net" }
+    if i == 12 { return "rtc" }
+    return "wm"
+}
+
+# The reference's level word: OK / WARN / FAIL, beside a dot of the matching
+# colour. kl_kind is 0 info, 1 warning, 2 error.
+fn kl_level(i) {
+    k = kl_kind(i)
+    if k == 1 { return "WARN" }
+    if k == 2 { return "FAIL" }
+    return "OK"
+}
+
 fn kl_msg(i) {
-    if i == 0 { return "multiboot: entry, 32-bit protected mode" }
-    if i == 1 { return "gdt: flat 4 GiB code and data segments" }
-    if i == 2 { return "idt: 256 gates, PIC remapped to 0x20" }
-    if i == 3 { return "cpu: cpuid leaves read, features latched" }
-    if i == 4 { return "apic: local APIC enabled" }
-    if i == 5 { return "smp: application processors started" }
-    if i == 6 { return "pci: configuration space enumerated" }
-    if i == 7 { return "fb: linear framebuffer mapped, 32 bpp" }
-    if i == 8 { return "xhci: usb host controller claimed" }
-    if i == 9 { return "input: keyboard and pointer attached" }
-    if i == 10 { return "nvme: namespace 1 identified" }
-    if i == 11 { return "virtio-net: link negotiated" }
-    if i == 12 { return "rtc: cmos clock read" }
-    return "wm: compositor up, desktop composed"
+    if i == 0 { return "entry, 32-bit protected mode" }
+    if i == 1 { return "flat 4 GiB code and data segments" }
+    if i == 2 { return "256 gates, PIC remapped to 0x20" }
+    if i == 3 { return "cpuid leaves read, features latched" }
+    if i == 4 { return "local APIC enabled" }
+    if i == 5 { return "application processors started" }
+    if i == 6 { return "configuration space enumerated" }
+    if i == 7 { return "linear framebuffer mapped, 32 bpp" }
+    if i == 8 { return "usb host controller claimed" }
+    if i == 9 { return "keyboard and pointer attached" }
+    if i == 10 { return "namespace 1 identified" }
+    if i == 11 { return "link negotiated" }
+    if i == 12 { return "cmos clock read" }
+    return "compositor up, desktop composed"
 }
 
 # 0 info, 1 warning, 2 error - the reference's 'i' / 'w' / 'e'.
@@ -199,41 +229,93 @@ fn kl_count() {
     return n
 }
 
+# THE REFERENCE'S LAYOUT, not a mono dump. R.log in the prototype is a header
+# line, a four-column table, a rule, a detail well and a band - and the level is
+# a WORD beside a coloured dot rather than the message being tinted, which is
+# what lets the message column carry ink of its own.
+#
+# Columns are the reference's percentages: time 13, level 14, subsys 12, message
+# 61. Time is right-aligned, as the reference marks it with `r: 1`.
+# The cell modes: size in the low byte, 256 right-aligns, 512 is the mono face.
+KL_M_NUM  = 768                    # S2_SM + right + mono - the time column
+KL_M_MONO = 512                    # S2_SM + mono        - the subsystem
+KL_M_LVL  = 0                      # S2_SM, left - the level word, past its dot                    # S2_SM + mono        - the subsystem
+KL_C_TIME = 13
+KL_C_LVL  = 14
+KL_C_SUB  = 12
+
 fn kl_ui(ax, ay, aw, ah, dm) {
     u = ui()
-    tbh = ui_tb_h()
     sbh = ui_sb_h()
+    hdh = 22 * u
 
-    # the segmented filter, centred in a top toolbar (S3's container bar)
-    ui_tb(ax, ay, aw, tbh, 0)
-    sw = ui_seg_w("All|Warnings|Errors", S2_MD)
-    sh = ui_seg_h(S2_MD)
-    if sw > aw - 16 * u { sw = aw - 16 * u }
-    got = ui_seg(ax + (aw - sw) / 2, ay + (tbh - sh) / 2, sw, sh, "All|Warnings|Errors", kl_filter, S2_MD)
+    # ---- the head: dmesg, the counts, and what the ring holds ----------------
+    ui_caps(ax + 10 * u, ay + 6 * u, "DMESG", theme(TH_TEXT_2), T_CAPTION)
+    hx2 = ax + 66 * u
+    ui_txtn(hx2, ay + 6 * u, KL_N, theme(TH_TEXT_HI), S2_SM, 0)
+    hx2 = hx2 + ui_tnw(KL_N, S2_SM, 0) + 4 * u
+    ui_txt(hx2, ay + 6 * u, "records", theme(TH_TEXT_DIM), S2_SM, 0)
+    hx2 = hx2 + ui_tw("records", S2_SM, 0) + 12 * u
+    ui_txtn(hx2, ay + 6 * u, kl_warns(), theme(TH_WARN), S2_SM, 0)
+    hx2 = hx2 + ui_tnw(kl_warns(), S2_SM, 0) + 4 * u
+    ui_txt(hx2, ay + 6 * u, "warn", theme(TH_TEXT_DIM), S2_SM, 0)
+    # right-aligned: what the ring is, and that nothing was lost. Both true -
+    # the log is fourteen fixed rows, so nothing can have been dropped.
+    klrw = ui_tw("ring 14 records - 0 dropped", S2_SM, 0)
+    ui_txt(ax + aw - 10 * u - klrw, ay + 6 * u, "ring 14 records - 0 dropped", theme(TH_TEXT_DIM), S2_SM, 0)
 
-    # the log body - S14.2. Timestamp column is 56 design px wide and RIGHT
-    # aligned, which is why it is drawn from its right edge back.
-    py = ay + tbh
-    ph = ah - tbh - sbh
-    ui_mono(ax, py, aw, ph, S2_PANEL_LOG)
-    lh = ui_mono_h(S2_PANEL_LOG)
-    tsr = ax + 10 * u + 56 * u
-    mx = ax + 10 * u + 65 * u
-    cy = py + 6 * u
+    # ---- the table ----------------------------------------------------------
+    ty2 = ay + hdh
+    # THE TRACKS ARE DECLARED ONCE and both the header and every cell read them.
+    # ui_colhead iterates the grid's column count, so without this it draws the
+    # band and none of the labels - which is what it did on the first render.
+    # Design units with `*` for the column that takes the remainder, which is
+    # the reference's 61% message column.
+    # 84 for the subsystem, not 64: `virtio-net` is eleven characters and at 64
+    # it overran into the message column, which is the one thing a grid is for.
+    ui_grid("64|76|84|*")
+    ui_colhead(ax, ty2, aw, "time|level|subsys|message", 0 - 1, 0)
+    ty2 = ty2 + ui_colhead_h()
+    rowh = ui_growh()
+    wellh = 46 * u
+    limit = ay + ah - sbh - wellh - 8 * u
     i = 0
+    shown = 0
     while i < KL_N {
         if kl_shown(i) == 1 {
-            if cy + lh <= py + ph {
-                ui_txtn(tsr - ui_tnw(kl_time(i), S2_MD, S2_MONO), cy, kl_time(i), ui_ink(S2_IK_T6), S2_MD, S2_MONO)
-                ui_txt(mx, cy, kl_msg(i), kl_kindcol(kl_kind(i)), S2_MD, S2_MONO)
-                cy = cy + lh
+            if ty2 + rowh <= limit {
+                ui_grow(ax, ty2, aw, shown, kl_sel_is(i))
+                # time, right-aligned inside its column
+                # time is RIGHT aligned, as the reference marks that column
+                ui_gcelln(ax, aw, ty2, rowh, 0, kl_time(i), theme(TH_TEXT_DIM), KL_M_NUM)
+                # the reference's `sw()`: a dot of the level's colour, then the
+                # word. The dot sits at the track's left edge and the word is
+                # inset past it, so both live inside the column.
+                kdx = ui_gspanx(ax, aw, 1)
+                ui_dot(kdx + 3 * u, ty2 + rowh / 2, kl_kindcol(kl_kind(i)), 0)
+                # the word is placed past the dot rather than in the cell: a
+                # grid cell starts at the track's own padding, which is exactly
+                # where the dot is, so the two collided.
+                klty = ty2 + (rowh - ui_th(S2_SM)) / 2
+                ui_txt(kdx + 14 * u, klty, kl_level(i), kl_kindcol(kl_kind(i)), S2_SM, 0)
+                ui_gcell(ax, aw, ty2, rowh, 2, kl_sub(i), theme(TH_TEXT_2), KL_M_MONO)
+                ui_gcell(ax, aw, ty2, rowh, 3, kl_msg(i), theme(TH_TEXT_HI), S2_SM)
+                ty2 = ty2 + rowh
+                shown = shown + 1
             }
         }
         i = i + 1
     }
 
-    # the status bar - S6. "N of M messages", assembled from measured pieces
-    # because zl has no runtime strings to concatenate.
+    # ---- the rule, and the selected record in full --------------------------
+    wy = ay + ah - sbh - wellh
+    fill_rgb(ax + 10 * u, wy - 6 * u, aw - 20 * u, 1, theme(TH_CUT))
+    ui_mono(ax + 10 * u, wy, aw - 20 * u, wellh - 6 * u, S2_PANEL_LOG)
+    ui_txt(ax + 20 * u, wy + 10 * u, kl_sub(kl_sel()), theme(TH_TEXT_2), S2_SM, S2_MONO)
+    kmy = wy + 10 * u + ui_th(S2_SM) + 4 * u
+    ui_txt(ax + 20 * u, kmy, kl_msg(kl_sel()), theme(TH_TEXT_HI), S2_SM, S2_MONO)
+
+    # ---- the band -----------------------------------------------------------
     sy = ay + ah - sbh
     ui_sb(ax, sy, aw, sbh)
     ty = s2_cy(sy, sbh, S2_SM)
@@ -246,8 +328,23 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     ui_txtn(tx, ty, KL_N, theme(TH_TEXT_DIM), S2_SM, 0)
     tx = tx + ui_tnw(KL_N, S2_SM, 0)
     ui_txt(tx, ty, " messages", theme(TH_TEXT_DIM), S2_SM, 0)
-    return got
+    return 0
 }
+
+# how many rows are warnings or worse - the head's `M warn`
+fn kl_warns() {
+    kw = 0
+    ki = 0
+    while ki < KL_N {
+        if kl_kind(ki) != 0 { kw = kw + 1 }
+        ki = ki + 1
+    }
+    return kw
+}
+
+kl_sel_row = 0
+fn kl_sel() { return kl_sel_row }
+fn kl_sel_is(i) { if i == kl_sel_row { return 1 }  return 0 }
 
 fn kl_apply(g) { kl_filter = g  return 0 }
 
@@ -417,9 +514,17 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     if ui_chip(cx1, chy, "+256", hx_page == 1) == 1 { hit = 1 }
     if ui_chip(cx2, chy, "+512", hx_page == 2) == 1 { hit = 2 }
 
+    # ---- the column header, as the reference has it -------------------------
+    # R.hex is a TBL of offset / bytes / ascii at 16, 62 and 22 percent, and the
+    # head is what makes three runs of monospace read as three columns rather
+    # than as one wide line. The tracks are design units: 8 hex digits, then the
+    # remainder for the bytes, then 16 characters and the two rules around them.
+    ui_grid("74|*|150")
+    ui_colhead(ax, ay + tbh, aw, "offset|bytes|ascii", 0 - 1, 0)
+
     # ---- the rows ---------------------------------------------------------
-    py = ay + tbh
-    ph = ah - tbh - sbh
+    py = ay + tbh + ui_colhead_h()
+    ph = ah - tbh - sbh - ui_colhead_h()
     ui_mono(ax, py, aw, ph, S2_PANEL_HEX)
     lh = ui_mono_h(S2_PANEL_HEX)
     bx = ax + 9 * u

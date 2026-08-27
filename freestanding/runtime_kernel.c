@@ -246,6 +246,17 @@ extern int  console_cols(void);
 extern int  wm_thumb(int, int, int, int, int);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
+/* uikit's table widgets. They have existed since the widget set was written and
+ * nothing outside C could reach them, so every table-shaped app in the prototype
+ * - the kernel log, hex, network, disk usage, registers - would have had to
+ * hand-draw its own header and rows. */
+extern int  ui_colhead(int, int, int, const char *, int, int);
+extern void ui_grid(const char *);
+extern void ui_grid_span(int, int, int, int *, int *);
+extern void ui_grid_cell(int, int, int, int, int, const char *, int, unsigned, int, int);
+extern int  ui_colhead_h(void);
+extern int  ui_grid_row(int, int, int, int, int);
+extern int  ui_grid_row_h(void);
 extern int  console_ui_scale_q8(void);
 extern int  console_cell_h(void);
 extern void fb_set_subpixel(int on);
@@ -1797,6 +1808,76 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_items"))   { if (a[0].type==V_STR) return zl_num((double)ui_items_count(a[0].str)); return zl_num(0.0); }
     if (streq(name, "ui_tw"))      { if (a[0].type==V_STR) return zl_num((double)ui_text_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
     if (streq(name, "ui_th"))      return zl_num((double)ui_text_h((int)a[0].num));
+    /* THE TABLE WIDGETS, which uikit has had all along and zl could not reach.
+     * R.log, R.hex, R.net, R.disk and R.regs in the prototype are all TBL() -
+     * a column header over grid rows - so every one of them needed these, and
+     * without them each app would have hand-drawn its own header and rows. */
+    if (streq(name, "ui_colhead")) { if (a[0].type == V_STR) return zl_num(0.0);
+                                     if (a[3].type == V_STR)
+                                         return zl_num((double)ui_colhead((int)a[0].num,
+                                             (int)a[1].num, (int)a[2].num, a[3].str,
+                                             (int)a[4].num, (int)a[5].num));
+                                     return zl_num(0.0); }
+    if (streq(name, "ui_colhead_h")) return zl_num((double)ui_colhead_h());
+    /* THE COLUMN TRACKS, which ui_colhead and ui_grid_cell both read. Without
+     * this ui_colhead iterates a column count of zero and draws no labels at
+     * all - the header band appears and its text does not, which is exactly
+     * what the kernel log did on its first render. */
+    /* WHERE A COLUMN STARTS AND HOW WIDE IT IS. ui_grid_cell places text inside
+     * a track, but the reference's level column is a DOT and then a word, and a
+     * dot is not text - it needs the track's own left edge. Without these the
+     * only way to place one is to re-derive the track arithmetic in zl, which
+     * would be a second copy of ui_grid_span. */
+    if (streq(name, "ui_gspanx"))  { int cx = 0, cw = 0;
+                                     ui_grid_span((int)a[0].num, (int)a[1].num,
+                                                  (int)a[2].num, &cx, &cw);
+                                     return zl_num((double)cx); }
+    if (streq(name, "ui_gspanw"))  { int cx = 0, cw = 0;
+                                     ui_grid_span((int)a[0].num, (int)a[1].num,
+                                                  (int)a[2].num, &cx, &cw);
+                                     return zl_num((double)cw); }
+    if (streq(name, "ui_grid"))    { if (a[0].type == V_STR) ui_grid(a[0].str);
+                                     return zl_nil(); }
+    /* THE CELL, IN EIGHT ARGUMENTS. A zl native gets Value[8] and
+     * ui_grid_cell takes ten, so align, size and the mono flag are packed into
+     * one `mode`: size in the low byte, bit 8 right-aligns, bit 9 selects the
+     * mono face. That is not a shortcut around the limit - a table cell only
+     * ever varies in those three ways, and passing them separately spent three
+     * of the eight slots on booleans.
+     *
+     * zl has no way to turn a number into a string, so the numeric variant
+     * carries the same zl_itoa bridge ui_txtn uses - and a table of figures is
+     * most of what these apps are. */
+#define ZL_CELL_ALIGN_R  0x100
+#define ZL_CELL_MONO     0x200
+    if (streq(name, "ui_gcelln"))  { int mode = (int)a[7].num;
+                                     ui_grid_cell((int)a[0].num, (int)a[1].num,
+                                         (int)a[2].num, (int)a[3].num, (int)a[4].num,
+                                         zl_itoa((int)a[5].num),
+                                         (mode & ZL_CELL_ALIGN_R) ? 1 : 0,
+                                         (unsigned)(unsigned long long)a[6].num,
+                                         mode & 0xFF,
+                                         (mode & ZL_CELL_MONO) ? 1 : 0);
+                                     return zl_nil(); }
+    if (streq(name, "ui_gcell"))   { int mode = (int)a[7].num;
+                                     if (a[5].type == V_STR)
+                                         ui_grid_cell((int)a[0].num, (int)a[1].num,
+                                             (int)a[2].num, (int)a[3].num, (int)a[4].num,
+                                             a[5].str,
+                                             (mode & ZL_CELL_ALIGN_R) ? 1 : 0,
+                                             (unsigned)(unsigned long long)a[6].num,
+                                             mode & 0xFF,
+                                             (mode & ZL_CELL_MONO) ? 1 : 0);
+                                     return zl_nil(); }
+    if (streq(name, "ui_grid"))    { if (a[0].type == V_STR) ui_grid(a[0].str);
+                                     return zl_nil(); }
+    /* The numeric cell. zl has no way to turn a number into a string, so the
+     * same zl_itoa bridge ui_txtn uses serves here - and a table of figures is
+     * most of what these apps are. */
+    if (streq(name, "ui_growh"))   return zl_num((double)ui_grid_row_h());
+    if (streq(name, "ui_grow"))    return zl_num((double)ui_grid_row((int)a[0].num,
+                                       (int)a[1].num, (int)a[2].num,
+                                       (int)a[3].num, (int)a[4].num));
     if (streq(name, "ui_txt"))     { if (a[2].type==V_STR) ui_text((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
     /* The number forms of ui_text/ui_text_w. zl cannot build "412" - there are
      * no runtime strings - and label_num/num_aa draw unconditionally, which is

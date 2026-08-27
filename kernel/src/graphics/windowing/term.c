@@ -348,6 +348,14 @@ static const struct cmd table[] = {
     { "ctxmenu", 204 }, { "menu2",   204 },
     { "activities", 205 }, { "overview", 205 },
     { "lock",     206 }, { "locksession", 206 },
+    /* THE REGISTER'S APPS, one word each. The rail opens them with a click and
+     * the palette names them, but a probe can only type - and an app whose body
+     * has been rebuilt to the reference cannot be checked against the reference
+     * without a way to put it on screen. */
+    { "klog",     210 }, { "dmesg",    210 },
+    { "hexv",     211 }, { "calcapp",  212 },
+    { "netapp",   213 }, { "clocks",   214 },
+    { "disku",    215 }, { "sysinfo",  216 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
