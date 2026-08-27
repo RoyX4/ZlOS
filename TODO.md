@@ -23,17 +23,11 @@ The unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-- [ ] `kernel/_gen64.c`
-- [ ] `kernel/_genefi.c`
-- [ ] `kernel/out.c`
+_none — every file the docs describe is tracked._
 
 ## Open tensions (.ultra/TENSIONS.md)
 
 _none open._
-
-## Open pull requests
-
-- [ ] #6 feat(desktop): implement the PRESSWORK design language  `design/presswork`
 
 ---
 
