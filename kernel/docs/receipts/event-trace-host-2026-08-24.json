@@ -43,7 +43,7 @@
       {
         "id": "uefi-llp64",
         "exit_code": 0,
-        "artifact_sha256": "3154ee016780f293111dc46bc4863bc371412c1ba5e2a796c8550df2eeb72e1f"
+        "artifact_sha256": "0facdf31b2a3dddbc75e40626d561b049a9e0518025e716ce7316bc973d2f317"
       }
     ]
   },

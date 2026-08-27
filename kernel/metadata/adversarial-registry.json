@@ -3,7 +3,7 @@
   "result": "PASS_WITH_OPEN_GAPS",
   "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "host_test_inventory_sha256": "3230182f58256a06d21c3e0367707c6405d6efedfd39ee19f90599d59e3fd9cc",
-  "host_test_receipt_sha256": "ab210de96dba8b516c6ea0c110b4354fb2d08173be596be9f4c679a923de81e2",
+  "host_test_receipt_sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
   "verifier_canaries": [
     {
       "id": "CAN-001",
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "3f2b61a6b9161bc33d3f5122d2dff66b7156fbc8b1089ca536ceed4713875819",
+      "output_sha256": "4e031346902e062bad3278184736f3aef25d09dfad9bd23d3e0cc782010a9c10",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {

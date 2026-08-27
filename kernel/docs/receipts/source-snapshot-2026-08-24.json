@@ -3,7 +3,7 @@
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
   "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "git": {
-    "head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4",
+    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
     "branch": "codex/presswork-close",
     "dirty": false,
     "canonical_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

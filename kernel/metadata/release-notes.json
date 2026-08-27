@@ -15,7 +15,7 @@
   "inputs": [
     {
       "path": "kernel/metadata/build-identity.json",
-      "sha256": "90e1e348ead5cd386f290cac95df703cbc963147650b68f7b8a31742d78b0032",
+      "sha256": "e9baaeb8e6a590fcd7d4736f3ff3373068a4b34e6a5f6c80136f0deb9a61a421",
       "schema": "zlos.build-input-identity.v1"
     },
     {
@@ -25,12 +25,12 @@
     },
     {
       "path": "kernel/metadata/artifact-registry.json",
-      "sha256": "7b8a1577c4751f109d478bc10b0639cb1b713273da81967b24e021a37727eec9",
+      "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
       "schema": "zlos.artifact-boot-registry.v1"
     },
     {
       "path": "kernel/metadata/app-evidence.json",
-      "sha256": "24f4b74fbee47d29513a51ba0f6494bfb66e67a479adf42910ce7ff109e5bd7c",
+      "sha256": "08343b13de5a819a0fd8e23a3184a1a276aaf2aad6b3aa7f6f32550e5ba7ddbb",
       "schema": "zlos.application-evidence-registry.v1"
     },
     {
@@ -40,7 +40,7 @@
     },
     {
       "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-      "sha256": "3033338acd7caef0c31f8e5c4de5d416bb24ab5b9f6c4c2f2cb7961159bc2526",
+      "sha256": "297335e0160ac161b72962a0d538b96efe76c1a8a8a8cf7dc45e950c02973c8f",
       "schema": "zlos.source-snapshot-receipt.v1"
     },
     {
@@ -50,17 +50,17 @@
     },
     {
       "path": "kernel/metadata/build-graph.json",
-      "sha256": "3ddf2c2b0e56dd7564c015228dcb8f37829653aacd2a856c105226976bfe3dae",
+      "sha256": "203a806d0c866b460eb24649a657762a377717aa83365e782320817d476feb8f",
       "schema": "zlos.build-graph.v1"
     },
     {
       "path": "kernel/tests/host/test-run-receipt.json",
-      "sha256": "ab210de96dba8b516c6ea0c110b4354fb2d08173be596be9f4c679a923de81e2",
+      "sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
       "schema": "zlos.host-test-run-receipt.v1"
     },
     {
       "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-      "sha256": "aca5b334a598be5030a5c290dd654c2185919474c7b2c714eb50d51e304fda6f",
+      "sha256": "e215ddc1a198c6c52fde0ff9ceba108ac514b21ac51a953829e0e7f09708ce18",
       "schema": "zlos.host-benchmark-receipt.v2"
     },
     {
@@ -70,17 +70,17 @@
     },
     {
       "path": "kernel/metadata/accessibility-registry.json",
-      "sha256": "633f5a62472d22d68f649e48520348bf7b485888f6659fd8946e74e4ecd8af79",
+      "sha256": "8cba6a38e098f5e7bf05363efd8b658aaa103341489dfc88be6cb9801edbc269",
       "schema": "zlos.accessibility-proof-registry.v1"
     },
     {
       "path": "kernel/metadata/security-registry.json",
-      "sha256": "a4044aa7c3287d468738e56d4a9ac84962cf4957cb037c386a82efa1678a5902",
+      "sha256": "65ae9e2493e868cdf04b062a41a33a5c52920d17d18799a5c606f5c0b12cdfae",
       "schema": "zlos.security-claim-registry.v1"
     },
     {
       "path": "kernel/metadata/observability-registry.json",
-      "sha256": "248d4d7ec494d2eea81f001f0acb894f5759a2dbabb1c887725e02baa71fffbc",
+      "sha256": "71c531f1229055d766793503d1a3d9e0c333fd7e9c09b7e4a8c474480742dc1d",
       "schema": "zlos.observability-registry.v1"
     }
   ],

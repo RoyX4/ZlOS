@@ -336,7 +336,12 @@ def validate_feature_status_value(value: dict) -> None:
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("feature-status build identity missing")
     blockers = value.get("global_blockers", {})
-    closed = {"current_artifact_snapshot_missing", "current_qemu_evidence_missing"}
+    closed = {
+        "current_artifact_snapshot_missing",
+        "current_qemu_evidence_missing",
+        "current_host_benchmark_missing",
+        "future_build_graph_outputs_missing",
+    }
     for name, item in blockers.items():
         if isinstance(item, bool) and item is not (name not in closed):
             raise ValueError(f"feature-status blocker state drift: {name}")
@@ -344,8 +349,7 @@ def validate_feature_status_value(value: dict) -> None:
         if isinstance(item, int) and not isinstance(item, bool) \
                 and name != "decision_legacy_semantics_open" and item <= 0:
             raise ValueError(f"feature-status hid numeric blocker: {name}")
-    for name in ("public_release_blocked", "current_host_test_receipt_missing",
-                 "current_host_benchmark_missing"):
+    for name in ("public_release_blocked", "current_host_test_receipt_missing"):
         if blockers.get(name) is not True:
             raise ValueError(f"feature-status hid blocker: {name}")
 
@@ -500,6 +504,12 @@ def selftest(value: dict, evidence_root: Path) -> None:
     graph = copy.deepcopy(value)
     graph["global_blockers"]["build_graph_scope_only_inputs"] = 0
     mutations["hidden-build-graph-superset"] = graph
+    future_graph = copy.deepcopy(value)
+    future_graph["global_blockers"]["future_build_graph_outputs_missing"] = True
+    mutations["reopened-future-build-graph"] = future_graph
+    benchmark = copy.deepcopy(value)
+    benchmark["global_blockers"]["current_host_benchmark_missing"] = True
+    mutations["reopened-current-host-benchmark"] = benchmark
     identity = copy.deepcopy(value)
     identity["build_identity"] = "short"
     mutations["missing-build-identity"] = identity

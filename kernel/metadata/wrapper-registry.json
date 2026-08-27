@@ -2,7 +2,7 @@
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
   "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-  "landing_gate_sha256": "6015f5c582f915bcb3a7cf8794ccbc28cb223edc50454665c7f52adf04140f0e",
+  "landing_gate_sha256": "218e014b7b877d6ec63a6bd794273962f065831e7ae761264440d4d6c56ef4d9",
   "wrappers": [
     {
       "path": ".github/scripts/render-desktop.sh",
@@ -94,8 +94,8 @@
     },
     {
       "path": "gates/land-gate.sh",
-      "sha256": "6015f5c582f915bcb3a7cf8794ccbc28cb223edc50454665c7f52adf04140f0e",
-      "bytes": 15377,
+      "sha256": "218e014b7b877d6ec63a6bd794273962f065831e7ae761264440d4d6c56ef4d9",
+      "bytes": 15871,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -468,8 +468,8 @@
     },
     {
       "path": "kernel/tools/checks/check-land-gate.py",
-      "sha256": "04e66dd8bde0a9c95e06fc691c0ec6c0b7e8e2899e56437f817cbe0a6374fa21",
-      "bytes": 6730,
+      "sha256": "908307345db522c803a3550415049aa0e02ec4cb9ac878b556edebec205408d2",
+      "bytes": 7089,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -864,8 +864,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-evidence-registry.py",
-      "sha256": "5f0001c7c2dd271368f55044b7765410de5434630969bdcd3cc0f7f9c41f68a5",
-      "bytes": 40935,
+      "sha256": "f5de21b73f87ae8c203610dee7a31985b8cb2bbb78b838b069be2da2ed8bd886",
+      "bytes": 40927,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -908,8 +908,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-provenance-viewer.py",
-      "sha256": "3e5f1817908e1b9fa257550883c4d261ffd493a65cca78c699721fb07a5dee94",
-      "bytes": 41065,
+      "sha256": "a447209555b2cffea73c2d5bc30ff855e0f0d1d58b0c930b3cd2b97c85e359fd",
+      "bytes": 41492,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -919,8 +919,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-release-notes.py",
-      "sha256": "d19f5b9a9c575493b919f3d9ba960abebbe83c3eea066cf9cd32ecf9b04b9515",
-      "bytes": 29834,
+      "sha256": "8138b75db9602d10c628e1f013fc37d9f7dcfd161af1dacbca2168e9f1ad6ed9",
+      "bytes": 29998,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",

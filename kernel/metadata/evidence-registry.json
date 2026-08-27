@@ -5,14 +5,14 @@
   "inputs": [
     {
       "path": "kernel/metadata/build-identity.json",
-      "sha256": "90e1e348ead5cd386f290cac95df703cbc963147650b68f7b8a31742d78b0032",
+      "sha256": "e9baaeb8e6a590fcd7d4736f3ff3373068a4b34e6a5f6c80136f0deb9a61a421",
       "schema": "zlos.build-input-identity.v1",
       "result": "IDENTITY_ONLY",
       "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt"
     },
     {
       "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-      "sha256": "3033338acd7caef0c31f8e5c4de5d416bb24ab5b9f6c4c2f2cb7961159bc2526",
+      "sha256": "297335e0160ac161b72962a0d538b96efe76c1a8a8a8cf7dc45e950c02973c8f",
       "schema": "zlos.source-snapshot-receipt.v1",
       "result": "PASS_WITH_OPEN_CUSTODY_GAP",
       "evidence_ceiling": "exact reconstructable current build-input closure in the same uncommitted worktree; not a signed, off-host, whole-repository or release-custody snapshot"
@@ -26,14 +26,14 @@
     },
     {
       "path": "kernel/metadata/app-evidence.json",
-      "sha256": "24f4b74fbee47d29513a51ba0f6494bfb66e67a479adf42910ce7ff109e5bd7c",
+      "sha256": "08343b13de5a819a0fd8e23a3184a1a276aaf2aad6b3aa7f6f32550e5ba7ddbb",
       "schema": "zlos.application-evidence-registry.v1",
       "result": "IDENTITY_ONLY",
       "evidence_ceiling": "source/build plus boot-embedded manifest and QEMU route, first draw and teardown; no complete-workflow or physical proof"
     },
     {
       "path": "kernel/metadata/artifact-registry.json",
-      "sha256": "7b8a1577c4751f109d478bc10b0639cb1b713273da81967b24e021a37727eec9",
+      "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
       "schema": "zlos.artifact-boot-registry.v1",
       "result": "PASS",
       "evidence_ceiling": "see named registry"
@@ -54,7 +54,7 @@
     },
     {
       "path": "kernel/metadata/wrapper-registry.json",
-      "sha256": "18c75bb64215d1d4a0f19b0f98e74ce8652b1d2e7bdee6bd693de684f503611e",
+      "sha256": "d2b07fb1524e04db73313458eac7f679e550a0fb0d4a200323413a0662cf7c16",
       "schema": "zlos.wrapper-registry.v1",
       "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
       "evidence_ceiling": "complete current shebang-wrapper inventory plus static policy classification; dynamic child-exit proof belongs to check-land-gate.py"
@@ -68,7 +68,7 @@
     },
     {
       "path": "kernel/metadata/build-graph.json",
-      "sha256": "3ddf2c2b0e56dd7564c015228dcb8f37829653aacd2a856c105226976bfe3dae",
+      "sha256": "203a806d0c866b460eb24649a657762a377717aa83365e782320817d476feb8f",
       "schema": "zlos.build-graph.v1",
       "result": "PASS_CURRENT_ARTIFACTS",
       "evidence_ceiling": "complete declared-input build recipe for four lanes joined to the current reproducible nine-artifact snapshot; not a compiler-emitted per-object attestation"
@@ -82,7 +82,7 @@
     },
     {
       "path": "kernel/metadata/adversarial-registry.json",
-      "sha256": "84a0460adc3f288c311d1c62a04789ea7b82187e7757487e43930d3efa3cf3d4",
+      "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
       "schema": "zlos.adversarial-registry.v1",
       "result": "PASS_WITH_OPEN_GAPS",
       "evidence_ceiling": "host canary and hostile-input evidence only; no completeness or target-hardware promotion"
@@ -96,28 +96,28 @@
     },
     {
       "path": "kernel/tests/host/test-run-receipt.json",
-      "sha256": "ab210de96dba8b516c6ea0c110b4354fb2d08173be596be9f4c679a923de81e2",
+      "sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
       "schema": "zlos.host-test-run-receipt.v1",
       "result": "PASS",
       "evidence_ceiling": "host execution only; instruments/manual hardware are explicit non-runs and exit 77 is not a pass"
     },
     {
       "path": "kernel/docs/receipts/reproducible-build-2026-08-22.json",
-      "sha256": "60c8eb7ebfe44ec89c1583b012ad2f97755a733b4846f6f29462de695b1c759a",
+      "sha256": "a69887b6397e3f5790dae08c492c640a18449ecfb0c28f724247b40e1e25f627",
       "schema": "zlos.reproducible-build-receipt.v1",
       "result": "PASS",
       "evidence_ceiling": "see named registry"
     },
     {
       "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-      "sha256": "aca5b334a598be5030a5c290dd654c2185919474c7b2c714eb50d51e304fda6f",
+      "sha256": "e215ddc1a198c6c52fde0ff9ceba108ac514b21ac51a953829e0e7f09708ce18",
       "schema": "zlos.host-benchmark-receipt.v2",
       "result": "PASS_WITH_OPEN_REGRESSIONS",
       "evidence_ceiling": "host p50/p95/peak distributions on one contended desktop; no QEMU or native-hardware promotion"
     },
     {
       "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-      "sha256": "2eee941b68fb7878adb98c6163f5f8f5dd988d5bbe53215211c9963d4c82554d",
+      "sha256": "de64f612a17653fb070d94a364e6a5987d43ef4edf633af19a03274018e822de",
       "schema": "zlos.cpu-fault-qemu-receipt.v1",
       "result": "PASS",
       "evidence_ceiling": "see named registry"
@@ -131,14 +131,14 @@
     },
     {
       "path": "kernel/metadata/accessibility-registry.json",
-      "sha256": "633f5a62472d22d68f649e48520348bf7b485888f6659fd8946e74e4ecd8af79",
+      "sha256": "8cba6a38e098f5e7bf05363efd8b658aaa103341489dfc88be6cb9801edbc269",
       "schema": "zlos.accessibility-proof-registry.v1",
       "result": "PASS_WITH_OPEN_GAPS",
       "evidence_ceiling": "host input/focus/scale primitives only; no complete assistive or target workflow promotion"
     },
     {
       "path": "kernel/metadata/security-registry.json",
-      "sha256": "a4044aa7c3287d468738e56d4a9ac84962cf4957cb037c386a82efa1678a5902",
+      "sha256": "65ae9e2493e868cdf04b062a41a33a5c52920d17d18799a5c606f5c0b12cdfae",
       "schema": "zlos.security-claim-registry.v1",
       "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
       "evidence_ceiling": "current claim inventory joined to current artifact/QEMU reachability and historical host evidence; no production or physical completeness"
@@ -152,35 +152,35 @@
     },
     {
       "path": "kernel/metadata/release-notes.json",
-      "sha256": "ff44eca47fcf27bc6015e80a462db83b40a15cb4716e573204d9df5f1d3abf03",
+      "sha256": "587babc898c5877b2f80cecc613f0288600d9a25489d904097069b7f362286eb",
       "schema": "zlos.release-notes.v1",
       "result": "PASS_UNRELEASED_WITH_BLOCKERS",
       "evidence_ceiling": "generated unreleased development changelog; not a versioned, signed, distributed or runtime-complete release"
     },
     {
       "path": "kernel/metadata/provenance-viewer.json",
-      "sha256": "c3c889b02cbf38e7ecb5b9b6ff7d3f863178c2b5b6ef58adeacd01c16d76ddf3",
+      "sha256": "1a1579755d5fa432bbebed7938d7e7b9dd1fe04eb4ba50803c752d8f994a02e8",
       "schema": "zlos.provenance-viewer.v1",
       "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS",
       "evidence_ceiling": "current static provenance projection with current artifact/QEMU and host benchmark evidence plus a dirty-tree host-test receipt; not a booted zlOS provenance app, live monitor, authenticated remote service or signed release portal"
     },
     {
       "path": "kernel/docs/receipts/event-trace-host-2026-08-24.json",
-      "sha256": "d098301cc92960ce14e202ee74d1e6709b9a131921813d5678f8668f11353da6",
+      "sha256": "0874dbad4a9f94276ffcae33f8fdf49397b450d54095f52c195f32ddd105bb86",
       "schema": "zlos.event-trace-host-receipt.v1",
       "result": "PASS_HOST_CORE_TARGET_UNINTEGRATED",
       "evidence_ceiling": "real core host execution plus ILP32/LLP64 compile; no shipped target route"
     },
     {
       "path": "kernel/metadata/event-schema.json",
-      "sha256": "35b51e94b096d095179d01e9996a0e22ed9394a8e4957376b4ed7e3cb79acba9",
+      "sha256": "cf50a46a4955c51f4783f5ca93096af96f9e3858f440b8b87ceba33be058e36e",
       "schema": "zlos.event-schema-registry.v1",
       "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED",
       "evidence_ceiling": "current static schema joined to historical host proof; no current-build or shipped target integration"
     },
     {
       "path": "kernel/metadata/observability-registry.json",
-      "sha256": "248d4d7ec494d2eea81f001f0acb894f5759a2dbabb1c887725e02baa71fffbc",
+      "sha256": "71c531f1229055d766793503d1a3d9e0c333fd7e9c09b7e4a8c474480742dc1d",
       "schema": "zlos.observability-registry.v1",
       "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS",
       "evidence_ceiling": "current source inventory joined to current-build QEMU boot/crash and event-schema host evidence; no target event emitter or durable crash evidence"
@@ -238,7 +238,7 @@
   ],
   "historical_host_test_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "subject_head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4",
+    "subject_head": "ba5a344742dad707b4b47800b6160468728deb0b",
     "current_build_bound": false,
     "evidence_ceiling": "dated host receipt; no current build identity binding"
   },

@@ -7,7 +7,7 @@
     "current_build_bound": true,
     "evidence_ceiling": "exact current artifact/QEMU registry bound to this build identity"
   },
-  "artifact_registry_sha256": "7b8a1577c4751f109d478bc10b0639cb1b713273da81967b24e021a37727eec9",
+  "artifact_registry_sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
   "toolchain_manifest_sha256": "e192dbdc1ad28d0ba338837a99044f15435e96ae1640228c37c5b9f62b112c4c",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
@@ -199,7 +199,7 @@
       "id": "artifact:boot-media-ids.json",
       "kind": "artifact",
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "e12e4a208becafbf8feae41b77ba9ed89b4e6cb91c46946bd6ce5a8b87103d41",
+      "sha256": "29956c845b74435ebfbeef9a12b7ab090012c4f3fe7690562ab136951e032320",
       "bytes": 484,
       "current_build_bound": true
     },
@@ -207,7 +207,7 @@
       "id": "artifact:kernel.elf",
       "kind": "artifact",
       "path": "kernel/kernel.elf",
-      "sha256": "8ead4fd7494c989130f30487d14b7f0c1f71af25f5c0bcd8f6709938e7a3edd4",
+      "sha256": "07108633eba499c522b78ced4d5fdccefadb9c76d7a13721eebe3c413423ec7c",
       "bytes": 6396228,
       "current_build_bound": true
     },
@@ -215,7 +215,7 @@
       "id": "artifact:kernel64.elf",
       "kind": "artifact",
       "path": "kernel/kernel64.elf",
-      "sha256": "eff660722d2e8279a127143076fe518aff42da4cbf0093b1c3d3a526c8f5a2ab",
+      "sha256": "14f3edd97712b08073acffe724d630c2ad3981339a3f66930bbbbda9fcf82aa2",
       "bytes": 3305128,
       "current_build_bound": true
     },
@@ -223,7 +223,7 @@
       "id": "artifact:kernel_raw.elf",
       "kind": "artifact",
       "path": "kernel/kernel_raw.elf",
-      "sha256": "f9cc6627cf32e21295af74d824418e7099922060327a35614fe8ecdb5c15e780",
+      "sha256": "723c2c7b69e181c9f7784b5073a7b3a2422593e6f7d09d63f8e3765954f50935",
       "bytes": 6396136,
       "current_build_bound": true
     },
@@ -231,7 +231,7 @@
       "id": "artifact:zlOS-usb.img",
       "kind": "artifact",
       "path": "kernel/zlOS-usb.img",
-      "sha256": "9386d0f0cb38d3a919d656acc002746188aaab185aacc1c4b6bf9aa6d964f3e1",
+      "sha256": "c79fd1ed720b91f89c13806c7fa8689196f118b4d843e8661138b91ea1d671ac",
       "bytes": 138412032,
       "current_build_bound": true
     },
@@ -239,7 +239,7 @@
       "id": "artifact:zlOS.img",
       "kind": "artifact",
       "path": "kernel/zlOS.img",
-      "sha256": "e31b6a8c73368c467e011d305f13583b623fdaa9b6dc324f73fd51d8a9740e43",
+      "sha256": "987798d9f1aa7d493bf0f4533980b5a6eff9b8d04f76361210788f098bd7530c",
       "bytes": 6291968,
       "current_build_bound": true
     },
@@ -247,7 +247,7 @@
       "id": "artifact:zlOS.iso",
       "kind": "artifact",
       "path": "kernel/zlOS.iso",
-      "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9",
+      "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d",
       "bytes": 31539200,
       "current_build_bound": true
     },
@@ -255,7 +255,7 @@
       "id": "artifact:zlOS64.iso",
       "kind": "artifact",
       "path": "kernel/zlOS64.iso",
-      "sha256": "18e9f63ef6d2f2bac0f592e5d9c5452b7a620f94c796f88937f0c0e39a1e1713",
+      "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee",
       "bytes": 28446720,
       "current_build_bound": true
     },

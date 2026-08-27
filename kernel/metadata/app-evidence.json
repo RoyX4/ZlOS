@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9"
+    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
   },
   "counts": {
     "catalogue_surfaces": 1,
@@ -2905,7 +2905,7 @@
       "artifact": {
         "bytes": 6291968,
         "path": "kernel/zlOS.img",
-        "sha256": "e31b6a8c73368c467e011d305f13583b623fdaa9b6dc324f73fd51d8a9740e43"
+        "sha256": "987798d9f1aa7d493bf0f4533980b5a6eff9b8d04f76361210788f098bd7530c"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "raw-bios",
@@ -2916,7 +2916,7 @@
       "artifact": {
         "bytes": 138412032,
         "path": "kernel/zlOS-usb.img",
-        "sha256": "9386d0f0cb38d3a919d656acc002746188aaab185aacc1c4b6bf9aa6d964f3e1"
+        "sha256": "c79fd1ed720b91f89c13806c7fa8689196f118b4d843e8661138b91ea1d671ac"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "native-uefi64",
@@ -2927,7 +2927,7 @@
       "artifact": {
         "bytes": 31539200,
         "path": "kernel/zlOS.iso",
-        "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9"
+        "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-bios32",
@@ -2938,7 +2938,7 @@
       "artifact": {
         "bytes": 31539200,
         "path": "kernel/zlOS.iso",
-        "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9"
+        "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-uefi32",
@@ -2949,7 +2949,7 @@
       "artifact": {
         "bytes": 28446720,
         "path": "kernel/zlOS64.iso",
-        "sha256": "18e9f63ef6d2f2bac0f592e5d9c5452b7a620f94c796f88937f0c0e39a1e1713"
+        "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-bios64",
@@ -2960,7 +2960,7 @@
       "artifact": {
         "bytes": 28446720,
         "path": "kernel/zlOS64.iso",
-        "sha256": "18e9f63ef6d2f2bac0f592e5d9c5452b7a620f94c796f88937f0c0e39a1e1713"
+        "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-uefi64",
@@ -2971,7 +2971,7 @@
   "schema": "zlos.application-evidence-registry.v1",
   "shipped_build_identity": {
     "dirty": false,
-    "head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4",
+    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
     "id": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "schema": 1
   },
@@ -2980,5 +2980,5 @@
     "schema": 1,
     "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
   },
-  "source_head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4"
+  "source_head": "ba5a344742dad707b4b47800b6160468728deb0b"
 }

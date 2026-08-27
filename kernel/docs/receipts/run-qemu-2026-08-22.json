@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9"
+    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
   },
   "evidence": "QEMU keyboard, filesystem error ladder, window lifecycle; not successful executable loading or physical proof",
   "result": {
@@ -46,7 +46,7 @@
   "schema": "zlos.run-route-qemu-receipt.v1",
   "shipped_build_identity": {
     "dirty": false,
-    "head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4",
+    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
     "id": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "schema": 1
   },
@@ -56,9 +56,9 @@
     "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
   },
   "source_files_sha256": {
-    "kernel/build_identity_embed.zl": "1a16e93f23f43a3161287a58fe191a2ab11d45984e6c317d270187c75af52143",
+    "kernel/build_identity_embed.zl": "c6b28ea0a63792e0fbab71f27d073cbd684ca974dc3fbc8cb3bf09aa8221322f",
     "kernel/metadata/app-manifest.json": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447",
-    "kernel/metadata/build-identity.json": "90e1e348ead5cd386f290cac95df703cbc963147650b68f7b8a31742d78b0032",
+    "kernel/metadata/build-identity.json": "e9baaeb8e6a590fcd7d4736f3ff3373068a4b34e6a5f6c80136f0deb9a61a421",
     "kernel/src/core/exec.c": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51",
     "kernel/src/graphics/windowing/term.c": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8",
     "kernel/src/graphics/windowing/wm.c": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
@@ -69,6 +69,6 @@
     "kernel/tools/probes/probe-run.py": "e3afcf13b492b5fd6193e99c21852f3460b7acab1cfaab53c20330b79e9e1c67",
     "kernel/tools/probes/probe-term.py": "b8f289db7481f0fe51701083572cc8d29d0a799d9871ab74ca270b2928487dbb"
   },
-  "source_head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4",
+  "source_head": "ba5a344742dad707b4b47800b6160468728deb0b",
   "weakest_link": "the loader's successful execution path is outside this receipt; physical keyboard and display are unproven here"
 }
