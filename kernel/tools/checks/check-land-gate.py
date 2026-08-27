@@ -63,6 +63,8 @@ REQUIRED_SNIPPETS = (
     'run "application evidence registry check"',
     'run "artifact and boot-route registry write"',
     'run "artifact and boot-route registry check"',
+    'run "final build graph artifact rebind write"',
+    'run "final build graph artifact rebind check"',
     'run "initialization registry write"',
     'run "initialization registry check"',
     'run "adversarial registry write"',
@@ -158,6 +160,14 @@ def selftest(source: str) -> None:
         ),
         "deleted-boot-route",
     )
+    expect_failure(
+        source.replace(
+            'run "final build graph artifact rebind check"',
+            '# removed final graph rebind check',
+            1,
+        ),
+        "deleted-final-graph-rebind",
+    )
     expect_failure(source.replace("exit $FAIL", "exit 0", 1), "masked-final-exit")
     expect_failure(
         source.replace(
@@ -170,7 +180,7 @@ def selftest(source: str) -> None:
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
         "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
-        "masked-final-exit and masked-child-failure"
+        "deleted-final-graph-rebind, masked-final-exit and masked-child-failure"
     )
 
 

@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "3b95999bca0dcaf3307293c88b9cb4a7f934ef70bbe3cd414f46196f8b834ac2"
+    "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9"
   },
   "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "crash_line": "ZLCRASH v=1 bytes=88 bits=32 vec=6 haserr=0 err=0x0000000000000000 ip=0x0000000000443550 cs=0x0000000000000008 flags=0x0000000000010246 sp=0x000000000072d69c ss=0x0000000000000000 cr2=0x0000000000000000 checksum=0x693c77435d7c7736 END\n",
@@ -10,7 +10,7 @@
   "guest_halted_after_record": true,
   "kernel": {
     "path": "kernel/kernel.elf",
-    "sha256": "95875a9048d286715903af7269cf4a6961bc49b44ad36811d7a63c273e26daf0"
+    "sha256": "8ead4fd7494c989130f30487d14b7f0c1f71af25f5c0bcd8f6709938e7a3edd4"
   },
   "kernel_symbol_ip": 4470096,
   "record": {

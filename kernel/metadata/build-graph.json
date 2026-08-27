@@ -1,13 +1,13 @@
 {
   "schema": "zlos.build-graph.v1",
-  "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
+  "result": "PASS_CURRENT_ARTIFACTS",
   "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "artifact_snapshot": {
-    "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-    "current_build_bound": false,
-    "evidence_ceiling": "exact historical artifact/QEMU registry; recipe edges do not promote those bytes as outputs of the current source identity"
+    "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+    "current_build_bound": true,
+    "evidence_ceiling": "exact current artifact/QEMU registry bound to this build identity"
   },
-  "artifact_registry_sha256": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
+  "artifact_registry_sha256": "7b8a1577c4751f109d478bc10b0639cb1b713273da81967b24e021a37727eec9",
   "toolchain_manifest_sha256": "e192dbdc1ad28d0ba338837a99044f15435e96ae1640228c37c5b9f62b112c4c",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
@@ -189,75 +189,75 @@
   "nodes": [
     {
       "id": "artifact:BOOTX64.EFI",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/BOOTX64.EFI",
       "sha256": "ce5d87163f213d834895621b0e34c8ebe027dd1eb9947df9341a70f720f6eca0",
       "bytes": 20480,
-      "current_build_bound": false
+      "current_build_bound": true
     },
     {
       "id": "artifact:boot-media-ids.json",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "31485f161218a04280db9fffc813542b2e79df2402636002e2c231bb4aa9e701",
+      "sha256": "e12e4a208becafbf8feae41b77ba9ed89b4e6cb91c46946bd6ce5a8b87103d41",
       "bytes": 484,
-      "current_build_bound": false
+      "current_build_bound": true
     },
     {
       "id": "artifact:kernel.elf",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/kernel.elf",
-      "sha256": "715e7da1f3dd5a7899ed934048513d247880fdfac5f9d2c9503a61864a7d9a20",
-      "bytes": 5594240,
-      "current_build_bound": false
+      "sha256": "8ead4fd7494c989130f30487d14b7f0c1f71af25f5c0bcd8f6709938e7a3edd4",
+      "bytes": 6396228,
+      "current_build_bound": true
     },
     {
       "id": "artifact:kernel64.elf",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/kernel64.elf",
-      "sha256": "afcd4996cb688ebe5a95bb510cd851515e3f48af10337d4a89636cf49aa78b9b",
-      "bytes": 3031456,
-      "current_build_bound": false
+      "sha256": "eff660722d2e8279a127143076fe518aff42da4cbf0093b1c3d3a526c8f5a2ab",
+      "bytes": 3305128,
+      "current_build_bound": true
     },
     {
       "id": "artifact:kernel_raw.elf",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/kernel_raw.elf",
-      "sha256": "f08946e28d262fb687eed1a46b13b01a41ca16eaf47c2239a2b83d6d119f1cb8",
-      "bytes": 5594084,
-      "current_build_bound": false
+      "sha256": "f9cc6627cf32e21295af74d824418e7099922060327a35614fe8ecdb5c15e780",
+      "bytes": 6396136,
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS-usb.img",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS-usb.img",
-      "sha256": "9951b2a04259f923929ebce8c75221b6a2e4050449fb9049505f48ce6c4a99b8",
+      "sha256": "9386d0f0cb38d3a919d656acc002746188aaab185aacc1c4b6bf9aa6d964f3e1",
       "bytes": 138412032,
-      "current_build_bound": false
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS.img",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS.img",
-      "sha256": "d2acd9ffde79af69830929e0ee6242259900aae3e617fb615735174a4d440d0c",
+      "sha256": "e31b6a8c73368c467e011d305f13583b623fdaa9b6dc324f73fd51d8a9740e43",
       "bytes": 6291968,
-      "current_build_bound": false
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS.iso",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS.iso",
-      "sha256": "30a21da385cb9a89fa7b0ec8943113829268b30beae5e15f3059c0d62a416273",
-      "bytes": 30736384,
-      "current_build_bound": false
+      "sha256": "100cdf07efb8602572d094c4ef42f527979517a8dae8d7d7d788bf4f5c7a59f9",
+      "bytes": 31539200,
+      "current_build_bound": true
     },
     {
       "id": "artifact:zlOS64.iso",
-      "kind": "historical-artifact",
+      "kind": "artifact",
       "path": "kernel/zlOS64.iso",
-      "sha256": "7c84021c510008cdd48b27564ad27db8f909d4a3d06d3a7eb97583a84396d163",
-      "bytes": 28174336,
-      "current_build_bound": false
+      "sha256": "18e9f63ef6d2f2bac0f592e5d9c5452b7a620f94c796f88937f0c0e39a1e1713",
+      "bytes": 28446720,
+      "current_build_bound": true
     },
     {
       "id": "generated:zl-c",
@@ -6932,8 +6932,8 @@
     "declared_c_units": 73,
     "target_lanes": 4,
     "artifacts": 9,
-    "current_artifacts": 0,
-    "historical_artifacts": 9,
+    "current_artifacts": 9,
+    "historical_artifacts": 0,
     "nodes": 474,
     "edges": 746,
     "orphan_source_inputs": 0,
@@ -6953,12 +6953,11 @@
   "open_gaps": [
     "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",
     "conservative header-superset inputs may be scope-only rather than active includes",
-    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes",
-    "the exact artifact snapshot is historical and no artifact hash is bound to the current source identity"
+    "archive/package/service outputs beyond the current nine-artifact registry are not yet graph nodes"
   ],
   "generator": {
     "path": "kernel/tools/generators/gen-build-graph.py",
     "sha256": "6d40497bab0ac7ff63e82ad1c5b1562922981f75c5e1ee4b325e8316dc2fcf7d"
   },
-  "evidence_ceiling": "complete declared-input build recipe for four lanes joined to a clearly historical nine-artifact snapshot; not current artifact provenance or a compiler-emitted per-object attestation"
+  "evidence_ceiling": "complete declared-input build recipe for four lanes joined to the current reproducible nine-artifact snapshot; not a compiler-emitted per-object attestation"
 }

@@ -94,7 +94,7 @@ OPEN_GAPS = {
     "historical_release_series_complete": False,
     "current_artifact_snapshot_missing": False,
     "current_qemu_evidence_missing": False,
-    "current_host_benchmark_missing": True,
+    "current_host_benchmark_missing": False,
 }
 
 
@@ -397,7 +397,7 @@ def validate(value: dict, docs: dict[str, dict]) -> None:
         ("kernel/metadata/artifact-registry.json", docs["artifact-registry.json"]["build_identity"]["id"], True),
         ("kernel/metadata/app-evidence.json", docs["app-evidence.json"]["shipped_build_identity"]["id"], True),
         ("kernel/docs/receipts/benchmark-host-2026-08-23.json",
-         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"], False),
+         docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"], True),
     ]
     if value.get("evidence_bindings") != [{
             "path": path, "subject_build_identity": subject,
@@ -469,7 +469,7 @@ def build() -> dict:
     if any(len(item) != 64 for item in evidence_inputs.values()) \
             or evidence_inputs["kernel/metadata/artifact-registry.json"] != identity \
             or evidence_inputs["kernel/metadata/app-evidence.json"] != identity \
-            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] == identity:
+            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] != identity:
         raise ValueError("release-note evidence boundary is invalid")
     if docs["license-registry.json"]["public_release_blocked"] is not True:
         raise ValueError("release notes require the current license release block")
@@ -630,6 +630,9 @@ def selftest(value: dict, docs: dict[str, dict]) -> None:
     binding = copy.deepcopy(value)
     binding["evidence_bindings"][0]["current_build_bound"] = False
     mutations["lost-current-artifact-proof"] = binding
+    benchmark = copy.deepcopy(value)
+    benchmark["evidence_bindings"][2]["current_build_bound"] = False
+    mutations["lost-current-benchmark-proof"] = benchmark
     caught = []
     for name, mutant in mutations.items():
         try:

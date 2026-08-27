@@ -2,7 +2,7 @@
   "schema": "zlos.accessibility-proof-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
   "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-  "host_test_receipt_sha256": "cbdf04b522526da240aa763999121eae1f97bd74f02a71cc948e0ed0e1059cc3",
+  "host_test_receipt_sha256": "ab210de96dba8b516c6ea0c110b4354fb2d08173be596be9f4c679a923de81e2",
   "source_identities": {
     "src/drivers/input/input.c": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0",
     "src/graphics/ui/ui.c": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",

@@ -1,25 +1,25 @@
 {
   "schema": "zlos.security-claim-registry.v1",
   "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
   "input_bindings": {
     "artifact_registry": {
-      "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
       "current_build_bound": true
     },
     "init_registry": {
-      "subject_build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
+      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
       "current_build_bound": true
     },
     "host_test_receipt": {
-      "subject_head": "528a21f5f7fe8061b9e86c377d075529a433a558",
+      "subject_head": "18a71101dced11411f4bb3614b9ea6fa9fd7bbb4",
       "current_build_bound": false
     }
   },
   "input_receipts": {
-    "kernel/metadata/artifact-registry.json": "56b6ba9f4142c23c69fd2d4b4532c1dba81359c307de7f5cf7a51ca5f46d5002",
-    "kernel/metadata/init-registry.json": "9bda15002df55cc1f208003659917598416e29e45138c34502846aa1ad239d59",
-    "kernel/tests/host/test-run-receipt.json": "cbdf04b522526da240aa763999121eae1f97bd74f02a71cc948e0ed0e1059cc3"
+    "kernel/metadata/artifact-registry.json": "7b8a1577c4751f109d478bc10b0639cb1b713273da81967b24e021a37727eec9",
+    "kernel/metadata/init-registry.json": "963afe648efb025f358d080f77c6385437bf925ea97ad180a2e44456d09d4c7d",
+    "kernel/tests/host/test-run-receipt.json": "ab210de96dba8b516c6ea0c110b4354fb2d08173be596be9f4c679a923de81e2"
   },
   "claims": [
     {

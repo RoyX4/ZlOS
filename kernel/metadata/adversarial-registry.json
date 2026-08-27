@@ -1,9 +1,9 @@
 {
   "schema": "zlos.adversarial-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "78c81e69528d5419f89139a173801ab358ae9b73b9dfccf8f2868d04ba9f24a5",
-  "host_test_inventory_sha256": "4bdfaf55668fddd5b98b4dc1bf77765ffde91053c592412c6b98e31b52cbe536",
-  "host_test_receipt_sha256": "cbdf04b522526da240aa763999121eae1f97bd74f02a71cc948e0ed0e1059cc3",
+  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "host_test_inventory_sha256": "3230182f58256a06d21c3e0367707c6405d6efedfd39ee19f90599d59e3fd9cc",
+  "host_test_receipt_sha256": "ab210de96dba8b516c6ea0c110b4354fb2d08173be596be9f4c679a923de81e2",
   "verifier_canaries": [
     {
       "id": "CAN-001",
@@ -15,7 +15,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "c261718dedb7372be6d03d172e50d99cbfcd340821b6964558c804424fd1725a",
+      "output_sha256": "fc9562450020a12f6ed04df76c3af28b7baa2d0d03cf9dd76b5d08b65103236a",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -28,7 +28,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "d13232e243cf4e76860f87b83b735f7806f4c7d794367a47304957d150a033ff",
+      "output_sha256": "007532eaf8613193f9a128f027d5eb28dbe2bd4fad616e16df9f2f81a08e501a",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "8192fe3bffa96576b798f082c62c7d65c467fb71ff26186991b0e839dbcc1250",
+      "output_sha256": "3f2b61a6b9161bc33d3f5122d2dff66b7156fbc8b1089ca536ceed4713875819",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -64,7 +64,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "5077bd1a9c93aa208a0712c841c569661cb8b2e257f38b0f04d11c6186be77f5",
+      "output_sha256": "d531aa612d2413c46bdbe4ca9468bdab7ddc64cea8e1bc03bf6c787e1716cdc0",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -76,7 +76,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "544f964fa3271078c47e9f60b2160d5c146e00c2e94982d5a40e592c15d4729b",
+      "output_sha256": "ad67628fc6e6c8d666178c4f58eefb44e9adad1c9bfb7ab0cdf14aa4266c8495",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -102,7 +102,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "aec8129c9547ad65a3bff282511d1277cdff4d8d9d5e1f1ab08c03b27a6f5331",
+      "output_sha256": "eb6ec1c41c51260433e1b8356b1913010e6de93d2ce8a16c33f220de67f161d9",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -128,7 +128,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "02ce212a2d7d40fe867b29824b7ccecc10c4b2a309ab3504ec33d08470e7eedd",
+      "output_sha256": "8beadf7ecc3ef709d7e361450e20cf5baada6aaa6e19d906611d9e96cd92855a",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -154,7 +154,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "9b79114ccde9aa4f488f14f39e3519a0339b0ff240a44f66d9eb3c1a3ae0415e",
+      "output_sha256": "5804d8d4f19317f63e830f9b47cfa7fb1de4f3e52b3803b070c5d544b1c5ae33",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -215,7 +215,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "mutations change IDs",
-      "output_sha256": "82de43bec2715a56ce429db472d6db26b013bd665a39c0519867b4a0b55f254a",
+      "output_sha256": "e1a94b0113e2e5e0e1e46e1215e3f1192ecfa5e0bf68842cc6586ce145a3b12a",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -241,7 +241,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "5540e42c88da27eb4fb5ebf8a106f1b65e64c65aa68446f85f377539c6f6281a",
+      "output_sha256": "2856fb1732e56681d4d29baf3c25170d030b64da3e5fbdce31c95e29f1dbcf40",
       "result": "PLANTED_MUTATION_CAUGHT"
     }
   ],
@@ -296,7 +296,7 @@
       "family": "lifecycle",
       "status": "PARTIAL",
       "passed_host_targets": [],
-      "open_gap": "62 app open-ready-close routes pass, but lifecycle failure is not injected"
+      "open_gap": "all current application open-ready-close routes pass, but lifecycle failure is not injected"
     }
   ],
   "hostile_corpus": [
@@ -406,6 +406,6 @@
   "weakest_link": "no failure family is exhaustive; ELF/archive/font/IPC corpora are absent",
   "generator": {
     "path": "kernel/gen-adversarial-registry.py",
-    "sha256": "bbf3859a3c1b1c38cd2a3c02c7c9d539779ad7f47fe6234e43050d7b38390224"
+    "sha256": "94c7b00635bbdb7ba27ad02fdf5dfcdcef5f7439ac18ff67e39c6f6bb5cb222e"
   }
 }

@@ -230,7 +230,7 @@
   },
   "proof": {
     "receipt_path": "kernel/docs/receipts/event-trace-host-2026-08-24.json",
-    "receipt_sha256": "9582c506d20d880e27b59583ba6209c0628c0343303a7339264a4195ae257d83",
+    "receipt_sha256": "d098301cc92960ce14e202ee74d1e6709b9a131921813d5678f8668f11353da6",
     "host_checks": 37,
     "host_failures": 0,
     "compile_lanes": 3,

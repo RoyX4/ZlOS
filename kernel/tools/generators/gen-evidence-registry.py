@@ -113,9 +113,9 @@ def validate(value: dict) -> None:
         "dependency_runtime_files": 91,
         "dependency_transitive_packages": 145,
         "dependency_source_archives_retained": 0,
-        "wrapper_inventory": 156,
-        "wrapper_named_by_landing_gate": 58,
-        "wrapper_legacy_policy_gaps": 19,
+        "wrapper_inventory": 164,
+        "wrapper_named_by_landing_gate": 63,
+        "wrapper_legacy_policy_gaps": 18,
         "toolchain_tools": 7,
         "toolchain_target_lanes": 4,
         "toolchain_external_headers": 82,
@@ -124,15 +124,15 @@ def validate(value: dict) -> None:
         "build_graph_target_lanes": 4,
         "build_graph_artifacts": 9,
         "build_graph_orphan_inputs": 0,
-        "build_graph_scope_only_inputs": 8,
+        "build_graph_scope_only_inputs": 9,
         "license_build_inputs": build_input_count,
         "license_files": 0,
-        "host_targets": 73,
+        "host_targets": 74,
         "host_commands_executed": 64,
         "host_passed": 59,
         "host_failed": 0,
         "host_hardware_skips": 3,
-        "host_not_run": 11,
+        "host_not_run": 12,
         "physical_exact_hash_proofs": 0,
         "verifier_canaries_caught": 19,
         "landing_gate_mandatory_seams": counts.get("landing_gate_mandatory_seams"),
@@ -196,7 +196,7 @@ def validate(value: dict) -> None:
         "historical_artifacts": 0,
         "current_build_bound_qemu_routes": 6,
         "historical_qemu_routes": 0,
-        "current_build_bound_host_receipts": 1,
+        "current_build_bound_host_receipts": 2,
     }
     if counts != expected_counts:
         raise ValueError("evidence count drift")
@@ -204,7 +204,7 @@ def validate(value: dict) -> None:
     expected_gaps = {
         "physical_exact_hash_artifacts": 9,
         "host_hardware_skips": 3,
-        "host_non_runs": 11,
+        "host_non_runs": 12,
         "inputs_without_redistribution_grant": build_input_count,
         "public_release_blocked": True,
         "source_snapshot_off_host_missing": True,
@@ -216,13 +216,13 @@ def validate(value: dict) -> None:
         "dependency_offline_rebuild_missing": True,
         "dependency_source_archives_missing": 145,
         "per_object_provenance_receipts_missing": True,
-        "build_graph_scope_only_inputs": 8,
-        "future_build_graph_outputs_missing": True,
+        "build_graph_scope_only_inputs": 9,
+        "future_build_graph_outputs_missing": False,
         "failure_injection_open_families": 7,
         "hostile_corpus_open_families": 4,
         "performance_over_budget": counts.get("benchmark_over_budget"),
         "native_target_benchmark_missing": True,
-        "benchmark_percentiles_missing": True,
+        "benchmark_percentiles_missing": False,
         "visual_unbound_assets": 41,
         "visual_variant_dimensions_open": 6,
         "accessibility_missing_capabilities": 9,
@@ -252,7 +252,7 @@ def validate(value: dict) -> None:
         "current_artifact_snapshot_missing": False,
         "current_qemu_evidence_missing": False,
         "current_host_test_receipt_missing": True,
-        "current_host_benchmark_missing": True,
+        "current_host_benchmark_missing": False,
     }
     if gaps != expected_gaps:
         raise ValueError("open evidence gaps were hidden or drifted")
@@ -268,7 +268,7 @@ def validate(value: dict) -> None:
     if len(value.get("generator", {}).get("sha256", "")) != 64:
         raise ValueError("missing evidence generator identity")
     bindings = value.get("evidence_bindings", [])
-    if len(bindings) != 8 or sum(row.get("current_build_bound") is True for row in bindings) != 7 \
+    if len(bindings) != 8 or sum(row.get("current_build_bound") is True for row in bindings) != 8 \
             or any(len(row.get("subject_build_identity", "")) != 64 for row in bindings):
         raise ValueError("evidence bindings were promoted or lost")
     if value.get("historical_host_test_receipt", {}).get("current_build_bound") is not False:
@@ -333,9 +333,7 @@ def build() -> dict:
         "kernel/docs/receipts/event-trace-host-2026-08-24.json": event_receipt.get("build_identity"),
     }
     if any(len(item or "") != 64 for item in evidence_inputs.values()) \
-            or any(subject != identity for path, subject in evidence_inputs.items()
-                   if path != "kernel/docs/receipts/benchmark-host-2026-08-23.json") \
-            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] == identity:
+            or any(subject != identity for subject in evidence_inputs.values()):
         raise ValueError("evidence identity boundary is invalid")
     if source_snapshot.get("result") != "PASS_WITH_OPEN_CUSTODY_GAP" \
             or source_snapshot.get("counts", {}).get("archived_inputs") != build_input_count \
@@ -352,7 +350,7 @@ def build() -> dict:
             or dependency.get("closure", {}).get("all_source_archives_retained") is not False:
         raise ValueError("init/dependency evidence is not passing")
     if wrappers.get("result") != "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS" \
-            or wrappers.get("counts", {}).get("wrappers") != 156 \
+            or wrappers.get("counts", {}).get("wrappers") != 164 \
             or wrappers.get("authority_contract", {}).get("legacy_policy_gaps_are_not_landing_authority") is not True:
         raise ValueError("wrapper inventory is missing or overpromoted")
     if toolchain.get("result") != "PASS_WITH_OPEN_PORTABILITY_GAPS" \
@@ -361,7 +359,7 @@ def build() -> dict:
     if build_graph.get("result") != "PASS_CURRENT_ARTIFACTS" \
             or build_graph.get("counts", {}).get("source_inputs") != build_input_count \
             or build_graph.get("counts", {}).get("orphan_source_inputs") != 0 \
-            or build_graph.get("counts", {}).get("scope_only_inputs") != 8 \
+            or build_graph.get("counts", {}).get("scope_only_inputs") != 9 \
             or build_graph.get("artifact_snapshot", {}).get("current_build_bound") is not True:
         raise ValueError("build graph is missing or overpromoted")
     if license_registry.get("result") != "PASS_WITH_RELEASE_BLOCK" \
@@ -532,7 +530,7 @@ def build() -> dict:
         "historical_artifacts": 0,
         "current_build_bound_qemu_routes": len(artifact["boot_routes"]),
         "historical_qemu_routes": 0,
-        "current_build_bound_host_receipts": 1,
+        "current_build_bound_host_receipts": 2,
     }
     value = {
         "schema": "zlos.evidence-registry.v1",
@@ -575,7 +573,7 @@ def build() -> dict:
             ),
             "per_object_provenance_receipts_missing": True,
             "build_graph_scope_only_inputs": build_graph["counts"]["scope_only_inputs"],
-            "future_build_graph_outputs_missing": True,
+            "future_build_graph_outputs_missing": False,
             "failure_injection_open_families": len(adversarial["open_gaps"]["failure_injection"]),
             "hostile_corpus_open_families": len(adversarial["open_gaps"]["hostile_corpus"]),
             "performance_over_budget": benchmark["counts"]["over_budget"],
@@ -610,14 +608,14 @@ def build() -> dict:
             "current_artifact_snapshot_missing": False,
             "current_qemu_evidence_missing": False,
             "current_host_test_receipt_missing": True,
-            "current_host_benchmark_missing": True,
+            "current_host_benchmark_missing": False,
         },
         "generator": {
             "path": "kernel/tools/generators/gen-evidence-registry.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": (
-            "current source/tooling index joined to current artifacts, QEMU routes and event host proof plus historical host/benchmark evidence; "
+            "current source/tooling index joined to current artifacts, QEMU routes, host benchmark and event host proof plus a dirty-tree host-test receipt; "
             "no physical-artifact, full-workflow or public-release promotion"
         ),
         "weakest_link": (
@@ -691,6 +689,9 @@ def selftest(value: dict) -> None:
     binding = copy.deepcopy(value)
     binding["evidence_bindings"][0]["current_build_bound"] = False
     mutations["lost-current-artifact-proof"] = binding
+    benchmark = copy.deepcopy(value)
+    benchmark["evidence_bindings"][5]["current_build_bound"] = False
+    mutations["lost-current-benchmark-proof"] = benchmark
     caught = []
     for name, mutated in mutations.items():
         try:

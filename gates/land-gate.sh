@@ -218,6 +218,13 @@ run "artifact and boot-route registry write" "$WT/kernel" \
     python3 tools/generators/gen-artifact-registry.py --write --selftest
 run "artifact and boot-route registry check" "$WT/kernel" \
     python3 tools/generators/gen-artifact-registry.py --check --selftest
+# The early build graph proves recipe/source closure before compilation. Rebind
+# it after the final artifact registry exists so downstream release/provenance
+# joins see the exact current outputs rather than the previous artifact batch.
+run "final build graph artifact rebind write" "$WT/kernel" \
+    python3 tools/generators/gen-build-graph.py --write --selftest
+run "final build graph artifact rebind check" "$WT/kernel" \
+    python3 tools/generators/gen-build-graph.py --check --selftest
 run "initialization registry write" "$WT/kernel" \
     python3 tools/generators/gen-init-registry.py --write --selftest
 run "initialization registry check" "$WT/kernel" \
