@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-27 — fix: close whole-tree audit findings (6ebb2d8)
+
+`codex/full-program` · 105 files changed, 2543 insertions(+), 1758 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>105 file(s)</summary>
+
+- `TODO.md`
+- `docs/PROJECT-STATUS.md`
+- `docs/evidence/status-audits/README.md`
+- `docs/evidence/status-audits/WHOLE-TREE-CODEX-AUDIT-2026-08-26.md`
+- `docs/program/FEATURE-STATUS.json`
+- `docs/program/PARTIAL-CLOSURE.json`
+- `docs/program/PARTIAL-CLOSURE.md`
+- `docs/program/README.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/README.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/boot/boot64.S`
+- _…and 93 more_
+
+</details>
+
 ## 2026-08-26 — fix: reconcile evidence build identities (7686f86)
 
 `codex/full-program` · 34 files changed, 5434 insertions(+), 5187 deletions(-)
