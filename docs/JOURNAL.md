@@ -7,6 +7,33 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix: the kernel log shows the machine's actual output, and six more written figures become reads (2275bbe)
+
+`design/presswork` · 11 files changed, 727 insertions(+), 78 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/design/app-parity-findings-2026-08-28.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/apps/apps_system.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/term.c`
+
+</details>
+
 ## 2026-08-28 — fix: four invented figures, two of them mine from this session (358ff29)
 
 `design/presswork` · 6 files changed, 67 insertions(+), 19 deletions(-)

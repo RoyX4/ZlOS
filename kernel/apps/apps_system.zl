@@ -88,7 +88,12 @@ fn clk_draw(ax, ay, aw, ah) {
 
     # the readings this machine can actually take
     ky = cy + chh + 12 * u
-    clk_kv(ax + 12 * u, ky, aw, "TICK", 100, "Hz, the PIT divisor this kernel programs")
+    # 100 IS THE FREQUENCY, NOT THE DIVISOR. idt.c programs
+    # `divisor = 1193182 / 100`, so the divisor is 11931 and 100 is the rate it
+    # produces. Calling the rate a divisor names the wrong quantity while
+    # printing the right number, which is the kind of error that survives
+    # review precisely because the figure beside it checks out.
+    clk_kv(ax + 12 * u, ky, aw, "TICK", 100, "Hz from the PIT, divisor 11931 of 1193182")
     ky = ky + 17 * u
     clk_kv(ax + 12 * u, ky, aw, "BUDGET", wm_budget(), "us per presentation deadline")
     ky = ky + 17 * u
