@@ -358,8 +358,18 @@ T_TITLE   = 2
 W_REG     = 0
 W_BOLD    = 1
 TITLE_H = 28                       # ZD_TITLE_H - down from 36, see design.h
-MON_W = 424                        # real resource surface, not a narrow widget strip
-MON_H = 376                        # matches the north-star three-window composition
+# THE PROTOTYPE'S OWN NUMBERS. presswork-prototype.html's APPS table gives the
+# monitor p:[14, 430, 640, 400]. This said 424 x 376, and the two-column body
+# the reference specifies does not fit in 424 - the column heads collided and
+# the composite-time figures ran into each other. The old comment claimed the
+# height "matches the north-star three-window composition"; that composition
+# came from ds.html, the PREDECESSOR document, which design.h has since
+# superseded ("If this header and the prototype disagree, THE PROTOTYPE WINS").
+# The widest the prototype's default composition reaches: files sits at x 672
+# and is 540 wide. Below this the desk falls back to the stacked layout.
+PROTO_FIT = 1212
+MON_W = 640                        # presswork-prototype.html APPS mon p[2]
+MON_H = 400                        # presswork-prototype.html APPS mon p[3]
 AB_H  = 150                        # About height; no clipped final line at 2x
 
 # ---- the four bands, in design units ----------------------------------------
@@ -4613,6 +4623,7 @@ fn run_command(cmd, arg) {
     if cmd == 216 { if wm_run() == 0 { return needs_wm("system info") }  return reg_open(32) }
     if cmd == 218 { if wm_run() == 0 { return needs_wm("the system pane") }  return open_syspane() }
     if cmd == 217 { if wm_run() == 0 { return needs_wm("the type pane") }  return open_typepane() }
+    if cmd == 219 { if wm_run() == 0 { return needs_wm("the monitor") }  return reopen_mon() }
     if cmd == 206 {
         if wm_run() == 0 { return needs_wm("the lock sheet") }
         ov_mode = OV_LOCK
@@ -4833,136 +4844,341 @@ fn draw_sysmon(sx, sy, sfoc) {
 # itself and hand this only its client area - the app contract in ui.h requires
 # app_draw to be position-pure, and this already was: every coordinate here is
 # derived from sx,sy. Nothing is baked in.
+# =============================================================================
+# 03 SYSTEM MONITOR
+#
+# THE REFERENCE ASKS FOR TWO THINGS THIS KERNEL CANNOT MEASURE, and the whole
+# design of this pane is what to print instead.
+#
+# 1. FOUR PER-CORE CPU PERCENTAGES. Nothing in this kernel counts per-core busy
+#    time. smp.c exports smp_cpu_count / smp_online / smp_mask / smp_band_wakes
+#    and there is no idle accounting anywhere, so a percentage would have to be
+#    computed from nothing. What IS real per core: whether it came up, its APIC
+#    id, and how many band wakes it has completed. That is the table drawn here.
+#    A meter reading 34.0 % would be a better-looking lie.
+#
+# 2. TEN NAMED PROCESSES WITH cpu %, rss AND wchan. There is no process model.
+#    sched.c's task is { sp, state, ticks, wake_at, entry } - no name, no RSS,
+#    no wchan, no pid - and it is EMPTY on a booted desktop, because sched_go()
+#    is only reached from a shell command. The honest analogue is the window
+#    table: live, selectable, already driven by the rail, and now carrying a
+#    real per-window microsecond figure via wm_appus. The reference's process
+#    list is mocked data; this one is the machine.
+#
+# The sampling note is re-labelled for the same reason. The reference says
+# "1 Hz - 64 s history"; wm.c's ring is pushed once per PAINTED FRAME, not once
+# per second, so at 60 Hz its 64 columns are about a second, not 64 of them.
+# It says "per frame" and prints the count it actually has.
+
+SM_PAD    = 12
+SM_GAP    = 10
+SM_METERH = 19                     # .meter
+SM_TRACKH = 9                      # .mtrack
+SM_SPARKH = 42                     # spark(hist, 300, 42, 100, --zd-steel)
+
+fn sm_lab(lx, ly, lh, s) {
+    ui_caps(lx, ly + (lh - ui_th(PW_SM)) / 2, s, theme(TH_TEXT_DIM), PW_SM)
+    return 0
+}
+
+# A meter. design.h:659 - "these are INSTRUMENTS, so their fill is ZD_STEEL and
+# never" the overprint - so the fill is TH_STEEL and the only other ink it may
+# take is the warn colour, when the thing being metered is past its ceiling.
+fn sm_meter(mx, my, mw, nm, val, vmax) {
+    u = ui()
+    mh = SM_METERH * u
+    sm_lab(mx, my, mh, nm)
+    mtx = mx + 86 * u
+    mtw = mw - 86 * u - 58 * u
+    mty = my + (mh - SM_TRACKH * u) / 2
+    mth = SM_TRACKH * u
+    fill_rgb(mtx, mty, mtw, mth, theme(TH_CUT))
+    fill_rgb(mtx + 1, mty + 1, mtw - 2, mth - 2, theme(TH_SURF_WELL))
+    mfw = 0
+    if vmax > 0 { mfw = (mtw - 2) * val / vmax }
+    if mfw > mtw - 2 { mfw = mtw - 2 }
+    mcol = theme(TH_STEEL)
+    if val * 5 > vmax * 4 { mcol = theme(TH_WARN) }
+    if mfw > 0 { fill_rgb(mtx + 1, mty + 1, mfw, mth - 2, mcol) }
+    mq1 = 0
+    if vmax > 0 { mq1 = val * 1000 / vmax }
+    my2 = my + (mh - ui_th(PW_SM)) / 2
+    # BACKWARDS FROM THE RIGHT EDGE, unit first. Laid out forwards from a
+    # guessed x the per-cent sign hung off the column the moment the reading
+    # reached three digits - pw_sect's comment says exactly this and it is worth
+    # obeying rather than rediscovering.
+    muw = ui_tw(" %", PW_SM, PW_MONO)
+    mnw = pw_decgw(mq1, 1, PW_SM, PW_MONO)
+    pw_decg(mx + mw - muw - mnw, my2, mq1, 1, theme(TH_TEXT_2), PW_SM, PW_MONO)
+    ui_txt(mx + mw - muw, my2, " %", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    return my + mh
+}
+
+# The composite-time spark, over wm.c's real per-frame ring.
+#
+# THIS REPLACED A DRAWING. It was seven line() calls at fixed offsets
+# -3, -1, -6, -3, -7, -4, -6: a shape with no data behind it, in an instrument,
+# in a system whose entire argument is that its instruments are read. It filled
+# with TH_ACCENT too, against the design.h rule quoted above.
+#
+# SCALED AGAINST THE BUDGET, NOT AGAINST THE TALLEST SAMPLE. A spark normalised
+# to its own maximum always looks the same, which is the one thing a frame-time
+# chart must never do: full height is wm_budget(), so a bar that reaches the top
+# is a frame that spent its whole deadline, and the shape means something across
+# two different runs.
+fn sm_spark(gx, gy, gw, gh) {
+    sn = wm_sn()
+    fill_rgb(gx, gy, gw, 1, theme(TH_CUT))
+    if sn < 1 { return 0 }
+    bud = wm_budget()
+    if bud < 1 { bud = 1 }
+    cap = SPARK_MAX
+    if sn < cap { cap = sn }
+    # FULL HEIGHT IS THE BUDGET *OR* THE TALLEST SAMPLE, WHICHEVER IS LARGER.
+    # It was the budget alone, which is right in intent - a spark normalised to
+    # its own peak always looks the same - and wrong in exactly the case that
+    # matters. Measured on this machine: min 18.3 ms against a 16.667 ms budget,
+    # so EVERY bar clipped at full height and the chart was a solid block that
+    # said only "over", never how far or whether it was getting worse. A chart
+    # that saturates when the news is bad is a chart that stops working when you
+    # start needing it.
+    top = bud
+    i = 0
+    while i < cap {
+        v = wm_sf(sn - cap + i)
+        if v > top { top = v }
+        i = i + 1
+    }
+    bw2 = gw / cap
+    if bw2 < 1 { bw2 = 1 }
+    i = 0
+    while i < cap {
+        v = wm_sf(sn - cap + i)
+        bh = v * gh / top
+        if bh > gh { bh = gh }
+        if bh < 1 { bh = 1 }
+        c = theme(TH_STEEL)
+        if v > bud { c = theme(TH_WARN) }
+        fill_rgb(gx + i * bw2, gy + gh - bh, bw2 - 1, bh, c)
+        i = i + 1
+    }
+    # The deadline, drawn where it actually falls now that the scale can exceed
+    # it. Bars crossing this line are over budget and you can see by how much.
+    bly = gy + gh - bud * gh / top
+    fill_rgb(gx, bly, gw, 1, theme(TH_LIT))
+    return 0
+}
+
+fn sm_ring_min() {
+    sn = wm_sn()
+    if sn < 1 { return 0 }
+    i = 0
+    lo = 0 - 1
+    while i < sn {
+        v = wm_sf(i)
+        if lo < 0 { lo = v }
+        if v < lo { lo = v }
+        i = i + 1
+    }
+    if lo < 0 { return 0 }
+    return lo
+}
+
+fn sm_ring_mean() {
+    sn = wm_sn()
+    if sn < 1 { return 0 }
+    i = 0
+    tot = 0
+    while i < sn {
+        tot = tot + wm_sf(i)
+        i = i + 1
+    }
+    return tot / sn
+}
+
+# A label and its number, laid out left to right by measurement. Returns the x
+# the next figure may start at, so a row of them cannot overlap however wide any
+# one of them turns out to be.
+fn sm_fig(fx, fy, nm, v, dp, col) {
+    lw = ui_capsw(nm, PW_SM)
+    ui_caps(fx, fy, nm, theme(TH_TEXT_DIM), PW_SM)
+    nx = fx + lw + 5 * ui()
+    pw_decg(nx, fy, v, dp, col, PW_SM, PW_MONO)
+    return nx + pw_decgw(v, dp, PW_SM, PW_MONO) + 14 * ui()
+}
+
+# THE IRQ TABLE, READ OFF THE IOAPIC.
+#
+# The reference prints eight rows - timer/i8042/xhci/e1000e/nvme q0/nvme q1/
+# intel vbl/spurious - with counts and modes. Per-IRQ counters exist in this
+# kernel only as zllog telemetry with NO READ-BACK: zllog.h exposes no counter
+# getter and no native binds one, so every count in that table would have to be
+# invented. Four of its rows are MSI/MSI-X vectors besides, which the IOAPIC
+# does not route at all, and one names e1000e where this config runs virtio-net.
+#
+# What IS readable is better than what the reference mocks: apic_redtbl(irq)
+# returns the LIVE redirection entry for IRQ 0-15 - the vector actually
+# programmed, the trigger and polarity actually set, and the mask bit actually
+# in force. That is hardware state, read this frame, not a remembered list.
+fn sm_irq_head(hx, hy, hw) {
+    hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), hy2, "irq", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 16), pw_colw(hw, 16), ui_capsw("gsi", PW_SM)), hy2, "gsi", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 32), pw_colw(hw, 16), ui_capsw("vec", PW_SM)), hy2, "vec", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 50) + pw_cellpx(), hy2, "mode", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 76) + pw_cellpx(), hy2, "state", theme(TH_TEXT_DIM), PW_SM)
+    fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
+    return hy + pw_headh()
+}
+
+fn sm_irq_row(rx, ry, rw, irq) {
+    red = apic_red(irq)
+    cy = pw_celly(ry)
+    num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, irq, theme(TH_TEXT_2))
+    num_aa(pw_right(pw_colx(rx, rw, 16), pw_colw(rw, 16), s3_numw(apic_gsi(irq))), cy, apic_gsi(irq), theme(TH_TEXT_DIM))
+    vec = band(red, 255)
+    num_aa(pw_right(pw_colx(rx, rw, 32), pw_colw(rw, 16), s3_numw(vec)), cy, vec, theme(TH_TEXT_2))
+    # bit 15 is trigger, bit 13 is polarity - both as the IOAPIC holds them now
+    if band(red, 32768) == 0 { ui_txt(pw_colx(rx, rw, 50) + pw_cellpx(), cy, "edge", theme(TH_TEXT_DIM), PW_SM, 0) } else { ui_txt(pw_colx(rx, rw, 50) + pw_cellpx(), cy, "level", theme(TH_TEXT_DIM), PW_SM, 0) }
+    if band(red, 8192) != 0 { ui_txt(pw_colx(rx, rw, 62) + pw_cellpx(), cy, "lo", theme(TH_TEXT_DIM), PW_SM, 0) }
+    # bit 16 is the mask. An armed line and a masked one look identical from
+    # anywhere else in the system, which is the whole reason to print it.
+    if band(red, 65536) == 0 { pw_sw(pw_colx(rx, rw, 76) + pw_cellpx(), cy, "ARMED", theme(TH_OK)) } else { pw_sw(pw_colx(rx, rw, 76) + pw_cellpx(), cy, "MASKED", theme(TH_TEXT_DIM)) }
+    pw_row_rule(rx, ry, rw)
+    return ry + pw_rowh()
+}
+
+fn sm_core_head(hx, hy, hw) {
+    hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), hy2, "core", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 24), pw_colw(hw, 24), ui_capsw("apic", PW_SM)), hy2, "apic", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 48), pw_colw(hw, 24), ui_capsw("wakes", PW_SM)), hy2, "wakes", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 74) + pw_cellpx(), hy2, "state", theme(TH_TEXT_DIM), PW_SM)
+    fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
+    return hy + pw_headh()
+}
+
+# One core. Every column is read: smp_id is the APIC id the AP actually
+# reported, smp_jobs is band wakes completed, and "state" is whether this core
+# came up at all - which is the question a four-percentage meter row silently
+# answers "yes" to whether or not it is true.
+fn sm_core_row(rx, ry, rw, i) {
+    cy = pw_celly(ry)
+    on = 0
+    if i < smp_n() { on = 1 }
+    num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, i, theme(TH_TEXT_2))
+    if on == 1 {
+        num_aa(pw_right(pw_colx(rx, rw, 24), pw_colw(rw, 24), s3_numw(smp_id(i))), cy, smp_id(i), theme(TH_TEXT_2))
+        num_aa(pw_right(pw_colx(rx, rw, 48), pw_colw(rw, 24), s3_numw(smp_jobs(i))), cy, smp_jobs(i), theme(TH_TEXT_2))
+        pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "UP", theme(TH_OK))
+    } else {
+        ui_txt(pw_right(pw_colx(rx, rw, 24), pw_colw(rw, 24), ui_tw("-", PW_SM, PW_MONO)), cy, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        ui_txt(pw_right(pw_colx(rx, rw, 48), pw_colw(rw, 24), ui_tw("-", PW_SM, PW_MONO)), cy, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "DOWN", theme(TH_WARN))
+    }
+    pw_row_rule(rx, ry, rw)
+    return ry + pw_rowh()
+}
+
+fn sm_win_head(hx, hy, hw) {
+    hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), hy2, "z", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_colx(hx, hw, 12) + pw_cellpx(), hy2, "window", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 56), pw_colw(hw, 22), ui_capsw("app us", PW_SM)), hy2, "app us", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 78), pw_colw(hw, 22), ui_capsw("kpx", PW_SM)), hy2, "kpx", theme(TH_TEXT_DIM), PW_SM)
+    fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
+    return hy + pw_headh()
+}
+
+# One window. app us is wm_appus(), the figure wm.c has measured per window with
+# two rdtsc around the app call since app_draw_dispatch was written - and which
+# nothing could read until wm_win_us was exported, so the settings pane printed
+# the whole compositor frame under a per-window label instead.
+fn sm_win_row(rx, ry, rw, zi) {
+    w = wm_zat(zi)
+    cy = pw_celly(ry)
+    num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, zi, theme(TH_TEXT_DIM))
+    ui_txt(pw_colx(rx, rw, 12) + pw_cellpx(), cy, app_name(wm_app(w)), theme(TH_TEXT_2), PW_SM, 0)
+    num_aa(pw_right(pw_colx(rx, rw, 56), pw_colw(rw, 22), s3_numw(wm_appus(w))), cy, wm_appus(w), theme(TH_TEXT_2))
+    kpx = wm_cw(w) * wm_ch(w) / 1000
+    num_aa(pw_right(pw_colx(rx, rw, 78), pw_colw(rw, 22), s3_numw(kpx)), cy, kpx, theme(TH_TEXT_2))
+    pw_row_rule(rx, ry, rw)
+    return ry + pw_rowh()
+}
+
 fn sysmon_body(sx, sy, sw, sh) {
     u = ui()
     fill_rgb(sx, sy, sw, sh, theme(TH_PANEL))
-    smpad = 12 * u
+    mx = sx + SM_PAD * u
+    mw = sw - 2 * SM_PAD * u
+    my = sy + SM_PAD * u
 
-    # Compact segmented navigation gives the app a real internal hierarchy.
-    # Resources is the live surface today; the other labels establish where
-    # Processes and Overview go without pretending those pages are complete.
-    navw = 246 * u
-    navx = sx + (sw - navw) / 2
-    navy = sy + 5 * u
-    rrect(navx, navy, navw, 28 * u, 12 * u, theme(TH_CHROME))
-    rrect(navx + 82 * u, navy + 2 * u, 82 * u, 24 * u, 10 * u, theme(TH_PANEL_HI))
-    label(navx + 13 * u, navy + 7 * u, "Processes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label(navx + 96 * u, navy + 7 * u, "Resources", theme(TH_TEXT), T_CAPTION, W_BOLD)
-    label(navx + 178 * u, navy + 7 * u, "Overview", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    # head: sampling / N samples, per frame / RUN
+    hy = my + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(mx, hy, "sampling", theme(TH_TEXT_DIM), PW_SM)
+    # THE SWATCH IS PLACED FIRST AND THE NOTE FITS AROUND IT. Laying the note
+    # out forwards from a guessed x is how it ended up printed straight through
+    # the RUN dot - the note's width changes with the sample count and the
+    # swatch's changes with the word, so neither may be assumed.
+    runw = pw_sww("RUN")
+    if wm_run() != 1 { runw = pw_sww("IDLE") }
+    swx = mx + mw - runw
+    runc = theme(TH_WARN)
+    if wm_run() == 1 { runc = theme(TH_OK) }
+    if wm_run() == 1 { pw_sw(swx, hy, "RUN", runc) } else { pw_sw(swx, hy, "IDLE", runc) }
+    nwx = mx + ui_capsw("sampling", PW_SM) + 12 * u
+    num_aa(nwx, hy, wm_sn(), theme(TH_TEXT_2))
+    ui_txt(nwx + s3_numw(wm_sn()), hy, " per composited frame", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    my = my + pw_headh()
 
-    # CPU card: identity, current frame cost and a restrained history line.
-    cardx = sx + smpad
-    cardw = sw - 2 * smpad
-    cpuy = sy + 45 * u
-    cpuh = 112 * u
-    rrect(cardx, cpuy, cardw, cpuh, 14 * u, theme(TH_BORDER))
-    rrect(cardx + 1, cpuy + 1, cardw - 2, cpuh - 2, 13 * u, theme(TH_PANEL_HI))
-    label(cardx + 12 * u, cpuy + 10 * u, "CPU", theme(TH_TEXT), T_BODY, W_BOLD)
-    label(cardx + cardw - 112 * u, cpuy + 11 * u, "frame ms", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(cardx + cardw - 48 * u, cpuy + 9 * u, wm_us() / 1000, theme(TH_ACCENT), T_BODY, W_BOLD)
+    # two columns, as the reference's .cols
+    colw = (mw - SM_GAP * u) / 2
+    lx = mx
+    rx2 = mx + colw + SM_GAP * u
+    ly = my
+    ry2 = my
 
-    # CPUID returns bytes through cpu_char(), not a zl string value.
-    smi = 0
-    smx = cardx + 12 * u
-    smy = cpuy + 38 * u
-    while smi < 48 {
-        smb = cpu_char(smi)
-        if smb > 32 { char_aa(smx, smy, smb, theme(TH_TEXT_HI)) }
-        if smb > 0 {
-            smx = smx + cell_w()
-            if smx > cardx + cardw - 12 * u - cell_w() {
-                smx = cardx + 12 * u
-                smy = smy + cell_h()
-            }
-        }
-        smi = smi + 1
+    # ---- left: the cores, then the one memory figure that is real ----------
+    ly = pw_sect(lx, ly, colw, "cores", smp_total(), " usable")
+    ly = sm_core_head(lx, ly, colw)
+    ci = 0
+    while ci < cpu_thr() {
+        if ly + pw_rowh() > sy + sh - 8 * u { ci = cpu_thr() } else { ly = sm_core_row(lx, ly, colw, ci)  ci = ci + 1 }
     }
-    bx = cardx + 12 * u
-    by = cpuy + cpuh - 12 * u
-    bw = cardw - 24 * u
-    # ---- THE CHART WAS DRAWN, NOT MEASURED --------------------------------
-    # This was seven line() calls at fixed offsets -3, -1, -6, -3, -7, -4, -6:
-    # a shape with NO DATA BEHIND IT, in an instrument, in a system whose whole
-    # argument is that its instruments are read. It also filled with TH_ACCENT,
-    # and design.h:659 says of meters and bars "these are INSTRUMENTS, so their
-    # fill is ZD_STEEL and never" the overprint.
-    #
-    # The measurement existed the whole time. wm.c keeps a 256-deep ring of
-    # per-frame microseconds (WM_SAMPLE_N, pushed once per painted frame) and
-    # wm_sn()/wm_sf(i) have been bound to zl all along. This is the reference's
-    # `spark(hist, 300, 42, 100, var(--zd-steel))` over that ring.
-    #
-    # SCALED AGAINST THE BUDGET, not against the tallest sample: a spark
-    # normalised to its own maximum always looks the same, which is the one
-    # thing a frame-time chart must never do. Full height IS wm_budget(), so a
-    # bar that reaches the top is a frame that spent its whole deadline.
-    smp_n2 = wm_sn()
-    if smp_n2 > 0 {
-        spk_h = 18 * u
-        spk_y = by - spk_h
-        spk_bud = wm_budget()
-        if spk_bud < 1 { spk_bud = 1 }
-        spk_max = SPARK_MAX
-        if smp_n2 < spk_max { spk_max = smp_n2 }
-        spk_bw = bw / spk_max
-        if spk_bw < 1 { spk_bw = 1 }
-        spk_i = 0
-        while spk_i < spk_max {
-            # newest sample at the right edge, as the reference reads
-            spk_v = wm_sf(smp_n2 - spk_max + spk_i)
-            spk_bh = spk_v * spk_h / spk_bud
-            if spk_bh > spk_h { spk_bh = spk_h }
-            if spk_bh < 1 { spk_bh = 1 }
-            spk_c = theme(TH_STEEL)
-            # over the deadline is the one thing worth colouring differently
-            if spk_v > spk_bud { spk_c = theme(TH_WARN) }
-            fill_rgb(bx + spk_i * spk_bw, spk_y + spk_h - spk_bh, spk_bw - 1, spk_bh, spk_c)
-            spk_i = spk_i + 1
+    ly = ly + 6 * u
+    # NAMED FOR ITS SCOPE. The reference's meter says "memory" and reads as
+    # machine RAM; heap_cap() is the fixed 64 MiB zl heap. Metering one and
+    # labelling it the other is how a true number tells a false thing.
+    ly = sm_meter(lx, ly, colw, "zl heap", heap_used(), heap_cap())
+    ly = ly + 8 * u
+
+    ly = pw_sect(lx, ly, colw, "ioapic lines", 16, " routable")
+    ly = sm_irq_head(lx, ly, colw)
+    qi = 0
+    while qi < 16 {
+        if ly + pw_rowh() > sy + sh - 8 * u { qi = 16 } else {
+            if apic_red(qi) != 0 { ly = sm_irq_row(lx, ly, colw, qi) }
+            qi = qi + 1
         }
-        # the budget line the bars are measured against
-        fill_rgb(bx, spk_y, bw, 1, theme(TH_CUT))
     }
 
-    # Memory card.
-    memy = cpuy + cpuh + 10 * u
-    memh = 68 * u
-    rrect(cardx, memy, cardw, memh, 14 * u, theme(TH_BORDER))
-    rrect(cardx + 1, memy + 1, cardw - 2, memh - 2, 13 * u, theme(TH_PANEL_HI))
-    label(cardx + 12 * u, memy + 10 * u, "Memory", theme(TH_TEXT), T_BODY, W_BOLD)
-    mempct = 0
-    if heap_cap() > 0 { mempct = heap_used() * 100 / heap_cap() }
-    label_num(cardx + cardw - 58 * u, memy + 11 * u, mempct, theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-    label(cardx + cardw - 28 * u, memy + 11 * u, "%", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD)
-    label(cardx + 12 * u, memy + 27 * u, "surfaces MiB", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(cardx + 104 * u, memy + 26 * u, wm_sbytes() / 1048576, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
-    label(cardx + cardw - 116 * u, memy + 27 * u, "dirty blocks", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(cardx + cardw - 28 * u, memy + 26 * u, blk_dirty(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
-    rrect(cardx + 12 * u, memy + 42 * u, cardw - 24 * u, 7 * u, 4 * u, theme(TH_CHROME))
-    rrect(cardx + 12 * u, memy + 42 * u, (cardw - 24 * u) * mempct / 100, 7 * u, 4 * u, theme(TH_ACCENT))
+    # ---- right: composite time, then the live window table -----------------
+    ry2 = pw_sect(rx2, ry2, colw, "composite time", wm_budget(), " us budget")
+    sm_spark(rx2, ry2, colw, SM_SPARKH * u)
+    ry2 = ry2 + SM_SPARKH * u + 5 * u
+    fy = ry2
+    fx = sm_fig(rx2, fy, "min", sm_ring_min() * 10 / 1000, 1, theme(TH_TEXT_2))
+    fx = sm_fig(fx, fy, "mean", sm_ring_mean() * 10 / 1000, 1, theme(TH_TEXT_2))
+    # budget at three decimals, because 16.667 ms is the figure the reference
+    # prints and rounding it to 16.7 loses the point of quoting it at all
+    sm_fig(fx, fy, "budget", wm_budget(), 3, theme(TH_TEXT_HI))
+    ry2 = ry2 + ui_th(PW_SM) + 8 * u
 
-    # Three live readouts along the bottom. Small cards keep numbers aligned
-    # without turning the dock into a developer HUD.
-    staty = memy + memh + 10 * u
-    statw = (cardw - 16 * u) / 3
-    si = 0
-    while si < 3 {
-        statx = cardx + si * (statw + 8 * u)
-        rrect(statx, staty, statw, 54 * u, 12 * u, theme(TH_CHROME))
-        if si == 0 {
-            label(statx + 10 * u, staty + 8 * u, "peak ms", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-            label_num(statx + 10 * u, staty + 26 * u, wm_peak() / 1000, theme(TH_TEXT_HI), T_BODY, W_BOLD)
-        }
-        if si == 1 {
-            label(statx + 10 * u, staty + 8 * u, "late", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-            latec = theme(TH_OK)
-            if wm_late() > 0 { latec = theme(TH_DANGER) }
-            label_num(statx + 10 * u, staty + 26 * u, wm_late(), latec, T_BODY, W_BOLD)
-        }
-        if si == 2 {
-            label(statx + 10 * u, staty + 8 * u, "uptime", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-            label_num(statx + 10 * u, staty + 26 * u, ticks() / 100, theme(TH_TEXT_HI), T_BODY, W_BOLD)
-        }
-        si = si + 1
+    ry2 = pw_sect(rx2, ry2, colw, "windows", wm_n(), " open")
+    ry2 = sm_win_head(rx2, ry2, colw)
+    wi = 0
+    while wi < wm_n() {
+        if ry2 + pw_rowh() > sy + sh - 8 * u { wi = wm_n() } else { ry2 = sm_win_row(rx2, ry2, colw, wi)  wi = wi + 1 }
     }
     return 0
 }
@@ -9828,8 +10044,17 @@ fn create_shell_window() {
     # centre a 1280-unit composition inside px_w(); the desk is px_w() - 170 dp
     # wide now, so centring on the screen pushes the whole composition 85 dp
     # right and the leftmost window under the rail.
-    if field_w() >= 1070 * csu {
-        return wm_open(APP_SHELL, "Terminal", desk_x(24), desk_y(24), 600 * csu, 368 * csu)
+    # THE PROTOTYPE'S OWN RECT: presswork-prototype.html APPS shell p[14,12,640,400].
+    # This was desk_x(24), desk_y(24), 600 x 368 - numbers re-origined from
+    # ds.html, the PREDECESSOR document. design.h settles which wins: "THE SOURCE
+    # IS docs/design/presswork-prototype.html ... If this header and the prototype
+    # disagree, THE PROTOTYPE WINS." The old comments cite the oracle's
+    # regions.json as the thing this composition answers to; that file records
+    # source ds.html with its sha, is generated into a 1280-wide screen, lives
+    # outside the repo in ~/Downloads, and is wired into no gate - so nothing has
+    # ever compared this composition to anything.
+    if field_w() >= PROTO_FIT * csu {
+        return wm_open(APP_SHELL, "Terminal", desk_x(14), desk_y(12), 640 * csu, 400 * csu)
     }
     return wm_open(APP_SHELL, "Terminal", desk_x(8), desk_y(8), field_w() - 16 * csu, field_h() - 16 * csu)
 }
@@ -10157,10 +10382,14 @@ fn wm_boot_start() {
     # to each other and to the desk, which is what the oracle's regions.json
     # compares - it names win_term, win_files and win_mon relative to the
     # composition, not to the panel.
-    if field_w() >= 1070 * u {
+    if field_w() >= PROTO_FIT * u {
         shell_win = create_shell_window()
-        files_win = wm_open(APP_FILES, "Files", desk_x(106), desk_y(300), 672 * u, 352 * u)
-        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_x(626), desk_y(28), 424 * u, 376 * u)
+        files_win = wm_open(APP_FILES, "Files", desk_x(672), desk_y(12), 540 * u, 400 * u)
+        # MON_W/MON_H, not a second copy of the size. This line said 424 x 376
+        # while reopen_mon() opened MON_W x MON_H, so the monitor was one size at
+        # boot and a different size the moment you closed and reopened it - the
+        # same one-fact-many-copies shape the reserves and the app count were.
+        mon_win = wm_open(APP_MONITOR, "System Monitor", desk_x(14), desk_y(430), MON_W * u, MON_H * u)
         # THE BOOT SET GETS ITS WORKSPACE FROM THE TABLE, not from whichever
         # one happens to be current. wm_open puts a new window on the current
         # workspace - correct for everything a person launches, and the wrong

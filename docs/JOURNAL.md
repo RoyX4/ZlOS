@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(desktop): ESC and F1 reach the desktop, and match what the keyboard emits (8333b4f)
+
+`design/presswork` · 17 files changed, 796 insertions(+), 53 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>17 file(s)</summary>
+
+- `HANDOFF-APP-PARITY.md`
+- `docs/JOURNAL.md`
+- `docs/design/shell-parity-audit-2026-08-28.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/ui.h`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/graphics/windowing/wmglue.c`
+- _…and 5 more_
+
+</details>
+
 ## 2026-08-28 — feat(apps): disk usage gets the reference's volume head and its closing rows (28c71d8)
 
 `design/presswork` · 6 files changed, 66 insertions(+), 9 deletions(-)

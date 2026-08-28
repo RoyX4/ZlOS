@@ -358,6 +358,7 @@ static const struct cmd table[] = {
     { "disku",    215 }, { "sysinfo",  216 },
     { "typepane", 217 }, { "specimen", 217 },
     { "syspane",  218 },
+    { "sysmon",   219 }, { "monitor",  219 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
