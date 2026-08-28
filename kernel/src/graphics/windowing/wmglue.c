@@ -124,10 +124,11 @@ static void glue_desk_click(int x, int y, int btn)
     zl_fn_desk_click(zl_num(x), zl_num(y), zl_num(btn));
 }
 
-static void glue_desk_key(int code, int mods)
+static int glue_desk_key(int code, int mods)
 {
-    if (!zl_fn_desk_key) return;
-    zl_fn_desk_key(zl_num(code), zl_num(mods));
+    if (!zl_fn_desk_key) return 0;
+    Value r = zl_fn_desk_key(zl_num(code), zl_num(mods));
+    return (int)r.num;
 }
 
 static void glue_desk(int x, int y, int w, int h)

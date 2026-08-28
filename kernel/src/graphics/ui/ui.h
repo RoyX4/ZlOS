@@ -294,7 +294,14 @@ typedef void (*desk_click_fn)(int x, int y, int btn);
 /* A SYSTEM KEY - one that belongs to the desktop rather than to whichever
  * window happens to have focus. Super is the only one today. Routing it to the
  * focused app instead would mean every app had to know about the start menu. */
-typedef void (*desk_key_fn)(int code, int mods);
+/* RETURNS 1 IF THE DESKTOP CONSUMED THE KEY. It was void, and that is half
+ * of why Escape never dismissed an overlay: with no way to say "mine", the
+ * only safe thing wm.c could do with a desk key was route the one key that
+ * is unambiguously the desktop's (Super) and give the rest to the focused
+ * window. Escape belongs to whichever is true at the time - the overlay if
+ * one is up, the app otherwise - and that is a question only the desktop
+ * can answer, so it has to be able to answer it. */
+typedef int (*desk_key_fn)(int code, int mods);
 
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
@@ -434,6 +441,7 @@ void wm_stop(void);                           /* 'q': ask the loop to end     */
 int  wm_running(void);
 /* what the last REPAINTING frame cost, in microseconds, and the worst so far */
 int  wm_frame_us(void);
+int  wm_win_us(int win);
 int  wm_peak_us(void);
 void wm_peak_reset(void);
 int  wm_win_app(int win);                      /* the ACTIVE tab.s app        */

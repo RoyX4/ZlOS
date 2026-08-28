@@ -1631,17 +1631,32 @@ fn rail_app(slot) {
 # row both need this, and before it existed "is this app running" and "is this
 # app focused" were two different walks that could disagree.
 fn rail_win(slot) {
-    if slot == 0 { return shell_win }
-    if slot == 1 { return files_win }
-    if slot == 2 { return mon_win }
-    if slot == 3 { return browser_win }
-    if slot == 4 { return edit_win }
-    if slot == 5 { return paint_win }
-    if slot == 6 { return snake_win }
-    if slot == 7 { return cube_win }
-    if slot == 8 { return about_win }
-    if slot == 9 { return settings_win }
-    if slot == 10 { return run_win }
+    # THIS WAS THE FIFTH TABLE KEYED BY POSITION, AND IT WAS STALE.
+    # It listed shell/files/mon/browser/edit/paint/snake/cube/about/settings/run
+    # - the slot order from BEFORE the register became the prototype's fourteen.
+    # rail_app(3) is APP_EDIT; this returned browser_win. So the browser wore
+    # register 04 with the editor's subtitle "fb.c", the editor wore 05 with
+    # "dmesg", and slots 11-13 got no label at all because the table stopped at
+    # 10. Every window's chrome was captioned by a table nobody had updated.
+    #
+    # It is not replaced with a corrected table. The comment at rail_cmd's
+    # deletion says the defect IS "a table keyed by position, sitting beside
+    # four other tables keyed by the same position", and label_windows' own
+    # comment records the same class a third time (REG_N vs a hardcoded 12).
+    # A sixth copy would just wait to go stale again.
+    #
+    # So ASK. rail_app already says which app a slot is, and the window manager
+    # already knows which window is showing which app. Add a rail row and the
+    # labelling follows it with no second edit.
+    rw_app = rail_app(slot)
+    if rw_app < 0 { return 0 - 1 }
+    rw_i = 0
+    rw_n = wm_n()
+    while rw_i < rw_n {
+        rw_w = wm_zat(rw_i)
+        if wm_app(rw_w) == rw_app { return rw_w }
+        rw_i = rw_i + 1
+    }
     return 0 - 1
 }
 
@@ -2126,6 +2141,23 @@ RULER_BASE = 0x00100000            # where the kernel image is loaded
 # smaller standing risk, and they carry the RULER_ prefix so check-memmap.sh's
 # discovery sweep lists them as a readout rather than as two more buffers.
 RULER_DMA     = 0x03000000         # memmap.h HI_IMG  - the first driver region
+
+# MIRRORED C CONSTANTS, DECLARED SO A CHECKER CAN SEE THEM.
+# zl cannot include a C header, so every one of these is a hand copy - and this
+# file has already been burned by exactly that. desk_key compared Escape against
+# 27 and F1 against 0x13B; keycodes.h says KEY_ESC is 0x101 and KEY_F1 is 0x120,
+# and 0x13B is a Linux keycode from a scheme this kernel does not use. The
+# copies were bare literals sitting inside an if, so nothing could check them
+# and nothing did. wm.c hit the identical bug from the C side - a hand-copied
+# key table with KEY_TAB missing, so Alt+Tab was written against '\t' and never
+# fired - and its fix was to delete the copies and include the header. zl has no
+# such move available. Naming them in the convention check-memmap-mirror.py
+# already reads is the nearest thing: a copy a tool can compare beats a copy
+# only a reader can.
+KEY_ESC_K  = 0x101                 # keycodes.h KEY_ESC   - from a real keyboard
+KEY_F1_K   = 0x120                 # keycodes.h KEY_F1
+KEY_SUPER_K = 0x11A                # keycodes.h KEY_SUPER
+SPARK_MAX  = 64                    # design.h ZD_SPARK_MAX - spark history depth
 RULER_DMA_END = 0x10000000         # memmap.h HI_HEAP - the last one's ceiling
 # THE READOUT IS SET TO THE MEASURE, exactly as the slug below it is, and for
 # the same reason: the full form is sixty mono cells, which at 800x600 - the
@@ -4579,6 +4611,8 @@ fn run_command(cmd, arg) {
     if cmd == 214 { if wm_run() == 0 { return needs_wm("clocks") }  return reg_open(31) }
     if cmd == 215 { if wm_run() == 0 { return needs_wm("disk usage") }  return reg_open(46) }
     if cmd == 216 { if wm_run() == 0 { return needs_wm("system info") }  return reg_open(32) }
+    if cmd == 218 { if wm_run() == 0 { return needs_wm("the system pane") }  return open_syspane() }
+    if cmd == 217 { if wm_run() == 0 { return needs_wm("the type pane") }  return open_typepane() }
     if cmd == 206 {
         if wm_run() == 0 { return needs_wm("the lock sheet") }
         ov_mode = OV_LOCK
@@ -4846,13 +4880,48 @@ fn sysmon_body(sx, sy, sw, sh) {
     bx = cardx + 12 * u
     by = cpuy + cpuh - 12 * u
     bw = cardw - 24 * u
-    line(bx, by, bx + bw / 7, by - 3 * u, theme(TH_ACCENT))
-    line(bx + bw / 7, by - 3 * u, bx + 2 * bw / 7, by - 1 * u, theme(TH_ACCENT))
-    line(bx + 2 * bw / 7, by - 1 * u, bx + 3 * bw / 7, by - 6 * u, theme(TH_ACCENT))
-    line(bx + 3 * bw / 7, by - 6 * u, bx + 4 * bw / 7, by - 3 * u, theme(TH_ACCENT))
-    line(bx + 4 * bw / 7, by - 3 * u, bx + 5 * bw / 7, by - 7 * u, theme(TH_ACCENT))
-    line(bx + 5 * bw / 7, by - 7 * u, bx + 6 * bw / 7, by - 4 * u, theme(TH_ACCENT))
-    line(bx + 6 * bw / 7, by - 4 * u, bx + bw, by - 6 * u, theme(TH_ACCENT))
+    # ---- THE CHART WAS DRAWN, NOT MEASURED --------------------------------
+    # This was seven line() calls at fixed offsets -3, -1, -6, -3, -7, -4, -6:
+    # a shape with NO DATA BEHIND IT, in an instrument, in a system whose whole
+    # argument is that its instruments are read. It also filled with TH_ACCENT,
+    # and design.h:659 says of meters and bars "these are INSTRUMENTS, so their
+    # fill is ZD_STEEL and never" the overprint.
+    #
+    # The measurement existed the whole time. wm.c keeps a 256-deep ring of
+    # per-frame microseconds (WM_SAMPLE_N, pushed once per painted frame) and
+    # wm_sn()/wm_sf(i) have been bound to zl all along. This is the reference's
+    # `spark(hist, 300, 42, 100, var(--zd-steel))` over that ring.
+    #
+    # SCALED AGAINST THE BUDGET, not against the tallest sample: a spark
+    # normalised to its own maximum always looks the same, which is the one
+    # thing a frame-time chart must never do. Full height IS wm_budget(), so a
+    # bar that reaches the top is a frame that spent its whole deadline.
+    smp_n2 = wm_sn()
+    if smp_n2 > 0 {
+        spk_h = 18 * u
+        spk_y = by - spk_h
+        spk_bud = wm_budget()
+        if spk_bud < 1 { spk_bud = 1 }
+        spk_max = SPARK_MAX
+        if smp_n2 < spk_max { spk_max = smp_n2 }
+        spk_bw = bw / spk_max
+        if spk_bw < 1 { spk_bw = 1 }
+        spk_i = 0
+        while spk_i < spk_max {
+            # newest sample at the right edge, as the reference reads
+            spk_v = wm_sf(smp_n2 - spk_max + spk_i)
+            spk_bh = spk_v * spk_h / spk_bud
+            if spk_bh > spk_h { spk_bh = spk_h }
+            if spk_bh < 1 { spk_bh = 1 }
+            spk_c = theme(TH_STEEL)
+            # over the deadline is the one thing worth colouring differently
+            if spk_v > spk_bud { spk_c = theme(TH_WARN) }
+            fill_rgb(bx + spk_i * spk_bw, spk_y + spk_h - spk_bh, spk_bw - 1, spk_bh, spk_c)
+            spk_i = spk_i + 1
+        }
+        # the budget line the bars are measured against
+        fill_rgb(bx, spk_y, bw, 1, theme(TH_CUT))
+    }
 
     # Memory card.
     memy = cpuy + cpuh + 10 * u
@@ -5260,7 +5329,11 @@ fn sys_cards(cx, cy, cw) {
     if sys_hz > 0 {
         sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", sys_hz, 3, "Hz, measured")
     } else {
-        sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", wm_frame(), 0, "composites, no panel clock")
+        # wm_painted(), NOT wm_frame(). wm_frame is bound as
+        # `{ wm_frame(); return zl_nil(); }` - it is the compositor's per-frame
+        # DRIVER, so this printed nil as 0 and re-entered the compositor from
+        # inside app_draw, draining input twice. wm_painted is the counter.
+        sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", wm_painted(), 0, "composites, no panel clock")
     }
     return cy + sd_h
 }
@@ -6193,6 +6266,8 @@ fn files_finish_new() {
     return files_open_selected()
 }
 
+# the cell mode: size in the low byte, 256 right-aligns, 512 selects mono
+FILES_M_NUM = 768
 fn files_draw_name(slot, x, y, colour) {
     files_ci = 0
     while files_ci < 23 {
@@ -6274,8 +6349,16 @@ fn files_draw(ax, ay, aw, ah) {
     } else {
         label(ax + 12 * files_u, ay + 40 * files_u, "N new   Enter open   Delete twice remove   R refresh", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
-    files_y0 = ay + 72 * files_u
-    files_rows = (ah - 104 * files_u) / files_rh
+    # R.files IS A TABLE, and its column head is what turns a run of names and
+    # figures into columns. The reference has five - name, size, kind, perm,
+    # mtime - and this has three, because zlfs is a flat store with NO MODES:
+    # printing `rw-r--r-- uid 0 gid 0` would be inventing a permission model
+    # this filesystem does not have, which is a claim rather than a decoration.
+    # Name, size and mtime are all real reads: fs_ch, fs_bytes, fs_when.
+    ui_grid("*|90|110")
+    ui_colhead(ax, ay + 62 * files_u, aw, "name|size|modified", 0 - 1, 0)
+    files_y0 = ay + 62 * files_u + ui_colhead_h()
+    files_rows = (ah - 104 * files_u - ui_colhead_h()) / files_rh
     if files_rows < 1 { files_rows = 1 }
     files_keep_visible(files_rows)
     files_di = 0
@@ -6296,8 +6379,10 @@ fn files_draw(ax, ay, aw, ah) {
                         fill_rgb(ax + 8 * files_u, files_ry, focus_bar(), files_rh - 2 * files_u, theme(TH_ACCENT))
                     }
                     files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
-                    label_num(ax + aw - 112 * files_u, files_ry + 4 * files_u, fs_bytes(files_di), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-                    label(ax + aw - 58 * files_u, files_ry + 4 * files_u, "bytes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                    # size and mtime, in their own tracks and right-aligned as
+                    # the reference marks both with `r: 1`
+                    ui_gcelln(ax, aw, files_ry, files_rh, 1, fs_bytes(files_di), theme(TH_TEXT_DIM), FILES_M_NUM)
+                    ui_gcelln(ax, aw, files_ry, files_rh, 2, fs_when(files_di), theme(TH_TEXT_DIM), FILES_M_NUM)
                     files_dn = files_dn + 1
             }}
             files_seen = files_seen + 1
@@ -9534,7 +9619,16 @@ fn desk_key(kcode, kmods) {
     # trap the desktop. The prototype prints "esc to dismiss" on two of its five
     # surfaces; a modal that lists a key it does not answer is worse than one
     # that lists none.
-    if kcode == 27 {
+    # 27 IS THE SERIAL ESCAPE; 0x101 IS KEY_ESC FROM A REAL KEYBOARD.
+    # This tested 27 alone, and 27 never arrives here from a keyboard - it is
+    # the raw COM1 byte. The keycode is 0x101, from keycodes.h, which zl cannot
+    # include. wm.c carries a comment about the twin of this bug: someone wrote
+    # the Alt+Tab test with no KEY_TAB in scope, reached for '\t', and Alt+Tab
+    # never fired. Its conclusion was to delete the copies and include the
+    # header - and zl cannot do that, so this file IS a second copy of that
+    # table and went wrong in the same way. Both values are tested because both
+    # genuinely occur.
+    if kcode == 27 or kcode == KEY_ESC_K {
         if ov_mode != OV_NONE {
             ov_mode = OV_NONE
             ov_sel = 0
@@ -9545,7 +9639,10 @@ fn desk_key(kcode, kmods) {
     # F1 IS ACTIVITIES, which is what the context menu says it is. A menu that
     # advertises a key the system does not answer is a picture of a menu, so the
     # row and the binding land together.
-    if kcode == 0x13B {
+    # 0x120, not 0x13B. KEY_F1 is 0x120 (keycodes.h:39); 0x13B is 0x100|0x3B,
+    # the Linux keycode, from a scheme this kernel does not use. Nothing has
+    # ever emitted it.
+    if kcode == KEY_F1_K {
         if ov_mode == OV_ACTIVITIES {
             ov_mode = OV_NONE
         } else {
@@ -9555,7 +9652,7 @@ fn desk_key(kcode, kmods) {
         wm_damage(0, 0, px_w(), px_h())
         return 1
     }
-    if kcode == 0x11A { return open_menu() }
+    if kcode == KEY_SUPER_K { return open_menu() }
     return 0
 }
 
@@ -9700,6 +9797,17 @@ fn rail_launch(slot) {
         wm_damage_win_all()
         return 0
     }
+    # THE SYSTEM AND TYPE PANES ARE ABOVE THE REGISTRY RANGE. app_draw already
+    # says so - 71 and 72 are tested BEFORE the `id >= REG_FIRST` fall-through
+    # precisely because reg_draw has never heard of them - and reg_open cannot
+    # create a window for an app the registry does not own. Rows 10 and 14 of
+    # the register went straight to it and got `reg: no window for app id 72`.
+    #
+    # Found by opening the type pane from the shell, not by the rail probe:
+    # that probe clicks row 05, so it proved one row and implied nothing about
+    # the other fourteen.
+    if da == APP_SYSPANE { return open_syspane() }
+    if da == APP_TYPEPANE { return open_typepane() }
     # EVERYTHING ELSE IN THE REGISTER IS A REGISTRY APP, addressed by its
     # manifest id - the id IS the app number, so no lookup is needed. reg_open
     # is the click path: it raises the window if the app is already open, and

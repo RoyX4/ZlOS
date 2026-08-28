@@ -568,6 +568,7 @@ extern int  wm_win_app(int win);
 extern int  wm_ws(void);
 extern int  wm_set_ws(int n);
 extern int  wm_win_ws(int win);
+extern int  wm_win_us(int win);   /* per-window app time; wm_frame_us is the whole frame */
 extern int  wm_set_win_ws(int win, int n);
 extern int  wm_set_ws_n(int n);
 extern int  wm_add_tab(int win, int app, const char *title);
@@ -1725,6 +1726,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    if (streq(name, "wm_appus"))   return zl_num((double)wm_win_us((int)a[0].num));
     /* the window list, for a taskbar: which window is i-th from the back, and
      * which app is in it. A taskbar cannot exist without these. */
     if (streq(name, "wm_zat"))     return zl_num((double)wm_zorder_at((int)a[0].num));

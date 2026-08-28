@@ -43,12 +43,72 @@ PY
 | clocks | `R.clock` | `kernel/apps/apps_system.zl` `clk_draw` | `7f6daf5` |
 | network | `R.net` | `kernel/apps/apps_sys3.zl` `s3nw_head` | uncommitted |
 
-## Open — 8 bodies
+## Open — corrected 2026-08-28 after a three-agent read of the prototype
 
-`R.shell`, `R.files`, `R.edit`, `R.mon`, `R.disk`, `R.type`, `R.sys`, and
-**`R.set` at 21,637 characters** — larger than the other thirteen combined, and
-it must be reconciled against the five panes already in
-`kernel/src/graphics/ui/settings.c`.
+**The previous version of this section was wrong about `R.set`, and wrong in the
+direction that costs the most.** It listed `R.set` as open and said it "must be
+reconciled against the five panes already in `kernel/src/graphics/ui/settings.c`".
+Both halves are false:
+
+- `R.set` was rebuilt in zl and landed in `3b8692b`. `kernel.zl:8359` dispatches
+  `APP_SETTINGS` to `settings_body`, with the reference's own four tabs
+  (`ladder` / `focus` / `boundary` / `press`) at `set_tab_body`.
+- `settings.c`'s draw path is **dead**. `settings_draw` and `settings_event` have
+  no caller in the kernel — `grep` finds only `kernel/tests/host/settingstest.c`.
+  The single live entry point into that file is `settings_load()`, bound as the
+  `set_load` native and called once at boot. Its five panes, sidebar and accent
+  chips are dead on screen and live on disk.
+
+Anyone following the old line would have rebuilt a pane that already existed, or
+"reconciled" the shipping pane against a file nothing draws. A handoff doc that
+says work is open when it is done is not a harmless lag; it is a instruction to
+redo it. This section is now written per-app with what was measured, not
+per-app with what was remembered.
+
+| Body | State | What is actually missing |
+|---|---|---|
+| `R.sys` | ~90% | The 14-row contrast table is a structural match and recomputes live. Needs the band status, and one invented caption: it prints "logical, hyperthreaded" as a literal where `cpu_tpc()` is bound and can gate the word. |
+| `R.set` | rebuilt, controls thin | 8 of the reference's 12 controls are absent. Present and live: the knockout toggle, the focus-bar slider. Absent: the `surface ladder` and both PRESS segmented controls, the `ui scale` slider, the `occlusion edge` toggle, and six PRESS toggles. Four of those six gate things `kernel.zl` currently draws unconditionally (module grid, crop marks, memory ruler, printer's slug) and are the cheapest group left. |
+| `R.mon` | not started | Still the pre-PRESSWORK toolkit. **Its CPU chart was fabricated** — see below. Of fifteen reference figures, five read directly, three need honest re-labelling, and two (per-core CPU percentages, the ten-row process table) have no measurement anywhere in this kernel and must be replaced rather than copied. |
+| `R.shell` | transcript only | No `.well` sunken body, no button row, no `exit 0 · 1.42 s`. The transcript is one ink where the reference uses three. |
+| `R.edit` | body only | No head row, no gutter, no well, and **no binary branch** — a binary file renders as a field of blank cells. Tab (code 9) is silently discarded, so the reference's `tab 4` would advertise a setting that does not exist. |
+
+## Three defects the audit found, all fixed 2026-08-28
+
+1. **The System Monitor's CPU chart was drawn, not measured.** Seven `line()`
+   calls at fixed offsets `-3, -1, -6, -3, -7, -4, -6` — a shape with no data
+   behind it, in an instrument, in a system whose entire argument is that its
+   instruments are read. It also filled with `TH_ACCENT` where `design.h:659`
+   says instruments "fill is ZD_STEEL and never" the overprint. The measurement
+   existed the whole time: `wm_sn()`/`wm_sf(i)` expose a 256-deep ring of
+   per-frame microseconds, bound to zl all along. Now drawn as the reference's
+   spark, scaled against `wm_budget()` rather than against its own maximum — a
+   frame-time chart normalised to its own peak always looks the same, which is
+   the one thing it must never do.
+
+2. **`wm_frame()` was being used as a value.** `kernel.zl` read the refresh card
+   from `wm_frame()`, which is bound as `{ wm_frame(); return zl_nil(); }` — the
+   compositor's per-frame *driver*. So the card printed nil as `0`, and drawing
+   the System pane re-entered the compositor from inside `app_draw`, draining
+   input twice. Now `wm_painted()`, which is the counter.
+
+3. **`rail_win()` was the fifth table keyed by position, and it was stale.** It
+   still held the slot order from before the register became fourteen rows, so
+   `rail_app(3)` said `APP_EDIT` while `rail_win(3)` returned `browser_win`: the
+   browser wore register 04 with the editor's subtitle, the editor wore 05 with
+   `dmesg`, and slots 11–13 got no label at all. It is not replaced with a
+   corrected table — `rail_cmd` was deleted for being exactly this, and
+   `label_windows` carries a comment recording the same class a third time. It
+   now *asks*: `rail_app` says which app a slot is, `wm_app()` says which window
+   shows it. Add a rail row and the labelling follows with no second edit.
+
+**And one measurement that existed but could not be read.** `wins[win].app_us`
+has been measured per window since the two `rdtsc` went into `app_draw_dispatch`,
+and no accessor existed in any `.c`, `.h` or `.zl` in the tree. So the settings
+pane printed `wm_us()` — the whole compositor frame, every window's work — under
+the label `THIS PANE, LAST DRAW`, while the comment directly above that row
+asserted it was the per-window figure. `wm_win_us(win)` now exports it. A
+measurement that cannot be read is indistinguishable from one never taken.
 
 ## How to see an app on screen
 

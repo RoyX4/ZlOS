@@ -4111,9 +4111,23 @@ static void route_key(int type, int code, int mods)
      * routing it to whichever app has focus would mean every app had to know
      * about the start menu. MOD_SUPER has been tracked since input.c was
      * written and used for nothing at all. */
-    if (type == EV_KEY_DOWN && code == KEY_SUPER) {
-        if (hook_desk_key) hook_desk_key(code, mods);
-        return;
+    if (type == EV_KEY_DOWN && (code == KEY_SUPER || code == KEY_ESC || code == KEY_F1)) {
+        if (hook_desk_key && hook_desk_key(code, mods)) return;
+        /* Super is the desktop's whether or not anything wanted it. Escape and
+         * F1 fall through to the focused window when no overlay took them - the
+         * editor's Escape still saves and closes. */
+        if (code == KEY_SUPER) return;
+    }
+    /* ESCAPE ARRIVES TWICE, BY TWO PATHS, AND THIS IS NOT A REDUNDANT TEST.
+     * A real keyboard sends EV_KEY_DOWN with KEY_ESC (0x101). COM1 sends the
+     * raw byte as EV_CHAR 27 and no key event at all - input.c states that
+     * choice and its reason: "a serial ESC would start arriving as KEY_ESC
+     * where the editor has always seen 27". Every probe-*.py drives this
+     * machine down that wire, so a fix that handled only the keycode would be
+     * a fix no probe could reach, and therefore one nobody would notice
+     * breaking again. */
+    if (type == EV_CHAR && code == 27) {
+        if (hook_desk_key && hook_desk_key(code, mods)) return;
     }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any
      * key", which is the phrase this whole rewrite exists to delete. */
@@ -4228,6 +4242,21 @@ static unsigned int frame_delta_us(unsigned int start, unsigned int end,
 }
 
 int wm_frame_us(void)  { return (int)frame_us; }
+
+/* The per-window figure. app_us has been measured per window since the two
+ * rdtsc in app_draw_dispatch went in, and until now NOTHING COULD READ IT:
+ * the value was written into wins[win].app_us every frame and no accessor
+ * existed in any .c, .h or .zl in the tree. So the settings pane printed
+ * wm_frame_us() under the label "THIS PANE, LAST DRAW" - the whole
+ * compositor's frame, every window's work, presented as one pane's cost -
+ * while the comment above that row asserted it was the per-window number.
+ * A measurement that exists but cannot be read is indistinguishable from one
+ * that was never taken, and it stays that way until someone reads the slot. */
+int wm_win_us(int win)
+{
+    if (!wm_is_open(win)) return 0;
+    return (int)wins[win].app_us;
+}
 int wm_peak_us(void)   { return (int)frame_peak_us; }
 int wm_late(void)      { return (int)frame_late; }
 int wm_lost(void)      { return (int)frame_lost; }

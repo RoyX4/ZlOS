@@ -356,6 +356,8 @@ static const struct cmd table[] = {
     { "hexv",     211 }, { "calcapp",  212 },
     { "netapp",   213 }, { "clocks",   214 },
     { "disku",    215 }, { "sysinfo",  216 },
+    { "typepane", 217 }, { "specimen", 217 },
+    { "syspane",  218 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
