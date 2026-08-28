@@ -7,6 +7,32 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(files): the empty state reads WHY nothing mounted, and stops offering to erase a damaged volume (424eb6c)
+
+`design/presswork` · 10 files changed, 157 insertions(+), 34 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>10 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/fs/fs.c`
+- `kernel/src/kernel.zl`
+- `kernel/tools/checks/check-header-mirror-selftest.sh`
+- `kernel/tools/checks/check-header-mirror.py`
+
+</details>
+
 ## 2026-08-28 — feat(shell): the terminal gets its well, its button row and a real exit readout (22df431)
 
 `design/presswork` · 6 files changed, 140 insertions(+), 10 deletions(-)

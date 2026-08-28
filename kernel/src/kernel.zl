@@ -5381,8 +5381,7 @@ fn sm_irq_row(rx, ry, rw, irq) {
 fn sm_core_head(hx, hy, hw) {
     hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
     ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), hy2, "core", theme(TH_TEXT_DIM), PW_SM)
-    ui_caps(pw_right(pw_colx(hx, hw, 24), pw_colw(hw, 24), ui_capsw("apic", PW_SM)), hy2, "apic", theme(TH_TEXT_DIM), PW_SM)
-    ui_caps(pw_right(pw_colx(hx, hw, 48), pw_colw(hw, 24), ui_capsw("wakes", PW_SM)), hy2, "wakes", theme(TH_TEXT_DIM), PW_SM)
+    ui_caps(pw_right(pw_colx(hx, hw, 30), pw_colw(hw, 30), ui_capsw("apic", PW_SM)), hy2, "apic", theme(TH_TEXT_DIM), PW_SM)
     ui_caps(pw_colx(hx, hw, 74) + pw_cellpx(), hy2, "state", theme(TH_TEXT_DIM), PW_SM)
     fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
     return hy + pw_headh()
@@ -5398,12 +5397,10 @@ fn sm_core_row(rx, ry, rw, i) {
     if i < smp_n() { on = 1 }
     num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, i, theme(TH_TEXT_2))
     if on == 1 {
-        num_aa(pw_right(pw_colx(rx, rw, 24), pw_colw(rw, 24), s3_numw(smp_id(i))), cy, smp_id(i), theme(TH_TEXT_2))
-        num_aa(pw_right(pw_colx(rx, rw, 48), pw_colw(rw, 24), s3_numw(smp_jobs(i))), cy, smp_jobs(i), theme(TH_TEXT_2))
+        num_aa(pw_right(pw_colx(rx, rw, 30), pw_colw(rw, 30), s3_numw(smp_id(i))), cy, smp_id(i), theme(TH_TEXT_2))
         pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "UP", theme(TH_OK))
     } else {
-        ui_txt(pw_right(pw_colx(rx, rw, 24), pw_colw(rw, 24), ui_tw("-", PW_SM, PW_MONO)), cy, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
-        ui_txt(pw_right(pw_colx(rx, rw, 48), pw_colw(rw, 24), ui_tw("-", PW_SM, PW_MONO)), cy, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        ui_txt(pw_right(pw_colx(rx, rw, 30), pw_colw(rw, 30), ui_tw("-", PW_SM, PW_MONO)), cy, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
         pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "DOWN", theme(TH_WARN))
     }
     pw_row_rule(rx, ry, rw)
@@ -5469,7 +5466,12 @@ fn sysmon_body(sx, sy, sw, sh) {
     ry2 = my
 
     # ---- left: the cores, then the one memory figure that is real ----------
-    ly = pw_sect(lx, ly, colw, "cores", smp_total(), " usable")
+    # SMP_JOBS IS GLOBAL AND WAS PRINTED PER ROW. smp_jobs takes no argument -
+    # it is smp_band_wakes(), one counter for the machine - so calling it
+    # smp_jobs(i) passed a core index that is ignored and printed the same total
+    # on every core's line under a per-core heading. A global figure belongs in
+    # the section head, once, where it cannot be read as four measurements.
+    ly = pw_sect(lx, ly, colw, "cores", smp_jobs(), " band wakes")
     ly = sm_core_head(lx, ly, colw)
     ci = 0
     while ci < cpu_thr() {
@@ -5482,7 +5484,11 @@ fn sysmon_body(sx, sy, sw, sh) {
     ly = sm_meter(lx, ly, colw, "zl heap", heap_used(), heap_cap())
     ly = ly + 8 * u
 
-    ly = pw_sect(lx, ly, colw, "ioapic lines", 16, " routable")
+    # apic_pins(), NOT THE LITERAL 16. This said 16 while apic_ioapic_pins()
+    # already existed, already bound, reading the version register's
+    # max-redirection-entry field at init. A written figure standing directly in
+    # front of a read one, in the pane whose entire subject is read figures.
+    ly = pw_sect(lx, ly, colw, "ioapic lines", apic_pins(), " routable")
     ly = sm_irq_head(lx, ly, colw)
     qi = 0
     while qi < 16 {
@@ -5867,7 +5873,11 @@ fn sys_cards(cx, cy, cw) {
     sd_h = PW_CARDPY * 2 * ui() + ui_th(PW_SM) * 2 + ui_th(PW_LG) + 6 * ui()
     sd_g = PW_CARDGAP * ui()
     sd_w = (cw - 2 * sd_g) / 3
-    sys_card(cx, cy, sd_w, sd_h, "cpu", cpu_thr(), 0, "logical, hyperthreaded")
+    # "hyperthreaded" WAS A WRITTEN CLAIM beside a measured number. cpu_tpc()
+    # is bound and reports threads per core, so the word can be earned rather
+    # than asserted - and on a part without SMT the old literal was simply
+    # false while the figure beside it was right.
+    if cpu_tpc() > 1 { sys_card(cx, cy, sd_w, sd_h, "cpu", cpu_thr(), 0, "logical, hyperthreaded") } else { sys_card(cx, cy, sd_w, sd_h, "cpu", cpu_thr(), 0, "logical, one thread per core") }
     # MiB, not GiB: ruler_mapped() is the memory map this kernel actually
     # mapped, and dividing it to one decimal of a gibibyte would round away the
     # thing the number is for. The foot's ruler prints the same figure.
@@ -8753,9 +8763,21 @@ fn set_press_body(x, y, w) {
     # THE LIVE READINGS. app_us is what wm.c actually measured for the last
     # draw of this window - the same figure its own foot band prints - so the
     # bottom of this tab is the cost of the top of it.
+    #
+    # AND IT WAS wm_us(), WHICH IS NOT THAT. wm_us is wm_frame_us: the WHOLE
+    # compositor frame, every window's work plus the chrome, printed under the
+    # label "THIS PANE" with the comment above claiming the opposite. The
+    # per-window figure was measured all along - two rdtsc around the app call
+    # in app_draw_dispatch - and no accessor existed in any .c, .h or .zl, so
+    # nothing could read the slot it was written into. wm_appus is that
+    # accessor.
     if set_vis(setpb_y, set_kvh()) == 1 {
         set_kv(setpb_x, setpb_y, setpb_w, "THIS PANE, LAST DRAW")
-        setpb_v = wm_us()
+        # settings_win, not `win` - set_press_body takes (x, y, w) and has no
+        # window in scope, so `win` here would have read whatever global of that
+        # name happened to hold, which is how a plausible wrong number gets on
+        # screen without anything failing.
+        setpb_v = wm_appus(settings_win)
         text_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 3 * cell_w(), setpb_y + setpb_u, " us", theme(TH_TEXT_HI))
         num_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 3 * cell_w() - s3_numw(setpb_v), setpb_y + setpb_u, setpb_v, theme(TH_TEXT_HI))
     }
