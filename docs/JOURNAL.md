@@ -7,6 +7,30 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — feat(mon): the System Monitor is rebuilt, and the desk composition is the prototype's (de69482)
+
+`design/presswork` · 8 files changed, 418 insertions(+), 144 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>8 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/kernel.zl`
+- `tools/doc-check.sh`
+
+</details>
+
 ## 2026-08-28 — fix(desktop): ESC and F1 reach the desktop, and match what the keyboard emits (8333b4f)
 
 `design/presswork` · 17 files changed, 796 insertions(+), 53 deletions(-)

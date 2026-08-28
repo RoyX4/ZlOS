@@ -34,6 +34,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-dock.py`
 - `probe-drag.py`
 - `probe-edit.py`
+- `probe-escape.py`
 - `probe-files.py`
 - `probe-frame.py`
 - `probe-kbd-survives.py`

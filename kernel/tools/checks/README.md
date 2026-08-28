@@ -30,6 +30,8 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-build-contract.py`
 - `check-dma.sh`
 - `check-elf-permissions.py`
+- `check-header-mirror-selftest.sh`
+- `check-header-mirror.py`
 - `check-himap.sh`
 - `check-land-gate.py`
 - `check-memmap-mirror-selftest.sh`
