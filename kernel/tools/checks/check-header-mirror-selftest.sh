@@ -12,9 +12,12 @@ ROOT=$(cd "$HERE/../.." && pwd)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-mkdir -p "$TMP/tools/checks" "$TMP/src"
+mkdir -p "$TMP/tools/checks" "$TMP/src" "$TMP/apps"
 cp "$HERE/check-header-mirror.py" "$TMP/tools/checks/"
 cp -r "$ROOT/src/." "$TMP/src/"
+# apps/ too, since the checker reads every .zl and not only kernel.zl. Without
+# this the selftest would exercise one of the eleven files it now guards.
+cp "$ROOT"/apps/*.zl "$TMP/apps/" 2>/dev/null || true
 ZL="$TMP/src/kernel.zl"
 CHECK="$TMP/tools/checks/check-header-mirror.py"
 
@@ -27,7 +30,7 @@ expect_fail() {
         echo "  $1: caught"
     fi
 }
-restore() { cp "$ROOT/src/kernel.zl" "$ZL"; }
+restore() { cp "$ROOT/src/kernel.zl" "$ZL"; cp "$ROOT"/apps/*.zl "$TMP/apps/" 2>/dev/null || true; }
 
 # baseline - the unmodified tree must pass, or every result below is noise
 if python3 "$CHECK" >/dev/null 2>&1; then
@@ -59,7 +62,11 @@ restore
 # .h AND .c both - the checker reads both, and a case D that only stripped .h
 # stopped catching anything the day fs.c's FS_WHY_* mirrors were added. The
 # selftest found that itself, which is the entire reason it plants this case.
-sed -i -E 's/#( *)([A-Za-z0-9_]*\.[hc]) ([A-Z_][A-Z0-9_]*)/# \3/' "$ZL"
+# EVERY .zl, not just kernel.zl - the checker reads them all now, so stripping
+# one file's citations leaves the others' and the run still finds work to do.
+# This case has now caught a coverage change three times: when .c citations were
+# added, and again when apps/*.zl came into scope. That is what it is for.
+sed -i -E 's/#( *)([A-Za-z0-9_]*\.[hc]) ([A-Z_][A-Z0-9_]*)/# \3/' "$ZL" "$TMP"/apps/*.zl
 expect_fail "D no citations at all"
 restore
 

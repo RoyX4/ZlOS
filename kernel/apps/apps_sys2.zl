@@ -576,7 +576,13 @@ fn hx_ui(ax, ay, aw, ah, dm) {
         # the hairline follows the curve instead of cutting it - ui.c's rule.
         if dm == 1 { rrect(lx, wy, ww, wh, 11 * u, ui_ink(S2_IK_SURF5)) }
         if dm == 1 { rrect(lx + 1, wy + 1, ww - 2, wh - 2, 11 * u - 1, ui_ink(S2_IK_SURF1)) }
-        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "/dev/kmem", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
+        # NOT "/dev/kmem". There is no /dev on this system - zlfs has no device
+        # nodes at all - so that label named a path nobody can open and implied
+        # a Unix indirection that does not exist here. What this pane actually
+        # reads is HX_BASE, the physical address boot.S is loaded at, straight
+        # through peek8. Saying so is both true and more useful: it tells the
+        # reader what they are looking at.
+        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "phys 0x100000, the loaded image", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
         ui_txt(lx + ww - 9 * u - ui_tw("256 B/page", S2_MD, S2_MONO), s2_mcy(wy, wh), "256 B/page", ui_ink(S2_IK_T5), S2_MD, S2_MONO)
     }
     if ui_chip(cx0, chy, "+0", hx_page == 0) == 1 { hit = 0 }

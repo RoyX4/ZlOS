@@ -253,8 +253,14 @@ S3DU_ROWS  = 7                        # the reference lists the top 7
 S3DU_SLOTS = 32                       # fs.c FS_MAXFILES - the whole directory
 S3DU_RD0   = 4194304                  # ds 3769: /dev/rd0, 4 MiB, full
 
-fn s3du_tmp_total() { return fs_cap() * fs_bs() }
-fn s3du_tmp_used() { return (fs_cap() - fs_free()) * fs_bs() }
+# GATED ON THE MOUNT, NOT ON THE ARITHMETIC. fs_cap() keeps reporting a
+# capacity when nothing is mounted while fs_free() reports 0, so
+# used = cap - free = cap, and this row drew a 100%-FULL volume for a
+# filesystem the kernel had refused to mount. Guarding on `total == 0` did not
+# catch it, because the total was never 0 - the number that was wrong was the
+# used figure, and it was wrong in the direction that looks like a full disk.
+fn s3du_tmp_total() { if fs_ok() == 0 { return 0 }  return fs_cap() * fs_bs() }
+fn s3du_tmp_used() { if fs_ok() == 0 { return 0 }  return (fs_cap() - fs_free()) * fs_bs() }
 
 # (size desc, slot asc) - a total order, so "the rank-th largest" is well
 # defined even when two files are the same size.
@@ -291,8 +297,16 @@ fn s3du_mount(x, y, w, nm, flag, used, total, ok) {
     by = y + 22 * u
     sc = theme(TH_ACCENT)
     if ok == 0 { sc = theme(TH_DANGER) }
-    s3_segbar(x, by, w, used, total, sc)
+    # A ZERO-CAPACITY VOLUME IS NOT A FULL ONE. s3_segbar divides by total, and
+    # an unmounted zlfs reports capacity 0, so "used of total" was 0 of 0 - which
+    # is not a fraction at all. Draw the empty track and say so in the figures
+    # below rather than letting the arithmetic decide what 0/0 looks like.
+    if total > 0 { s3_segbar(x, by, w, used, total, sc) } else { s3_segbar(x, by, w, 0, 1, sc) }
     ty = by + 18 * u
+    if total == 0 {
+        s3_mono(x, by + 18 * u, "not mounted - no capacity to report", theme(TH_TEXT_DIM))
+        return by + 18 * u + ui_th(S3_MD) + 6 * u
+    }
     uk = used / 1024
     tk = total / 1024
     num_aa(x, ty, uk, theme(TH_TEXT_DIM))
@@ -330,7 +344,13 @@ fn s3du_draw(ax, ay, aw, ah) {
 
     y = s3du_mount(x, y, w, "/dev/rd0", "read-only rdfs", S3DU_RD0, S3DU_RD0, 0)
     y = y + S3DU_GAP * u
-    y = s3du_mount(x, y, w, "/tmp", "read-write zlfs", s3du_tmp_used(), s3du_tmp_total(), 1)
+    # THE `ok` FLAG WAS THE LITERAL 1, WHICH IS THE ONE THING IT MUST NOT BE.
+    # /tmp is zlfs, and when nothing is mounted fs_cap() and fs_free() are both
+    # 0 - so used and total are both 0, the bar has nothing to divide by, and
+    # this row drew a healthy green volume for a filesystem the kernel had
+    # refused to mount. The Files pane three files away prints the refusal and
+    # its cause on the same boot.
+    y = s3du_mount(x, y, w, "/tmp", "read-write zlfs", s3du_tmp_used(), s3du_tmp_total(), fs_ok())
     y = y + S3DU_GAP * u
 
     # THE WRITE PATH AND WHAT PROVES IT. The reference closes on two kv rows,

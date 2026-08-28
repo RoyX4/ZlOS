@@ -45,8 +45,17 @@ import sys
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-KERNEL_ZL = ROOT / "src/kernel.zl"
 SRC = ROOT / "src"
+
+# EVERY .zl IN THE TREE, NOT JUST kernel.zl. This read one file, and the app
+# modules mirror C constants too - apps_sys3.zl carries
+# `S3DU_SLOTS = 32  # fs.c FS_MAXFILES` and apps_sys2.zl one more - so two
+# declared mirrors sat outside the guard from the day it was written. A checker
+# that reads one of eleven files reports OK for the other ten.
+def zl_sources():
+    out = [ROOT / "src/kernel.zl"]
+    out += sorted((ROOT / "apps").glob("*.zl"))
+    return [q for q in out if q.exists()]
 
 
 def parse_int(tok):
@@ -75,52 +84,55 @@ def find_header(name):
 
 
 def main() -> int:
-    if not KERNEL_ZL.exists():
-        print("check-header-mirror: FAIL - kernel.zl is missing")
+    sources = zl_sources()
+    if not sources:
+        print("check-header-mirror: FAIL - no .zl sources found")
         return 1
 
     cache, bad, checked = {}, [], 0
-    for lineno, line in enumerate(KERNEL_ZL.read_text().splitlines(), 1):
-        m = re.match(r'\s*([A-Z_][A-Z0-9_]*)\s*=\s*(0[xX][0-9a-fA-F]+|\d+)\b(.*)', line)
-        if not m:
-            continue
-        # .c AS WELL AS .h, AND THIS WAS A REAL MISS. Six FS_WHY_* mirrors were
+    for zl in sources:
+      rel = zl.relative_to(ROOT)
+      for lineno, line in enumerate(zl.read_text().splitlines(), 1):
+          m = re.match(r'\s*([A-Z_][A-Z0-9_]*)\s*=\s*(0[xX][0-9a-fA-F]+|\d+)\b(.*)', line)
+          if not m:
+                continue
+          # .c AS WELL AS .h, AND THIS WAS A REAL MISS. Six FS_WHY_* mirrors were
         # added citing "fs.c FS_WHY_DAMAGED" - fs.c holds those #defines because
         # there is no fs.h - and this pattern skipped every one of them while
         # still reporting OK. A checker that silently matches nothing passes
         # exactly as loudly as one that matches everything, which is the failure
         # this file's own selftest case D exists to catch. It caught it here
         # only because the mirror count did not move.
-        cite = re.search(r'#.*?\b([A-Za-z0-9_]+\.[hc])\s+([A-Z_][A-Z0-9_]*)', m.group(3))
-        if not cite:
-            continue
-        name, val = m.group(1), parse_int(m.group(2))
-        header, sym = cite.group(1), cite.group(2)
-        checked += 1
+          cite = re.search(r'#.*?\b([A-Za-z0-9_]+\.[hc])\s+([A-Z_][A-Z0-9_]*)', m.group(3))
+          if not cite:
+                continue
+          name, val = m.group(1), parse_int(m.group(2))
+          header, sym = cite.group(1), cite.group(2)
+          checked += 1
 
-        if header not in cache:
-            p = find_header(header)
-            cache[header] = defines_in(p) if p else None
-        table = cache[header]
+          if header not in cache:
+              p = find_header(header)
+              cache[header] = defines_in(p) if p else None
+          table = cache[header]
 
-        if table is None:
-            bad.append((lineno, name, val, header, sym, "no such header under src/"))
-        elif sym not in table:
-            bad.append((lineno, name, val, header, sym, "header has no such symbol"))
-        elif table[sym] != val:
-            bad.append((lineno, name, val, header, sym,
-                        "header says %s (0x%X)" % (table[sym], table[sym])))
+          if table is None:
+              bad.append((rel, lineno, name, val, header, sym, "no such header under src/"))
+          elif sym not in table:
+              bad.append((rel, lineno, name, val, header, sym, "header has no such symbol"))
+          elif table[sym] != val:
+              bad.append((rel, lineno, name, val, header, sym,
+                          "header says %s (0x%X)" % (table[sym], table[sym])))
 
     if bad:
         print("check-header-mirror: FAIL - %d mirrored constant(s) disagree" % len(bad))
-        for lineno, name, val, header, sym, why in bad:
-            print("  kernel.zl:%d  %s = %s  cites %s %s - %s"
-                  % (lineno, name, val, header, sym, why))
+        for rel, lineno, name, val, header, sym, why in bad:
+            print("  %s:%d  %s = %s  cites %s %s - %s"
+                  % (rel, lineno, name, val, header, sym, why))
         return 1
 
     if checked == 0:
         print("check-header-mirror: FAIL - no citations found at all.")
-        print("  kernel.zl mirrors C constants and always has. Zero matches means")
+        print("  these files mirror C constants and always have. Zero matches means")
         print("  the convention was renamed or this pattern broke, not that the")
         print("  mirrors went away - a checker that checks nothing passes loudly.")
         return 1
