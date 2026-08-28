@@ -7,6 +7,17 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — Merge pull request #7 from RoyX4/codex/presswork-local-closure (5059663)
+
+`main` · 71 files changed, 2938 insertions(+), 1238 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
 ## 2026-08-28 — fix(test): reanchor the version mutation guard (37b3b9d)
 
 `codex/presswork-local-closure` · 3 files changed, 9 insertions(+), 9 deletions(-)
