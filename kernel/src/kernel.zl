@@ -2246,6 +2246,7 @@ RULER_DMA     = 0x03000000         # memmap.h HI_IMG  - the first driver region
 KEY_ESC_K  = 0x101                 # keycodes.h KEY_ESC   - from a real keyboard
 KEY_F1_K   = 0x120                 # keycodes.h KEY_F1
 KEY_SUPER_K = 0x11A                # keycodes.h KEY_SUPER
+KEY_ENTER_K = 0x104                # keycodes.h KEY_ENTER
 SPARK_MAX  = 64                    # design.h ZD_SPARK_MAX - spark history depth
 RULER_DMA_END = 0x10000000         # memmap.h HI_HEAP - the last one's ceiling
 # THE READOUT IS SET TO THE MEASURE, exactly as the slug below it is, and for
@@ -9615,16 +9616,38 @@ ov_sel  = 0                        # the highlighted row, per surface
 # does not have, and a solid panel would say "the desktop is gone" rather than
 # "the desktop is behind this".
 #
-# 5/8 is the prototype's own `.scrim { background: rgba(0,0,0,.38) }` - 1-0.38
-# is 0.62, and 5/8 is 0.625. The nearest eighth, because this is integer maths
-# and an eighth is exact in binary.
-OV_SCRIM_NUM = 5
-OV_SCRIM_DEN = 8
+# THE PROTOTYPE'S OWN SCRIM, which is a mix and not a darkening:
+#
+#   #palette .scrim { background: color-mix(in srgb, var(--zd-cut) 78%, transparent); }
+#
+# 78 parts ZD_CUT to 22 parts of what is underneath. Written as 78/100 rather
+# than rounded to an eighth because there is no reason to round: mix() takes
+# num/den and the arithmetic is integer either way.
+OV_SCRIM_NUM = 78
+OV_SCRIM_DEN = 100
+
+# The overview is an opaque panel over the FIELD - not a scrim, and not over the
+# whole screen. The rail, the raster strip and the foot are not dimmed by it.
+fn ov_field_panel(cx0, cy0, cx1, cy1) {
+    fx0 = field_x()
+    fy0 = field_y()
+    if cx0 > fx0 { fx0 = cx0 }
+    if cy0 > fy0 { fy0 = cy0 }
+    fx1 = cx1
+    fy1 = cy1
+    if fx1 > field_x() + field_w() { fx1 = field_x() + field_w() }
+    if fy1 > field_y() + field_h() { fy1 = field_y() + field_h() }
+    if fx1 > fx0 { if fy1 > fy0 { fill_rgb(fx0, fy0, fx1 - fx0, fy1 - fy0, theme(TH_BG)) } }
+    return 0
+}
 
 fn ov_active() { if ov_mode == OV_NONE { return 0 }  return 1 }
 
 # THE SHEET a modal sits on: centred, bounded, and never wider than its measure.
-OV_SHEET_W = 520                   # design units, the prototype's .sheet
+# 580, not 520. presswork-prototype.html: #palette .sheet { width: calc(580px
+# * var(--ui)) }. At 520 the right-flushed kind column and the row text had
+# 60 dp less room than the design allows for, which is most of a word.
+OV_SHEET_W = 580                   # design units, the prototype's .sheet
 OV_SHEET_MAXH = 420
 fn ov_sheet_x() { return (px_w() - OV_SHEET_W * ui()) / 2 }
 fn ov_sheet_y() { return (px_h() - OV_SHEET_MAXH * ui()) / 3 }
@@ -9632,28 +9655,46 @@ fn ov_sheet_y() { return (px_h() - OV_SHEET_MAXH * ui()) / 3 }
 # ---- the command palette -----------------------------------------------------
 # The prototype's CMDS table is fourteen rows of `label, kind, target`. This is
 # the same list, and the kinds are the prototype's own words.
-OV_PAL_N = 10
+OV_PAL_N = 16
+# ALL SIXTEEN, IN THE PROTOTYPE'S OWN ORDER. This held ten and dropped six -
+# the whole `design` kind, which ov_pal_kind had no case for either, plus two
+# shell rows. A palette that silently omits a third of its commands is a
+# shorter palette, not a smaller one: there is no way to tell from the screen
+# that the missing rows exist.
 fn ov_pal_label(i) {
     if i == 0 { return "open 03 monitor" }
     if i == 1 { return "open 02 files" }
     if i == 2 { return "open 11 settings" }
     if i == 3 { return "open 05 kernel log" }
     if i == 4 { return "open 13 registers" }
-    if i == 5 { return "zlfs fsck rd0" }
-    if i == 6 { return "dmesg --level warn" }
-    if i == 7 { return "tile onto the module" }
-    if i == 8 { return "workspace 02" }
-    return "lock session"
+    if i == 5 { return "regdump --pipe A" }
+    if i == 6 { return "zlfs fsck rd0" }
+    if i == 7 { return "dmesg --level warn" }
+    if i == 8 { return "modeset 1600x1000" }
+    if i == 9 { return "tile onto the module" }
+    if i == 10 { return "workspace 02" }
+    if i == 11 { return "lock session" }
+    if i == 12 { return "toggle the knockout" }
+    if i == 13 { return "toggle occlusion edge" }
+    if i == 14 { return "toggle desk grid" }
+    return "swap to raking ladder"
 }
 fn ov_pal_kind(i) {
     if i < 5 { return "window" }
-    if i < 7 { return "shell" }
-    if i < 9 { return "wm" }
-    return "session"
+    if i < 9 { return "shell" }
+    if i < 11 { return "wm" }
+    if i < 12 { return "session" }
+    return "design"
 }
 # WHAT EACH ROW ACTUALLY DOES. A palette whose rows are labels and nothing else
 # is a picture of a palette - the same distinction probe-dock.py draws about the
 # dock, and the reason this returns an app id rather than a string.
+# WHICH APP A ROW OPENS, or -1 for a row that is not an open. The comment this
+# function was written under says a palette whose rows are labels and nothing
+# else "is a picture of a palette", which is the reason it returns an app id
+# rather than a string - and then it was never called by anything. Enter calls
+# it now. Row 4 is "open 13 registers", which is the registers pane, not
+# sysinfo: 32 was the id this listed before the register was renumbered.
 fn ov_pal_app(i) {
     if i == 0 { return APP_MONITOR }
     if i == 1 { return APP_FILES }
@@ -9661,6 +9702,19 @@ fn ov_pal_app(i) {
     if i == 3 { return 40 }
     if i == 4 { return 32 }
     return 0 - 1
+}
+
+# What Enter does on the selected row. Only the five window rows and the two
+# that name a thing this kernel can actually do are wired; the rest report that
+# they are not, rather than appearing to work. A palette row that swallows
+# Enter silently is worse than one that says no.
+fn ov_pal_run(i) {
+    pa = ov_pal_app(i)
+    if pa >= 0 { ov_mode = OV_NONE  wm_damage(0, 0, px_w(), px_h())  return reg_open(pa) }
+    if i == 6 { ov_mode = OV_NONE  wm_damage(0, 0, px_w(), px_h())  return run_command(46, 0) }
+    if i == 11 { ov_mode = OV_LOCK  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
+    note_say("that row names something this machine cannot do yet", 400)
+    return 1
 }
 
 fn ov_draw_palette(u) {
@@ -10088,8 +10142,32 @@ fn overlay_draw(ox0, oy0, ox1, oy1) {
     if sy0 < 0 { sy0 = 0 }
     if sx1 > px_w() { sx1 = px_w() }
     if sy1 > px_h() { sy1 = px_h() }
+    # ---- ONE SCRIM FOR FOUR SURFACES WAS THREE SURFACES WRONG ---------------
+    #
+    # This shaded the whole screen for every mode. The prototype does that for
+    # exactly one of them:
+    #
+    #   palette     a scrim over everything - the only true scrim
+    #   activities  an OPAQUE ZD_VOID panel over the FIELD ONLY. The rail, the
+    #               strip and the foot keep their own brightness; the overview
+    #               replaces the desk, it does not dim the machine.
+    #   menu        NO scrim at all. A context menu that dims the screen is a
+    #               modal, and this one is not.
+    #   lock        opaque, full screen, and outside #os entirely.
+    #
+    # And the scrim itself was the wrong operation. shade() multiplies toward
+    # BLACK at 5/8, keeping 62.5% of each pixel. The prototype lays 78% of
+    # ZD_CUT over what is underneath, keeping 22% - roughly twice as dark, and
+    # warm rather than neutral, because the whole ladder sits on a warm ground
+    # and a neutral veil reads as a different material laid on top.
+    #
+    # The comment that used to justify 5/8 cited `.scrim { background:
+    # rgba(0,0,0,.38) }`. `rgba(` does not appear anywhere in the current
+    # prototype - that rule is from ds.html, the superseded predecessor.
     if sx1 > sx0 { if sy1 > sy0 {
-        shade(sx0, sy0, sx1 - sx0, sy1 - sy0, OV_SCRIM_NUM, OV_SCRIM_DEN)
+        if ov_mode == OV_PALETTE { mix(sx0, sy0, sx1 - sx0, sy1 - sy0, theme(TH_CUT), OV_SCRIM_NUM, OV_SCRIM_DEN) }
+        if ov_mode == OV_LOCK { fill_rgb(sx0, sy0, sx1 - sx0, sy1 - sy0, theme(TH_BG)) }
+        if ov_mode == OV_ACTIVITIES { ov_field_panel(sx0, sy0, sx1, sy1) }
     }}
     if ov_mode == OV_PALETTE { return ov_draw_palette(ou) }
     if ov_mode == OV_MENU { return ov_draw_menu(ou) }
@@ -10359,6 +10437,30 @@ fn desk_key(kcode, kmods) {
         }
         wm_damage(0, 0, px_w(), px_h())
         return 1
+    }
+    # ---- THE PALETTE IS DRIVEN, NOT JUST DRAWN ----------------------------
+    # Everything below only fires while the palette is up, and returns 1 to say
+    # the desk took the key. With no overlay open none of it matches and the
+    # focused window gets its keys exactly as before.
+    if ov_mode == OV_PALETTE {
+        if kcode == K_UP {
+            ov_sel = ov_sel - 1
+            if ov_sel < 0 { ov_sel = OV_PAL_N - 1 }
+            wm_damage(0, 0, px_w(), px_h())
+            return 1
+        }
+        if kcode == K_DOWN {
+            ov_sel = ov_sel + 1
+            if ov_sel >= OV_PAL_N { ov_sel = 0 }
+            wm_damage(0, 0, px_w(), px_h())
+            return 1
+        }
+        # Enter arrives as KEY_ENTER from a keyboard and as 13 or 10 down the
+        # serial wire, the same split Escape has - input.c pushes the raw byte
+        # for COM1 and a keycode for PS/2 and USB.
+        if kcode == KEY_ENTER_K { return ov_pal_run(ov_sel) }
+        if kcode == 13 { return ov_pal_run(ov_sel) }
+        if kcode == 10 { return ov_pal_run(ov_sel) }
     }
     if kcode == KEY_SUPER_K { return open_menu() }
     return 0

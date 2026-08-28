@@ -1822,6 +1822,41 @@ void fb_shade(int x, int y, int w, int h, int num, int den)
         }
 }
 
+/* MIX A RECTANGLE TOWARD A COLOUR, num/den of the way. This is not fb_shade.
+ *
+ * fb_shade multiplies each channel toward BLACK; the prototype's scrim is
+ *
+ *     color-mix(in srgb, var(--zd-cut) 78%, transparent)
+ *
+ * which lays 78% of ZD_CUT over what is underneath. ZD_CUT is #0A0300 - nearly
+ * black but WARM, and the warmth is the point: the whole ladder is built on a
+ * warm ground and a neutral scrim reads as a different material laid over it.
+ *
+ * The two also disagree in strength, not only in hue. shade(5,8) keeps 62.5%
+ * of each pixel; the scrim keeps 22%. So the shipped overlay was roughly half
+ * the specified darkness AND the wrong colour, which is why the windows behind
+ * the palette stayed legible enough to compete with it. */
+void fb_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den)
+{
+    if (den <= 0) return;
+    if (num < 0) num = 0;
+    if (num > den) num = den;
+    int tr = (int)((rgb >> 16) & 0xFF);
+    int tg = (int)((rgb >> 8)  & 0xFF);
+    int tb = (int)( rgb        & 0xFF);
+    int keep = den - num;
+    for (int yy = y; yy < y + h; yy++)
+        for (int xx = x; xx < x + w; xx++) {
+            if ((unsigned)xx >= fb_w || (unsigned)yy >= fb_h) continue;
+            unsigned int c = fb_get_px(xx, yy);
+            int r = ((int)((c >> 16) & 0xFF) * keep + tr * num) / den;
+            int g = ((int)((c >> 8)  & 0xFF) * keep + tg * num) / den;
+            int b = ((int)( c        & 0xFF) * keep + tb * num) / den;
+            put_pixel((unsigned)xx, (unsigned)yy,
+                      ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b);
+        }
+}
+
 /* a soft drop shadow, offset down-right of a window's footprint. No gaussian
  * blur on a CPU - instead, nested darkening passes from the outside in: a
  * pixel near the window edge is inside every pass (darkest), one far out is

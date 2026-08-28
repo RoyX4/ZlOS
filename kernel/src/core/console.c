@@ -64,6 +64,7 @@ void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge);
 unsigned int fb_get_px(int x, int y);
 void fb_shade(int x, int y, int w, int h, int num, int den);
+void fb_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
@@ -446,6 +447,10 @@ int console_get_px(int x, int y) { return fb_active() ? (int)fb_get_px(x, y) : 0
 /* darken a region: one shadow pass, num/den of current brightness */
 void console_shade(int x, int y, int w, int h, int num, int den)
 { if (fb_active()) fb_shade(x, y, w, h, num, den); }
+
+/* mix a region toward a colour - the scrim, which is not a darkening */
+void console_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den)
+{ if (fb_active()) fb_mix(x, y, w, h, rgb, num, den); }
 
 /* a soft drop shadow offset down-right of a window footprint */
 void console_shadow(int x, int y, int w, int h, int off, int soft)

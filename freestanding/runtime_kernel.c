@@ -97,6 +97,7 @@ extern void console_gradient_rgb(int x, int y, int w, int h, unsigned int top, u
 extern void console_text_rgb(int px, int py, const char *s, unsigned int rgb);
 extern int  console_get_px(int x, int y);
 extern void console_shade(int x, int y, int w, int h, int num, int den);
+extern void console_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den);
 extern void console_shadow(int x, int y, int w, int h, int off, int soft);
 extern void console_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 extern void console_text_aa(int px, int py, const char *s, unsigned int rgb);
@@ -2314,6 +2315,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "text_rgb"))  { if (a[2].type==V_STR) console_text_rgb((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "get_px"))    return zl_num((double)console_get_px((int)a[0].num,(int)a[1].num));
     if (streq(name, "shade"))     { console_shade((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "mix"))       { console_mix((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
     if (streq(name, "shadow"))    { console_shadow((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
     if (streq(name, "rrect"))     { console_rrect((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num); return zl_nil(); }
     if (streq(name, "text_aa"))   { if (a[2].type==V_STR) console_text_aa((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }

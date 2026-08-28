@@ -4175,8 +4175,23 @@ static void route_key(int type, int code, int mods)
      * routing it to whichever app has focus would mean every app had to know
      * about the start menu. MOD_SUPER has been tracked since input.c was
      * written and used for nothing at all. */
-    if (type == EV_KEY_DOWN && (code == KEY_SUPER || code == KEY_ESC || code == KEY_F1)) {
+    /* AN OVERLAY IS MODAL TO THE KEYBOARD, and the desk says so by consuming.
+     *
+     * Only Super, Escape and F1 were offered to the desk, which is why the
+     * palette could be opened and then not driven: its arrows, its Enter and
+     * every character typed into it went to whichever window had focus behind
+     * it. ov_active() exists in kernel.zl for exactly this question and had
+     * ZERO READERS.
+     *
+     * The desk is offered every key now and answers 1 only when it took one -
+     * which, with no overlay up, is just its own three. So the editor still
+     * gets its Escape and the terminal still gets its characters; nothing
+     * changes for a window until something is genuinely in front of it. That
+     * is what the int return added earlier is for. */
+    if (type == EV_KEY_DOWN || type == EV_CHAR) {
         if (hook_desk_key && hook_desk_key(code, mods)) return;
+    }
+    if (type == EV_KEY_DOWN && (code == KEY_SUPER || code == KEY_ESC || code == KEY_F1)) {
         /* Super is the desktop's whether or not anything wanted it. Escape and
          * F1 fall through to the focused window when no overlay took them - the
          * editor's Escape still saves and closes. */
