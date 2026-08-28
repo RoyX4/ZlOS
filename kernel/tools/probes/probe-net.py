@@ -37,6 +37,7 @@ failure mode with a distinct cause:
     ARP reply           a frame went out AND a matching one came back
     ping                twenty round trips, all returned
     DNS                 a real name resolves, a fake one is REFUSED
+    browser fetch       example.com is fetched and laid out after bring-up
     driver counters     no truncated frame, runt, bad checksum, double-return
                         or unmatched echo
 
@@ -61,6 +62,7 @@ every wait polls for a marker, per the project rule that a gate must never be
 timing-sensitive.
 
     ./probe-net.py              the gate
+    ./probe-net.py --fetch      also fetch and render http://example.com/
     ./probe-net.py --verbose    print the whole transcript
 """
 
@@ -116,6 +118,8 @@ def main():
     ap.add_argument("--driver", choices=("virtio", "e1000", "cdc"), default="virtio")
     ap.add_argument("--pcap", action="store_true",
                     help="retain a QEMU filter-dump packet capture in /tmp")
+    ap.add_argument("--fetch", action="store_true",
+                    help="after the network proof, fetch and render example.com")
     ap.add_argument("--no-build", action="store_true")
     args = ap.parse_args()
 
@@ -275,6 +279,26 @@ def main():
             m = re.search(pat, t)
             check(f"driver: {label}", bool(m) and int(m.group(1)) == 0,
                   f"{m.group(1)}" if m else "counter not in the readout")
+
+        if args.fetch:
+            # Do not enqueue net and fetch together. net_gate() owns the receive
+            # queue until DHCP, ARP, ping and DNS have all completed; the old
+            # verify-net.sh sent `.NEq` at boot and occasionally let E race that
+            # work. Waiting for the returned prompt makes the dependency real.
+            prompt, net_tail = ser.wait(PROMPT, 30)
+            check("network diagnostic returned to the desktop", prompt)
+            if prompt:
+                qtype(qmp, "fetch\n")
+                returned, fetch_tail = ser.wait(PROMPT, 90)
+                if args.verbose:
+                    print(fetch_tail)
+                check("HTTP: example.com fetched and rendered",
+                      "fetched and rendered" in fetch_tail,
+                      "" if "fetched and rendered" in fetch_tail else
+                      fetch_tail[-500:].strip())
+                check("browser fetch returned to the desktop", returned)
+            elif args.verbose:
+                print(net_tail)
 
         print(f"\n{len(checks)} checks, {failures} failed")
         sys.exit(1 if failures else 0)

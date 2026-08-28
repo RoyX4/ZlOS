@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 GATE = Path(__file__).resolve().parents[3] / "gates" / "land-gate.sh"
+VERIFY_NET = Path(__file__).resolve().parent / "verify-net.sh"
 
 REQUIRED_SNIPPETS = (
     'run "mandatory boot prerequisites"',
@@ -100,7 +101,9 @@ OPTIONAL_AUTHORITY = re.compile(
 OPTIONAL_BOOT = re.compile(r'\[ -x "\$WT/kernel/\$g" \] \|\| continue')
 
 
-def failures(source: str) -> list[str]:
+def failures(source: str, verify_net: str | None = None) -> list[str]:
+    if verify_net is None:
+        verify_net = VERIFY_NET.read_text()
     errors = [
         f"missing mandatory invocation: {snippet}"
         for snippet in REQUIRED_SNIPPETS
@@ -110,6 +113,10 @@ def failures(source: str) -> list[str]:
         errors.append("kernel authority is hidden behind an existence guard")
     if OPTIONAL_BOOT.search(source):
         errors.append("named boot script can be skipped when absent")
+    if "python3 tools/probes/probe-net.py --fetch" not in verify_net:
+        errors.append("network boot gate does not use the synchronized fetch probe")
+    if ".NEq" in verify_net:
+        errors.append("network boot gate enqueues dependent commands together")
     for required in (
         "out=$( cd \"$dir\" && \"$@\" 2>&1 ); rc=$?",
         'echo ">>> FAIL ($label) exit=$rc"\n    FAIL=$((FAIL+1))',
@@ -120,12 +127,13 @@ def failures(source: str) -> list[str]:
     return errors
 
 
-def expect_failure(source: str, label: str) -> None:
-    if not failures(source):
+def expect_failure(source: str, label: str, verify_net: str | None = None) -> None:
+    if not failures(source, verify_net):
         raise AssertionError(f"mutation escaped: {label}")
 
 
 def selftest(source: str) -> None:
+    verify_net = VERIFY_NET.read_text()
     expect_failure(
         source.replace('run "build input identity"', '# removed identity gate', 1),
         "deleted-verifier",
@@ -174,6 +182,20 @@ def selftest(source: str) -> None:
         source.replace('run "rail register QEMU"', '# removed rail gate', 1),
         "deleted-rail-gate",
     )
+    expect_failure(
+        source,
+        "deleted-synchronized-network-fetch",
+        verify_net.replace(
+            "python3 tools/probes/probe-net.py --fetch",
+            "python3 tools/probes/probe-net.py",
+            1,
+        ),
+    )
+    expect_failure(
+        source,
+        "restored-network-command-race",
+        verify_net + "\nKEYS='.NEq'\n",
+    )
     expect_failure(source.replace("exit $FAIL", "exit 0", 1), "masked-final-exit")
     expect_failure(
         source.replace(
@@ -186,8 +208,8 @@ def selftest(source: str) -> None:
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
         "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
-        "deleted-final-graph-rebind, deleted-rail-gate, masked-final-exit and "
-        "masked-child-failure"
+        "deleted-final-graph-rebind, deleted-rail-gate, deleted-synchronized-network-fetch, "
+        "restored-network-command-race, masked-final-exit and masked-child-failure"
     )
 
 
