@@ -172,28 +172,45 @@ fn si_rownum(ax, y, k, v) {
 # Intel display would be inventing a reading, so the table shows the registers
 # this machine DOES answer - cpuid and the APIC - and decodes each one. Same
 # structure, real values, and it says which block it is reading.
+# THREE OF THESE NAMED A REGISTER FIELD THE CODE DOES NOT READ.
+#
+# Rows 0 and 1 said CPUID.1:EBX[23:16] and [31:24]. cpu_threads() reads CPUID
+# LEAF 0x0B, the topology leaf, and cpu_cores() is a derivation from it
+# (threads / threads_per_core) - neither touches leaf 1's EBX, and [31:24]
+# there is the initial APIC id, not a thread count. Row 8 said
+# IA32_APIC_BASE[11]; apic_active() returns the kernel's own file-static
+# apic_on flag, which is what this kernel DID, and the MSR can disagree with it.
+#
+# A register column that names a field nobody read is the worst version of this
+# fault: it is checkable, it looks checked, and the value beside it is right.
 SI_N = 9
 fn si_reg(i) {
-    if i == 0 { return "CPUID.1:EBX[23:16]" }
-    if i == 1 { return "CPUID.1:EBX[31:24]" }
-    if i == 2 { return "APIC:ICR startup" }
+    if i == 0 { return "CPUID.0Bh topology" }
+    if i == 1 { return "CPUID.0Bh threads" }
+    if i == 2 { return "smp cores online" }
     if i == 3 { return "TSC / PIT gate" }
     if i == 4 { return "TSC frequency" }
     if i == 5 { return "CPUID.1:EDX[26]" }
     if i == 6 { return "CPUID.1:ECX[28]" }
     if i == 7 { return "CPUID.1:ECX[31]" }
-    return "IA32_APIC_BASE[11]"
+    return "apic_on, kernel flag"
 }
 fn si_dec(i) {
-    if i == 0 { return "logical cores this package reports" }
+    if i == 0 { return "cores, derived as threads / per-core" }
     if i == 1 { return "threads the topology leaf enumerates" }
-    if i == 2 { return "processors that answered INIT/STARTUP" }
+    # NOT "processors that answered INIT/STARTUP". smp_n() counts cores the
+    # kernel has brought online, and on a machine where no startup IPI was ever
+    # sent it is 1 - the BSP, which answered nothing. The old decode read that 1
+    # as evidence of a handshake that had not happened.
+    if i == 2 { return "cores online, BSP included" }
     if i == 3 { return "core clock, measured against the PIT" }
-    if i == 4 { return "invariant TSC, kHz" }
+    # Invariance is reported by the clocks pane, which reads cpu_inv(). Asserting
+    # it here as well would be a second unchecked copy of the same claim.
+    if i == 4 { return "TSC frequency, kHz" }
     if i == 5 { return "SSE2 - the float path this kernel forbids" }
     if i == 6 { return "AVX - present, unused, no XSAVE area" }
     if i == 7 { return "hypervisor present bit" }
-    return "local APIC enabled, not the 8259" }
+    return "the APIC this kernel enabled, not the MSR bit" }
 fn si_val(i) {
     if i == 0 { return cpu_cores() }
     if i == 1 { return cpu_thr() }

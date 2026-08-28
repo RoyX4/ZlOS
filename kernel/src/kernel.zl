@@ -839,7 +839,7 @@ fn rail_status(slot) {
     if slot == 9 { return "zlos 0.3" }
     if slot == 10 { return "design.h" }
     if slot == 11 { return "rd0" }
-    if slot == 12 { return "mmio" }
+    if slot == 12 { return "cpuid, apic" }
     # DejaVu is CORRECT and stays. The three baked atlases are generated from
     # DejaVu Sans Mono by gen_hd_font.py - kernel/HANDOFF.md:1116 - so this is a
     # true citation, not the prototype describing some other machine.
@@ -871,7 +871,13 @@ fn rail_sub(slot) {
     if slot == 9 { return "0.3" }
     if slot == 10 { return "design.h" }
     if slot == 11 { return "zlfs" }
-    if slot == 12 { return "pipe A" }
+    # NOT "pipe A", WHICH IS WHAT THE PROTOTYPE PRINTS. Its registers pane
+    # reads PIPE_LINK_M/N off real Intel silicon. This one deliberately does
+    # not: that block reads ZERO under QEMU, and si_draw's own comment says
+    # printing the reference's 0x0080D9E4 there "would be inventing a reading",
+    # so the pane shows cpuid and the APIC instead. The subtitle stayed behind
+    # naming a block the pane had already stopped reading.
+    if slot == 12 { return "cpuid, apic" }
     if slot == 13 { return "DejaVu" }
     return "reg"
 }
