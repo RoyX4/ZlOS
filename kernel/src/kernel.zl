@@ -9744,13 +9744,30 @@ fn ov_draw_palette(u) {
     pi = 0
     while pi < OV_PAL_N {
         ry = sy + 62 * u + pi * rowh
+        # THE SELECTED ROW IS A VALUE FLIP, NOT A COLOURED EDGE, and the mark
+        # on it cannot be the overprint.
+        #
+        # This drew ZD_RAISE with a vermilion bar. On ZD_RAISE that bar is a
+        # perfectly good 3.7150:1 - which is exactly why it survived review.
+        # The prototype's selected row is the KNOCKOUT, and vermilion on the
+        # knockout measures 1.3989:1: the mark would be there and invisible.
+        # So the prototype marks it with ZD_KO_EDGE, the knockout's own edge
+        # run, and that is the pair that has to move together. Changing the
+        # ground without changing the mark is the version of this that looks
+        # right in a screenshot and fails at arm's length.
+        pnum = theme(TH_TEXT_DIM)
+        ptxt = theme(TH_TEXT_HI)
+        pkind = theme(TH_TEXT_2)
         if pi == ov_sel {
-            fill_rgb(sx, ry, sw, rowh, theme(TH_PANEL_HI))
-            fill_rgb(sx, ry, focus_bar(), rowh, theme(TH_ACCENT))
+            fill_rgb(sx, ry, sw, rowh, theme(TH_KNOCK))
+            fill_rgb(sx, ry, focus_bar(), rowh, theme(TH_KO_EDGE))
+            pnum = theme(TH_KNOCK_INK2)
+            ptxt = theme(TH_KNOCK_INK)
+            pkind = theme(TH_KNOCK_INK2)
         }
-        label_num(sx + 13 * u, ry + 4 * u, pi + 1, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        label(sx + 38 * u, ry + 4 * u, ov_pal_label(pi), theme(TH_TEXT_HI), T_BODY, W_REG)
-        ui_caps(sx + sw - 76 * u, ry + 5 * u, ov_pal_kind(pi), theme(TH_TEXT_2), T_CAPTION)
+        label_num(sx + 13 * u, ry + 4 * u, pi + 1, pnum, T_CAPTION, W_REG)
+        label(sx + 38 * u, ry + 4 * u, ov_pal_label(pi), ptxt, T_BODY, W_REG)
+        ui_caps(sx + sw - 76 * u, ry + 5 * u, ov_pal_kind(pi), pkind, T_CAPTION)
         pi = pi + 1
     }
     # the footer, the prototype's three key hints
@@ -10030,14 +10047,32 @@ fn ov_draw_activities(u) {
         fill_rgb(tx, ty, tw, th, theme(TH_PANEL))
         fill_rgb(tx, ty, tw, 1, theme(TH_LIT))
         fill_rgb(tx, ty + th - 1, tw, 1, theme(TH_CUT))
+        # THE FOCUSED TILE IS A KNOCKED-OUT HEADER, AND THE BAR STARTS BELOW IT.
+        #
+        # This drew a full-height vermilion bar straight down the tile,
+        # crossing its own header. The prototype's `.thumb.on::after` starts at
+        # top: 20dp - below the header band - and the header itself flips to
+        # ZD_KNOCK with its text reversed out. The prototype's comment records
+        # why it is not both: "It used to take a vermilion border as well, which
+        # contradicted the caption directly above it."
+        #
+        # Measured on this ladder, vermilion on the knockout is 1.3989:1, so a
+        # bar drawn over a knocked-out header would be there and unreadable.
+        # ZD_KO_EDGE is the knockout's own edge run - design.h states 2.5487:1
+        # on it - and that is what marks the focused tile below the band.
+        onum = theme(TH_TEXT_DIM)
+        onm = theme(TH_TEXT_2)
         if wm_focus() == ow2 {
-            fill_rgb(tx, ty, focus_bar(), th, theme(TH_ACCENT))
+            fill_rgb(tx, ty, tw, OV_ACT_TH * u, theme(TH_KNOCK))
+            fill_rgb(tx, ty + OV_ACT_TH * u, focus_bar(), th - OV_ACT_TH * u, theme(TH_KO_EDGE))
+            onum = theme(TH_KNOCK_INK2)
+            onm = theme(TH_KNOCK_INK)
         }
         # the tile header: register number, name, and the window's REAL size
         osl = slot_of_app(wm_app(ow2))
         if osl >= 0 {
-            label_num(tx + 8 * u, ty + 4 * u, osl + 1, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-            label(tx + 28 * u, ty + 4 * u, rail_name(osl), theme(TH_TEXT_2), T_CAPTION, W_REG)
+            label_num(tx + 8 * u, ty + 4 * u, osl + 1, onum, T_CAPTION, W_REG)
+            label(tx + 28 * u, ty + 4 * u, rail_name(osl), onm, T_CAPTION, W_REG)
         }
         label_num(tx + tw - 62 * u, ty + 4 * u, wm_w(ow2), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         label(tx + tw - 34 * u, ty + 4 * u, "x", theme(TH_TEXT_DIM), T_CAPTION, W_REG)

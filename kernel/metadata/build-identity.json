@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "9309b81fe76f3be0f8c31e9b47778483733ce33c"
+    "head": "7f2b5942ee5dc011906f787e421617aa92007e74"
   },
-  "identity_sha256": "cac6b2f5238357e5e5c3dedbdc0d26c116f5335150d7d29ad5e34ff9e8d19037",
+  "identity_sha256": "fe45be84bee2a0aa2e68277471efda5424f3ef605b0b5b078db8c2f8c74de233",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -17,7 +17,7 @@
     "freestanding/runtime_kernel.c": "93076f6f7d78f0fd685a9c8c5ad693a2e4aed2843fb1f430cf34cf2a77c4096d",
     "freestanding/zl_freestanding.h": "5be9db332d6666dd6332643a05b31774b14f3f93c85546f8dbac18144ef7a843",
     "kernel/SOURCES": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
-    "kernel/app_manifest_embed.zl": "5f1543af45547401ed5e82eac15026792ed50e17ff45a43ec4325ff422d02e9f",
+    "kernel/app_manifest_embed.zl": "e9f2f0f2c48725b417f3e1d906ccb236b8d13e2b857b7c0240853a77ea5a20b8",
     "kernel/apps/apps_common.zl": "dc15b6174f21e45a4c51aaa055fa61e56a27f8245e0c4ea99b0a545214bc5df2",
     "kernel/apps/apps_games1.zl": "e64d44bde4aff81bf1b2c8adea2593d99cc5f08c77e931a43effdda7fc884ce1",
     "kernel/apps/apps_games2.zl": "8756a9d4a5159d3628eb41493a071ac51b2bac76f510059a990480ee89fff077",
@@ -43,7 +43,7 @@
     "kernel/build.sh": "ed63792c70b9d2491e46aec11e79ef0b8b98f2185d6e8ea960b7cce3e598d5f1",
     "kernel/build64.sh": "01a1476a9c0089f7f430a54af521ac9fde84c73b75671f75ca686913afeffde0",
     "kernel/buildefi.sh": "cf8abf6f91ac9a9cdb2e7d9208645b2087d0d8397f75c4ae217ff05d6645ee80",
-    "kernel/metadata/app-manifest.json": "584ad7df8117dbd7af8535eeb7e3850e245f9e5f5b6a617d5c334881dc4a5db0",
+    "kernel/metadata/app-manifest.json": "7cf6bc9a0e68fe28229deb0dfe74b60e2c6292451c7505255a9bdf220223eea9",
     "kernel/src/arch/x86/apic.c": "708dae2c5007c0c3b2f0bd3a8fba29f1db022185cfa12c19119fe8ea5e85eb8d",
     "kernel/src/arch/x86/cpu.c": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa",
     "kernel/src/arch/x86/divmod.c": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
@@ -122,7 +122,7 @@
     "kernel/src/graphics/windowing/userwin.c": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
     "kernel/src/graphics/windowing/wm.c": "fed27e2a33a6a28e91add14710694257e66e8cd7abd133e1f9a8eef99aea9a79",
     "kernel/src/graphics/windowing/wmglue.c": "eb73db25f14892e5b0b1ce728ce78f2b0c7d897faa3730559730ee3483444162",
-    "kernel/src/kernel.zl": "b915341ce3df7862eef389cf578b96bd351024f6bdecc2c3f53ec58b808cd778",
+    "kernel/src/kernel.zl": "4cef2149fe9e87777296e251b5a62422881027fcd9894c3cd16b1f9188518bb2",
     "kernel/src/net/crypto.c": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",
     "kernel/src/net/crypto.h": "48e7b2e3020c9edccebd7be063646dcbebc753d36c99c1cfef2408cfe34eddaa",
     "kernel/src/net/dhcp.c": "7e3115d9b3334ab7520556c15ec8427fafd488e51238f91f0ecf26798ce33fbb",
