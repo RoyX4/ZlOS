@@ -12,7 +12,7 @@
   "build_identity": {
     "schema": "zlos.build-input-identity.v1",
     "id": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
-    "head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a",
+    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
     "dirty": false
   },
   "evidence_vocabulary": {
@@ -25,7 +25,7 @@
   },
   "reproducibility_receipt": {
     "path": "kernel/docs/receipts/reproducible-build-2026-08-22.json",
-    "sha256": "b5b15fdf064dc12c8ac6fc5edb2a9bf9b3f9a3f7edd09cb17e1a146be7c7d130"
+    "sha256": "eadf745fde55d303dfee7a6430df8821575ea40f51697d3b321a00094d968876"
   },
   "relations": {
     "iso_kernel": {
@@ -52,7 +52,7 @@
       "source": "kernel_raw.elf",
       "relation": "objcopy-binary",
       "payload_bytes": 6325828,
-      "payload_sha256": "93c0ca655f627c5793c3ac39b7952552f7f23fb37d7c5909d4c8d134148c84f1",
+      "payload_sha256": "fd4b9ee0144ca9a12dfef9abdae55f6f414ebe912f018783c05a1909e8011e3f",
       "boot_sector_sha256": "f6888b968117aa455e45b17e51175a7a4f30ceb00d24a6a119f51ef5051c2822"
     }
   },
@@ -64,7 +64,7 @@
       "loader": "zlOS 512-byte boot sector",
       "boot_origin": "our bootloader (raw_boot), no GRUB",
       "receipt": "kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json",
-      "receipt_sha256": "07398d22585bd8000ad2036fe15ba9df1ff30afcca9224273a77817a85cdbf22",
+      "receipt_sha256": "c89afdb12af5e7d20b1e311b2c0f6f7b8f8b84eae66b0cb6f8946474f77f74cc",
       "result": "PASS",
       "evidence": "QEMU_RUNTIME",
       "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
@@ -76,7 +76,7 @@
       "loader": "zlOS EFI application",
       "boot_origin": "UEFI application - no GRUB, no bootloader",
       "receipt": "kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "bbd3946686a4b4b359ef43398690617d3c5f180aeecc7da4f341c4a1eec691b2",
+      "receipt_sha256": "52875c91c8c2fff88270845822621f2d0125e498f57374cad801d5acd2b39abf",
       "result": "PASS",
       "evidence": "QEMU_RUNTIME",
       "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
@@ -88,7 +88,7 @@
       "loader": "GRUB 2",
       "boot_origin": "multiboot handoff, 32-bit protected mode",
       "receipt": "kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json",
-      "receipt_sha256": "50e987132149702e14335d5a4d0f4f3de8ceade73c3f4609e44420700d6b0c6d",
+      "receipt_sha256": "f79d3a8b63b2ec1124f80fdbddb67899041f9a604f76db15326a1e8fff282ef1",
       "result": "PASS",
       "evidence": "QEMU_RUNTIME",
       "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
@@ -100,7 +100,7 @@
       "loader": "GRUB 2",
       "boot_origin": "multiboot handoff, 32-bit protected mode",
       "receipt": "kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json",
-      "receipt_sha256": "4ae033f8d4492550df707d9ba1f6be19c358529242e3ce0815d2f19ff9a7728e",
+      "receipt_sha256": "9b4248934db8c55c4c5345f090777839273650afe2f1c213a314ce787f3d59b4",
       "result": "PASS",
       "evidence": "QEMU_RUNTIME",
       "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
@@ -112,7 +112,7 @@
       "loader": "GRUB 2",
       "boot_origin": "multiboot handoff, then OUR jump into 64-bit long mode",
       "receipt": "kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json",
-      "receipt_sha256": "f6290a3253f948a6400407f5d54603134e4aa022b9199e838f70e69e97940727",
+      "receipt_sha256": "47019c6291a9a90f61a3e57d8e5ea80bcfb5aa497ea274fbcbe2b4535e1da31a",
       "result": "PASS",
       "evidence": "QEMU_RUNTIME",
       "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
@@ -124,7 +124,7 @@
       "loader": "GRUB 2",
       "boot_origin": "multiboot handoff, then OUR jump into 64-bit long mode",
       "receipt": "kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "ee908531c89d7f61595e406b905042d77aaf6ad507e0f12952db2784ef1956dc",
+      "receipt_sha256": "899ed57471498747678deeb0dabc4c8329eb18f02eb242fe7427b4f8714d823a",
       "result": "PASS",
       "evidence": "QEMU_RUNTIME",
       "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH"
@@ -132,7 +132,7 @@
   },
   "application_evidence": {
     "path": "kernel/metadata/app-evidence.json",
-    "sha256": "0f713f4d71810571c3e30649047a2dcb372aad97b16a513d81eddaaa4ba42342",
+    "sha256": "c9a00eae333cf26e53c0f30e5c58bfdc410ef6cad403a6b353617324fb51ea25",
     "identities": 64,
     "artifact": "zlOS.iso",
     "claim_ceiling": "source/build plus boot-embedded manifest and QEMU route, first draw and teardown; no complete-workflow or physical proof"
@@ -141,7 +141,7 @@
     "kernel.elf": {
       "bytes": 6493832,
       "path": "kernel/kernel.elf",
-      "sha256": "650c4457fc8223a662a875badfd1a0e724c2bddaaf01b475036f8931e0a0a297",
+      "sha256": "4eb06c9b2e9092c9da743184dcd288833c572d14b54481e40a636c0d6f0e5b98",
       "description": "ELF32 multiboot kernel",
       "producer": "build.sh",
       "proof_state": "PARENT_BYTE_EXACT",
@@ -156,7 +156,7 @@
     "kernel64.elf": {
       "bytes": 3335312,
       "path": "kernel/kernel64.elf",
-      "sha256": "babeddd6980dc9061420ee11244560d06685b233dc58da14e93c5c6cc24dc7cd",
+      "sha256": "cf5cec3f07b2b871c474e049c17ca9955bedb20213db0b97c5c274adb3030da1",
       "description": "ELF64 freestanding kernel",
       "producer": "build64.sh",
       "proof_state": "PARENT_BYTE_EXACT",
@@ -171,7 +171,7 @@
     "kernel_raw.elf": {
       "bytes": 6493676,
       "path": "kernel/kernel_raw.elf",
-      "sha256": "f4ca83fec1d2db898a8c4e743278e3afa30a38742528b98f5e7b7e88bd06cf5e",
+      "sha256": "a556a6bf790dabbca985e104d4e46045355054454a3bc5b8c37e9b972c4cca65",
       "description": "ELF32 raw-loader kernel",
       "producer": "tools/images/mkdisk.sh",
       "proof_state": "PARENT_DERIVED_PAYLOAD",
@@ -198,7 +198,7 @@
     "zlOS.iso": {
       "bytes": 31635456,
       "path": "kernel/zlOS.iso",
-      "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664",
+      "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5",
       "description": "hybrid ISO with GRUB",
       "producer": "tools/images/mkiso.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -212,7 +212,7 @@
     "zlOS64.iso": {
       "bytes": 28477440,
       "path": "kernel/zlOS64.iso",
-      "sha256": "68641ffbae6e2c41d0c67ac39038a4cd30673b956581f6d0ff605f4b17972d0d",
+      "sha256": "e124b6667de1d98493d3737c5647e9c87f1b9e7377f35a0a442d1661a72d258b",
       "description": "hybrid GRUB ISO with 64-bit multiboot payload",
       "producer": "tools/images/mkiso64.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -226,7 +226,7 @@
     "zlOS.img": {
       "bytes": 8389120,
       "path": "kernel/zlOS.img",
-      "sha256": "053fe0c538de8d952b6efeb4d6465eb6d13f6a64f4181634770f7ad5c0fb4528",
+      "sha256": "d9cfa162fc0e9064d48d86df14e231b0f366e623df65f722ec2b4a269cf961e5",
       "description": "raw BIOS disk image",
       "producer": "tools/images/mkdisk.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -239,7 +239,7 @@
     "zlOS-usb.img": {
       "bytes": 138412032,
       "path": "kernel/zlOS-usb.img",
-      "sha256": "0e38e9579582121548c820a4a4dd71153e64202b92b267dc921015d1d8c793e1",
+      "sha256": "7ad982c17875d533d68dce4551f3060656f6b161abb02b8bdf39d93a02749875",
       "description": "GPT/FAT UEFI USB disk image",
       "producer": "tools/images/mkusb.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -252,7 +252,7 @@
     "boot-media-ids.json": {
       "bytes": 484,
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "edf6e15fc67eb7884dc5eebe4c4504b4041db8dec2a85fc87361f116f0ff1f98",
+      "sha256": "25af6198c6e3d01855cefce5e879ce71c2dd9e6369af2cc29777926d0e350184",
       "description": "deterministic disk/FAT identity metadata",
       "producer": "tools/generators/gen-boot-media-ids.py",
       "proof_state": "METADATA_ONLY",

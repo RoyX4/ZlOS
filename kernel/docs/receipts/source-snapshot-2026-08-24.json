@@ -3,7 +3,7 @@
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
   "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "git": {
-    "head": "6dcb3f0f68bc7f77bbc5d2266e8bf2abc15e9fa7",
+    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
     "branch": "codex/presswork-local-closure",
     "dirty": false,
     "canonical_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

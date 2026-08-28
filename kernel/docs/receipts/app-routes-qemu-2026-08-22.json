@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664"
+    "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5"
   },
   "counts": {
     "boot": 3,
@@ -791,7 +791,7 @@
   "schema": "zlos.application-route-qemu-receipt.v2",
   "shipped_build_identity": {
     "dirty": false,
-    "head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a",
+    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
     "id": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
     "schema": 1
   },
@@ -801,15 +801,15 @@
     "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
   },
   "source_files_sha256": {
-    "kernel/build_identity_embed.zl": "9302602385903f35e4b608582fb642444fae8779c21b12bf73c4cb6e7e3d44fb",
+    "kernel/build_identity_embed.zl": "8dc9c6d5adc0777af680e39a0bcece9079fb44d330a069fce01c486ef3d613c8",
     "kernel/metadata/app-manifest.json": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4",
-    "kernel/metadata/build-identity.json": "bee72c8e37cd10269089429491d0be5c32b0c56977f4840a2863c88a377b7f83",
+    "kernel/metadata/build-identity.json": "c35d13de187623a6a2605f795bd6f2e6227ed421160a764d9dca9f1ae4fa2b52",
     "kernel/src/graphics/windowing/wm.c": "8d5a1e6a5d4429581a7a2e891ff05b350870050df85413db8afa4ad29ccbd536",
     "kernel/src/kernel.zl": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
     "kernel/tests/oracle/zlosboot.py": "258e856c0e1ad472d8bc09968542da1894928a4b29d38bc4738f7741ede6b6ad",
     "kernel/tools/probes/probe-app-lifecycle.py": "c6cedd4f5d2bad3bc069fcd77d8e878733856ae769401dd9ccc3dfe5be012a1a",
     "kernel/tools/probes/probe-app-routes.py": "a1e5fd6d384aefd07b814fe83e6badee01e2221728e62c759d1a205c0cf8a300"
   },
-  "source_head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a",
+  "source_head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
   "weakest_link": "route and first draw are not complete workflows; native physical input is unproven here"
 }

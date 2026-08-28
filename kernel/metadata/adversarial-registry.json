@@ -3,7 +3,7 @@
   "result": "PASS_WITH_OPEN_GAPS",
   "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "host_test_inventory_sha256": "3230182f58256a06d21c3e0367707c6405d6efedfd39ee19f90599d59e3fd9cc",
-  "host_test_receipt_sha256": "43eec945af92a2fa8c694040024e05e85ff97bb940100fb932a5420f00eff9e8",
+  "host_test_receipt_sha256": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08",
   "verifier_canaries": [
     {
       "id": "CAN-001",

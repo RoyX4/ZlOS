@@ -12,14 +12,14 @@
       "current_build_bound": true
     },
     "host_test_receipt": {
-      "subject_head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a",
+      "subject_head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
       "current_build_bound": false
     }
   },
   "input_receipts": {
-    "kernel/metadata/artifact-registry.json": "eab893c45b6c0a3ddd9c43c25b7482d77ffccffddcd66cb506a9ad26da1731e0",
+    "kernel/metadata/artifact-registry.json": "313663864ea2ffcce55a51de2db64c78115fc6f711778fccc9855edae8135415",
     "kernel/metadata/init-registry.json": "2a2ea0702d6dbb7a7bbbb0b9b9ab6e04e697f696c8f8296e40cf960ad33dbf2a",
-    "kernel/tests/host/test-run-receipt.json": "43eec945af92a2fa8c694040024e05e85ff97bb940100fb932a5420f00eff9e8"
+    "kernel/tests/host/test-run-receipt.json": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08"
   },
   "claims": [
     {

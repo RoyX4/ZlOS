@@ -44,12 +44,12 @@
   "inputs": [
     {
       "path": "kernel/metadata/build-identity.json",
-      "sha256": "bee72c8e37cd10269089429491d0be5c32b0c56977f4840a2863c88a377b7f83",
+      "sha256": "c35d13de187623a6a2605f795bd6f2e6227ed421160a764d9dca9f1ae4fa2b52",
       "schema": "zlos.build-input-identity.v1"
     },
     {
       "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-      "sha256": "142511356a93f906d8f2e3a3655bde366aea7c1d2b90508843e4cd814101e3aa",
+      "sha256": "c10cbbb0d8e5a72bf7c6cdb7ebdfc62e48a8feed62c7e20ae7ac5e5b60f652f5",
       "schema": "zlos.source-snapshot-receipt.v1"
     },
     {
@@ -69,7 +69,7 @@
     },
     {
       "path": "kernel/metadata/artifact-registry.json",
-      "sha256": "eab893c45b6c0a3ddd9c43c25b7482d77ffccffddcd66cb506a9ad26da1731e0",
+      "sha256": "313663864ea2ffcce55a51de2db64c78115fc6f711778fccc9855edae8135415",
       "schema": "zlos.artifact-boot-registry.v1"
     },
     {
@@ -79,7 +79,7 @@
     },
     {
       "path": "kernel/metadata/app-evidence.json",
-      "sha256": "0f713f4d71810571c3e30649047a2dcb372aad97b16a513d81eddaaa4ba42342",
+      "sha256": "c9a00eae333cf26e53c0f30e5c58bfdc410ef6cad403a6b353617324fb51ea25",
       "schema": "zlos.application-evidence-registry.v1"
     },
     {
@@ -89,12 +89,12 @@
     },
     {
       "path": "kernel/tests/host/test-run-receipt.json",
-      "sha256": "43eec945af92a2fa8c694040024e05e85ff97bb940100fb932a5420f00eff9e8",
+      "sha256": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08",
       "schema": "zlos.host-test-run-receipt.v1"
     },
     {
       "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-      "sha256": "f97667f26962db06ba77842a4d2f003b8ffa77422dfdbabb81c3207fc94ba805",
+      "sha256": "0bbd7248bbc303d51090d6cf3836e7de0642430330fc84f4365f7b4f3a4b08f1",
       "schema": "zlos.host-benchmark-receipt.v2"
     },
     {
@@ -104,17 +104,17 @@
     },
     {
       "path": "kernel/metadata/accessibility-registry.json",
-      "sha256": "00565bfcb990fc56461977104586b70be557b10189ce9c824bccc74f5a89e35f",
+      "sha256": "71ba92faec9fc559ddcf6c3215ba23475c09b5125b312c491fd179d57cc787ae",
       "schema": "zlos.accessibility-proof-registry.v1"
     },
     {
       "path": "kernel/metadata/security-registry.json",
-      "sha256": "20c5f6b338c0340dea796451214b0992d0c07a859bf262702dd216839b6bf9f5",
+      "sha256": "93407d59833eaaf5ab00cb94c60c83e15eef0f6ac125de95318bece0cdd0c99c",
       "schema": "zlos.security-claim-registry.v1"
     },
     {
       "path": "kernel/metadata/observability-registry.json",
-      "sha256": "bf7bda2a70e39132471d5b0c0eb328eb8125c54fa943c8d3aae1cf94a8bb565c",
+      "sha256": "c67ee5854ea3824667f0141f76f73bb1af0b94e6bf1dec6cb443e29dbc5f242c",
       "schema": "zlos.observability-registry.v1"
     },
     {
@@ -124,7 +124,7 @@
     },
     {
       "path": "kernel/metadata/release-notes.json",
-      "sha256": "767d4b9aed5c95c7fd0ca7c170bcae491a9eb3818a873cfdf99b06ff5bcd10f2",
+      "sha256": "ba509c3536b44ad41e15d4f7b24312c7d9bf7ff0b66f28849ac5417af05ed45f",
       "schema": "zlos.release-notes.v1"
     }
   ],
@@ -149,7 +149,7 @@
     }
   ],
   "identity": {
-    "head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a",
+    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
     "branch": "codex/presswork-local-closure",
     "dirty": false,
     "release_state": "UNRELEASED_DEVELOPMENT",
@@ -222,7 +222,7 @@
     {
       "area": "Performance",
       "status": "CURRENT_HOST_REGRESSION",
-      "detail": "Current build: 1 of 7 host frame metrics exceed budget; no native-target distribution exists."
+      "detail": "Current build: 2 of 7 host frame metrics exceed budget; no native-target distribution exists."
     },
     {
       "area": "Visual proof",
@@ -274,7 +274,7 @@
       "name": "boot-media-ids.json",
       "bytes": 484,
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "edf6e15fc67eb7884dc5eebe4c4504b4041db8dec2a85fc87361f116f0ff1f98",
+      "sha256": "25af6198c6e3d01855cefce5e879ce71c2dd9e6369af2cc29777926d0e350184",
       "description": "deterministic disk/FAT identity metadata",
       "producer": "tools/generators/gen-boot-media-ids.py",
       "proof_state": "METADATA_ONLY",
@@ -286,7 +286,7 @@
       "name": "kernel.elf",
       "bytes": 6493832,
       "path": "kernel/kernel.elf",
-      "sha256": "650c4457fc8223a662a875badfd1a0e724c2bddaaf01b475036f8931e0a0a297",
+      "sha256": "4eb06c9b2e9092c9da743184dcd288833c572d14b54481e40a636c0d6f0e5b98",
       "description": "ELF32 multiboot kernel",
       "producer": "build.sh",
       "proof_state": "PARENT_BYTE_EXACT",
@@ -302,7 +302,7 @@
       "name": "kernel64.elf",
       "bytes": 3335312,
       "path": "kernel/kernel64.elf",
-      "sha256": "babeddd6980dc9061420ee11244560d06685b233dc58da14e93c5c6cc24dc7cd",
+      "sha256": "cf5cec3f07b2b871c474e049c17ca9955bedb20213db0b97c5c274adb3030da1",
       "description": "ELF64 freestanding kernel",
       "producer": "build64.sh",
       "proof_state": "PARENT_BYTE_EXACT",
@@ -318,7 +318,7 @@
       "name": "kernel_raw.elf",
       "bytes": 6493676,
       "path": "kernel/kernel_raw.elf",
-      "sha256": "f4ca83fec1d2db898a8c4e743278e3afa30a38742528b98f5e7b7e88bd06cf5e",
+      "sha256": "a556a6bf790dabbca985e104d4e46045355054454a3bc5b8c37e9b972c4cca65",
       "description": "ELF32 raw-loader kernel",
       "producer": "tools/images/mkdisk.sh",
       "proof_state": "PARENT_DERIVED_PAYLOAD",
@@ -333,7 +333,7 @@
       "name": "zlOS-usb.img",
       "bytes": 138412032,
       "path": "kernel/zlOS-usb.img",
-      "sha256": "0e38e9579582121548c820a4a4dd71153e64202b92b267dc921015d1d8c793e1",
+      "sha256": "7ad982c17875d533d68dce4551f3060656f6b161abb02b8bdf39d93a02749875",
       "description": "GPT/FAT UEFI USB disk image",
       "producer": "tools/images/mkusb.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -347,7 +347,7 @@
       "name": "zlOS.img",
       "bytes": 8389120,
       "path": "kernel/zlOS.img",
-      "sha256": "053fe0c538de8d952b6efeb4d6465eb6d13f6a64f4181634770f7ad5c0fb4528",
+      "sha256": "d9cfa162fc0e9064d48d86df14e231b0f366e623df65f722ec2b4a269cf961e5",
       "description": "raw BIOS disk image",
       "producer": "tools/images/mkdisk.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -361,7 +361,7 @@
       "name": "zlOS.iso",
       "bytes": 31635456,
       "path": "kernel/zlOS.iso",
-      "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664",
+      "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5",
       "description": "hybrid ISO with GRUB",
       "producer": "tools/images/mkiso.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
@@ -376,7 +376,7 @@
       "name": "zlOS64.iso",
       "bytes": 28477440,
       "path": "kernel/zlOS64.iso",
-      "sha256": "68641ffbae6e2c41d0c67ac39038a4cd30673b956581f6d0ff605f4b17972d0d",
+      "sha256": "e124b6667de1d98493d3737c5647e9c87f1b9e7377f35a0a442d1661a72d258b",
       "description": "hybrid GRUB ISO with 64-bit multiboot payload",
       "producer": "tools/images/mkiso64.sh",
       "proof_state": "QEMU_DIRECT_ARTIFACT",
