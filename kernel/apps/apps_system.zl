@@ -203,25 +203,70 @@ fn ca_btn_press(i) {
 }
 
 CA_BTN = 44
+# R.calc: a right-aligned display well, the same value in three other bases, the
+# width note, a rule, the sixteen keys, and a band.
+#
+# THE COLOURS WERE RAW LITERALS. This drew its display on rgb(14,17,26) and its
+# keys on rgb(30,36,54) - blue-slate values from the palette PRESSWORK replaced,
+# and design.h says it is the ONLY place a colour literal may appear. They are
+# theme roles now, so the calculator answers a theme change like everything else.
+#
+# THE THREE BASES ARE THE POINT of a calculator in an OS written in a language
+# with no floats. ac_draw_base renders an integer in any base, so hex, octal and
+# binary come from the same value the display shows rather than from a second
+# conversion. The width row states the constraint outright.
+fn ca_val() { if ca_has_entry == 1 { return ca_entry }  return ca_acc }
+
 fn ca_draw(ax, ay, aw, ah) {
     u = ui()
-    fill_rgb(ax + 8 * u, ay + 6 * u, aw - 16 * u, 30 * u, rgb(14, 17, 26))
-    if ca_has_entry == 1 { label_num(ax + 12 * u, ay + 14 * u, ca_entry, theme(TH_TEXT_HI), T_TITLE, W_BOLD) }
-    if ca_has_entry == 0 { label_num(ax + 12 * u, ay + 14 * u, ca_acc, theme(TH_TEXT_HI), T_TITLE, W_BOLD) }
+    dw = aw - 16 * u
+    # the display: a well, value right-aligned as the reference has it
+    rrect(ax + 8 * u, ay + 6 * u, dw, 30 * u, R_INSET_D * u, theme(TH_PANEL_HI))
+    cvw = s3_numw(ca_val())
+    label_num(ax + 8 * u + dw - 10 * u - cvw, ay + 14 * u, ca_val(), theme(TH_TEXT_HI), T_TITLE, W_BOLD)
 
-    gy = ay + 46 * u
+    # the same number, three other ways
+    ky = ay + 42 * u
+    ui_caps(ax + 12 * u, ky, "HEX", theme(TH_TEXT_2), T_CAPTION)
+    ac_draw_base(ax + 78 * u, ky, ca_val(), 8, 16, theme(TH_TEXT_HI))
+    ky = ky + 16 * u
+    ui_caps(ax + 12 * u, ky, "OCTAL", theme(TH_TEXT_2), T_CAPTION)
+    ac_draw_base(ax + 78 * u, ky, ca_val(), 11, 8, theme(TH_TEXT_HI))
+    ky = ky + 16 * u
+    ui_caps(ax + 12 * u, ky, "BINARY", theme(TH_TEXT_2), T_CAPTION)
+    ac_draw_base(ax + 78 * u, ky, ca_val(), 16, 2, theme(TH_TEXT_HI))
+    ky = ky + 16 * u
+    ui_caps(ax + 12 * u, ky, "WIDTH", theme(TH_TEXT_2), T_CAPTION)
+    label(ax + 78 * u, ky, "int64, no float in the drawing path", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    ky = ky + 18 * u
+    fill_rgb(ax + 12 * u, ky, dw - 8 * u, 1, theme(TH_CUT))
+
+    gy = ky + 8 * u
     i = 0
     while i < 16 {
         r = i / 4
         c = i % 4
         bx = ax + 8 * u + c * CA_BTN * u
         by = gy + r * CA_BTN * u
-        bg = rgb(30, 36, 54)
-        if i == 15 { bg = ac_cat_color(1) }
-        rrect(bx + 2 * u, by + 2 * u, CA_BTN * u - 4 * u, CA_BTN * u - 4 * u, 6 * u, bg)
-        label(bx + CA_BTN * u / 2 - 4 * u, by + CA_BTN * u / 2 - 8 * u, ca_btn_label(i), theme(TH_TEXT_HI), T_BODY, W_BOLD)
+        bg = theme(TH_PANEL_HI)
+        kc = theme(TH_TEXT_HI)
+        # `=` IS THE PRIMARY, and it is index 14 here. The reference's last row
+        # is `0 . = +` and it marks `=` as .btn.prim - the one key that COMMITS
+        # rather than continues. This accented 15, which is `+`, so the accent
+        # sat on an operator.
+        #
+        # Index 12 is `C` where the reference has `.`, and that is right rather
+        # than a mismatch: a decimal point in a calculator whose drawing path
+        # has no floats is a key that would do nothing.
+        if i == 14 { bg = theme(TH_ACCENT)  kc = theme(TH_INK_ON) }
+        rrect(bx + 2 * u, by + 2 * u, CA_BTN * u - 4 * u, CA_BTN * u - 4 * u, R_INSET_D * u, bg)
+        label(bx + CA_BTN * u / 2 - 4 * u, by + CA_BTN * u / 2 - 8 * u, ca_btn_label(i), kc, T_BODY, W_BOLD)
         i = i + 1
     }
+    # the reference's note, and it is a real figure from this project
+    ny = gy + 4 * CA_BTN * u + 6 * u
+    ui_caps(ax + 12 * u, ny, "NOTE", theme(TH_TEXT_2), T_CAPTION)
+    label(ax + 60 * u, ny, "241690 kHz is the measured pixel clock", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     return 0
 }
 
