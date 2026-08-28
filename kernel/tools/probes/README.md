@@ -46,6 +46,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-net.py`
 - `probe-pointer-usb.py`
 - `probe-rail.py`
+- `probe-railcover.py`
 - `probe-resize.py`
 - `probe-run.py`
 - `probe-shellbtn.py`
