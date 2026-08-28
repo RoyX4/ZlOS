@@ -4696,6 +4696,26 @@ fn run_command(cmd, arg) {
             color(C_GREY)  return 0
         }
         if fs_mount() == 0 {
+            # THE SAME MISDIAGNOSIS THE FILES PANE HAD, WIRED TO AN INSTANT
+            # ERASE AND WITH NO CONFIRMATION AT ALL.
+            #
+            # This printed "no volume here yet - formatting" and called
+            # fs_format() whenever the mount failed - for any of the TEN causes
+            # fs_mount_impl can fail from. The Files app at least asked twice.
+            # A volume whose superblock checksum is bad is not a volume that is
+            # absent, and fs.c says so in as many words on the way out:
+            # "the volume is damaged, not empty. Nothing was read." Typing
+            # `format` on that disk destroyed it and told you it had been empty.
+            #
+            # fs_format is fs_mkfs_impl, which zeroes the superblock FIRST, by
+            # its own comment, so a failed reformat cannot leave a mountable
+            # half-volume. There is no undo and no confirmation on this path.
+            if fs_why() != FS_WHY_UNFORMATTED {
+                color(C_RED)
+                print("    the mount was refused and the disk is NOT blank - refusing to format")
+                put("    cause ")  put(fs_why())  print(" - see 02 FILES for what it means")
+                color(C_GREY)  return 0
+            }
             print("    no volume here yet - formatting")
             if fs_format() == 0 {
                 color(C_RED)  print("    format failed")
