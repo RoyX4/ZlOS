@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — fix(shell): the band printed an exit status this OS does not have (adbf1e6)
+
+`design/presswork` · 6 files changed, 61 insertions(+), 22 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-29 — fix(ui): the scrollbar ladder was inverted and the trim rule was never drawn (d31bbd5)
 
 `design/presswork` · 4 files changed, 69 insertions(+), 8 deletions(-)

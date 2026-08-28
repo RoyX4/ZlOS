@@ -2054,7 +2054,13 @@ fn grid_cwr() { return grid_inw() - grid_gut() * (GRID_COLS - 1) - grid_cw() * G
 fn grid_rh()  { return idiv(grid_inh() - grid_gut() * (GRID_ROWS - 1), GRID_ROWS) }
 fn grid_rhr() { return grid_inh() - grid_gut() * (GRID_ROWS - 1) - grid_rh() * GRID_ROWS }
 
+# THE DESK GRID HAS STATE NOW. The field menu has always offered "toggle desk
+# grid  CTRL G" and there was nothing to toggle - draw_grid ran unconditionally
+# and no key reached it. S.cfg.grid is the prototype's equivalent.
+desk_grid_on = 1
+
 fn draw_grid() {
+    if desk_grid_on == 0 { return 0 }
     u = ui()
     fx = field_x()
     fy = field_y()
@@ -2247,6 +2253,7 @@ KEY_ESC_K  = 0x101                 # keycodes.h KEY_ESC   - from a real keyboard
 KEY_F1_K   = 0x120                 # keycodes.h KEY_F1
 KEY_SUPER_K = 0x11A                # keycodes.h KEY_SUPER
 KEY_ENTER_K = 0x104                # keycodes.h KEY_ENTER
+MOD_ALT_K   = 4                    # keycodes.h MOD_ALT
 SPARK_MAX  = 64                    # design.h ZD_SPARK_MAX - spark history depth
 RULER_DMA_END = 0x10000000         # memmap.h HI_HEAP - the last one's ceiling
 # THE READOUT IS SET TO THE MEASURE, exactly as the slug below it is, and for
@@ -9817,7 +9824,7 @@ ov_menu_x = 0
 ov_menu_y = 0
 ov_menu_win = 0 - 1
 
-OV_CTX_N = 11
+OV_CTX_N = 12
 fn ov_ctx_label(i) {
     if i == 0 { return "activities" }
     if i == 1 { return "command palette" }
@@ -9829,6 +9836,11 @@ fn ov_ctx_label(i) {
     if i == 7 { return "workspace 01" }
     if i == 8 { return "workspace 02" }
     if i == 9 { return "-" }
+    # "open 11 settings" WAS MISSING. The prototype's ctxmenu has twelve
+    # entries and this had eleven - the row between the third separator and
+    # lock session. A menu one row short is not a shorter menu; nothing on
+    # screen says the row exists.
+    if i == 10 { return "open 11 settings" }
     return "lock session"
 }
 # SEPARATORS AND SHORTCUTS ARE ANSWERED BY NUMBER, not by comparing text.
@@ -9857,11 +9869,12 @@ fn ov_ctx_key(i) {
     if i == 4 { return "CTRL G" }
     if i == 7 { return "ALT 1" }
     if i == 8 { return "ALT 2" }
-    if i == 10 { return "CTRL L" }
+    if i == 10 { return "ALT 11" }
+    if i == 11 { return "CTRL L" }
     return ""
 }
 
-OV_WIN_N = 8
+OV_WIN_N = 9
 fn ov_win_label(i) {
     if i == 0 { return "bring to front" }
     if i == 1 { return "minimise" }
@@ -9869,7 +9882,11 @@ fn ov_win_label(i) {
     if i == 3 { return "-" }
     if i == 4 { return "tile onto the module" }
     if i == 5 { return "this plate is on the field" }
-    if i == 6 { return "-" }
+    # "header is knocked out / at rest" WAS MISSING ENTIRELY. It is the row
+    # that names the focus signal this whole design is built on, and it is the
+    # second of the two DISABLED rows whose value column carries a live ratio.
+    if i == 6 { return "header is at rest" }
+    if i == 7 { return "-" }
     return "close"
 }
 fn ov_win_sep(i) {
@@ -9884,14 +9901,23 @@ fn ov_win_haskey(i) {
 }
 fn ov_win_key(i) {
     if i == 0 { return "CLICK" }
+    # "travel 160" - the prototype names the motion the minimise takes, and
+    # ZD_MS_TRAVEL is 160 in design.h, so this is a quoted constant and not a
+    # measurement of anything this kernel timed.
+    if i == 1 { return "TRAVEL 160" }
     if i == 2 { return "DOUBLE CLICK" }
     return ""
 }
 # Row 5 is DISABLED in the prototype - it states a fact about the plate rather
 # than offering an action, and it is set at the caption rung to say so.
-fn ov_win_dis(i) { if i == 5 { return 1 }  return 0 }
+# Rows 5 AND 6 are the disabled pair - both are statements about the window
+# rather than actions on it, and both carry a live ratio in the value column.
+fn ov_win_dis(i) { if i == 5 { return 1 }  if i == 6 { return 1 }  return 0 }
 
-OV_MENU_W = 210                    # design units, the prototype's .menu
+# 214, the prototype's `.menu { min-width: calc(214px * var(--ui)) }`. It is a
+# MINIMUM there and a fixed width here, which is a real divergence: the
+# prototype's menu grows to its longest row and this one clips it.
+OV_MENU_W = 214
 fn ov_menu_rows() {
     if ov_menu_kind == OV_MENU_WIN { return OV_WIN_N }
     return OV_CTX_N
@@ -10515,6 +10541,39 @@ fn desk_key(kcode, kmods) {
         if kcode == KEY_ENTER_K { return ov_pal_run(ov_sel) }
         if kcode == 13 { return ov_pal_run(ov_sel) }
         if kcode == 10 { return ov_pal_run(ov_sel) }
+    }
+    # ---- THE KEYS THE MENUS ADVERTISE ------------------------------------
+    #
+    # The field menu has always printed CTRL K, CTRL G, CTRL L, ALT 1 and
+    # ALT 2 beside its rows, and FIVE OF THE SIX had no handler anywhere in
+    # the tree - only F1 did, and F1 was unreachable until this file's Escape
+    # fix. kernel.zl's own comment two hundred lines up says "a menu that
+    # advertises a key the system does not answer is a picture of a menu", and
+    # the menu had been one since it was written.
+    #
+    # Ctrl+letter arrives as the ASCII control code: Ctrl+G is 7, Ctrl+K is 11,
+    # Ctrl+L is 12. Alt is read from the modifier bitmap, MOD_ALT.
+    if kcode == 11 {
+        ov_mode = OV_PALETTE
+        ov_sel = 0
+        wm_damage(0, 0, px_w(), px_h())
+        return 1
+    }
+    if kcode == 12 {
+        ov_mode = OV_LOCK
+        ov_sel = 0
+        wm_damage(0, 0, px_w(), px_h())
+        return 1
+    }
+    if kcode == 7 {
+        desk_grid_on = 1 - desk_grid_on
+        if desk_grid_on == 1 { note_say("desk grid on - 12 x 8, ruled onto the field", 300) } else { note_say("desk grid off", 300) }
+        wm_damage(0, 0, px_w(), px_h())
+        return 1
+    }
+    if band(kmods, MOD_ALT_K) != 0 {
+        if kcode == 49 { wm_setws(0)  wm_damage(0, 0, px_w(), px_h())  return 1 }
+        if kcode == 50 { wm_setws(1)  wm_damage(0, 0, px_w(), px_h())  return 1 }
     }
     if kcode == KEY_SUPER_K { return open_menu() }
     return 0

@@ -70,11 +70,20 @@ def defines_in(path):
     mirror of a computed value is a different and worse idea than a mirror of a
     literal, and silently 'resolving' one would invent a number."""
     out = {}
+    text = path.read_text(errors="replace")
     for m in re.finditer(r'#define\s+(\w+)\s+(0[xX][0-9a-fA-F]+|\d+)\s*(?:UL?|L)?\s*(?:/\*|//|$)',
-                         path.read_text(errors="replace"), re.M):
+                         text, re.M):
         v = parse_int(m.group(2))
         if v is not None:
             out[m.group(1)] = v
+    # AND `(1 << n)`, because every MOD_* in keycodes.h is written that way and
+    # skipping them meant a legitimate citation reported "header has no such
+    # symbol" - which reads as a typo in the zl file rather than as a gap in
+    # this reader. One shift of one literal by another is still a literal; a
+    # general expression evaluator is not wanted here and is not what this is.
+    for m in re.finditer(r'#define\s+(\w+)\s+\(\s*(\d+)\s*<<\s*(\d+)\s*\)', text, re.M):
+        if m.group(1) not in out:
+            out[m.group(1)] = int(m.group(2)) << int(m.group(3))
     return out
 
 

@@ -117,6 +117,27 @@ try:
         if not case(nm, op, dis):
             break
 
+    # ---- THE SHORTCUTS THE FIELD MENU ADVERTISES --------------------------
+    # Five of its six had no handler anywhere until the desk was offered every
+    # key. Ctrl+letter arrives as the ASCII control code down the wire, which is
+    # exactly what desk_key now tests for.
+    print("the shortcuts the field menu prints:")
+    for nm, byte in (("ctrl+k palette", "\x0b"), ("ctrl+l lock", "\x0c")):
+        if not at_base(settle(nm + "-base")):
+            fails.append("%s: skipped, not at baseline" % nm)
+            continue
+        ser.send(byte)
+        up = settle(nm + "-up")
+        d = frame_delta(base, up) if up else None
+        ok = d is not None and d >= MOVED
+        print("  %-22s delta %.4f   %s" % (nm, d if d is not None else -1,
+                                           "OK" if ok else "FAIL"))
+        if not ok:
+            fails.append("%s: nothing opened (delta %s)" % (nm, d))
+        else:
+            ser.send("\x1b")
+            settle(nm + "-clear")
+
     if at_base(settle("pre-f1")):
         print("F1 opens activities (keycode 0x120, which never matched before):")
         qmp.sendkey("f1")
