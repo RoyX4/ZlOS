@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(test): reanchor the version mutation guard (37b3b9d)
+
+`codex/presswork-local-closure` · 3 files changed, 9 insertions(+), 9 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/evidence/one-fact-many-copies-2026-08-27.md`
+- `kernel/tools/checks/check-version-selftest.py`
+- `kernel/tools/checks/check-version.py`
+
+</details>
+
 ## 2026-08-28 — test: record green closure gate evidence (70bbcea)
 
 `codex/presswork-local-closure` · 31 files changed, 379 insertions(+), 378 deletions(-)
