@@ -57,7 +57,8 @@ def constants(sources):
 
 
 def function_body(text, name):
-    match = re.search(r"fn %s\([A-Za-z_][A-Za-z0-9_]*\)\s*\{" % re.escape(name), text)
+    params = r"(?:[A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)?"
+    match = re.search(r"fn %s\(\s*%s\s*\)\s*\{" % (re.escape(name), params), text)
     if not match:
         fail(f"missing function {name}")
     start = match.end()
@@ -318,6 +319,10 @@ def run_selftest(manifest):
     missing_source["source_files"].remove("apps_registry.zl")
     mutations.append(("missing-source", missing_source))
     caught = []
+    parser_probe = "fn sample(a, b, c) { if a { return b } return c }"
+    if function_body(parser_probe, "sample").strip() != "if a { return b } return c":
+        fail("function parser does not preserve a multi-argument body")
+    caught.append("multi-argument-function")
     dense = [entry["id"] for entry in manifest["entries"] if entry["source_family"] == "registry"]
     catalog_id = next(entry["id"] for entry in manifest["entries"] if entry["name"] == "All Applications")
     for name, mutant in mutations:

@@ -261,6 +261,9 @@ def source_register_routes():
         seam = f"if da == {app} {{ return {owner}() }}"
         if seam not in launch:
             fail(f"rail_launch does not route kernel-owned {app} through {owner}")
+    cards = gen.function_body(kernel, "sys_cards")
+    if "wm_painted()" not in cards or "wm_frame()" in cards:
+        fail("System cards must read wm_painted(), never recursively drive wm_frame()")
     menu = gen.function_body(kernel, "menu_pick")
     for row, _, name in MENU_SURFACES:
         seam = f"if idx == {row} {{ return {MENU_HANDLERS[row]}() }}"

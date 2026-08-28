@@ -5248,7 +5248,7 @@ fn sys_cards(cx, cy, cw) {
     if sys_hz > 0 {
         sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", sys_hz, 3, "Hz, measured")
     } else {
-        sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", wm_frame(), 0, "composites, no panel clock")
+        sys_card(cx + 2 * (sd_w + sd_g), cy, sd_w, sd_h, "refresh", wm_painted(), 0, "composites, no panel clock")
     }
     return cy + sd_h
 }
