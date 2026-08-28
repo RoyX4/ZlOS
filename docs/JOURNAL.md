@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — docs: capsule for probe-railcover (c6d210d)
+
+`design/presswork` · 2 files changed, 22 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/tools/probes/README.md`
+
+</details>
+
 ## 2026-08-29 — feat(wm): the rail can no longer be dragged under - the prototype's rule 1, enforced (f57b343)
 
 `design/presswork` · 5 files changed, 239 insertions(+), 23 deletions(-)
