@@ -2870,7 +2870,6 @@ fn mouse_tick() {
 SH_BTNH = 22                       # .btn { height: calc(22px * var(--ui)) }
 SH_BTNPX = 10                      # .btn { padding: 0 calc(10px * var(--ui)) }
 
-sh_exit = 0
 sh_cs = 0
 sh_t0 = 0
 
@@ -2915,16 +2914,28 @@ fn sh_buttons(bx, by, bw) {
     nx = sh_btn(bx, by, sh_btnw("dmesg"), "dmesg", 1, 1)
     nx = sh_btn(nx, by, sh_btnw("regdump"), "regdump", 0, sh_regdump_on())
     ey2 = by + (SH_BTNH * bu - ui_th(PW_SM)) / 2
-    ew3 = ui_tw("exit ", PW_SM, PW_MONO) + s3_numw(sh_exit) + ui_tw(" - ", PW_SM, PW_MONO) + pw_decgw(sh_cs, 2, PW_SM, PW_MONO) + ui_tw(" s", PW_SM, PW_MONO)
+    # THE REFERENCE PRINTS "exit 0 - 1.42 s" AND ONLY THE SECOND HALF IS REAL.
+    #
+    # I added this readout as `exit N` from run_command's return value, and
+    # that value is not an exit status. run_command returns 0 from 74 sites -
+    # its ordinary "done" - returns 1 from one, and delegates from 48 more, so
+    # the number it hands back depends on which branch ran and not on whether
+    # anything succeeded. The catalog proved it on screen: `apps` opened the
+    # window correctly and the band read "exit 1", because reg_open happened to
+    # return 1. An arbitrary internal value printed under a name that means
+    # something specific is precisely the fault I have spent today removing,
+    # and I introduced this one.
+    #
+    # zlOS builtins do not exit. They are function calls in the compositor's
+    # own process; there is no status to read and inventing a plausible 0 would
+    # be worse than the 1, not better. The elapsed time IS real - ticks() is
+    # the PIT at 100 Hz, so centiseconds, and the reference's own 1.42 s is 142
+    # of them - so that is what this prints, and it prints what it is.
+    ew3 = ui_tw("ran in ", PW_SM, PW_MONO) + s3_numw(sh_cs) + ui_tw(" us", PW_SM, PW_MONO)
     ex3 = bx + bw - ew3
-    ecol = theme(TH_TEXT_DIM)
-    if sh_exit != 0 { ecol = theme(TH_WARN) }
-    ui_txt(ex3, ey2, "exit ", ecol, PW_SM, PW_MONO)
-    num_aa(ex3 + ui_tw("exit ", PW_SM, PW_MONO), ey2, sh_exit, ecol)
-    dx = ex3 + ui_tw("exit ", PW_SM, PW_MONO) + s3_numw(sh_exit)
-    ui_txt(dx, ey2, " - ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
-    pw_decg(dx + ui_tw(" - ", PW_SM, PW_MONO), ey2, sh_cs, 2, theme(TH_TEXT_2), PW_SM, PW_MONO)
-    ui_txt(dx + ui_tw(" - ", PW_SM, PW_MONO) + pw_decgw(sh_cs, 2, PW_SM, PW_MONO), ey2, " s", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    ui_txt(ex3, ey2, "ran in ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    num_aa(ex3 + ui_tw("ran in ", PW_SM, PW_MONO), ey2, sh_cs, theme(TH_TEXT_2))
+    ui_txt(ex3 + ui_tw("ran in ", PW_SM, PW_MONO) + s3_numw(sh_cs), ey2, " us", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
     return 0
 }
 
@@ -9235,7 +9246,7 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                     ta = term_arg()
                     td_open = open_app(tc, ta)
                     if td_open == 0 {
-                        sh_t0 = ticks()
+                        sh_t0 = cpu_tsc()
                         td_result = run_command(tc, ta)
                         # THE REFERENCE PRINTS "exit 0 - 1.42 s" AND BOTH HALVES
                         # ARE REAL HERE. run_command already returned a result
@@ -9243,8 +9254,16 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                         # ticks() is the PIT at 100 Hz, so it is centiseconds
                         # and 142 of them IS 1.42 s. Nothing had to be invented,
                         # only kept.
-                        sh_exit = td_result
-                        sh_cs = ticks() - sh_t0
+                        # MICROSECONDS FROM THE TSC, NOT CENTISECONDS FROM
+                        # THE PIT. ticks() is 100 Hz, so every builtin that
+                        # finishes inside 10 ms - which is all of them - read
+                        # "0.00 s": true, and useless. cpu_khz() is the
+                        # measured TSC rate, so (delta / khz) is microseconds
+                        # and the readout can show what a command actually
+                        # cost. A zero or uncalibrated rate falls back rather
+                        # than dividing by it.
+                        sh_khz = cpu_khz()
+                        if sh_khz > 0 { sh_cs = (cpu_tsc() - sh_t0) / sh_khz } else { sh_cs = 0 }
                         term_complete(tc, td_result)
                     } else { term_complete(tc, 0) }
                 }
