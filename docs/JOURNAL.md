@@ -36,6 +36,17 @@ the part that makes a change legible later, and the part nobody writes down.
 
 </details>
 
+## 2026-08-28 — Merge pull request #6 from RoyX4/design/presswork (682b802)
+
+`main` · 148 files changed, 25192 insertions(+), 9092 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
 ## 2026-08-28 — chore: refresh complete closure evidence (14f3c2c)
 
 `codex/presswork-local-closure` · 35 files changed, 1139 insertions(+), 889 deletions(-)
