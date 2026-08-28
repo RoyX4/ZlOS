@@ -14,6 +14,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import sys
 
 
@@ -23,6 +24,7 @@ REPO_ROOT = os.path.dirname(KERNEL_ROOT)
 METADATA = os.path.join(KERNEL_ROOT, "metadata")
 MANIFEST = os.path.join(METADATA, "app-manifest.json")
 BUILD_IDENTITY = os.path.join(METADATA, "build-identity.json")
+KERNEL_SOURCE = os.path.join(KERNEL_ROOT, "src", "kernel.zl")
 ISO = os.path.join(KERNEL_ROOT, "zlOS.iso")
 OUTPUT = os.path.join(METADATA, "app-evidence.json")
 RECEIPTS = {
@@ -55,6 +57,14 @@ def sha256(path):
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def source_int(name):
+    source = open(KERNEL_SOURCE, encoding="utf-8").read()
+    match = re.search(r"^%s\s*=\s*(\d+)" % re.escape(name), source, re.M)
+    if not match:
+        fail(f"kernel.zl no longer defines {name}")
+    return int(match.group(1))
 
 
 def manifest_contract(manifest):
@@ -236,10 +246,19 @@ def build(manifest, receipts, boot_receipts, verify_files=True, verify_artifact=
     route_result = receipts["routes"].get("result", {})
     if "dock" in route_result:
         fail("routes: legacy dock evidence is not valid for the current rail shell")
-    if len(route_result.get("register", [])) != 11:
-        fail("routes: register receipt does not cover all 11 fixed launch rows")
-    if len(route_result.get("surface", [])) != 4:
-        fail("routes: surface receipt does not cover Menu, System, Type, and All Applications")
+    register = route_result.get("register", [])
+    register_count = source_int("REG_N")
+    slots = [item.get("slot") for item in register]
+    if slots != list(range(register_count)):
+        fail("routes: register receipt slots %r do not cover source REG_N %d"
+             % (slots, register_count))
+    surface_routes = [item.get("route") for item in route_result.get("surface", [])]
+    expected_surfaces = {
+        "super", "menu:3", "menu:8", "menu:9", "menu:11", "rail:all-apps",
+    }
+    if set(surface_routes) != expected_surfaces or len(surface_routes) != len(expected_surfaces):
+        fail("routes: surface receipt does not cover the exact current Menu, About, "
+             "System, Type, Browser, and All Applications routes")
     for item in route_result.get("boot", []):
         add_record(evidence, known, item, "boot", require_close=False)
     for item in route_result.get("register", []):
@@ -350,6 +369,9 @@ def selftest(manifest, receipts, boot_receipts):
     missing_identity = copy.deepcopy(receipts)
     missing_identity["catalogue"]["result"]["cycles"].pop()
     mutations.append(("unproved-identity", missing_identity))
+    missing_register = copy.deepcopy(receipts)
+    missing_register["routes"]["result"]["register"].pop()
+    mutations.append(("missing-register-route", missing_register))
     wrong_name = copy.deepcopy(receipts)
     wrong_name["routes"]["result"]["register"][0]["name"] = "Not Terminal"
     mutations.append(("identity-drift", wrong_name))

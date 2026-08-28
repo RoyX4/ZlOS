@@ -27,7 +27,7 @@ KERNEL_SEG   equ 0x1000          ; bounce buffer at 0x10000, reused every chunk
 KERNEL_DEST  equ 0x100000        ; where the kernel actually runs: 1 MiB
 KERNEL_LBA   equ 1               ; kernel starts at the 2nd sector of the disk
 CHUNK_SECS   equ 64              ; sectors per BIOS read (32 KiB)
-; 192 * 32 KiB = 6 MiB, so the loaded image spans 1 MiB .. 7 MiB.
+; 256 * 32 KiB = 8 MiB, so the loaded image spans 1 MiB .. 9 MiB.
 ;
 ; A kernel that outgrows this is not a build error: the loader reads exactly
 ; CHUNKS chunks whatever the kernel's size, so the tail is simply never loaded
@@ -44,13 +44,13 @@ CHUNK_SECS   equ 64              ; sectors per BIOS read (32 KiB)
 ; one was overrun before it was written. Both times the number was set to just
 ; past where the kernel happened to be that day.
 ;
-; 6 MiB is set against where the kernel can plausibly GO, not where it is:
-; measured payload 1,614,532 bytes, so this is 3.9x the current image. Raising
-; it cost moving two neighbours up (the raw-boot stack 6 -> 12 MiB, the program
-; arena 8 -> 14 MiB) because at 6 MiB of capacity the loaded image would have
-; run into the stack. That is the right trade: those two had no reason to be
-; where they were beyond a kernel that used to be smaller.
-CHUNKS       equ 192
+; 6 MiB was set against where the kernel could plausibly go, not where it was,
+; but PRESSWORK eventually made that payload 6,324,036 bytes. The build guard
+; caught the 32,580-byte overrun before a truncated image shipped. 8 MiB leaves
+; 2,064,572 bytes of measured payload headroom and ends at 9 MiB, still 3 MiB
+; below the raw stack at 12 MiB. The stack and program arena therefore do not
+; need to move again.
+CHUNKS       equ 256
 
 ; Scratch below the bounce buffer (the boot sector ends at 0x7E00, the buffer
 ; starts at 0x10000), used only while we are still in real mode.
@@ -220,7 +220,7 @@ pm_entry:
     mov esp, 0x00C00000          ; a stack in high memory (12 MiB), growing down.
                                  ; Low memory is too tight: the framebuffer
                                  ; compositor nests deep. It was 6 MiB, which the
-                                 ; loader now writes THROUGH - CHUNKS covers 1..7
+                                 ; loader now writes THROUGH - CHUNKS covers 1..9
                                  ; MiB - so a stack at 6 MiB would be inside the
                                  ; region the loader is still filling.
                                  ; Must match raw_entry.S, which sets it again,

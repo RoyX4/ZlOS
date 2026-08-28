@@ -97,6 +97,7 @@ def validate(value: dict) -> None:
     counts = value.get("counts", {})
     manifest = load("app-manifest.json")
     app = load("app-evidence.json")
+    wrappers = load("wrapper-registry.json")
     provenance = load("provenance-viewer.json")
     application_count = len(manifest.get("entries", []))
     build_input_count = len(load("build-identity.json").get("source_files_sha256", {}))
@@ -113,9 +114,13 @@ def validate(value: dict) -> None:
         "dependency_runtime_files": 91,
         "dependency_transitive_packages": 145,
         "dependency_source_archives_retained": 0,
-        "wrapper_inventory": 164,
-        "wrapper_named_by_landing_gate": 63,
-        "wrapper_legacy_policy_gaps": 18,
+        "wrapper_inventory": wrappers.get("counts", {}).get("wrappers"),
+        "wrapper_named_by_landing_gate": wrappers.get("counts", {}).get(
+            "named_by_landing_gate"
+        ),
+        "wrapper_legacy_policy_gaps": wrappers.get("counts", {}).get(
+            "no_static_failure_policy"
+        ),
         "toolchain_tools": 7,
         "toolchain_target_lanes": 4,
         "toolchain_external_headers": 82,
@@ -349,8 +354,20 @@ def build() -> dict:
             or dependency.get("closure", {}).get("all_package_dependencies_resolved") is not True \
             or dependency.get("closure", {}).get("all_source_archives_retained") is not False:
         raise ValueError("init/dependency evidence is not passing")
+    wrapper_rows = wrappers.get("wrappers", [])
+    wrapper_counts = wrappers.get("counts", {})
     if wrappers.get("result") != "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS" \
-            or wrappers.get("counts", {}).get("wrappers") != 164 \
+            or not wrapper_rows \
+            or wrapper_counts.get("wrappers") != len(wrapper_rows) \
+            or wrapper_counts.get("named_by_landing_gate") != sum(
+                row.get("named_by_landing_gate") is True for row in wrapper_rows
+            ) \
+            or wrapper_counts.get("no_static_failure_policy") != sum(
+                row.get("exit_policy") in {
+                    "NO_STATIC_FAILURE_POLICY", "PYTHON_UNPROVED_TOP_LEVEL", "UNKNOWN"
+                }
+                for row in wrapper_rows
+            ) \
             or wrappers.get("authority_contract", {}).get("legacy_policy_gaps_are_not_landing_authority") is not True:
         raise ValueError("wrapper inventory is missing or overpromoted")
     if toolchain.get("result") != "PASS_WITH_OPEN_PORTABILITY_GAPS" \
@@ -635,6 +652,9 @@ def selftest(value: dict) -> None:
     physical = copy.deepcopy(value)
     physical["counts"]["physical_exact_hash_proofs"] = 1
     mutations["physical-overclaim"] = physical
+    wrappers = copy.deepcopy(value)
+    wrappers["counts"]["wrapper_inventory"] += 1
+    mutations["wrapper-count-drift"] = wrappers
     skipped = copy.deepcopy(value)
     skipped["open_gaps"]["host_hardware_skips"] = 0
     mutations["hidden-hardware-skip"] = skipped

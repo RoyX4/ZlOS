@@ -20,11 +20,11 @@ _rawstart:
                                    nests deep and needs ~256 KiB.
 
                                    It moved to 12 MiB when raw_boot.asm's CHUNKS went
-                                   to 192: the loader now fills 1 MiB .. 7 MiB, so
-                                   6 MiB is INSIDE the region being loaded. The
-                                   kernel image currently reaches __bss_end 0x2E15C0
-                                   (2.88 MiB), so this leaves it about 9 MiB to grow
-                                   down into. Check that gap before moving either.
+                                   to 192: the loader then filled 1 MiB .. 7 MiB, so
+                                   6 MiB was INSIDE the region being loaded. CHUNKS
+                                   is now 256 and fills 1 MiB .. 9 MiB. The measured
+                                   __bss_end is 0x943880, leaving about 2.73 MiB below
+                                   this stack. Check that gap before moving either.
 
                                    raw_boot.asm:pm_entry sets the same value before
                                    jumping here, and arena.c's RAW_STACK_TOP asserts

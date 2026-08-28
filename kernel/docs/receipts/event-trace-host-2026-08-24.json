@@ -1,7 +1,7 @@
 {
   "schema": "zlos.event-trace-host-receipt.v1",
   "result": "PASS_HOST_CORE_TARGET_UNINTEGRATED",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "source_identities": {
     "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
     "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
@@ -43,7 +43,7 @@
       {
         "id": "uefi-llp64",
         "exit_code": 0,
-        "artifact_sha256": "0facdf31b2a3dddbc75e40626d561b049a9e0518025e716ce7316bc973d2f317"
+        "artifact_sha256": "7c924ffe8eb09a1f5e32533bd600bb5265e7d65de32ab97492f35e703f213d70"
       }
     ]
   },

@@ -100,12 +100,32 @@ def validate_cycle(opened, ready, closed, app, baseline):
     return errors
 
 
+def source_rail_slots():
+    source = open(os.path.join(KERNEL_ROOT, "src", "kernel.zl"), encoding="utf-8").read()
+    body = re.search(r"fn rail_app\(slot\) \{(.*?)\n\}", source, re.S)
+    if not body:
+        fail("kernel.zl no longer defines rail_app")
+    return [int(slot) for slot in re.findall(r"if slot == (\d+)", body.group(1))]
+
+
+def validate_rail_geometry(geometry, route_slots):
+    errors = []
+    expected = list(range(len(geometry["slots"])))
+    if route_slots != expected:
+        errors.append(f"rail routes {route_slots}, geometry exposes {expected}")
+    if geometry["slots"] and geometry["catalogue"][1] <= geometry["slots"][-1][1]:
+        errors.append("All Applications is not after the register")
+    return errors
+
+
 def selftest():
     geometry = zb.rail_geometry(1920, 1200)
-    if len(geometry["slots"]) != 11:
-        fail("selftest rail geometry did not expose all eleven routes")
-    if geometry["catalogue"][1] <= geometry["slots"][-1][1]:
-        fail("selftest rail geometry did not put All Applications after the register")
+    rail_slots = source_rail_slots()
+    errors = validate_rail_geometry(geometry, rail_slots)
+    if errors:
+        fail("selftest rail geometry drift: " + "; ".join(errors))
+    if not validate_rail_geometry(geometry, rail_slots[:-1]):
+        fail("selftest rail-route-count mutation escaped")
     good = (
         {"event": "open", "slot": 4, "app": 15, "generation": 3, "live": 5},
         {"event": "ready", "slot": 4, "app": 15, "generation": 3, "live": 5},
@@ -126,7 +146,7 @@ def selftest():
     leaked = [dict(item) for item in good]
     leaked[2]["live"] = 5
     mutations.append(("close-leak", leaked))
-    caught = []
+    caught = ["rail-route-count"]
     for name, mutant in mutations:
         if validate_cycle(*mutant, 15, 4):
             caught.append(name)

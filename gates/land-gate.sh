@@ -205,6 +205,8 @@ until guard; do sleep 30; done
 run "app routes QEMU" "$WT/kernel" python3 tools/probes/probe-app-routes.py --no-build \
     --receipt docs/receipts/app-routes-qemu-2026-08-22.json
 until guard; do sleep 30; done
+run "rail register QEMU" "$WT/kernel" python3 tools/probes/probe-rail.py --no-build
+until guard; do sleep 30; done
 run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --no-build \
     --receipt docs/receipts/app-lifecycle-qemu-2026-08-22.json
 until guard; do sleep 30; done

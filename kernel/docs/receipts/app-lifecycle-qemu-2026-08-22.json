@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
+    "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5"
   },
   "catalogue": {
     "baseline_live": 4,
@@ -1268,24 +1268,24 @@
   "scope": "47 All Applications registry entries only",
   "shipped_build_identity": {
     "dirty": false,
-    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
-    "id": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
+    "id": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
     "schema": 1
   },
   "shipped_manifest": {
     "entries": 64,
     "schema": 1,
-    "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+    "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
   },
   "source_files_sha256": {
     "kernel/apps/apps_registry.zl": "632ac333ca4bef2da712d9507b5614dc9fc951904d78b557ec738597976a94c7",
-    "kernel/build_identity_embed.zl": "c6b28ea0a63792e0fbab71f27d073cbd684ca974dc3fbc8cb3bf09aa8221322f",
-    "kernel/metadata/app-manifest.json": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447",
-    "kernel/metadata/build-identity.json": "e9baaeb8e6a590fcd7d4736f3ff3373068a4b34e6a5f6c80136f0deb9a61a421",
-    "kernel/src/graphics/windowing/wm.c": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
-    "kernel/src/kernel.zl": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
-    "kernel/tools/probes/probe-app-lifecycle.py": "615832a6ced66c3641bc4a3707ec449b4b58338c6315d0b21b1b6cc273e466e6"
+    "kernel/build_identity_embed.zl": "8dc9c6d5adc0777af680e39a0bcece9079fb44d330a069fce01c486ef3d613c8",
+    "kernel/metadata/app-manifest.json": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4",
+    "kernel/metadata/build-identity.json": "c35d13de187623a6a2605f795bd6f2e6227ed421160a764d9dca9f1ae4fa2b52",
+    "kernel/src/graphics/windowing/wm.c": "8d5a1e6a5d4429581a7a2e891ff05b350870050df85413db8afa4ad29ccbd536",
+    "kernel/src/kernel.zl": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
+    "kernel/tools/probes/probe-app-lifecycle.py": "c6cedd4f5d2bad3bc069fcd77d8e878733856ae769401dd9ccc3dfe5be012a1a"
   },
-  "source_head": "ba5a344742dad707b4b47800b6160468728deb0b",
+  "source_head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
   "weakest_link": "first compositor draw is readiness, not a successful user workflow; non-catalog routes remain unproven here"
 }

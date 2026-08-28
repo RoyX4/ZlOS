@@ -1,84 +1,84 @@
 {
   "schema": "zlos.observability-registry.v1",
   "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "boot_transcripts": [
     {
       "path": "kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json",
-      "receipt_sha256": "3516e83e7b11fd9f927c4ae952f74803e72af7d18d92fbb58967163d1bb3572f",
+      "receipt_sha256": "c89afdb12af5e7d20b1e311b2c0f6f7b8f8b84eae66b0cb6f8946474f77f74cc",
       "route": "raw-bios",
-      "boot_log_sha256": "1520ef21a81ce081c85a444d15562fb5dac442659a2219a0953a2e4e5bc3f454",
+      "boot_log_sha256": "acb18d0c4b111c76a5dfef02471fdb942649124cc75f74783f22711d0ca5a9db",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "5bc92a6f4a1a941028edb5858db83cd8941050e021ac700884eccd845028954b",
+      "receipt_sha256": "52875c91c8c2fff88270845822621f2d0125e498f57374cad801d5acd2b39abf",
       "route": "native-uefi64",
-      "boot_log_sha256": "4effe749ee6941e187f71d2c8e632b5647a22ca0049d8280a9c194bfb6e246e3",
+      "boot_log_sha256": "df8bba2ecb768fbb6c2dd7920622dd00864dbf33a91c57ab03fe510abbe7b7e6",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json",
-      "receipt_sha256": "22ec33f5e07a0c3c56526f92e757fdc1718aa4f12cf0d580a45c743b30c61821",
+      "receipt_sha256": "f79d3a8b63b2ec1124f80fdbddb67899041f9a604f76db15326a1e8fff282ef1",
       "route": "grub-bios32",
-      "boot_log_sha256": "61bdb3fc4343b819ba37ab84dc3f213df0114d9fddf2f57879dce3e40c565f48",
+      "boot_log_sha256": "f11a38bac85a8a97015be4999ee144812d1c5c0fdb2c6526d39d09a8ea3719ba",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json",
-      "receipt_sha256": "03beaf9c6f12b1cde1e8770415082266cf9a7e2a6cacebc9ea13b0194d06a992",
+      "receipt_sha256": "9b4248934db8c55c4c5345f090777839273650afe2f1c213a314ce787f3d59b4",
       "route": "grub-uefi32",
-      "boot_log_sha256": "45b613d909294cf7221074ff62a4e727bf1d7e7b6a6779f7da3303ac404cb9e5",
+      "boot_log_sha256": "6f5111a022a1b8e9077a273750ad898ec7aa4bd9d5a27e859a0af99545367e96",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json",
-      "receipt_sha256": "4c580061b919538c4ffdb38e766e00495b1b981736a9e6e5609fe97626a0a36a",
+      "receipt_sha256": "47019c6291a9a90f61a3e57d8e5ea80bcfb5aa497ea274fbcbe2b4535e1da31a",
       "route": "grub-bios64",
-      "boot_log_sha256": "152f8a90e3e652d56c1a0911b27d76b016e963876d29f63fe16e3f67b4f1903d",
+      "boot_log_sha256": "05ef06bc609e30334d70b5f2377a9a69739eb6d5aa8bea8c531f88864cf7cfef",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "a12e6e45bbe8741d92ce610021af4be61ca218e9eea059ac4d984bb974f3218a",
+      "receipt_sha256": "899ed57471498747678deeb0dabc4c8329eb18f02eb242fe7427b4f8714d823a",
       "route": "grub-uefi64",
-      "boot_log_sha256": "9fd311f3e69a917d6d5689a89ec2d536120ef3869c4fedeb4a85932432bd483a",
+      "boot_log_sha256": "4d1a9d12fd70ee2c82e2f714e3b02d759ea64b7043772d203d99276c8c0b864d",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
       "current_build_bound": true
     }
   ],
   "host_test_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
-    "subject_head": "ba5a344742dad707b4b47800b6160468728deb0b",
+    "sha256": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08",
+    "subject_head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
     "current_build_bound": false
   },
   "qemu_crash_receipt": {
     "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-    "sha256": "de64f612a17653fb070d94a364e6a5987d43ef4edf633af19a03274018e822de",
-    "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+    "sha256": "827a5f1aa73b2fbf4b59cf20d67c24b5508fc9f3647895b05c951f1156974bba",
+    "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
     "current_build_bound": true
   },
   "event_schema": {
     "path": "kernel/metadata/event-schema.json",
-    "sha256": "cf50a46a4955c51f4783f5ca93096af96f9e3858f440b8b87ceba33be058e36e",
+    "sha256": "fa7530bbd38ca661b96e194881984ab6ac987de02518355878f6bb61ff59fc9e",
     "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED",
     "target_emitters": 0
   },
@@ -89,7 +89,7 @@
     "src/core/heap.c": "d3d7cbb7010e7527713ca516a40a3dfc3050875e01762e83cb4443bc17fe4d1f",
     "src/core/console.c": "124025daa79df82856d35d1aee78ff9981a886371fdfd74aa5e6f2f4aa1bd67d",
     "src/arch/x86/support.c": "4ce2cecf76a4da5547fbf9749fa817dc879cf6b5b0d05958e38c672fa022378a",
-    "src/graphics/windowing/term.c": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8",
+    "src/graphics/windowing/term.c": "48d9563f12b91bc4280b6fbb553a80fcbf933f6f9a7edc66057eb287ef5b9c04",
     "tools/checks/verify-crash.py": "44c745f78dae1c684768ceab3675e313048e8c971a588c6aa1120cf9b0921051",
     "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
     "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",

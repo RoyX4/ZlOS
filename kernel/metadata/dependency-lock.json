@@ -1,7 +1,7 @@
 {
   "schema": "zlos.host-dependency-lock.v2",
   "result": "PASS_WITH_OPEN_SUPPLY_GAPS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "host": {
     "platform": "Linux-7.0.12+kali-amd64-x86_64-with-glibc2.42",
     "python": "3.14.6",

@@ -7,10 +7,13 @@
 # comparison against a moving target, and the gate would fail for reasons that
 # have nothing to do with the driver.
 #
-# So the guest's clock is SET, with `-rtc base=`, and the expected output is
-# known exactly. That makes this a test of the decoder - BCD, the century
-# register, the update-in-progress flag - rather than a test of whether two
-# clocks agree. Which is the part that can actually be wrong.
+# So the guest's clock is SET, with `-rtc base=`, and the expected starting
+# epoch is known exactly. QEMU advances that clock while the guest boots, so
+# the observed second may be a few seconds later; requiring the configured
+# second exactly made machine load look like an RTC decoder failure. The gate
+# instead requires a small nonnegative offset and requires the printed fields
+# to convert back to the epoch the guest printed. That still tests BCD, the
+# century register and leap-day decoding without pretending boot takes no time.
 #
 # Three bases, chosen for what each one breaks:
 #   2026-08-18 14:37:05  ordinary
@@ -23,6 +26,7 @@ cd "$(dirname "$0")/../.." || exit
 . tools/checks/qemu-crash.sh
 
 CEILING=${CEILING:-240}
+MAX_BOOT_SECONDS=${MAX_BOOT_SECONDS:-30}
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 
 if pgrep '^qemu-system' >/dev/null 2>&1; then
@@ -54,12 +58,22 @@ check () {
     got_rtc=$(sed -n 's/.*RTC=\([0-9:-]* [0-9:]*\).*/\1/p' "$OUT" | tail -1)
     got_epoch=$(sed -n 's/.*epoch=\([0-9]*\).*/\1/p' "$OUT" | tail -1)
 
-    if [ "$got_rtc" = "$want_rtc" ] && [ "$got_epoch" = "$want_epoch" ]; then
-        echo "ok    $base -> $got_rtc  epoch $got_epoch"
+    local rtc_epoch offset
+    rtc_epoch=$(date -u -d "$got_rtc" +%s 2>/dev/null || true)
+    offset=0
+    if [[ "$got_epoch" =~ ^[0-9]+$ ]]; then
+        offset=$((got_epoch - want_epoch))
+    else
+        offset=$((MAX_BOOT_SECONDS + 1))
+    fi
+
+    if [ "$rtc_epoch" = "$got_epoch" ] && [ "$offset" -ge 0 ] && [ "$offset" -le "$MAX_BOOT_SECONDS" ]; then
+        echo "ok    $base -> $got_rtc  epoch $got_epoch (+${offset}s boot)"
     else
         echo "FAIL  $base"
-        echo "        want RTC=$want_rtc epoch=$want_epoch"
+        echo "        want start RTC=$want_rtc epoch=$want_epoch, offset 0..${MAX_BOOT_SECONDS}s"
         echo "        got  RTC=${got_rtc:-<none>} epoch=${got_epoch:-<none>}"
+        echo "        parsed epoch=${rtc_epoch:-<invalid>} offset=${offset}s"
         fails=$((fails + 1))
     fi
 }

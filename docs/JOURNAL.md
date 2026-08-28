@@ -7,6 +7,54 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(test): reanchor the version mutation guard (37b3b9d)
+
+`codex/presswork-local-closure` · 3 files changed, 9 insertions(+), 9 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `docs/evidence/one-fact-many-copies-2026-08-27.md`
+- `kernel/tools/checks/check-version-selftest.py`
+- `kernel/tools/checks/check-version.py`
+
+</details>
+
+## 2026-08-28 — test: record green closure gate evidence (70bbcea)
+
+`codex/presswork-local-closure` · 31 files changed, 379 insertions(+), 378 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>31 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- `kernel/docs/receipts/benchmark-host-2026-08-23.json`
+- _…and 19 more_
+
+</details>
+
 ## 2026-08-28 — Merge pull request #6 from RoyX4/design/presswork (682b802)
 
 `main` · 148 files changed, 25192 insertions(+), 9092 deletions(-)
@@ -17,6 +65,340 @@ the part that makes a change legible later, and the part nobody writes down.
 | pinned engine divergences | 4 |
 | baselined doc rot | 0 |
 | docs vs tree | agree |
+
+## 2026-08-28 — chore: refresh complete closure evidence (14f3c2c)
+
+`codex/presswork-local-closure` · 35 files changed, 1139 insertions(+), 889 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>35 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- `kernel/docs/receipts/benchmark-host-2026-08-23.json`
+- _…and 23 more_
+
+</details>
+
+## 2026-08-28 — fix(evidence): derive wrapper inventory counts (ca91510)
+
+`codex/presswork-local-closure` · 1 file changed, 24 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/tools/generators/gen-evidence-registry.py`
+
+</details>
+
+## 2026-08-28 — fix(test): synchronize the network fetch gate (f3a929c)
+
+`codex/presswork-local-closure` · 3 files changed, 55 insertions(+), 39 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `kernel/tools/checks/check-land-gate.py`
+- `kernel/tools/checks/verify-net.sh`
+- `kernel/tools/probes/probe-net.py`
+
+</details>
+
+## 2026-08-28 — chore: refresh system repair provenance (51ea034)
+
+`codex/presswork-local-closure` · 9 files changed, 39 insertions(+), 39 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+- `kernel/metadata/wrapper-registry.json`
+
+</details>
+
+## 2026-08-28 — fix(test): allow rtc time to advance during boot (8422208)
+
+`codex/presswork-local-closure` · 1 file changed, 21 insertions(+), 7 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/tools/checks/verify-clock.sh`
+
+</details>
+
+## 2026-08-28 — fix(desktop): prevent recursive system panel frames (c3c4192)
+
+`codex/presswork-local-closure` · 5 files changed, 12 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>5 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/generators/gen-app-manifest.py`
+- `kernel/tools/probes/probe-app-routes.py`
+
+</details>
+
+## 2026-08-28 — chore: refresh launch coverage provenance (93011aa)
+
+`codex/presswork-local-closure` · 9 files changed, 27 insertions(+), 27 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+- `kernel/metadata/wrapper-registry.json`
+
+</details>
+
+## 2026-08-28 — fix(desktop): restore complete app launch coverage (b6eb558)
+
+`codex/presswork-local-closure` · 8 files changed, 67 insertions(+), 22 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/evidence/app-registry-truth-2026-08-22.md`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/generators/gen-app-evidence.py`
+- `kernel/tools/probes/probe-app-routes.py`
+
+</details>
+
+## 2026-08-28 — chore: refresh register route provenance (42ffdc9)
+
+`codex/presswork-local-closure` · 9 files changed, 29 insertions(+), 29 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+- `kernel/metadata/wrapper-registry.json`
+
+</details>
+
+## 2026-08-28 — fix(desktop): complete presswork register routes (63b9e6f)
+
+`codex/presswork-local-closure` · 8 files changed, 289 insertions(+), 148 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/checks/check-shell-layout.py`
+- `kernel/tools/probes/probe-app-lifecycle.py`
+- `kernel/tools/probes/probe-app-routes.py`
+
+</details>
+
+## 2026-08-28 — chore: refresh raw loader provenance (02e4110)
+
+`codex/presswork-local-closure` · 8 files changed, 38 insertions(+), 38 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+
+</details>
+
+## 2026-08-28 — fix(boot): raise raw loader capacity (adf8d1a)
+
+`codex/presswork-local-closure` · 6 files changed, 45 insertions(+), 37 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `kernel/boot/link-raw.ld`
+- `kernel/boot/raw_boot.asm`
+- `kernel/boot/raw_entry.S`
+- `kernel/docs/reference/system/memory-model.md`
+- `kernel/src/arch/x86/memmap.h`
+- `kernel/src/core/arena.c`
+
+</details>
+
+## 2026-08-28 — chore: refresh rail gate provenance (f1256f9)
+
+`codex/presswork-local-closure` · 9 files changed, 97 insertions(+), 85 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+- `kernel/metadata/wrapper-registry.json`
+
+</details>
+
+## 2026-08-28 — test: gate the presswork rail route (25ec889)
+
+`codex/presswork-local-closure` · 3 files changed, 16 insertions(+), 3 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `gates/land-gate.sh`
+- `kernel/tools/checks/check-land-gate.py`
+- `kernel/tools/probes/probe-rail.py`
+
+</details>
+
+## 2026-08-28 — chore: refresh presswork application manifest (57931c2)
+
+`codex/presswork-local-closure` · 2 files changed, 2 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>2 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/metadata/app-manifest.json`
+
+</details>
 
 ## 2026-08-28 — test: record green presswork landing gate (1c9a8a8)
 

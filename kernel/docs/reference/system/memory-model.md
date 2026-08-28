@@ -23,7 +23,7 @@ in the same session, not from arithmetic.
 | `0x00009000` | | the SMP trampoline | `smp.c:55,124` | — |
 | `0x000A0000` | | VGA hole and BIOS ROM | hardware | — |
 | `0x00100000` | 1 MiB | the kernel image | `link*.ld` | 6 linker `ASSERT`s |
-| `0x00700000` | 7 MiB | top of what the raw loader fills | `raw_boot.asm` `CHUNKS` | `mkdisk.sh` size guard |
+| `0x00900000` | 9 MiB | top of what the raw loader fills | `raw_boot.asm` `CHUNKS` | `mkdisk.sh` size guard |
 | `0x00C00000` | 12 MiB | raw-boot stack TOP, grows **down** | `raw_entry.S`, `raw_boot.asm` | `arena.c` `_Static_assert` |
 | `0x00E00000` | 14 MiB | the program arena, 16 MiB budget | `arena.c` | `check-memmap.sh` |
 | `0x01E00000` | 30 MiB | arena end | | |
@@ -48,15 +48,15 @@ address chosen by a person. Nothing inside the heap appears in `memmap.h`,
 because nothing inside it has an address until something asks for one. That is
 the whole direction of travel — Stage 4 extends it to the rest of the table.
 
-Measured build sizes, 2026-08-20:
+Current measured raw-build sizes, 2026-08-28:
 
 ```
-kernel_raw.bin    1,614,532 bytes   what the raw loader must carry (no .bss)
-__bss_start       0x0028A2D0        2.539 MiB
-__bss_end         0x002E15C0        2.880 MiB   = __kernel_end
-kernel.elf        __kernel_end 0x003215C0       3.130 MiB (multiboot build)
-kernel64.elf      1,353,880 bytes
-BOOTX64.EFI       1,291,776 bytes
+kernel_raw.bin    6,324,036 bytes   what the raw loader must carry (no .bss)
+__bss_start       0x00707F50        7.031 MiB
+__bss_end         0x00943880        9.264 MiB   = raw __kernel_end
+kernel.elf        6,492,004 bytes   multiboot artifact
+kernel64.elf      3,334,984 bytes
+ZLOS.EFI          3,432,448 bytes
 ```
 
 ---
@@ -95,8 +95,8 @@ that shape: raising (1) pushed the loaded region through the stack, which is
   four passed no `-m` at all and booted QEMU's 128 MiB default, so the top half
   of the declared map was unbacked RAM on them. See `HANDOFF.md`, "The RAM
   floor". **The trade: zlOS no longer claims to boot on a 256 MB machine.**
-- **Stage 2 — raise the kernel size ceiling. DONE.** `CHUNKS` 60 → 192 (1.875 →
-  6 MiB), which forced the raw-boot stack 6 → 12 MiB and the program arena
+- **Stage 2 — raise the kernel size ceiling. DONE.** `CHUNKS` 60 → 192 → 256
+  (1.875 → 6 → 8 MiB). The first raise forced the raw-boot stack 6 → 12 MiB and the program arena
   8 → 14 MiB. `mkdisk.sh`'s image size is now *derived* from `CHUNKS` instead of
   being a literal that could drift from it. See below.
 - **Stage 3 — a real allocator with free/reuse. DONE.** `heap.c`, 64 MiB at
@@ -128,14 +128,14 @@ to be that day: 40 (1.25 MiB) against a 1.23 MiB kernel — 84 KiB spare, which
 the v10 type scale walked straight through — then 60. Setting it a third time
 the same way would buy one more release.
 
-So it is 192 (6 MiB), 3.9× the current image, sized against where the kernel can
-plausibly go. That has a consequence: the loader now fills `0x100000` ..
+So it became 192 (6 MiB), 3.9× the then-current image, sized against where the kernel could
+plausibly go. That had a consequence: the loader filled `0x100000` ..
 `0x700000`, and **the raw-boot stack was at 6 MiB — inside the region being
 loaded.** A machine that overwrites its own stack while booting. So:
 
 | | was | now |
 |---|---|---|
-| `CHUNKS` | 60 (1.875 MiB) | **192 (6 MiB)** |
+| `CHUNKS` | 60 (1.875 MiB) | **256 (8 MiB)**, after 192 (6 MiB) was exhausted |
 | raw-boot stack top | 6 MiB | **12 MiB** |
 | `ARENA_BASE` | 8 MiB | **14 MiB** (16 MiB budget → ends 30 MiB) |
 | `mkdisk.sh` image size | literal `2M` | **derived: `512 + CHUNKS*32 KiB`** |
@@ -144,6 +144,12 @@ loaded.** A machine that overwrites its own stack while booting. So:
 The stack top is written in **three** places — `raw_entry.S`, `raw_boot.asm`'s
 `pm_entry`, and `arena.c`'s `RAW_STACK_TOP` which asserts on it. All three or
 none; `arena.c`'s `_Static_assert` is what catches two of the three.
+
+PRESSWORK later grew `kernel_raw.bin` to 6,324,036 bytes. The 6 MiB guard failed
+by 32,580 bytes before the bootloader could ship a truncated kernel. Raising to
+256 chunks gives an 8 MiB payload ceiling and 2,064,572 measured bytes of
+headroom. The loader now fills 1..9 MiB, still three MiB below the 12 MiB stack,
+so the stack and arena remain in place.
 
 `ARENA_BASE` is written in **three** places too — `arena.c`, and deliberately
 duplicated in `hosttest/arenatest.c` and `hosttest/libctest.c` so a partial move

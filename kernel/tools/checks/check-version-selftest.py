@@ -8,8 +8,8 @@ against a planted defect once, by hand, before I committed it" is not that -
 nobody re-runs it, and the guard rots exactly like the thing it was watching.
 
 THE FIRST VERSION OF check-version.py FAILED CASE B. It only examined literals
-that NAMED the system - "zlOS 0.3", "0.3 x86_64" - which skipped kernel.zl:780's
-bare `if slot == 8 { return "0.3" }` entirely. A registry slot table is close to
+that NAMED the system - "zlOS 0.3", "0.3 x86_64" - which skipped rail_sub's
+bare `if slot == 9 { return "0.3" }` entirely. A registry slot table is close to
 the ideal hiding place for a stale version: it is a column of unrelated short
 strings, and nothing about "0.3" sitting between "wire" and "design.h" looks
 like a claim about the system. The guard was written, run, seen to pass, and was
@@ -30,7 +30,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 GUARD = HERE / "check-version.py"
 KERNEL_ZL = HERE.parents[1] / "src/kernel.zl"
 
-SLOT = 'if slot == 8 { return "0.3" }'
+SLOT = 'if slot == 9 { return "0.3" }'
 
 
 def load():
@@ -66,12 +66,12 @@ def main() -> int:
         ("A  the real tree passes",
          real, 0),
         ("B  drift in the BARE slot-table literal is caught",
-         real.replace(SLOT, 'if slot == 8 { return "0.5" }', 1), 1),
+         real.replace(SLOT, 'if slot == 9 { return "0.5" }', 1), 1),
         ("C  a version named in a trailing comment is NOT a claim",
          real.replace(SLOT, SLOT + '   # was "0.1" before the rename', 1), 0),
         ("D  a '#' inside a string does not truncate the line",
-         real.replace('if slot == 9 { return "design.h" }',
-                      'if slot == 9 { return "design.h # tokens" }', 1), 0),
+         real.replace('if slot == 10 { return "design.h" }',
+                      'if slot == 10 { return "design.h # tokens" }', 1), 0),
     ]
 
     fails = 0

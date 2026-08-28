@@ -2,7 +2,7 @@
   "schema": "zlos.decision-ledger.v1",
   "result": "PASS_WITH_OPEN_GAPS",
   "feature_id": "EV-026",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "records": [
     {
       "id": "DEC-0001",

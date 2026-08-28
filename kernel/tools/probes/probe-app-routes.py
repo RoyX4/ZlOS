@@ -2,7 +2,7 @@
 """Exercise every current non-catalogue application launch surface in QEMU.
 
 The registry-app sweep owns IDs 15..69. This probe owns boot-open identities,
-all eleven register slots, every shell-word application, Menu, System, Type,
+all fourteen register slots, every shell-word application, Menu, System, Type,
 and All Applications. Run/exec also has its own deeper workflow probe.
 """
 
@@ -43,14 +43,17 @@ REGISTER = [
     (0, 0, "Terminal"),
     (1, 13, "Files"),
     (2, 1, "System Monitor"),
-    (3, 5, "Browser"),
-    (4, 12, "Text Editor"),
-    (5, 8, "Paint"),
-    (6, 3, "Snake"),
-    (7, 9, "3D"),
-    (8, 2, "About"),
-    (9, 6, "Settings"),
-    (10, 7, "Run"),
+    (3, 12, "Text Editor"),
+    (4, 40, "Kernel Log"),
+    (5, 42, "Hex Viewer"),
+    (6, 33, "Calculator"),
+    (7, 50, "Network"),
+    (8, 31, "Clocks & Timers"),
+    (9, 71, "System"),
+    (10, 6, "Settings"),
+    (11, 46, "Disk Usage"),
+    (12, 32, "System Info"),
+    (13, 72, "Type"),
 ]
 WORDS = [
     ("snake", 3, "Snake"),
@@ -62,6 +65,18 @@ WORDS = [
     ("files", 13, "Files"),
 ]
 BOOT_OPEN = [(0, "Terminal"), (13, "Files"), (1, "System Monitor")]
+MENU_SURFACES = [
+    (3, 2, "About"),
+    (8, 71, "System"),
+    (9, 72, "Type"),
+    (11, 5, "Browser"),
+]
+MENU_HANDLERS = {
+    3: "reopen_about",
+    8: "open_syspane",
+    9: "open_typepane",
+    11: "reopen_browser",
+}
 TITLE_REPORT = re.compile(r"wm: win \d+ title (\d+),(\d+) (\d+)x(\d+)")
 
 
@@ -238,8 +253,23 @@ def source_register_routes():
         if app is None:
             fail(f"rail_app has unresolved token {token}")
         routes.append((int(slot), app))
-    if len(routes) != 11 or len({slot for slot, _ in routes}) != 11:
-        fail(f"rail_app defines {len(routes)} non-unique routes, expected 11")
+    if len(routes) != len(REGISTER) or len({slot for slot, _ in routes}) != len(REGISTER):
+        fail(f"rail_app defines {len(routes)} non-unique routes, expected {len(REGISTER)}")
+    launch = gen.function_body(kernel, "rail_launch")
+    for app, owner in (("APP_SYSPANE", "open_syspane"),
+                       ("APP_TYPEPANE", "open_typepane")):
+        seam = f"if da == {app} {{ return {owner}() }}"
+        if seam not in launch:
+            fail(f"rail_launch does not route kernel-owned {app} through {owner}")
+    cards = gen.function_body(kernel, "sys_cards")
+    if "wm_painted()" not in cards or "wm_frame()" in cards:
+        fail("System cards must read wm_painted(), never recursively drive wm_frame()")
+    menu = gen.function_body(kernel, "menu_pick")
+    for row, _, name in MENU_SURFACES:
+        seam = f"if idx == {row} {{ return {MENU_HANDLERS[row]}() }}"
+        if seam not in menu:
+            fail(f"menu_pick no longer routes tested {name} row {row} through "
+                 f"{MENU_HANDLERS[row]}")
     return routes
 
 
@@ -257,8 +287,8 @@ def run(receipt_path, no_build, timeout):
         if identities.get(app) != name:
             fail(f"word route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
 
-    for app, name in ((4, "Menu"), (70, "All Applications"),
-                      (71, "System"), (72, "Type")):
+    for app, name in ((2, "About"), (4, "Menu"), (5, "Browser"),
+                      (70, "All Applications"), (71, "System"), (72, "Type")):
         if identities.get(app) != name:
             fail(f"surface route identity drift: {app} is {identities.get(app)!r}, expected {name!r}")
 
@@ -301,7 +331,7 @@ def run(receipt_path, no_build, timeout):
         menu = super_cycle(machine, 4, timeout)
         result["surface"].append({"route": "super", "id": 4, "name": "Menu", **menu})
         print("[super] Menu                 open-ready-close PASS")
-        for row, app, name in ((8, 71, "System"), (9, 72, "Type")):
+        for row, app, name in MENU_SURFACES:
             cycle = menu_row_cycle(machine, row, app, timeout)
             result["surface"].append({"route": f"menu:{row}", "id": app,
                                       "name": name, **cycle})
@@ -309,7 +339,7 @@ def run(receipt_path, no_build, timeout):
         catalogue = simple_pointer_cycle(machine, geometry["catalogue"], 70, timeout)
         result["surface"].append({"route": "rail:all-apps", "id": 70,
                                   "name": "All Applications", **catalogue})
-        print("[rail 11] All Applications  open-ready-close PASS")
+        print(f"[rail {len(REGISTER):02d}] All Applications  open-ready-close PASS")
 
     iso = os.path.join(KERNEL_ROOT, "zlOS.iso")
     receipt = {
