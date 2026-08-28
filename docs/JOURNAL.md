@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — chore: refresh complete closure evidence (14f3c2c)
+
+`codex/presswork-local-closure` · 35 files changed, 1139 insertions(+), 889 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>35 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/UNRELEASED-CHANGELOG.md`
+- `kernel/docs/provenance-viewer.html`
+- `kernel/docs/receipts/app-lifecycle-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-routes-qemu-2026-08-22.json`
+- `kernel/docs/receipts/benchmark-host-2026-08-23.json`
+- _…and 23 more_
+
+</details>
+
 ## 2026-08-28 — fix(evidence): derive wrapper inventory counts (ca91510)
 
 `codex/presswork-local-closure` · 1 file changed, 24 insertions(+), 4 deletions(-)
