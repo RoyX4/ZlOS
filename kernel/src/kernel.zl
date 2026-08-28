@@ -398,6 +398,7 @@ FOCUS_BAR_D = 3                    # ZD_FOCUS_BAR - the register mark's width
 # radius at all - they are drawn with fill_rgb. ZD_R_PLATE is ui_metric(UM_RADIUS)
 # and wm.c reads it. ZD_R_INSET is the only one this file has to name.
 R_INSET_D   = 4                    # ZD_R_INSET - a row or field inside a plate
+R_CHIP_D    = 2                    # design.h ZD_R_CHIP - the button and chip radius
 
 # THE MODULE GRID. ZD_GRID_COLS / ROWS / MARGIN / GUTTER, and there is no
 # ui_metric for them because they are not a widget metric - they are the desk's
@@ -2836,6 +2837,83 @@ fn mouse_tick() {
 # settings panes stack text in it; the editor's body is whatever is left of the
 # client, so it needs the same surface measured in pixels. Same five draws, same
 # order, same tokens - this is the prototype's `.well` rule and nothing else.
+SH_BTNH = 22                       # .btn { height: calc(22px * var(--ui)) }
+SH_BTNPX = 10                      # .btn { padding: 0 calc(10px * var(--ui)) }
+
+sh_exit = 0
+sh_cs = 0
+sh_t0 = 0
+
+# .btn, to the prototype's own rule: ZD_RAISE ground, 1px ZD_CUT border, a
+# struck ZD_LIT top inset, ZD_R_CHIP radius. `prim` swaps the ground for the
+# vermilion overprint with ZD_INK_ON text - the one primary action, which
+# design.h reserves the overprint for. `on` 0 draws it disabled, and a disabled
+# button uses ZD_TEXT_INERT, which is one of the four uses that token is
+# actually sanctioned for.
+fn sh_btn(bx, by, bw, nm, prim, on) {
+    bu = ui()
+    bh = SH_BTNH * bu
+    rrect(bx, by, bw, bh, R_CHIP_D * bu, theme(TH_CUT))
+    if prim == 1 {
+        rrect(bx + 1, by + 1, bw - 2, bh - 2, R_CHIP_D * bu, theme(TH_ACCENT))
+        fill_rgb(bx + 1, by + 1, bw - 2, 1, theme(TH_ACCENT_BR))
+    } else {
+        rrect(bx + 1, by + 1, bw - 2, bh - 2, R_CHIP_D * bu, theme(TH_PANEL_HI))
+        fill_rgb(bx + 1, by + 1, bw - 2, 1, theme(TH_LIT))
+    }
+    tc2 = theme(TH_TEXT_2)
+    if prim == 1 { tc2 = theme(TH_INK_ON) }
+    if on == 0 { tc2 = theme(TH_SURF_7) }
+    ui_caps(bx + (bw - ui_capsw(nm, PW_SM)) / 2, by + (bh - ui_th(PW_SM)) / 2, nm, tc2, PW_SM)
+    return bx + bw + 8 * bu
+}
+
+fn sh_btnw(nm) { return ui_capsw(nm, PW_SM) + 2 * SH_BTNPX * ui() }
+
+# REGDUMP IS OFFERED ONLY WHEN THERE IS A PIPE TO DUMP. intel_ok() is false
+# under QEMU, where the PIPE_A registers read back zero - the system pane
+# already refuses to print them for exactly this reason. A button that runs and
+# prints zeros is worse than one that says it cannot run.
+fn sh_regdump_on() { return intel_ok() }
+
+# The reference's row is REBUILD / DMESG / REGDUMP. REBUILD IS NOT OFFERED:
+# there is no compiler and no linker on this machine - exec.c runs a prebuilt
+# /system/user.bin and nothing in the tree compiles anything - so that button
+# could only ever lie about what it did. The two that remain both do their job.
+fn sh_buttons(bx, by, bw) {
+    bu = ui()
+    nx = sh_btn(bx, by, sh_btnw("dmesg"), "dmesg", 1, 1)
+    nx = sh_btn(nx, by, sh_btnw("regdump"), "regdump", 0, sh_regdump_on())
+    ey2 = by + (SH_BTNH * bu - ui_th(PW_SM)) / 2
+    ew3 = ui_tw("exit ", PW_SM, PW_MONO) + s3_numw(sh_exit) + ui_tw(" - ", PW_SM, PW_MONO) + pw_decgw(sh_cs, 2, PW_SM, PW_MONO) + ui_tw(" s", PW_SM, PW_MONO)
+    ex3 = bx + bw - ew3
+    ecol = theme(TH_TEXT_DIM)
+    if sh_exit != 0 { ecol = theme(TH_WARN) }
+    ui_txt(ex3, ey2, "exit ", ecol, PW_SM, PW_MONO)
+    num_aa(ex3 + ui_tw("exit ", PW_SM, PW_MONO), ey2, sh_exit, ecol)
+    dx = ex3 + ui_tw("exit ", PW_SM, PW_MONO) + s3_numw(sh_exit)
+    ui_txt(dx, ey2, " - ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    pw_decg(dx + ui_tw(" - ", PW_SM, PW_MONO), ey2, sh_cs, 2, theme(TH_TEXT_2), PW_SM, PW_MONO)
+    ui_txt(dx + ui_tw(" - ", PW_SM, PW_MONO) + pw_decgw(sh_cs, 2, PW_SM, PW_MONO), ey2, " s", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    return 0
+}
+
+# Which button a click landed on, or -1. The row is laid out once, here and in
+# sh_buttons, from the same widths - a second copy of the geometry is how a
+# button ends up drawn in one place and clickable in another.
+fn sh_btn_hit(win, hx2, hy2) {
+    hu = ui()
+    hp = 10 * hu
+    hby = wm_ch(win) - hp - SH_BTNH * hu
+    if hy2 < hby { return 0 - 1 }
+    if hy2 > hby + SH_BTNH * hu { return 0 - 1 }
+    b0 = hp
+    b1 = b0 + sh_btnw("dmesg") + 8 * hu
+    if hx2 >= b0 { if hx2 < b0 + sh_btnw("dmesg") { return 0 } }
+    if hx2 >= b1 { if hx2 < b1 + sh_btnw("regdump") { return 1 } }
+    return 0 - 1
+}
+
 fn pw_well(x, y, w, h) {
     pwu = ui()
     rrect(x, y, w, h, R_INSET_D * pwu, theme(TH_CUT))
@@ -8862,7 +8940,15 @@ fn app_draw(id, ax, ay, aw, ah, afocus) {
         u = ui()
         cb = 0
         if afocus == 1 { if band(ticks() / 50, 1) == 0 { cb = 1 } }
-        term_draw(ax + 8 * u, ay + 6 * u, aw - 16 * u, ah - 12 * u, theme(TH_TEXT_HI), theme(TH_TEXT_DIM), theme(TH_ACCENT), cb)
+        # THE TRANSCRIPT SITS IN A WELL, as the reference's
+        # `<div class="well stack">` does. It was drawn straight onto the plate,
+        # so the one surface in this app that is a container did not read as one.
+        shp = 10 * u
+        shbh = SH_BTNH * u + 10 * u
+        shwh = ah - 2 * shp - shbh
+        pw_well(ax + shp, ay + shp, aw - 2 * shp, shwh)
+        term_draw(ax + shp + 8 * u, ay + shp + 6 * u, aw - 2 * shp - 16 * u, shwh - 12 * u, theme(TH_TEXT_HI), theme(TH_TEXT_DIM), theme(TH_ACCENT), cb)
+        sh_buttons(ax + shp, ay + ah - shp - SH_BTNH * u, aw - 2 * shp)
         return 0
     }
     # Everything past APP_EDIT is the app suite (apps_registry.zl and the
@@ -8960,6 +9046,19 @@ fn app_event(id, win, ety, ecode, ex, ey) {
     # character-only translation used by the append-only editor below.
     if id == APP_SHELL {
         ac = ecode
+        # THE BUTTONS ARE CLICKABLE, which is the difference between a control
+        # and a picture of one. The mask is tested the way menu_event and the
+        # browser test it: EV_MOUSE carries the buttons in ecode and is pushed
+        # for MOTION too, so acting on every EV_MOUSE would fire on hover.
+        if ety == 4 {
+            if band(ecode, 1) != 0 {
+                shb = sh_btn_hit(win, ex, ey)
+                if shb == 0 { return open_app(210, 0) }
+                if shb == 1 { if sh_regdump_on() == 1 { return open_app(216, 0) } }
+                if shb == 1 { note_say("no intel pipe here - PIPE_A reads back zero", 400)  return 1 }
+            }
+            return 1
+        }
         if ety == 1 {
             ac = nav_to_char(ecode)
             if ac == 0 {
@@ -8985,7 +9084,16 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                     ta = term_arg()
                     td_open = open_app(tc, ta)
                     if td_open == 0 {
+                        sh_t0 = ticks()
                         td_result = run_command(tc, ta)
+                        # THE REFERENCE PRINTS "exit 0 - 1.42 s" AND BOTH HALVES
+                        # ARE REAL HERE. run_command already returned a result
+                        # and it was passed to term_complete and then dropped;
+                        # ticks() is the PIT at 100 Hz, so it is centiseconds
+                        # and 142 of them IS 1.42 s. Nothing had to be invented,
+                        # only kept.
+                        sh_exit = td_result
+                        sh_cs = ticks() - sh_t0
                         term_complete(tc, td_result)
                     } else { term_complete(tc, 0) }
                 }

@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — feat(edit,band): the editor gets the reference's shape and a binary branch; every band's status line is set (d7eceab)
+
+`design/presswork` · 6 files changed, 295 insertions(+), 42 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-28 — docs: regenerate directory capsules for the new checks and probes (e7f0594)
 
 `design/presswork` · 3 files changed, 27 insertions(+)
