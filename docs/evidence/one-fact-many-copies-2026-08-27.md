@@ -124,10 +124,10 @@ spite of it.
 - `"zlOS 0.3"`, `"0.3 x86_64"`, `"zlos 0.3, x86_64, single image, "`. That found
 the `"zlOS 0.10"` banner immediately, which felt like proof it worked.
 
-It was skipping `kernel.zl:780`:
+It was skipping the bare version value in `rail_sub`:
 
 ```
-if slot == 8 { return "0.3" }
+if slot == 9 { return "0.3" }
 ```
 
 A registry slot table is close to the ideal hiding place for a stale version. It

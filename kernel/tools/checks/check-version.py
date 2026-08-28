@@ -68,7 +68,7 @@ def main() -> int:
             #   a) it NAMES the system: "zlOS 0.3", "0.3 x86_64",
             #      "zlos 0.3, x86_64, single image, ".
             #   b) it is a BARE version and nothing else: `return "0.3"` in the
-            #      registry slot table at kernel.zl:780. Rule (a) skipped that
+            #      rail_sub registry slot table. Rule (a) skipped that
             #      one completely, so the guard would have sat green through a
             #      drift in a slot table - which is exactly the kind of place a
             #      stale copy of a version goes to hide.
