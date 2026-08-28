@@ -296,6 +296,24 @@ unsigned int input_event_seq(void);
  * character". A partial copy of a table cannot carry a rule. */
 #include "keycodes.h"
 
+/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
+ *
+ * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
+ * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
+ * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
+ * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
+ * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
+ * maximised window was drawn from x = 0 straight over the launcher.
+ *
+ * Numbers that describe the shell belong to the theme, which is where the
+ * shell reads them from too; two copies of 48 in two files is how the first
+ * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
+ * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
+ * scaled by the same q8 as everything else here. */
+#define RESERVE_TOP(t)   ((t)->strip_h)
+#define RESERVE_BOT(t)   ((t)->foot_h)
+#define RESERVE_LEFT(t)  ((t)->rail_w)
+
 unsigned int idt_ticks(void);
 /* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
  * compositor has ever timed a frame - desktop-TODO 0h says to do this BEFORE
@@ -2168,6 +2186,60 @@ void wm_set_modal(int win, int on)
     }
 }
 
+/* THE RAIL MUST NEVER BE COVERED, and nothing enforced it.
+ *
+ * The prototype states this as its rule 1 and clamps in layout():
+ *
+ *     x = Math.max(0, Math.min(x, Math.max(0, fw - 120)));
+ *     y = Math.max(0, Math.min(y, Math.max(0, fh - 60)));
+ *
+ * where fw/fh are the FIELD - the desk inside the rail, below the strip and
+ * above the foot. wm_move assigned x and y verbatim, wm_open stored them
+ * verbatim, and route_mouse's GRAB_MOVE passed a raw pointer delta straight
+ * through. So a window could be dragged fully over the rail, over the raster
+ * strip, over the foot, or to negative coordinates with NO ROUTE BACK - the
+ * title bar you would grab to drag it home is the first part to go under.
+ *
+ * The only reserve anything respected was inside snap_to_rect, so a SNAPPED
+ * window sat beside the rail correctly while a dragged one covered it: two
+ * behaviours for one edge, and only the unused one written down.
+ *
+ * 120 and 60 are the prototype's own - enough of the window must stay on the
+ * field to grab it by - in design px there and here. */
+/* THE INVARIANT IS "A WINDOW ON THE FIELD STAYS ON IT", not "every window is
+ * forced onto the field". The difference is not pedantry, it is three failing
+ * assertions: wmtest_feel runs ui_theme_init(2), so on its 1280x800 screen the
+ * rail alone is 340 px, and the window it opens at x=200 legitimately starts
+ * underneath it. A clamp that pulls any window into the field teleports that
+ * one on its first drag and breaks the exact-move check - punishing the test
+ * for a state the real desktop never reaches, since wm_open there goes through
+ * desk_x() which already clears the rail.
+ *
+ * So the lower bound is min(field edge, where the window already is): a window
+ * inside cannot leave, and one that began outside is free to stay where it is
+ * or move further in. That is the rule the prototype's layout() is expressing
+ * and the one that keeps the rail reachable. */
+static void clamp_to_field(int *x, int *y, int cur_x, int cur_y)
+{
+    const struct ui_theme *t = ui_theme();
+    int fx = RESERVE_LEFT(t);
+    int fy = RESERVE_TOP(t);
+    int fw = (int)fb_pxw() - fx;
+    int fh = (int)fb_pxh() - fy - RESERVE_BOT(t);
+    int maxx = fx + fw - UI_DP(t, 120);
+    int maxy = fy + fh - UI_DP(t, 60);
+    if (maxx < fx) maxx = fx;
+    if (maxy < fy) maxy = fy;
+    if (fx > cur_x) fx = cur_x;
+    if (fy > cur_y) fy = cur_y;
+    if (maxx < cur_x) maxx = cur_x;
+    if (maxy < cur_y) maxy = cur_y;
+    if (*x < fx) *x = fx;
+    if (*y < fy) *y = fy;
+    if (*x > maxx) *x = maxx;
+    if (*y > maxy) *y = maxy;
+}
+
 void wm_move(int win, int x, int y)
 {
     if (!wm_is_open(win)) return;
@@ -3243,23 +3315,6 @@ static int shell_compose(int win, int focused,
                                  sw, sh, sx, sy);
 }
 
-/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
- *
- * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
- * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
- * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
- * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
- * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
- * maximised window was drawn from x = 0 straight over the launcher.
- *
- * Numbers that describe the shell belong to the theme, which is where the
- * shell reads them from too; two copies of 48 in two files is how the first
- * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
- * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
- * scaled by the same q8 as everything else here. */
-#define RESERVE_TOP(t)   ((t)->strip_h)
-#define RESERVE_BOT(t)   ((t)->foot_h)
-#define RESERVE_LEFT(t)  ((t)->rail_w)
 
 /* Where the toast sits. The foot is desktop furniture drawn by hook_desk and
  * wm.c does not know how tall it is, so this asks for the same reserve every
@@ -3925,7 +3980,16 @@ static void route_mouse(int x, int y, int btn)
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
         if (grab_drag == GRAB_MOVE) {
-            wm_move(pgrab, x - grab_dx, y - grab_dy);
+            /* CLAMPED HERE, NOT IN wm_move. The first attempt put it inside
+             * wm_move and broke six wmtest_feel assertions at once - maximise,
+             * restore, Super+Down and the snap round-trip all place windows
+             * PROGRAMMATICALLY through the same function, and a restore that
+             * cannot return a window to the exact rect it came from is not a
+             * restore. The prototype clamps in layout(), which runs on the
+             * user's interaction; this is that path and nothing else. */
+            int mx = x - grab_dx, my = y - grab_dy;
+            clamp_to_field(&mx, &my, wins[pgrab].x, wins[pgrab].y);
+            wm_move(pgrab, mx, my);
             snap_preview_set(snap_zone_for_point(x, y,
                                                  (int)fb_pxw(), (int)fb_pxh()));
         } else if (grab_drag == GRAB_RESIZE) {

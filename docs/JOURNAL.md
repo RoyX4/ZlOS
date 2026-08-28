@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — docs: capsule for the new shell-button probe (d2607fa)
+
+`design/presswork` · 2 files changed, 25 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/tools/probes/README.md`
+
+</details>
+
 ## 2026-08-28 — fix(shell): the button row was dead two ways, and the probe that said so was dead a third (52f05bd)
 
 `design/presswork` · 8 files changed, 349 insertions(+), 20 deletions(-)
