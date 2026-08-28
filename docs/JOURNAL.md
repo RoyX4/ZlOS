@@ -7,6 +7,44 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(test): allow rtc time to advance during boot (8422208)
+
+`codex/presswork-local-closure` · 1 file changed, 21 insertions(+), 7 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/tools/checks/verify-clock.sh`
+
+</details>
+
+## 2026-08-28 — fix(desktop): prevent recursive system panel frames (c3c4192)
+
+`codex/presswork-local-closure` · 5 files changed, 12 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>5 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/generators/gen-app-manifest.py`
+- `kernel/tools/probes/probe-app-routes.py`
+
+</details>
+
 ## 2026-08-28 — chore: refresh launch coverage provenance (93011aa)
 
 `codex/presswork-local-closure` · 9 files changed, 27 insertions(+), 27 deletions(-)
