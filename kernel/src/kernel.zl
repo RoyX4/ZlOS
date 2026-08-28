@@ -6862,6 +6862,13 @@ fn files_draw_name(slot, x, y, colour) {
 
 fn files_draw(ax, ay, aw, ah) {
     fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    # DISARM HERE, NOT ONLY IN THE KEY HANDLER. The handler runs on SHIFT F, so
+    # a flag armed on a blank disk survived the volume being mounted by anything
+    # else - the shell's format, or files_refresh - and sat at 1 with the
+    # confirmation banner unreachable, because that banner is drawn inside the
+    # empty-state branch. This runs every frame, so the arm cannot outlive the
+    # state that justified it.
+    if fs_ok() == 1 { files_format = 0 }
     files_u = ui()
     files_rh = FILES_ROW * files_u
     # THE APP NO LONGER PRINTS ITS OWN NAME. The chrome writes "02 FILES rd0"
@@ -7065,12 +7072,24 @@ fn files_event(win, ety, ecode, ex, ey) {
             # superblock FIRST - deliberately, by its own comment, so a failed
             # reformat cannot leave a mountable half-volume. There is no undo
             # behind this key.
+            # THE ARM MUST NOT OUTLIVE THE STATE IT WAS ARMED IN.
+            #
+            # files_format was set by the first press and cleared in only three
+            # places - module init, files_refresh, and a successful format. Not
+            # by the refusal below, and not when the volume came back. The
+            # confirmation banner is drawn inside `if fs_ok() == 0`, so once
+            # anything mounted the disk the flag could sit at 1 with NOTHING ON
+            # SCREEN saying the machine was one keypress from erasing it, and
+            # the next time the pane went empty a SINGLE press would format.
+            # "format - twice to confirm" was then a promise the code did not
+            # keep. Disarm on every path that is not the second press.
+            if fs_ok() == 1 { files_format = 0 }
             if fs_ok() == 0 {
                 if fs_why() == FS_WHY_UNFORMATTED {
                     if files_format == 1 {
                         if fs_format() == 1 { files_format = 0  files_select_first()  note_say("zlfs formatted", 300) }
                     } else { files_format = 1 }
-                } else { note_say("format refused - this volume is not blank", 400) }
+                } else { files_format = 0  note_say("format refused - this volume is not blank", 400) }
                 wm_dmg(win)
             }
             return 1

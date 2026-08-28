@@ -103,6 +103,40 @@ static u8  blkbuf[FS_BLK_MAX];            /* one block, for I/O staging      */
 static u8  sbbuf[FS_BLK_MAX];             /* the superblock block            */
 
 static int  mounted;
+
+/* The ten distinct answers to "why is nothing mounted". These are #defines and
+ * not an enum so that check-header-mirror.py can compare kernel.zl's copies
+ * against them - zl cannot include this file, so its copies are hand-made and
+ * the only thing standing between them and drift is that checker. */
+#define FS_WHY_OK          0
+#define FS_WHY_NODISK      1
+#define FS_WHY_UNREADABLE  2
+#define FS_WHY_UNFORMATTED 3
+#define FS_WHY_VERSION     4
+#define FS_WHY_DAMAGED     5
+#define FS_WHY_BLOCKSIZE   6
+#define FS_WHY_MAXFILES    7
+#define FS_WHY_GEOMETRY    8
+#define FS_WHY_DIRLOAD     9
+#define FS_WHY_DIRENTRY    10
+#define FS_WHY_DIRBROKEN   11
+
+/* WHY THE LAST MOUNT FAILED.
+ *
+ * fs_mounted() answers only yes or no, and fs_mount_impl can answer no from TEN
+ * distinct places. The Files app collapsed all ten into one printed sentence -
+ * "the disk is present and unformatted" - and then offered SHIFT F to format on
+ * that same unguarded arm. Exactly one of the ten is the state that sentence
+ * describes. One of the other nine is the checksum failure directly below,
+ * where this file goes out of its way to print "the volume is damaged, not
+ * empty. Nothing was read." - and the app answered that by inviting the user to
+ * erase it.
+ *
+ * The pattern is already established twice in this tree: rtc_why() returns an
+ * int consumed in zl, br_why() returns a string printed in zl. This is the one
+ * subsystem that was missing it. An int, not a string, because zl can compare
+ * ints and has no string values to compare. */
+int fs_why_code;
 static int  fs_quiet;   /* boot path: silent on no-disk and no-volume */
 static u32  dev_bsize;
 static u32  dev_nblocks;
@@ -402,6 +436,14 @@ static int dir_commit(int idx, const u8 *prev)
     }
     p_str("  zlfs: the directory is inconsistent on disk and cannot be repaired\n");
     p_str("  zlfs: unmounting rather than writing to it again\n");
+    /* THE REASON MUST TRAVEL WITH THE UNMOUNT. fs_why_code was written only on
+     * fs_mount_impl's failure returns, and `mounted` drops in three places -
+     * here, in fs_mkfs_impl, and there. So after this unmount fs_why() answered
+     * with whatever some EARLIER mount attempt had left behind, and the Files
+     * pane printed "the mount was refused - reason not reported" about a
+     * failure this function had just named on the console. A stale cache is
+     * worse than no cache: it is confidently wrong. */
+    fs_why_code = FS_WHY_DIRBROKEN;
     mounted = 0;
     return 0;
 }
@@ -481,6 +523,12 @@ static int probe_device(void)
 /* ---- format -------------------------------------------------------------- */
 static int fs_mkfs_impl(void)
 {
+    /* Set before the unmount, not after: this function zeroes the superblock
+     * first (deliberately - see below), so from the moment it starts, the
+     * honest answer to "why is nothing mounted" is that the volume is blank.
+     * If it fails partway that is still true, and it is the one cause for which
+     * offering a format again is correct. */
+    fs_why_code = FS_WHY_UNFORMATTED;
     mounted = 0;
     if (!probe_device()) return 0;
 
@@ -520,6 +568,7 @@ static int fs_mkfs_impl(void)
         p_str("  zlfs: superblock write failed\n");
         return 0;
     }
+    fs_why_code = FS_WHY_OK;
     mounted = 1;
     return 1;
 }
@@ -536,38 +585,6 @@ int fs_mkfs(void)
 
 /* ---- mount ---------------------------------------------------------------
  * Every refusal below prints the value that caused it. */
-/* The ten distinct answers to "why is nothing mounted". These are #defines and
- * not an enum so that check-header-mirror.py can compare kernel.zl's copies
- * against them - zl cannot include this file, so its copies are hand-made and
- * the only thing standing between them and drift is that checker. */
-#define FS_WHY_OK          0
-#define FS_WHY_NODISK      1
-#define FS_WHY_UNREADABLE  2
-#define FS_WHY_UNFORMATTED 3
-#define FS_WHY_VERSION     4
-#define FS_WHY_DAMAGED     5
-#define FS_WHY_BLOCKSIZE   6
-#define FS_WHY_MAXFILES    7
-#define FS_WHY_GEOMETRY    8
-#define FS_WHY_DIRLOAD     9
-#define FS_WHY_DIRENTRY    10
-
-/* WHY THE LAST MOUNT FAILED.
- *
- * fs_mounted() answers only yes or no, and fs_mount_impl can answer no from TEN
- * distinct places. The Files app collapsed all ten into one printed sentence -
- * "the disk is present and unformatted" - and then offered SHIFT F to format on
- * that same unguarded arm. Exactly one of the ten is the state that sentence
- * describes. One of the other nine is the checksum failure directly below,
- * where this file goes out of its way to print "the volume is damaged, not
- * empty. Nothing was read." - and the app answered that by inviting the user to
- * erase it.
- *
- * The pattern is already established twice in this tree: rtc_why() returns an
- * int consumed in zl, br_why() returns a string printed in zl. This is the one
- * subsystem that was missing it. An int, not a string, because zl can compare
- * ints and has no string values to compare. */
-int fs_why_code;
 
 static int fs_mount_impl(void)
 {
@@ -664,6 +681,7 @@ static int fs_mount_impl(void)
         }
     }
 
+    fs_why_code = FS_WHY_OK;
     mounted = 1;
     return 1;
 }
