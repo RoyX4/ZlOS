@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "7f2b5942ee5dc011906f787e421617aa92007e74"
+    "head": "897ea9a8305a0b765c6642c852d396ce4b2a1b9c"
   },
-  "identity_sha256": "fe45be84bee2a0aa2e68277471efda5424f3ef605b0b5b078db8c2f8c74de233",
+  "identity_sha256": "fb5a519faa400d56168dcfbb1f77bd5356a0d526398db202154e26700ac9c0eb",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -114,7 +114,7 @@
     "kernel/src/graphics/ui/notify.c": "56d6e7b3ad1401c378f70dd3f2104bb8f71acff7bc331ba762c7c4553d0fa7f7",
     "kernel/src/graphics/ui/settings.c": "bec8d5eee5d2525e108e592d528b5ecba7024ea46c18f59c2479b59e89da3397",
     "kernel/src/graphics/ui/snap.c": "58cd52f8fa7271dc4544927fb8d3379b4aa677b61f671f1069da7ba6b7969c88",
-    "kernel/src/graphics/ui/ui.c": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",
+    "kernel/src/graphics/ui/ui.c": "c0b390835855955f1b1d08f2dd0752fae0db7abfe9b21cef390741e3c98b413b",
     "kernel/src/graphics/ui/ui.h": "7846b7ac3f8e28d29c121caca16e76aeb6c336cd2c4ae3acf88570389321d23a",
     "kernel/src/graphics/ui/uikit.c": "7cd585e1655cee456aff151d911abff93ce31efc2869a91711a1f83841531389",
     "kernel/src/graphics/windowing/clip.c": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886",
