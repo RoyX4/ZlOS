@@ -311,10 +311,42 @@ fn s3du_draw(ax, ay, aw, ah) {
     w = aw - 2 * S3DU_PAD_X * u
     y = ay + S3DU_PAD_Y * u
 
+    # R.disk's head: which volume, and whether it is sound. The reference reads
+    # `rd0, zlfs, 4.0 MiB image  <dot> OK  0 orphan extents`; this says what
+    # fs_ok() actually reports, because an unformatted volume is the state this
+    # machine boots into and the reference never had one.
+    ui_caps(x, y, "VOLUME", theme(TH_TEXT_2), T_CAPTION)
+    if fs_ok() == 1 {
+        label(x + 62 * u, y, "rd0, zlfs", theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        ui_dot(x + w - 96 * u, y + 5 * u, theme(TH_OK), 0)
+        label_num(x + w - 84 * u, y, fs_n(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(x + w - 62 * u, y, "files mounted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        label(x + 62 * u, y, "rd0, unformatted", theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        ui_dot(x + w - 96 * u, y + 5 * u, theme(TH_WARN), 0)
+        label(x + w - 84 * u, y, "no volume", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    y = y + 22 * u
+
     y = s3du_mount(x, y, w, "/dev/rd0", "read-only rdfs", S3DU_RD0, S3DU_RD0, 0)
     y = y + S3DU_GAP * u
     y = s3du_mount(x, y, w, "/tmp", "read-write zlfs", s3du_tmp_used(), s3du_tmp_total(), 1)
     y = y + S3DU_GAP * u
+
+    # THE WRITE PATH AND WHAT PROVES IT. The reference closes on two kv rows,
+    # and both are true of this filesystem rather than borrowed: zlfs journals
+    # then swaps the superblock, and the generation sequence 1 -> 2 -> 3 was
+    # verified across three cold boots - a power cycle between each, which is
+    # the only way to prove a filesystem survives one.
+    # SHORTENED TO THE WINDOW. This app is 456 design units wide and the
+    # reference's full sentences ran past its right edge - a row clipped
+    # mid-word says less than a shorter one that finishes.
+    s3_mono(x, y, "write path", theme(TH_TEXT_DIM))
+    s3_mono(x + 78 * u, y, "cow, journal then superblock swap", theme(TH_TEXT))
+    y = y + 16 * u
+    s3_mono(x, y, "verified", theme(TH_TEXT_DIM))
+    s3_mono(x + 78 * u, y, "gen 1-2-3, three cold boots", theme(TH_TEXT))
+    y = y + 20 * u
 
     s3_heading(x, y, "LARGEST FILES ON RD0")
     y = y + 19 * u

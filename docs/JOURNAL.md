@@ -7,6 +7,31 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — feat(apps): the network link head, and a cold-start handoff for the parity work (570c4c3)
+
+`design/presswork` · 9 files changed, 252 insertions(+), 70 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>9 file(s)</summary>
+
+- `HANDOFF-APP-PARITY.md`
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/apps/apps_system.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+
+</details>
+
 ## 2026-08-28 — feat(apps): clocks becomes a monotonic pane, and says why the wall clock is not one (7f6daf5)
 
 `design/presswork` · 8 files changed, 202 insertions(+), 55 deletions(-)
