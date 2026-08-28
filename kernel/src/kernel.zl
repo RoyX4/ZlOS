@@ -797,15 +797,63 @@ fn rail_name(slot) {
 # rail_app(), rail_name() and rail_icon(), kept adjacent for the same reason
 # they are - zl has no record type, so a row added to one is visibly missing
 # from the others.
+# THE STATUS BAND'S LEFT CELL, which until now was EMPTY ON EVERY WINDOW.
+#
+# wm.c draws the band as chrome and has always had a slot for this - the design
+# note there says the band is chrome precisely so that 53 apps cannot each draw
+# it differently. wm_set_status is declared, defined, and bound to zl. It had
+# ZERO CALLERS in any .zl file in the tree, so the cell it fills was blank on
+# all fourteen windows while the prototype prints a line on each.
+#
+# These are the prototype's own band strings, except where its string would say
+# something untrue of this machine. Each departure is named at the line.
+fn rail_status(slot) {
+    if slot == 0 { return "tty1" }
+    if slot == 1 { return "rd0 - zlfs" }
+    # "sampler 1 Hz" in the reference; the ring is per painted frame.
+    if slot == 2 { return "sampler, per frame" }
+    # "read only" in the reference, whose editor is a viewer. This one writes:
+    # editor_save calls fs_wr then fs_sync and reports a failed flush as not
+    # durable. Copying that label would advertise the opposite of Ctrl+S.
+    if slot == 3 { return "read write" }
+    if slot == 4 { return "ring buffer" }
+    # "rd0 - 4 MiB" in the reference. hx_ui reads HX_BASE = 0x100000 - the
+    # kernel image at its load address - with +0/+256/+512 page chips. It has
+    # never been able to open a file, so naming a volume here would point at
+    # something it does not show.
+    if slot == 5 { return "kernel image" }
+    if slot == 6 { return "int64" }
+    if slot == 7 { return "virtio-net" }
+    if slot == 8 { return "monotonic" }
+    if slot == 9 { return "zlos 0.3" }
+    if slot == 10 { return "design.h" }
+    if slot == 11 { return "rd0" }
+    if slot == 12 { return "mmio" }
+    # DejaVu is CORRECT and stays. The three baked atlases are generated from
+    # DejaVu Sans Mono by gen_hd_font.py - kernel/HANDOFF.md:1116 - so this is a
+    # true citation, not the prototype describing some other machine.
+    if slot == 13 { return "DejaVu" }
+    return "reg"
+}
+
 fn rail_sub(slot) {
     if slot == 0 { return "zlsh" }
     if slot == 1 { return "rd0" }
-    if slot == 2 { return "1 Hz" }
+    # NOT "1 Hz". wm.c's sample ring is pushed once per PAINTED FRAME, not once
+    # per second, so at 60 Hz its 64 columns are about one second and not
+    # sixty-four of them. The monitor's own head row says "per composited
+    # frame"; this is the same fact and must not disagree with it.
+    if slot == 2 { return "per frame" }
     if slot == 3 { return "fb.c" }
     if slot == 4 { return "dmesg" }
     if slot == 5 { return "rd0 s0" }
     if slot == 6 { return "int64" }
-    if slot == 7 { return "enp0s31f6" }
+    # NOT "enp0s31f6", WHICH THE PROTOTYPE PRINTS. That is a Linux predictable
+    # interface name for an Intel part; this OS names no interfaces, and
+    # s3nw_drv() two files away answers "virtio-net" for this very slot. The
+    # network pane already shipped one bug of exactly this shape - a hardcoded
+    # e1000e in the head with virtio-net in the driver row two lines below.
+    if slot == 7 { return "virtio-net" }
     if slot == 8 { return "monotonic" }
     # "0.3" is the VERSION, and check-version.py checks it against version.h
     # along with every other version literal in this file.
@@ -840,6 +888,7 @@ fn label_windows() {
         lw = rail_win(ls)
         if lw >= 0 {
             if wm_is_open(lw) == 1 { wm_set_label(lw, ls + 1, rail_sub(ls)) }
+            if wm_is_open(lw) == 1 { wm_set_status(lw, rail_status(ls)) }
         }
         ls = ls + 1
     }
@@ -2783,39 +2832,217 @@ fn mouse_tick() {
     return 1
 }
 
-fn editor_draw(ax, ay, aw, ah) {
-    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
-    ed_cw = cell_w()
-    ed_ch = cell_h()
-    ed_x = ax + 4
-    ed_y = ay + 4
-    ed_i = 0
-    while ed_i < ed_len {
-        ed_c = peek8(EDIT_BUF + ed_i)
-        if ed_c == 10 {
-            ed_x = ax + 4
-            ed_y = ed_y + ed_ch
+# A well of an arbitrary pixel height. set_well() takes a line count because the
+# settings panes stack text in it; the editor's body is whatever is left of the
+# client, so it needs the same surface measured in pixels. Same five draws, same
+# order, same tokens - this is the prototype's `.well` rule and nothing else.
+fn pw_well(x, y, w, h) {
+    pwu = ui()
+    rrect(x, y, w, h, R_INSET_D * pwu, theme(TH_CUT))
+    rrect(x + 1, y + 1, w - 2, h - 2, R_INSET_D * pwu - 1, theme(TH_SURF_WELL))
+    fill_rgb(x + 1, y + 1, w - 2, 1, theme(TH_CUT))
+    fill_rgb(x + 1, y + h - 2, w - 2, 1, theme(TH_LITSOFT))
+    return 0
+}
+
+# How many newlines the buffer holds. The old footer printed ed_len - BYTES -
+# where the reference prints "N ln", and those are different quantities in the
+# same slot: a 4 KiB file is not 4096 lines.
+fn ed_lines() {
+    edl_i = 0
+    edl_n = 1
+    while edl_i < ed_len {
+        if peek8(EDIT_BUF + edl_i) == 10 { edl_n = edl_n + 1 }
+        edl_i = edl_i + 1
+    }
+    return edl_n
+}
+
+# Bytes since the last newline. The reference hardcodes col 1; this editor only
+# ever appends, so the column is exactly computable and is a live number - one
+# of the few places the OS can be strictly more truthful than the mockup for
+# free.
+fn ed_col() {
+    edc_i = 0
+    edc_c = 1
+    while edc_i < ed_len {
+        if peek8(EDIT_BUF + edc_i) == 10 { edc_c = 1 } else { edc_c = edc_c + 1 }
+        edc_i = edc_i + 1
+    }
+    return edc_c
+}
+
+# IS THIS A TEXT BUFFER AT ALL?
+#
+# There was no answer to that question anywhere in the editor. editor_open_disk
+# checks fs_ok, fs_inuse and the size ceiling and then fs_rd's the bytes
+# unconditionally, and editor_draw guards only `if ed_c > 32`, so a binary file
+# renders as a field of blank cells with the occasional stray glyph, advancing
+# one cell per byte. That is precisely the state the reference's binary branch
+# exists to prevent, and this OS reached it.
+#
+# The classification costs nothing invented: the bytes are already in EDIT_BUF.
+# Anything outside tab, newline, carriage return and printable ASCII is not text
+# to a renderer that draws one baked glyph per byte, which is what this one does.
+fn ed_nontext() {
+    edn_i = 0
+    edn_n = 0
+    edn_cap = ed_len
+    if edn_cap > 512 { edn_cap = 512 }
+    while edn_i < edn_cap {
+        edn_c = peek8(EDIT_BUF + edn_i)
+        if edn_c == 9 or edn_c == 10 or edn_c == 13 {
+            edn_i = edn_i + 1
         } else {
-            if ed_c > 32 { char_aa(ed_x, ed_y, ed_c, theme(TH_TEXT_HI)) }
-            ed_x = ed_x + ed_cw
-            if ed_x > ax + aw - ed_cw { ed_x = ax + 4  ed_y = ed_y + ed_ch }
+            if edn_c < 32 or edn_c > 126 { edn_n = edn_n + 1 }
+            edn_i = edn_i + 1
         }
-        if ed_y > ay + ah - ed_ch * 2 { ed_i = ed_len }
-        ed_i = ed_i + 1
     }
-    # the caret, where the next character will land
-    fill_rgb(ed_x, ed_y, ed_cw, ed_ch - 2, theme(TH_ACCENT))
-    text_aa(ax + 4, ay + ah - ed_ch, "Ctrl+S save  ESC save+close", theme(TH_TEXT_DIM))
-    ed_ni = 0
-    ed_nx = ax + aw - 24 * ed_cw
-    while ed_ni < 23 {
-        ed_nc = fs_ch(ed_slot, ed_ni)
-        if ed_nc > 0 { char_aa(ed_nx, ay + ah - ed_ch, ed_nc, theme(TH_ACCENT)) }
-        ed_nx = ed_nx + ed_cw
-        ed_ni = ed_ni + 1
+    return edn_n
+}
+
+fn ed_is_binary() {
+    if ed_len < 1 { return 0 }
+    edb_cap = ed_len
+    if edb_cap > 512 { edb_cap = 512 }
+    if ed_nontext() * 20 > edb_cap { return 1 }
+    return 0
+}
+
+# The filename, drawn a glyph at a time. It cannot go through a string: zl has
+# string literals and no string values, so fs_ch(slot, i) one byte at a time is
+# the only way a runtime name reaches the screen.
+fn ed_name(nx, ny, col) {
+    edn2_i = 0
+    edn2_x = nx
+    while edn2_i < 23 {
+        edn2_c = fs_ch(ed_slot, edn2_i)
+        if edn2_c > 0 { char_aa(edn2_x, ny, edn2_c, col) }
+        if edn2_c > 0 { edn2_x = edn2_x + cell_w() }
+        edn2_i = edn2_i + 1
     }
-    if ed_dirty == 1 { text_aa(ax + aw - 2 * ed_cw, ay + ah - ed_ch, "*", theme(TH_ACCENT)) }
-    num_aa(ax + aw - 8 * ed_cw, ay + ah - ed_ch, ed_len, theme(TH_TEXT_DIM))
+    return edn2_x
+}
+
+fn ed_namew() {
+    edw_i = 0
+    edw_n = 0
+    while edw_i < 23 {
+        if fs_ch(ed_slot, edw_i) > 0 { edw_n = edw_n + 1 }
+        edw_i = edw_i + 1
+    }
+    return edw_n * cell_w()
+}
+
+# head(): buffer | <name> | <state> | ... | encoding, in the reference's order.
+fn ed_head(hx, hy, hw) {
+    hu = ui()
+    hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(hx, hy2, "buffer", theme(TH_TEXT_DIM), PW_SM)
+    ed_name(hx + ui_capsw("buffer", PW_SM) + 10 * hu, hy2, theme(TH_TEXT_HI))
+    # NOT "read only", WHICH IS WHAT THE REFERENCE PRINTS. Its editor is a
+    # viewer; this one writes - editor_save calls fs_wr and then fs_sync and
+    # says so when the flush fails. Copying that label would advertise the
+    # opposite of what Ctrl+S does.
+    sx2 = hx + ui_capsw("buffer", PW_SM) + 10 * hu + ed_namew() + 14 * hu
+    if ed_dirty == 1 { ui_caps(sx2, hy2, "modified", theme(TH_ACCENT), PW_SM) } else { ui_caps(sx2, hy2, "saved", theme(TH_TEXT_DIM), PW_SM) }
+    # NOT "utf-8" EITHER. There is no UTF-8 decoder in the drawing path: one
+    # byte in, one baked glyph out. "lf" is true - editor_key inserts byte 10
+    # for Enter and there is no CR path anywhere.
+    ew = ui_tw("ascii - lf - ", PW_SM, PW_MONO)
+    enw = s3_numw(ed_lines()) + ui_tw(" ln", PW_SM, PW_MONO)
+    ui_txt(hx + hw - ew - enw, hy2, "ascii - lf - ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    num_aa(hx + hw - enw, hy2, ed_lines(), theme(TH_TEXT_2))
+    ui_txt(hx + hw - enw + s3_numw(ed_lines()), hy2, " ln", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    return hy + pw_headh()
+}
+
+# The footer: ln, col, tab, state. Three of those four are read.
+fn ed_foot(fx, fy, fw) {
+    fu = ui()
+    nx = sm_fig(fx, fy, "ln", ed_lines(), 0, theme(TH_TEXT_2))
+    nx = sm_fig(nx, fy, "col", ed_col(), 0, theme(TH_TEXT_2))
+    # THE REFERENCE PRINTS "tab 4" AND THIS ONE CANNOT. editor_key accepts
+    # code >= 32 plus 3/8/13/19/22/27; Tab is 9, so it falls through and is
+    # DISCARDED. There is no tab width because there are no tabs, and printing
+    # a width would advertise a setting that does not exist.
+    ui_caps(nx, fy, "tab", theme(TH_TEXT_DIM), PW_SM)
+    ui_txt(nx + ui_capsw("tab", PW_SM) + 5 * fu, fy, "not accepted", theme(TH_TEXT_DIM), PW_SM, 0)
+    if ed_dirty == 1 { pw_sw(fx + fw - pw_sww("UNSAVED"), fy, "UNSAVED", theme(TH_WARN)) } else { pw_sw(fx + fw - pw_sww("CLEAN"), fy, "CLEAN", theme(TH_OK)) }
+    return 0
+}
+
+# THE BINARY BRANCH THE EDITOR NEVER HAD.
+#
+# The reference's empty state says "open it in 06 HEX", and this OS must not:
+# hx_ui reads HX_BASE = 0x100000, which is kernel memory at the load address,
+# with +0/+256/+512 page chips. It cannot view a file at all. Sending someone
+# there would land them on the kernel image and call it their file, so the
+# sentence says what is true instead and names the measurement that decided it.
+fn ed_binary_body(bx, by, bw, bh) {
+    bu = ui()
+    pw_well(bx, by, bw, bh)
+    cy = by + bh / 2 - ui_th(PW_SM)
+    ui_caps(bx + (bw - ui_capsw("no text preview", PW_SM)) / 2, cy, "no text preview", theme(TH_TEXT_DIM), PW_SM)
+    cy = cy + ui_th(PW_SM) + 8 * bu
+    lw = ui_tw("of the first ", PW_SM, PW_MONO) + s3_numw(ed_nontext()) + ui_tw(" bytes are not text", PW_SM, PW_MONO)
+    lx = bx + (bw - lw) / 2
+    ui_txt(lx, cy, "of the first ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    num_aa(lx + ui_tw("of the first ", PW_SM, PW_MONO), cy, ed_nontext(), theme(TH_TEXT_2))
+    ui_txt(lx + ui_tw("of the first ", PW_SM, PW_MONO) + s3_numw(ed_nontext()), cy, " bytes are not text", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    cy = cy + ui_th(PW_SM) + 6 * bu
+    ui_txt(bx + (bw - ui_tw("this editor draws one baked glyph per byte", PW_SM, 0)) / 2, cy, "this editor draws one baked glyph per byte", theme(TH_TEXT_DIM), PW_SM, 0)
+    cy = cy + ui_th(PW_SM) + 2 * bu
+    ui_txt(bx + (bw - ui_tw("06 HEX reads memory, not files - it cannot show this one", PW_SM, 0)) / 2, cy, "06 HEX reads memory, not files - it cannot show this one", theme(TH_TEXT_DIM), PW_SM, 0)
+    return 0
+}
+
+# The gutter and the text, inside the well. The reference's gutter is the first
+# six columns of its own source strings lifted out; this one derives the numbers
+# from the buffer, because the buffer is the truth here and the strings are the
+# mockup's stand-in for one.
+fn ed_text_body(tx, ty, tw, th) {
+    tu = ui()
+    pw_well(tx, ty, tw, th)
+    gw = 5 * cell_w() + 8 * tu
+    fill_rgb(tx + gw, ty + 2, 1, th - 4, theme(TH_CUT))
+    px = tx + gw + 8 * tu
+    py = ty + 6 * tu
+    ln = 1
+    num_aa(tx + gw - 8 * tu - s3_numw(ln), py, ln, theme(TH_TEXT_DIM))
+    i = 0
+    cw = cell_w()
+    ch = cell_h()
+    while i < ed_len {
+        c = peek8(EDIT_BUF + i)
+        if c == 10 {
+            px = tx + gw + 8 * tu
+            py = py + ch
+            ln = ln + 1
+            if py + ch < ty + th - 4 { num_aa(tx + gw - 8 * tu - s3_numw(ln), py, ln, theme(TH_TEXT_DIM)) }
+        } else {
+            if c > 32 { char_aa(px, py, c, theme(TH_TEXT_HI)) }
+            px = px + cw
+            if px > tx + tw - cw { px = tx + gw + 8 * tu  py = py + ch }
+        }
+        if py > ty + th - ch - 4 { i = ed_len } else { i = i + 1 }
+    }
+    fill_rgb(px, py, cw, ch - 2, theme(TH_ACCENT))
+    return 0
+}
+
+fn editor_draw(ax, ay, aw, ah) {
+    eu = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    ep = 10 * eu
+    ex = ax + ep
+    ew2 = aw - 2 * ep
+    ey = ay + ep
+    ey = ed_head(ex, ey, ew2)
+    fh = pw_kvh()
+    bh = ah - (ey - ay) - fh - ep
+    if ed_is_binary() == 1 { ed_binary_body(ex, ey, ew2, bh) } else { ed_text_body(ex, ey, ew2, bh) }
+    ed_foot(ex, ay + ah - fh + (fh - ui_th(PW_SM)) / 2, ew2)
     return 0
 }
 
@@ -5003,6 +5230,13 @@ fn sm_fig(fx, fy, nm, v, dp, col) {
     lw = ui_capsw(nm, PW_SM)
     ui_caps(fx, fy, nm, theme(TH_TEXT_DIM), PW_SM)
     nx = fx + lw + 5 * ui()
+    # dp 0 IS A WHOLE NUMBER, not a number with nothing after the point.
+    # pw_decg still draws the separator at dp 0, so a line count came out as
+    # "1." - which reads as a truncated decimal, i.e. as a rendering fault.
+    if dp == 0 {
+        num_aa(nx, fy, v, col)
+        return nx + s3_numw(v) + 14 * ui()
+    }
     pw_decg(nx, fy, v, dp, col, PW_SM, PW_MONO)
     return nx + pw_decgw(v, dp, PW_SM, PW_MONO) + 14 * ui()
 }
