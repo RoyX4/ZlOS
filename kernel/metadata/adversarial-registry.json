@@ -1,9 +1,9 @@
 {
   "schema": "zlos.adversarial-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "host_test_inventory_sha256": "3230182f58256a06d21c3e0367707c6405d6efedfd39ee19f90599d59e3fd9cc",
-  "host_test_receipt_sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
+  "host_test_receipt_sha256": "43eec945af92a2fa8c694040024e05e85ff97bb940100fb932a5420f00eff9e8",
   "verifier_canaries": [
     {
       "id": "CAN-001",
@@ -15,7 +15,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "fc9562450020a12f6ed04df76c3af28b7baa2d0d03cf9dd76b5d08b65103236a",
+      "output_sha256": "02d9b45689c5deb004e8e51bb0bf35ae56e0003b1780f4a3a0b7cfd020030358",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -28,7 +28,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "007532eaf8613193f9a128f027d5eb28dbe2bd4fad616e16df9f2f81a08e501a",
+      "output_sha256": "75981d1437d7916706417acd0f9188b8d010f0243b810a8386284841072ece1d",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "4e031346902e062bad3278184736f3aef25d09dfad9bd23d3e0cc782010a9c10",
+      "output_sha256": "a408634766a425f1add6961a937c75221cc0f5981a4080765b7360ed9947f879",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -128,7 +128,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "8beadf7ecc3ef709d7e361450e20cf5baada6aaa6e19d906611d9e96cd92855a",
+      "output_sha256": "7964376097187dcfe8f23ad43bc3b9ceb7b3cc93cea66ce881c60fec952d5e49",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -215,7 +215,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "mutations change IDs",
-      "output_sha256": "e1a94b0113e2e5e0e1e46e1215e3f1192ecfa5e0bf68842cc6586ce145a3b12a",
+      "output_sha256": "d8435dc58d10ce11bd9b0742d6ab07139bd898d174dd1ffdce50a1583c78c428",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -241,7 +241,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "2856fb1732e56681d4d29baf3c25170d030b64da3e5fbdce31c95e29f1dbcf40",
+      "output_sha256": "fa9d28547fbfabba9647066e7ae700e95e6069b3a7718c3258c2fc1d594e37e1",
       "result": "PLANTED_MUTATION_CAUGHT"
     }
   ],

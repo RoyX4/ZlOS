@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
+    "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664"
   },
   "counts": {
     "catalogue_surfaces": 1,
@@ -152,25 +152,25 @@
           "close": {
             "app": 2,
             "event": "close",
-            "generation": 9,
+            "generation": 24,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 2,
             "event": "open",
-            "generation": 9,
+            "generation": 24,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 2,
             "event": "ready",
-            "generation": 9,
+            "generation": 24,
             "live": 2,
             "slot": 1
           },
-          "route": "register:8"
+          "route": "surface:menu:3"
         }
       ]
     },
@@ -194,45 +194,21 @@
           "close": {
             "app": 3,
             "event": "close",
-            "generation": 7,
+            "generation": 15,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 3,
             "event": "open",
-            "generation": 7,
+            "generation": 15,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 3,
             "event": "ready",
-            "generation": 7,
-            "live": 2,
-            "slot": 1
-          },
-          "route": "register:6"
-        },
-        {
-          "close": {
-            "app": 3,
-            "event": "close",
-            "generation": 12,
-            "live": 1,
-            "slot": 1
-          },
-          "open": {
-            "app": 3,
-            "event": "open",
-            "generation": 12,
-            "live": 2,
-            "slot": 1
-          },
-          "ready": {
-            "app": 3,
-            "event": "ready",
-            "generation": 12,
+            "generation": 15,
             "live": 2,
             "slot": 1
           },
@@ -260,21 +236,21 @@
           "close": {
             "app": 4,
             "event": "close",
-            "generation": 19,
+            "generation": 22,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 4,
             "event": "open",
-            "generation": 19,
+            "generation": 22,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 4,
             "event": "ready",
-            "generation": 19,
+            "generation": 22,
             "live": 2,
             "slot": 1
           },
@@ -302,25 +278,25 @@
           "close": {
             "app": 5,
             "event": "close",
-            "generation": 4,
+            "generation": 30,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 5,
             "event": "open",
-            "generation": 4,
+            "generation": 30,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 5,
             "event": "ready",
-            "generation": 4,
+            "generation": 30,
             "live": 2,
             "slot": 1
           },
-          "route": "register:3"
+          "route": "surface:menu:11"
         }
       ]
     },
@@ -344,25 +320,25 @@
           "close": {
             "app": 6,
             "event": "close",
-            "generation": 10,
+            "generation": 11,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 6,
             "event": "open",
-            "generation": 10,
+            "generation": 11,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 6,
             "event": "ready",
-            "generation": 10,
+            "generation": 11,
             "live": 2,
             "slot": 1
           },
-          "route": "register:9"
+          "route": "register:10"
         }
       ]
     },
@@ -382,30 +358,6 @@
       "migration_phase": "MP-12",
       "name": "Run",
       "routes": [
-        {
-          "close": {
-            "app": 7,
-            "event": "close",
-            "generation": 11,
-            "live": 1,
-            "slot": 1
-          },
-          "open": {
-            "app": 7,
-            "event": "open",
-            "generation": 11,
-            "live": 2,
-            "slot": 1
-          },
-          "ready": {
-            "app": 7,
-            "event": "ready",
-            "generation": 11,
-            "live": 2,
-            "slot": 1
-          },
-          "route": "register:10"
-        },
         {
           "close": {
             "app": 7,
@@ -452,45 +404,21 @@
           "close": {
             "app": 8,
             "event": "close",
-            "generation": 6,
+            "generation": 16,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 8,
             "event": "open",
-            "generation": 6,
+            "generation": 16,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 8,
             "event": "ready",
-            "generation": 6,
-            "live": 2,
-            "slot": 1
-          },
-          "route": "register:5"
-        },
-        {
-          "close": {
-            "app": 8,
-            "event": "close",
-            "generation": 13,
-            "live": 1,
-            "slot": 1
-          },
-          "open": {
-            "app": 8,
-            "event": "open",
-            "generation": 13,
-            "live": 2,
-            "slot": 1
-          },
-          "ready": {
-            "app": 8,
-            "event": "ready",
-            "generation": 13,
+            "generation": 16,
             "live": 2,
             "slot": 1
           },
@@ -518,45 +446,21 @@
           "close": {
             "app": 9,
             "event": "close",
-            "generation": 8,
+            "generation": 17,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 9,
             "event": "open",
-            "generation": 8,
+            "generation": 17,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 9,
             "event": "ready",
-            "generation": 8,
-            "live": 2,
-            "slot": 1
-          },
-          "route": "register:7"
-        },
-        {
-          "close": {
-            "app": 9,
-            "event": "close",
-            "generation": 14,
-            "live": 1,
-            "slot": 1
-          },
-          "open": {
-            "app": 9,
-            "event": "open",
-            "generation": 14,
-            "live": 2,
-            "slot": 1
-          },
-          "ready": {
-            "app": 9,
-            "event": "ready",
-            "generation": 14,
+            "generation": 17,
             "live": 2,
             "slot": 1
           },
@@ -584,21 +488,21 @@
           "close": {
             "app": 10,
             "event": "close",
-            "generation": 15,
+            "generation": 18,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 10,
             "event": "open",
-            "generation": 15,
+            "generation": 18,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 10,
             "event": "ready",
-            "generation": 15,
+            "generation": 18,
             "live": 2,
             "slot": 1
           },
@@ -626,21 +530,21 @@
           "close": {
             "app": 11,
             "event": "close",
-            "generation": 16,
+            "generation": 19,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 11,
             "event": "open",
-            "generation": 16,
+            "generation": 19,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 11,
             "event": "ready",
-            "generation": 16,
+            "generation": 19,
             "live": 2,
             "slot": 1
           },
@@ -668,45 +572,45 @@
           "close": {
             "app": 12,
             "event": "close",
-            "generation": 5,
+            "generation": 4,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 12,
             "event": "open",
-            "generation": 5,
+            "generation": 4,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 12,
             "event": "ready",
-            "generation": 5,
+            "generation": 4,
             "live": 2,
             "slot": 1
           },
-          "route": "register:4"
+          "route": "register:3"
         },
         {
           "close": {
             "app": 12,
             "event": "close",
-            "generation": 17,
+            "generation": 20,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 12,
             "event": "open",
-            "generation": 17,
+            "generation": 20,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 12,
             "event": "ready",
-            "generation": 17,
+            "generation": 20,
             "live": 2,
             "slot": 1
           },
@@ -776,21 +680,21 @@
           "close": {
             "app": 13,
             "event": "close",
-            "generation": 18,
+            "generation": 21,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 13,
             "event": "open",
-            "generation": 18,
+            "generation": 21,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 13,
             "event": "ready",
-            "generation": 18,
+            "generation": 21,
             "live": 2,
             "slot": 1
           },
@@ -1490,6 +1394,30 @@
           "close": {
             "app": 31,
             "event": "close",
+            "generation": 9,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 31,
+            "event": "open",
+            "generation": 9,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 31,
+            "event": "ready",
+            "generation": 9,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:8"
+        },
+        {
+          "close": {
+            "app": 31,
+            "event": "close",
             "generation": 17,
             "live": 4,
             "slot": 4
@@ -1532,6 +1460,30 @@
           "close": {
             "app": 32,
             "event": "close",
+            "generation": 13,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 32,
+            "event": "open",
+            "generation": 13,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 32,
+            "event": "ready",
+            "generation": 13,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:12"
+        },
+        {
+          "close": {
+            "app": 32,
+            "event": "close",
             "generation": 18,
             "live": 4,
             "slot": 4
@@ -1570,6 +1522,30 @@
       "migration_phase": "MP-12",
       "name": "Calculator",
       "routes": [
+        {
+          "close": {
+            "app": 33,
+            "event": "close",
+            "generation": 7,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 33,
+            "event": "open",
+            "generation": 7,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 33,
+            "event": "ready",
+            "generation": 7,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:6"
+        },
         {
           "close": {
             "app": 33,
@@ -1658,6 +1634,30 @@
           "close": {
             "app": 40,
             "event": "close",
+            "generation": 5,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 40,
+            "event": "open",
+            "generation": 5,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 40,
+            "event": "ready",
+            "generation": 5,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:4"
+        },
+        {
+          "close": {
+            "app": 40,
+            "event": "close",
             "generation": 21,
             "live": 4,
             "slot": 4
@@ -1738,6 +1738,30 @@
       "migration_phase": "MP-12",
       "name": "Hex Viewer",
       "routes": [
+        {
+          "close": {
+            "app": 42,
+            "event": "close",
+            "generation": 6,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 42,
+            "event": "open",
+            "generation": 6,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 42,
+            "event": "ready",
+            "generation": 6,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:5"
+        },
         {
           "close": {
             "app": 42,
@@ -1910,6 +1934,30 @@
           "close": {
             "app": 46,
             "event": "close",
+            "generation": 12,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 46,
+            "event": "open",
+            "generation": 12,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 46,
+            "event": "ready",
+            "generation": 12,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:11"
+        },
+        {
+          "close": {
+            "app": 46,
+            "event": "close",
             "generation": 27,
             "live": 4,
             "slot": 4
@@ -2074,6 +2122,30 @@
       "migration_phase": "MP-12",
       "name": "Network",
       "routes": [
+        {
+          "close": {
+            "app": 50,
+            "event": "close",
+            "generation": 8,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 50,
+            "event": "open",
+            "generation": 8,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 50,
+            "event": "ready",
+            "generation": 8,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:7"
+        },
         {
           "close": {
             "app": 50,
@@ -2792,21 +2864,21 @@
           "close": {
             "app": 70,
             "event": "close",
-            "generation": 24,
+            "generation": 31,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 70,
             "event": "open",
-            "generation": 24,
+            "generation": 31,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 70,
             "event": "ready",
-            "generation": 24,
+            "generation": 31,
             "live": 2,
             "slot": 1
           },
@@ -2834,21 +2906,45 @@
           "close": {
             "app": 71,
             "event": "close",
-            "generation": 21,
+            "generation": 10,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 71,
             "event": "open",
-            "generation": 21,
+            "generation": 10,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 71,
             "event": "ready",
-            "generation": 21,
+            "generation": 10,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:9"
+        },
+        {
+          "close": {
+            "app": 71,
+            "event": "close",
+            "generation": 26,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 71,
+            "event": "open",
+            "generation": 26,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 71,
+            "event": "ready",
+            "generation": 26,
             "live": 2,
             "slot": 1
           },
@@ -2876,21 +2972,45 @@
           "close": {
             "app": 72,
             "event": "close",
-            "generation": 23,
+            "generation": 14,
             "live": 1,
             "slot": 1
           },
           "open": {
             "app": 72,
             "event": "open",
-            "generation": 23,
+            "generation": 14,
             "live": 2,
             "slot": 1
           },
           "ready": {
             "app": 72,
             "event": "ready",
-            "generation": 23,
+            "generation": 14,
+            "live": 2,
+            "slot": 1
+          },
+          "route": "register:13"
+        },
+        {
+          "close": {
+            "app": 72,
+            "event": "close",
+            "generation": 28,
+            "live": 1,
+            "slot": 1
+          },
+          "open": {
+            "app": 72,
+            "event": "open",
+            "generation": 28,
+            "live": 2,
+            "slot": 1
+          },
+          "ready": {
+            "app": 72,
+            "event": "ready",
+            "generation": 28,
             "live": 2,
             "slot": 1
           },
@@ -2903,82 +3023,82 @@
   "runtime_manifest_boot_routes": [
     {
       "artifact": {
-        "bytes": 6291968,
+        "bytes": 8389120,
         "path": "kernel/zlOS.img",
-        "sha256": "987798d9f1aa7d493bf0f4533980b5a6eff9b8d04f76361210788f098bd7530c"
+        "sha256": "053fe0c538de8d952b6efeb4d6465eb6d13f6a64f4181634770f7ad5c0fb4528"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "raw-bios",
-      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+      "shipped_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "shipped_manifest_sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     },
     {
       "artifact": {
         "bytes": 138412032,
         "path": "kernel/zlOS-usb.img",
-        "sha256": "c79fd1ed720b91f89c13806c7fa8689196f118b4d843e8661138b91ea1d671ac"
+        "sha256": "0e38e9579582121548c820a4a4dd71153e64202b92b267dc921015d1d8c793e1"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "native-uefi64",
-      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+      "shipped_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "shipped_manifest_sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     },
     {
       "artifact": {
-        "bytes": 31539200,
+        "bytes": 31635456,
         "path": "kernel/zlOS.iso",
-        "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
+        "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-bios32",
-      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+      "shipped_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "shipped_manifest_sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     },
     {
       "artifact": {
-        "bytes": 31539200,
+        "bytes": 31635456,
         "path": "kernel/zlOS.iso",
-        "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
+        "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-uefi32",
-      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+      "shipped_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "shipped_manifest_sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     },
     {
       "artifact": {
-        "bytes": 28446720,
+        "bytes": 28477440,
         "path": "kernel/zlOS64.iso",
-        "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee"
+        "sha256": "68641ffbae6e2c41d0c67ac39038a4cd30673b956581f6d0ff605f4b17972d0d"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-bios64",
-      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+      "shipped_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "shipped_manifest_sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     },
     {
       "artifact": {
-        "bytes": 28446720,
+        "bytes": 28477440,
         "path": "kernel/zlOS64.iso",
-        "sha256": "e33e86e5118195d3707ea53d7e49b72a9cd74055c9d32e01ae9b7b5deb8268ee"
+        "sha256": "68641ffbae6e2c41d0c67ac39038a4cd30673b956581f6d0ff605f4b17972d0d"
       },
       "evidence": "QEMU runtime boot and embedded manifest; not native physical hardware",
       "route": "grub-uefi64",
-      "shipped_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-      "shipped_manifest_sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+      "shipped_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "shipped_manifest_sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     }
   ],
   "schema": "zlos.application-evidence-registry.v1",
   "shipped_build_identity": {
     "dirty": false,
-    "head": "ba5a344742dad707b4b47800b6160468728deb0b",
-    "id": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+    "head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a",
+    "id": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
     "schema": 1
   },
   "shipped_manifest": {
     "entries": 64,
     "schema": 1,
-    "sha256": "7af1b372d577ce809587bb5cea8eb4877e2732d06b7fbb6ac2975d7e93b4e447"
+    "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
   },
-  "source_head": "ba5a344742dad707b4b47800b6160468728deb0b"
+  "source_head": "15ffd48c8f36bf43a42ddf85b66ea45043268d9a"
 }

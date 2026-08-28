@@ -1,12 +1,12 @@
 {
   "schema": "zlos.accessibility-proof-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-  "host_test_receipt_sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "host_test_receipt_sha256": "43eec945af92a2fa8c694040024e05e85ff97bb940100fb932a5420f00eff9e8",
   "source_identities": {
     "src/drivers/input/input.c": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0",
     "src/graphics/ui/ui.c": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",
-    "src/graphics/windowing/wm.c": "cbeeb07f1ccbebdf5464576bb2a88e5d6c07f65d3687c355041cb587cd334d3e",
+    "src/graphics/windowing/wm.c": "8d5a1e6a5d4429581a7a2e891ff05b350870050df85413db8afa4ad29ccbd536",
     "tests/host/inputtest_hid.c": "98fba1e6381779a9017675aba7d44dfc82604239096d7163e1f4243b66b37f38",
     "tests/host/uitest.c": "0d5d866cd4be9c9d34776ab928c5f01cf2dcef4a0a4ad250ce3798b60ad0f7a2",
     "tests/host/wmtest.c": "2c5b4aebd083af3dd73355758c026eeb29ca4f9970a836b0c9c894ae26ed4bfd",
@@ -14,7 +14,7 @@
   },
   "visual_registry": {
     "path": "kernel/metadata/visual-registry.json",
-    "sha256": "ba7778d588677a54645ce6c32432bef972016be8220494e8618ebde31468a2c3",
+    "sha256": "48226f79e13cc9c361f0051b43cb76a54be42e897553eb61afb73867e71fda09",
     "current_build_bound": 0
   },
   "capabilities": [

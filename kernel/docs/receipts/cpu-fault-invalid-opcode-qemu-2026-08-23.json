@@ -1,29 +1,29 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "bb3d3063cda22e8775444c1d33c1f1177a6186438e3a5f695715f5c4a44d931d"
+    "sha256": "7ba4397a86bba1503bf4573bcf4138840ccbf09f74fd8ca8ec6f2bd81c1a0664"
   },
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
-  "crash_line": "ZLCRASH v=1 bytes=88 bits=32 vec=6 haserr=0 err=0x0000000000000000 ip=0x0000000000443550 cs=0x0000000000000008 flags=0x0000000000010246 sp=0x000000000072d69c ss=0x0000000000000000 cr2=0x0000000000000000 checksum=0x693c77435d7c7736 END\n",
-  "crash_line_sha256": "6780205e8ed6dd073fba76eafeac03d4a9135de2c10e5d1b6112fb773abd5787",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "crash_line": "ZLCRASH v=1 bytes=88 bits=32 vec=6 haserr=0 err=0x0000000000000000 ip=0x0000000000453b50 cs=0x0000000000000008 flags=0x0000000000010246 sp=0x0000000000744cec ss=0x0000000000000000 cr2=0x0000000000000000 checksum=0xaee4cfe3d81f92d5 END\n",
+  "crash_line_sha256": "b58d563d1fe882a466ad9ced5f44907614e3be2e388788b843773522db41825e",
   "evidence": "QEMU target execution of the exact current ISO/kernel; vector, UD2 IP, bounded schema and checksum independently verified; no durability or recovery claim",
   "guest_halted_after_record": true,
   "kernel": {
     "path": "kernel/kernel.elf",
-    "sha256": "07108633eba499c522b78ced4d5fdccefadb9c76d7a13721eebe3c413423ec7c"
+    "sha256": "650c4457fc8223a662a875badfd1a0e724c2bddaaf01b475036f8931e0a0a297"
   },
-  "kernel_symbol_ip": 4470096,
+  "kernel_symbol_ip": 4537168,
   "record": {
     "bits": 32,
     "bytes": 88,
-    "checksum": 7583067003800024886,
+    "checksum": 12602426234779964117,
     "cr2": 0,
     "cs": 8,
     "error": 0,
     "flags": 66118,
     "has_error": 0,
-    "ip": 4470096,
-    "sp": 7526044,
+    "ip": 4537168,
+    "sp": 7621868,
     "ss": 0,
     "vector": 6,
     "version": 1
@@ -36,8 +36,8 @@
     "kernel/src/arch/x86/idt.c": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
     "kernel/src/core/crash.c": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
     "kernel/src/core/crash.h": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",
-    "kernel/src/graphics/windowing/term.c": "8026cb24a0a81f22d0b640a06e9ec27a0012337c519fb1525ad7885c76f4d3a8",
-    "kernel/src/kernel.zl": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
+    "kernel/src/graphics/windowing/term.c": "48d9563f12b91bc4280b6fbb553a80fcbf933f6f9a7edc66057eb287ef5b9c04",
+    "kernel/src/kernel.zl": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
     "kernel/tools/checks/verify-crash.py": "44c745f78dae1c684768ceab3675e313048e8c971a588c6aa1120cf9b0921051"
   },
   "trigger": "UD2 through typed crashtest diagnostic",

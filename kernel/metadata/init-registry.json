@@ -1,11 +1,11 @@
 {
   "schema": "zlos.init-registry.v1",
   "result": "PASS",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "source": {
     "path": "kernel/src/kernel.zl",
-    "sha256": "3f4723ef14d6173315bbbd532d58b28220b3e0628f2f6844cf8b50ed1885b0f6",
-    "boot_marker_line": 9730
+    "sha256": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
+    "boot_marker_line": 10149
   },
   "generator": {
     "path": "kernel/tools/generators/gen-init-registry.py",
@@ -25,7 +25,7 @@
       "name": "gdt",
       "owner": "cpu",
       "source_anchor": "setup_gdt()",
-      "source_line": 9752,
+      "source_line": 10171,
       "dependencies": [],
       "obligation": "required-success",
       "failure_behavior": "Failure is fatal before protected execution can continue.",
@@ -44,7 +44,7 @@
       "name": "idt-pic-pit-ps2",
       "owner": "interrupts",
       "source_anchor": "setup_idt()",
-      "source_line": 9753,
+      "source_line": 10172,
       "dependencies": [
         "INIT-001"
       ],
@@ -65,7 +65,7 @@
       "name": "framebuffer-write-combining",
       "owner": "display",
       "source_anchor": "fb_wc()",
-      "source_line": 9754,
+      "source_line": 10173,
       "dependencies": [
         "INIT-002"
       ],
@@ -86,7 +86,7 @@
       "name": "apic-routing",
       "owner": "interrupts",
       "source_anchor": "boot_apic = apic_up()",
-      "source_line": 9755,
+      "source_line": 10174,
       "dependencies": [
         "INIT-002"
       ],
@@ -107,7 +107,7 @@
       "name": "usb-bootstrap",
       "owner": "usb",
       "source_anchor": "boot_usb = usb_boot()",
-      "source_line": 9756,
+      "source_line": 10175,
       "dependencies": [
         "INIT-002"
       ],
@@ -128,7 +128,7 @@
       "name": "persistent-observer",
       "owner": "storage",
       "source_anchor": "diag_boot = diag_up()",
-      "source_line": 9757,
+      "source_line": 10176,
       "dependencies": [
         "INIT-005"
       ],
@@ -149,7 +149,7 @@
       "name": "keyboard-state",
       "owner": "input",
       "source_anchor": "kbd_init()",
-      "source_line": 9759,
+      "source_line": 10178,
       "dependencies": [
         "INIT-002"
       ],
@@ -170,7 +170,7 @@
       "name": "settings-load",
       "owner": "settings",
       "source_anchor": "set_load()",
-      "source_line": 9765,
+      "source_line": 10184,
       "dependencies": [
         "INIT-006",
         "INIT-007"
@@ -192,7 +192,7 @@
       "name": "filesystem-mount",
       "owner": "storage",
       "source_anchor": "fs_try()",
-      "source_line": 9768,
+      "source_line": 10187,
       "dependencies": [
         "INIT-006",
         "INIT-008"
@@ -214,7 +214,7 @@
       "name": "program-arena",
       "owner": "memory",
       "source_anchor": "arena_up()",
-      "source_line": 9778,
+      "source_line": 10197,
       "dependencies": [
         "INIT-009"
       ],
@@ -235,7 +235,7 @@
       "name": "kernel-heap",
       "owner": "memory",
       "source_anchor": "heap_up()",
-      "source_line": 9780,
+      "source_line": 10199,
       "dependencies": [
         "INIT-010"
       ],
@@ -256,7 +256,7 @@
       "name": "virtual-memory-report",
       "owner": "memory",
       "source_anchor": "vmm_up()",
-      "source_line": 9782,
+      "source_line": 10201,
       "dependencies": [
         "INIT-011"
       ],
@@ -277,7 +277,7 @@
       "name": "display-layout",
       "owner": "display",
       "source_anchor": "if px_w() > 0 { layout() }",
-      "source_line": 9814,
+      "source_line": 10233,
       "dependencies": [
         "INIT-012"
       ],
@@ -298,7 +298,7 @@
       "name": "compositor-bootstrap",
       "owner": "window-system",
       "source_anchor": "wm_boot = wm_boot_start()",
-      "source_line": 9829,
+      "source_line": 10248,
       "dependencies": [
         "INIT-013"
       ],
@@ -319,7 +319,7 @@
       "name": "ring3-smoke",
       "owner": "process",
       "source_anchor": "user_up()",
-      "source_line": 9922,
+      "source_line": 10341,
       "dependencies": [
         "INIT-002",
         "INIT-012",
@@ -342,7 +342,7 @@
       "name": "application-manifest",
       "owner": "product-identity",
       "source_anchor": "app_manifest_report()",
-      "source_line": 9930,
+      "source_line": 10349,
       "dependencies": [
         "INIT-015"
       ],
@@ -363,7 +363,7 @@
       "name": "build-identity",
       "owner": "artifact-identity",
       "source_anchor": "build_identity_report()",
-      "source_line": 9931,
+      "source_line": 10350,
       "dependencies": [
         "INIT-016"
       ],
@@ -384,7 +384,7 @@
       "name": "ready-publication",
       "owner": "boot",
       "source_anchor": "color(C_GREEN)  print(\"  ready.\")",
-      "source_line": 9934,
+      "source_line": 10353,
       "dependencies": [
         "INIT-017"
       ],

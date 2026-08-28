@@ -468,8 +468,8 @@
     },
     {
       "path": "kernel/tools/checks/check-land-gate.py",
-      "sha256": "12610c5f72b074779f367f5c02db1b4b9c7728240546b26be8bd2a16d85153ce",
-      "bytes": 7337,
+      "sha256": "a2f36ad276b99ef4187f94f45b9f50695d1968f296899e34202d54d4686f442c",
+      "bytes": 8287,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -699,13 +699,13 @@
     },
     {
       "path": "kernel/tools/checks/verify-net.sh",
-      "sha256": "276f3a2e13f0ff488edd0e1b5bf34b581287ce44da1ad8b3bbb10d3b9538b886",
-      "bytes": 1423,
+      "sha256": "95f772ce749d386092506c23fd4fc76449ec1a3f7f074aefad3ae0e459070f32",
+      "bytes": 389,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "VERIFIER",
-      "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "exit_policy": "SHELL_ERREXIT",
       "named_by_landing_gate": true
     },
     {
@@ -864,8 +864,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-evidence-registry.py",
-      "sha256": "f5de21b73f87ae8c203610dee7a31985b8cb2bbb78b838b069be2da2ed8bd886",
-      "bytes": 40927,
+      "sha256": "358fae10b620c4bca5fc33b06cb6e7384358ab7a5100212f8cd6b9b58a6ea729",
+      "bytes": 41868,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1381,8 +1381,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-net.py",
-      "sha256": "2c83014abef55e5862f30384ac2316c32d8a346e4143a71c64aadeb3524861f2",
-      "bytes": 13862,
+      "sha256": "cfb079b9c76f33e0c9d13dbfb42e802a95f0c107576a98e25e11278fa84e7f21",
+      "bytes": 15183,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
