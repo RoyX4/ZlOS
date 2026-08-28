@@ -15,28 +15,104 @@
 # ==============================================================================
 clk_last_s = 0 - 1
 
+# R.clock: a source head, three duration cards, the readings, and a well that
+# says why the wall clock is not one of them.
+#
+# THE PANE IS ABOUT MONOTONIC TIME, which is the reference's whole point - "every
+# duration on this pane is read from the monotonic counter, never from the wall
+# clock". This drew the RTC's hours, minutes and date, which is the one clock
+# that cannot be trusted for a duration.
+#
+# AND IT IS TRUE HERE, not borrowed reasoning: this machine's RTC runs days slow
+# and NTP corrects it mid-session, so a timestamp taken before the correction and
+# one taken after are not comparable. Durations come from ticks().
+#
+# The source line says PIT at 100 Hz because that is what this kernel programs -
+# the reference's "apic timer, 1000.15 Hz measured" is its machine, not this one.
+fn clk_hms_h(t) { return idiv(t, 3600) }
+fn clk_hms_m(t) { return idiv(t, 60) % 60 }
+fn clk_hms_s(t) { return t % 60 }
+
+# one duration card: label above, h m s below, in the card's own plate
+fn clk_card(cx, cy, cw, ch, nm, secs) {
+    cu = ui()
+    rrect(cx, cy, cw, ch, R_INSET_D * cu, theme(TH_PANEL_HI))
+    ui_caps(cx + 10 * cu, cy + 7 * cu, nm, theme(TH_TEXT_2), T_CAPTION)
+    vx = cx + 10 * cu
+    vy = cy + 24 * cu
+    ac_draw_base(vx, vy, clk_hms_h(secs), 2, 10, theme(TH_TEXT_HI))
+    label(vx + 2 * cell_w() + 2 * cu, vy, "h", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    vx = vx + 3 * cell_w() + 4 * cu
+    ac_draw_base(vx, vy, clk_hms_m(secs), 2, 10, theme(TH_TEXT_HI))
+    label(vx + 2 * cell_w() + 2 * cu, vy, "m", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    vx = vx + 3 * cell_w() + 4 * cu
+    ac_draw_base(vx, vy, clk_hms_s(secs), 2, 10, theme(TH_TEXT_HI))
+    label(vx + 2 * cell_w() + 2 * cu, vy, "s", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
+# a reading row: LABEL, then the figure, then its unit and note
+fn clk_kv(kx, ky, kw, nm, val, unit) {
+    ku = ui()
+    ui_caps(kx, ky, nm, theme(TH_TEXT_2), T_CAPTION)
+    label_num(kx + 96 * ku, ky, val, theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(kx + 96 * ku + s3_numw(val) + 5 * ku, ky, unit, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    return 0
+}
+
 fn clk_draw(ax, ay, aw, ah) {
     u = ui()
-    if rtc_ok() == 0 {
-        label(ax + 8 * u, ay + 10 * u, "no real-time clock on this machine", theme(TH_TEXT_DIM), T_BODY, W_REG)
-        return 0
+    up = idiv(ticks(), 100)
+
+    # the head: which counter these durations come from, and whether it is sound
+    ui_caps(ax + 10 * u, ay + 6 * u, "SOURCE", theme(TH_TEXT_2), T_CAPTION)
+    label(ax + 72 * u, ay + 6 * u, "PIT, 100 Hz on IRQ0", theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    scol = theme(TH_OK)
+    if rtc_ok() == 0 { scol = theme(TH_WARN) }
+    ui_dot(ax + aw - 74 * u, ay + 11 * u, scol, 0)
+    if rtc_ok() == 1 { label(ax + aw - 62 * u, ay + 6 * u, "monotonic", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+    if rtc_ok() == 0 { label(ax + aw - 62 * u, ay + 6 * u, "no rtc", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+
+    # THREE CARDS, and only two of them are different numbers. The reference's
+    # third is `process`, which needs per-process accounting this kernel does
+    # not keep - so the third card is the TICK COUNT itself rather than an
+    # invented third duration.
+    cy = ay + 26 * u
+    cw = (aw - 26 * u) / 3
+    chh = 46 * u
+    clk_card(ax + 8 * u, cy, cw, chh, "MONOTONIC", up)
+    clk_card(ax + 13 * u + cw, cy, cw, chh, "SINCE BOOT", up)
+    rrect(ax + 18 * u + 2 * cw, cy, cw, chh, R_INSET_D * u, theme(TH_PANEL_HI))
+    ui_caps(ax + 28 * u + 2 * cw, cy + 7 * u, "TICKS", theme(TH_TEXT_2), T_CAPTION)
+    label_num(ax + 28 * u + 2 * cw, cy + 24 * u, ticks(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+
+    # the readings this machine can actually take
+    ky = cy + chh + 12 * u
+    clk_kv(ax + 12 * u, ky, aw, "TICK", 100, "Hz, the PIT divisor this kernel programs")
+    ky = ky + 17 * u
+    clk_kv(ax + 12 * u, ky, aw, "BUDGET", wm_budget(), "us per presentation deadline")
+    ky = ky + 17 * u
+    clk_kv(ax + 12 * u, ky, aw, "TSC", cpu_khz(), "kHz, invariant")
+    ky = ky + 17 * u
+    if rtc_ok() == 1 {
+        ui_caps(ax + 12 * u, ky, "WALL", theme(TH_TEXT_2), T_CAPTION)
+        ac_draw_base(ax + 108 * u, ky, rtc_h(), 2, 10, theme(TH_TEXT_HI))
+        char_aa(ax + 108 * u + 2 * cell_w(), ky, 58, theme(TH_TEXT_DIM))
+        ac_draw_base(ax + 108 * u + 3 * cell_w(), ky, rtc_mi(), 2, 10, theme(TH_TEXT_HI))
+        label(ax + 108 * u + 6 * cell_w(), ky, "read once, never differenced", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        ui_caps(ax + 12 * u, ky, "WALL", theme(TH_TEXT_2), T_CAPTION)
+        label(ax + 108 * u, ky, "no real-time clock on this machine", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
-    label(ax + 8 * u, ay + 8 * u, "local time", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    ac_draw_base(ax + 8 * u, ay + 28 * u, rtc_h(), 2, 10, theme(TH_TEXT_HI))
-    char_aa(ax + 8 * u + 2 * cell_w(), ay + 28 * u, 58, theme(TH_TEXT_HI))
-    ac_draw_base(ax + 8 * u + 3 * cell_w(), ay + 28 * u, rtc_mi(), 2, 10, theme(TH_TEXT_HI))
-    char_aa(ax + 8 * u + 5 * cell_w(), ay + 28 * u, 58, theme(TH_TEXT_HI))
-    ac_draw_base(ax + 8 * u + 6 * cell_w(), ay + 28 * u, rtc_s(), 2, 10, theme(TH_ACCENT))
 
-    label(ax + 8 * u, ay + 66 * u, "date", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    ac_draw_base(ax + 8 * u, ay + 84 * u, rtc_y(), 4, 10, theme(TH_TEXT_HI))
-    char_aa(ax + 8 * u + 4 * cell_w(), ay + 84 * u, 45, theme(TH_TEXT_DIM))
-    ac_draw_base(ax + 8 * u + 5 * cell_w(), ay + 84 * u, rtc_mo(), 2, 10, theme(TH_TEXT_HI))
-    char_aa(ax + 8 * u + 7 * cell_w(), ay + 84 * u, 45, theme(TH_TEXT_DIM))
-    ac_draw_base(ax + 8 * u + 8 * cell_w(), ay + 84 * u, rtc_d(), 2, 10, theme(TH_TEXT_HI))
-
-    label(ax + 8 * u, ay + 116 * u, "uptime ticks", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(ax + 8 * u, ay + 132 * u, ticks(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    # the well: why the wall clock is stated and not used
+    wy = ky + 24 * u
+    if wy + 52 * u <= ay + ah - 6 * u {
+        ui_mono(ax + 10 * u, wy, aw - 20 * u, 50 * u, 0)
+        label(ax + 20 * u, wy + 9 * u, "this rtc runs slow and ntp corrects it mid session, so a", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 20 * u, wy + 24 * u, "timestamp from before the correction and one from after are", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 20 * u, wy + 39 * u, "not comparable. every duration above is read from ticks().", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
     return 0
 }
 

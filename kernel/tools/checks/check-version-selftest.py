@@ -30,7 +30,19 @@ HERE = pathlib.Path(__file__).resolve().parent
 GUARD = HERE / "check-version.py"
 KERNEL_ZL = HERE.parents[1] / "src/kernel.zl"
 
-SLOT = 'if slot == 8 { return "0.3" }'
+# THE ANCHOR MOVED, and this file said so rather than quietly passing. The
+# register became the prototype's fourteen apps, which made slot 8 "clocks -
+# monotonic" and put the version at slot 9. The guard below refuses to run cases
+# B and C against an anchor it cannot find, which is the difference between a
+# selftest and a decoration: it noticed that the thing it was testing had moved
+# instead of testing nothing and reporting success.
+SLOT = 'if slot == 9 { return "0.3" }'
+# Case D needs a literal containing no version at all, to prove an unquoted '#'
+# does not truncate the line. It was anchored on slot 9's "design.h" - which is
+# slot 10 now, so the replace silently became a NO-OP and case D passed while
+# testing nothing. A case that quietly stops testing is worse than one that
+# fails, so this is asserted below like SLOT is.
+HASH_ANCHOR = 'if slot == 10 { return "design.h" }'
 
 
 def load():
@@ -46,6 +58,11 @@ def main() -> int:
         return 1
     cv = load()
     real = KERNEL_ZL.read_text()
+    for anchor, why in ((SLOT, "cases B/C"), (HASH_ANCHOR, "case D")):
+        if anchor not in real:
+            print(f"check-version-selftest: FAIL - kernel.zl no longer contains "
+                  f"{anchor!r}; {why} is anchored to it and must be re-pointed")
+            return 1
     if SLOT not in real:
         print(f"check-version-selftest: FAIL - kernel.zl no longer contains "
               f"{SLOT!r}; cases B/C are anchored to it and must be re-pointed")
@@ -66,12 +83,11 @@ def main() -> int:
         ("A  the real tree passes",
          real, 0),
         ("B  drift in the BARE slot-table literal is caught",
-         real.replace(SLOT, 'if slot == 8 { return "0.5" }', 1), 1),
+         real.replace(SLOT, 'if slot == 9 { return "0.5" }', 1), 1),
         ("C  a version named in a trailing comment is NOT a claim",
          real.replace(SLOT, SLOT + '   # was "0.1" before the rename', 1), 0),
         ("D  a '#' inside a string does not truncate the line",
-         real.replace('if slot == 9 { return "design.h" }',
-                      'if slot == 9 { return "design.h # tokens" }', 1), 0),
+         real.replace(HASH_ANCHOR, HASH_ANCHOR[:-2] + ' # tokens" }', 1), 0),
     ]
 
     fails = 0
