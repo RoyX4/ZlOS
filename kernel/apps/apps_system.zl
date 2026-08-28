@@ -107,8 +107,11 @@ fn clk_draw(ax, ay, aw, ah) {
 
     # the well: why the wall clock is stated and not used
     wy = ky + 24 * u
-    if wy + 52 * u <= ay + ah - 6 * u {
-        ui_mono(ax + 10 * u, wy, aw - 20 * u, 50 * u, 0)
+    # 62, not 50: three lines inset 9 dp at a 15 dp lead need 9 + 3*15 = 54,
+    # and the panel was 50 - so the last line, which is the one that names the
+    # rule, was clipped through the middle.
+    if wy + 64 * u <= ay + ah - 6 * u {
+        ui_mono(ax + 10 * u, wy, aw - 20 * u, 62 * u, 0)
         label(ax + 20 * u, wy + 9 * u, "this rtc runs slow and ntp corrects it mid session, so a", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         label(ax + 20 * u, wy + 24 * u, "timestamp from before the correction and one from after are", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         label(ax + 20 * u, wy + 39 * u, "not comparable. every duration above is read from ticks().", theme(TH_TEXT_DIM), T_CAPTION, W_REG)

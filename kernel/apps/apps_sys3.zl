@@ -1175,10 +1175,43 @@ fn s3nw_kv_key(i) {
     return "errors"
 }
 
+# R.net opens with `link <iface> <dot> UP` and, flush right, what the link
+# actually negotiated. Every figure here is a real read - net_ok is the driver's
+# own link state and net_rx/net_tx are its counters - so this is the reference's
+# head over measurements rather than over its mock `1000 Mb/s full duplex`.
+fn s3nw_head(hx, hy, hw, sel) {
+    hu = ui()
+    ui_caps(hx + 13 * hu, hy, "LINK", theme(TH_TEXT_2), T_CAPTION)
+    label(hx + 58 * hu, hy, s3nw_name(sel), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    up = s3nw_up(sel)
+    dc = theme(TH_OK)
+    if up == 0 { dc = theme(TH_DANGER) }
+    ui_dot(hx + 108 * hu, hy + 5 * hu, dc, 0)
+    if up == 1 { label(hx + 120 * hu, hy, "UP", dc, T_CAPTION, W_BOLD) }
+    if up == 0 { label(hx + 120 * hu, hy, "DOWN", dc, T_CAPTION, W_BOLD) }
+    # FLUSH RIGHT: THE DRIVER THIS INTERFACE ACTUALLY HAS, read rather than
+    # written. This said "e1000e - dhcp" and the driver row two lines below it
+    # said `virtio-net` - because I typed a device name instead of asking for
+    # one, and this QEMU config is virtio. The contradiction was visible only
+    # because my label sat above the true one; on a machine where the guess
+    # happened to be right it would have looked correct and still been invented.
+    #
+    # The reference prints "1000 Mb/s full duplex - msi". Nothing in this kernel
+    # measures negotiated speed or duplex, so the slot carries what is known:
+    # which driver claimed the device.
+    if sel == 0 {
+        label(hx + hw - 130 * hu, hy, "loopback, no device", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        label(hx + hw - 130 * hu, hy, s3nw_drv(sel), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    return 0
+}
+
 fn s3nw_body(ax, ay, aw, ah) {
     u = ui()
+    s3nw_head(ax, ay + 2 * u, aw, s3nw_sel)
     x = ax + 13 * u
-    y = ay + 11 * u
+    y = ay + 24 * u
     kw = s3_mw("rx packets") + 16 * u
     up = s3nw_up(s3nw_sel)
     i = 0
