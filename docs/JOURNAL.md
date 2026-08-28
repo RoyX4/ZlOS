@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(evidence): derive wrapper inventory counts (ca91510)
+
+`codex/presswork-local-closure` · 1 file changed, 24 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `kernel/tools/generators/gen-evidence-registry.py`
+
+</details>
+
 ## 2026-08-28 — fix(test): synchronize the network fetch gate (f3a929c)
 
 `codex/presswork-local-closure` · 3 files changed, 55 insertions(+), 39 deletions(-)
