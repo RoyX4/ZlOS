@@ -292,6 +292,24 @@ else
     skip "check-memmap-mirror.py not present"
 fi
 
+# The same, for the guard that covers EVERY header a .zl mirrors - not just
+# memmap.h. It was written, it passed, and NOTHING RAN IT: a complete guard with
+# no caller is the failure it exists to catch, and it had it.
+if [ -f kernel/tools/checks/check-header-mirror.py ]; then
+    if out=$(python3 kernel/tools/checks/check-header-mirror.py 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -A3 FAIL | head -4)"
+    fi
+    if out=$(sh kernel/tools/checks/check-header-mirror-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -iE 'NOT CAUGHT|FAIL' | head -3)"
+    fi
+else
+    skip "check-header-mirror.py not present"
+fi
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"

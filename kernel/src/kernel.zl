@@ -371,6 +371,11 @@ PROTO_FIT = 1212
 MON_W = 640                        # presswork-prototype.html APPS mon p[2]
 MON_H = 400                        # presswork-prototype.html APPS mon p[3]
 AB_H  = 150                        # About height; no clipped final line at 2x
+# ABOUT HAD NO WIDTH OF ITS OWN. It used MON_W for its width AND for its right
+# anchor, so raising the monitor to the prototype's 640 silently made About 640
+# wide and moved it - a window nobody was editing, changed by a constant that
+# had never been about it. 424 is the width it had for its whole life.
+AB_W  = 424
 
 # ---- the four bands, in design units ----------------------------------------
 # These are ZD_RAIL_W / ZD_STRIP_H / ZD_FOOT_H / ZD_BAND_H / ZD_ROW_H / ZD_PAD /
@@ -834,7 +839,7 @@ fn rail_status(slot) {
     # something it does not show.
     if slot == 5 { return "kernel image" }
     if slot == 6 { return "int64" }
-    if slot == 7 { return "virtio-net" }
+    if slot == 7 { return s3nw_drv(1) }
     if slot == 8 { return "monotonic" }
     if slot == 9 { return "zlos 0.3" }
     if slot == 10 { return "design.h" }
@@ -864,7 +869,7 @@ fn rail_sub(slot) {
     # s3nw_drv() two files away answers "virtio-net" for this very slot. The
     # network pane already shipped one bug of exactly this shape - a hardcoded
     # e1000e in the head with virtio-net in the driver row two lines below.
-    if slot == 7 { return "virtio-net" }
+    if slot == 7 { return s3nw_drv(1) }
     if slot == 8 { return "monotonic" }
     # "0.3" is the VERSION, and check-version.py checks it against version.h
     # along with every other version literal in this file.
@@ -2928,10 +2933,15 @@ fn sh_buttons(bx, by, bw) {
 fn sh_btn_hit(win, hx2, hy2) {
     hu = ui()
     hp = 10 * hu
-    hby = wm_ch(win) - hp - SH_BTNH * hu
+    # SCREEN COORDINATES, BECAUSE THAT IS WHAT ex/ey ARE. This computed
+    # `wm_ch(win) - ...`, a client HEIGHT, and compared it against a screen y -
+    # so the row was drawn in one space and hit-tested in another and could
+    # never be clicked. files_mouse_slot two hundred lines away does it right
+    # (`wm_cy(win) + ...`) and was the thing to copy.
+    hby = wm_cy(win) + wm_ch(win) - hp - SH_BTNH * hu
     if hy2 < hby { return 0 - 1 }
     if hy2 > hby + SH_BTNH * hu { return 0 - 1 }
-    b0 = hp
+    b0 = wm_cx(win) + hp
     b1 = b0 + sh_btnw("dmesg") + 8 * hu
     if hx2 >= b0 { if hx2 < b0 + sh_btnw("dmesg") { return 0 } }
     if hx2 >= b1 { if hx2 < b1 + sh_btnw("regdump") { return 1 } }
@@ -5308,7 +5318,13 @@ fn sm_spark(gx, gy, gw, gh) {
         if bh < 1 { bh = 1 }
         c = theme(TH_STEEL)
         if v > bud { c = theme(TH_WARN) }
-        fill_rgb(gx + i * bw2, gy + gh - bh, bw2 - 1, bh, c)
+        # bw2 - 1 IS THE GAP, AND AT bw2 == 1 IT IS THE WHOLE BAR. The clamp
+        # above guarantees bw2 >= 1, so a narrow monitor drew every column
+        # ZERO PIXELS WIDE and the spark vanished entirely - the one column
+        # width at which the gap must be given up rather than the bar.
+        bwid = bw2 - 1
+        if bwid < 1 { bwid = 1 }
+        fill_rgb(gx + i * bw2, gy + gh - bh, bwid, bh, c)
         i = i + 1
     }
     # The deadline, drawn where it actually falls now that the scale can exceed
@@ -5419,8 +5435,14 @@ fn sm_core_head(hx, hy, hw) {
 # answers "yes" to whether or not it is true.
 fn sm_core_row(rx, ry, rw, i) {
     cy = pw_celly(ry)
+    # WHICH CORE, NOT HOW MANY. This read `i < smp_n()`, comparing a core
+    # INDEX against a COUNT of online cores - so if cores 0 and 2 came up and
+    # core 1 did not, it would report 0 and 1 UP and 2 DOWN, naming the wrong
+    # core in both directions. smp_mask() is the bitmap that records which ones
+    # actually answered, and it was already bound and already used elsewhere in
+    # this file.
     on = 0
-    if i < smp_n() { on = 1 }
+    if band(shr(smp_mask(), i), 1) == 1 { on = 1 }
     num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, i, theme(TH_TEXT_2))
     if on == 1 {
         num_aa(pw_right(pw_colx(rx, rw, 30), pw_colw(rw, 30), s3_numw(smp_id(i))), cy, smp_id(i), theme(TH_TEXT_2))
@@ -5548,8 +5570,8 @@ fn sysmon_body(sx, sy, sw, sh) {
 # a small About window - the identity card, static content
 fn draw_about(ax, ay, afoc) {
     u = ui()
-    draw_window(ax, ay, MON_W * u, AB_H * u, "About", afoc)
-    about_body(ax, ay + TITLE_H * u, MON_W * u, (AB_H - TITLE_H) * u)
+    draw_window(ax, ay, AB_W * u, AB_H * u, "About", afoc)
+    about_body(ax, ay + TITLE_H * u, AB_W * u, (AB_H - TITLE_H) * u)
     return 0
 }
 
@@ -9174,9 +9196,15 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         # for MOTION too, so acting on every EV_MOUSE would fire on hover.
         if ety == 4 {
             if band(ecode, 1) != 0 {
+                # run_command, NOT open_app. open_app handles seven commands -
+                # 77, 97, 100, 103, 105, 118, 120 - and neither 210 nor 216 is
+                # among them, so both buttons returned 0 and did nothing even
+                # before the coordinate bug above. Two independent reasons for
+                # the same dead control, which is why "I wired it" is never the
+                # same claim as "it fires".
                 shb = sh_btn_hit(win, ex, ey)
-                if shb == 0 { return open_app(210, 0) }
-                if shb == 1 { if sh_regdump_on() == 1 { return open_app(216, 0) } }
+                if shb == 0 { return run_command(210, 0) }
+                if shb == 1 { if sh_regdump_on() == 1 { return run_command(216, 0) } }
                 if shb == 1 { note_say("no intel pipe here - PIPE_A reads back zero", 400)  return 1 }
             }
             return 1
@@ -10594,7 +10622,7 @@ fn reopen_mon() {
 fn reopen_about() {
     u = ui()
     if about_win >= 0 { if wm_open_p(about_win) == 1 { wm_setfocus(about_win)  wm_raise(about_win)  return 0 } }
-    about_win = wm_open(APP_ABOUT, "About", desk_r(MON_W * u + 16 * u), desk_y(16) + (MON_H + 16) * u, MON_W * u, AB_H * u)
+    about_win = wm_open(APP_ABOUT, "About", desk_r(AB_W * u + 16 * u), desk_y(16) + (MON_H + 16) * u, AB_W * u, AB_H * u)
     wm_setfocus(about_win)
     return 0
 }

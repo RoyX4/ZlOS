@@ -7,6 +7,29 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(fs,files): the reason code was a stale cache and the format confirmation degraded to one press (86eb58f)
+
+`design/presswork` · 7 files changed, 103 insertions(+), 43 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>7 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/fs/fs.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-28 — fix(regs): the register column named three fields the code never reads (7de22f2)
 
 `design/presswork` · 7 files changed, 68 insertions(+), 20 deletions(-)
