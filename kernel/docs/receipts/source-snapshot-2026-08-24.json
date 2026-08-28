@@ -1,9 +1,9 @@
 {
   "schema": "zlos.source-snapshot-receipt.v1",
   "result": "PASS_WITH_OPEN_CUSTODY_GAP",
-  "build_identity": "33a6a0c9b933944fa25d5a332c2a7f4d5fa03128f4dd3724768846ca07dcec43",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "git": {
-    "head": "54b0bd474895368f41661899027726a8b4c27687",
+    "head": "7bd7c4ffd55f2ccbf9dd0b0905a1cd1e6454d561",
     "branch": "codex/presswork-local-closure",
     "dirty": false,
     "canonical_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -13,8 +13,8 @@
   "archive": {
     "path": "kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar",
     "format": "deterministic POSIX ustar; sorted paths; uid/gid/mtime zero",
-    "bytes": 7874560,
-    "sha256": "b4bbcf89d838bd06356088fbac54262f8ebb82da6ea79469bdb14a23754e7d8e",
+    "bytes": 7884800,
+    "sha256": "b4bbc210bf5c01f94579d4307b837ffed6b2dac13302f2dacbff00356fd10cd3",
     "members": 149
   },
   "counts": {
@@ -44,7 +44,7 @@
       "path": "kernel/app_manifest_embed.zl",
       "bytes": 270,
       "mode": 436,
-      "sha256": "2f9c593c520e3e3e93255889efec3736f81b468b6af0c3bc9784681bb4748bf3"
+      "sha256": "c00b8a2760d39c380409c324392bd2b767bc1e8716198702664d2e5cfcf58364"
     },
     {
       "path": "kernel/apps/apps_common.zl",
@@ -200,7 +200,7 @@
       "path": "kernel/metadata/app-manifest.json",
       "bytes": 21926,
       "mode": 436,
-      "sha256": "c077b45202e75635687f0c50ca7334d959cd09632e43faec3698e592f72cf8c5"
+      "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
     },
     {
       "path": "kernel/src/arch/x86/apic.c",
@@ -684,9 +684,9 @@
     },
     {
       "path": "kernel/src/kernel.zl",
-      "bytes": 502646,
+      "bytes": 502648,
       "mode": 436,
-      "sha256": "3c895c9dfb9d2b674e58f42eae77867c601d25a8c3d80fa4e09f1935fc6e2d1b"
+      "sha256": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063"
     },
     {
       "path": "kernel/src/net/crypto.c",
@@ -870,9 +870,9 @@
     },
     {
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "bytes": 16208,
+      "bytes": 16556,
       "mode": 436,
-      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04"
+      "sha256": "c39906ed9ddee6c6d9511b4ddafd8c604085e43575966edf33dc2832652e1569"
     },
     {
       "path": "kernel/tools/generators/gen-boot-media-ids.py",

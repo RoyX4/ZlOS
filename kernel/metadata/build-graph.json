@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
   "result": "PASS_RECIPE_WITH_HISTORICAL_ARTIFACT_SNAPSHOT",
-  "build_identity": "33a6a0c9b933944fa25d5a332c2a7f4d5fa03128f4dd3724768846ca07dcec43",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "artifact_snapshot": {
     "subject_build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
     "current_build_bound": false,
     "evidence_ceiling": "exact historical artifact/QEMU registry; recipe edges do not promote those bytes as outputs of the current source identity"
   },
   "artifact_registry_sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
-  "toolchain_manifest_sha256": "644495e89ba5b0bf29cce5d80d83e4e00f2a553b60081d127485f26774137273",
+  "toolchain_manifest_sha256": "aa5845dd6f851d1da85ed19f2bff68bc1dc8fbad2f4fb4c29d8475ead09a54f1",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -2176,7 +2176,7 @@
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "2f9c593c520e3e3e93255889efec3736f81b468b6af0c3bc9784681bb4748bf3",
+      "sha256": "c00b8a2760d39c380409c324392bd2b767bc1e8716198702664d2e5cfcf58364",
       "suffix": ".zl"
     },
     {
@@ -2358,7 +2358,7 @@
       "id": "source:kernel/metadata/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "c077b45202e75635687f0c50ca7334d959cd09632e43faec3698e592f72cf8c5",
+      "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4",
       "suffix": ".json"
     },
     {
@@ -2925,7 +2925,7 @@
       "id": "source:kernel/src/kernel.zl",
       "kind": "source-input",
       "path": "kernel/src/kernel.zl",
-      "sha256": "3c895c9dfb9d2b674e58f42eae77867c601d25a8c3d80fa4e09f1935fc6e2d1b",
+      "sha256": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
       "suffix": ".zl"
     },
     {
@@ -3142,7 +3142,7 @@
       "id": "source:kernel/tools/generators/gen-app-manifest.py",
       "kind": "source-input",
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04",
+      "sha256": "c39906ed9ddee6c6d9511b4ddafd8c604085e43575966edf33dc2832652e1569",
       "suffix": ".py"
     },
     {

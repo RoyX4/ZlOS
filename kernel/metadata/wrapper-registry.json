@@ -1,7 +1,7 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "33a6a0c9b933944fa25d5a332c2a7f4d5fa03128f4dd3724768846ca07dcec43",
+  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
   "landing_gate_sha256": "c8438bcb78fb83ef978d24bf9e9e1c6f41c1b494c6d989eab9fe886e7fd282ee",
   "wrappers": [
     {
@@ -633,8 +633,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-clock.sh",
-      "sha256": "403f02fb0a51b53f7137612b5516d769e3117e42c87d33ea6b0aa06e12be16f1",
-      "bytes": 3049,
+      "sha256": "84de4a0063582bac9afcb4d43e73acd00b3c981d0924b54beb390c76964600b6",
+      "bytes": 3755,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -776,8 +776,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-app-manifest.py",
-      "sha256": "de52fa0a280aacf8fbab2c5a4c6f21dd458bcf64bc9dbfd2d7e7fa1de3cc7b04",
-      "bytes": 16208,
+      "sha256": "c39906ed9ddee6c6d9511b4ddafd8c604085e43575966edf33dc2832652e1569",
+      "bytes": 16556,
       "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1227,8 +1227,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-app-routes.py",
-      "sha256": "7d2697997f35a9ebc73b9fb08994cb40cfc6cec7f3a0c6a37d79f29e72de8954",
-      "bytes": 16883,
+      "sha256": "a1e5fd6d384aefd07b814fe83e6badee01e2221728e62c759d1a205c0cf8a300",
+      "bytes": 17083,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
