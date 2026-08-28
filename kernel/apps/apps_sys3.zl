@@ -1106,8 +1106,32 @@ fn s3nw_up(i) {
 }
 fn s3nw_name(i) { if i == 0 { return "lo" }  return "eth0" }
 fn s3nw_mtu(i) { if i == 0 { return 65536 }  return 1500 }
-fn s3nw_drv(i) { if i == 0 { return "loopback" }  return "virtio-net" }
-fn s3nw_addr(i) { if i == 0 { return S3NW_LOOPBACK }  return NET_ME }
+# THE DRIVER IS READ, NOT TYPED. This returned the literal "virtio-net" for
+# every non-loopback interface while netdev_kind() sat bound and unused - and
+# the same pane's own head had already shipped a hardcoded "e1000e" beside this
+# line's "virtio-net", which is how the bug was found the first time. The rail's
+# subtitle had the third copy of it.
+#
+# The values are netdev.h's enum (NONE 0, VIRTIO 1, E1000 2, CDC_ECM 3). They
+# are written as bare numbers rather than as a cited mirror because
+# check-header-mirror.py compares against #define, and these are enumerators -
+# a citation it cannot resolve would fail the build rather than guard anything.
+fn s3nw_drv(i) {
+    if i == 0 { return "loopback" }
+    if net_kind() == 1 { return "virtio-net" }
+    if net_kind() == 2 { return "e1000" }
+    if net_kind() == 3 { return "cdc-ecm" }
+    return "no driver"
+}
+# THE LEASED ADDRESS WINS OVER THE COMPILE-TIME ONE. NET_ME is the static
+# fallback this image was built with; dhcp_address() is what the machine was
+# actually given, and DHCP runs every frame. Printing the constant while a lease
+# is held shows an address the machine is not using.
+fn s3nw_addr(i) {
+    if i == 0 { return S3NW_LOOPBACK }
+    if dhcp_ip() != 0 { return dhcp_ip() }
+    return NET_ME
+}
 fn s3nw_rx(i) { if i == 0 { return 0 }  return net_rx() }
 fn s3nw_tx(i) { if i == 0 { return 0 }  return net_tx() }
 
@@ -1253,8 +1277,13 @@ fn s3nw_body(ax, ay, aw, ah) {
         vx = x + kw
         if i == 0 { s3_mono(vx, ry, s3nw_name(s3nw_sel), theme(TH_TEXT)) }
         if i == 1 {
+            # RUNNING WAS ASSERTED. "UP RUNNING" printed whenever the device
+            # initialised, which is the U in UP - it says nothing about the
+            # carrier. netdev_link_up() reads that and was bound and unused, so
+            # a cable-out machine reported RUNNING. The two words are two
+            # different facts and are now two different reads.
             if up == 1 {
-                s3_mono(vx, ry, "UP RUNNING", theme(TH_TEXT))
+                if net_link() == 1 { s3_mono(vx, ry, "UP RUNNING", theme(TH_TEXT)) } else { s3_mono(vx, ry, "UP NO CARRIER", theme(TH_WARN)) }
             } else {
                 s3_mono(vx, ry, "DOWN", theme(TH_DANGER))
             }

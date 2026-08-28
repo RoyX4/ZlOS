@@ -92,7 +92,11 @@ fn clk_draw(ax, ay, aw, ah) {
     ky = ky + 17 * u
     clk_kv(ax + 12 * u, ky, aw, "BUDGET", wm_budget(), "us per presentation deadline")
     ky = ky + 17 * u
-    clk_kv(ax + 12 * u, ky, aw, "TSC", cpu_khz(), "kHz, invariant")
+    # "invariant" WAS PRINTED UNCONDITIONALLY while cpu_inv() - CPUID
+    # 0x80000007 EDX bit 8 - sat bound and unused. On a part without it the TSC
+    # changes rate with the core clock, which is exactly when a reader needs to
+    # be told, and exactly when the old caption said the opposite.
+    if cpu_inv() == 1 { clk_kv(ax + 12 * u, ky, aw, "TSC", cpu_khz(), "kHz, invariant") } else { clk_kv(ax + 12 * u, ky, aw, "TSC", cpu_khz(), "kHz, NOT invariant - rate follows the core") }
     ky = ky + 17 * u
     if rtc_ok() == 1 {
         ui_caps(ax + 12 * u, ky, "WALL", theme(TH_TEXT_2), T_CAPTION)
@@ -112,9 +116,17 @@ fn clk_draw(ax, ay, aw, ah) {
     # rule, was clipped through the middle.
     if wy + 64 * u <= ay + ah - 6 * u {
         ui_mono(ax + 10 * u, wy, aw - 20 * u, 62 * u, 0)
-        label(ax + 20 * u, wy + 9 * u, "this rtc runs slow and ntp corrects it mid session, so a", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        label(ax + 20 * u, wy + 24 * u, "timestamp from before the correction and one from after are", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        label(ax + 20 * u, wy + 39 * u, "not comparable. every duration above is read from ticks().", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # THIS USED TO DESCRIBE THE DEVELOPMENT MACHINE, NOT THIS ONE. It said
+        # "this rtc runs slow and ntp corrects it mid session" - which is true
+        # of the Linux box this OS is built on, and impossible here: there is no
+        # NTP client anywhere in this kernel, and nothing ever observes drift.
+        # A fact about the host had leaked into the guest's own UI and was being
+        # printed as if measured. What IS true is the reason the note exists:
+        # the RTC is read once and never corrected, so it is a wall clock and
+        # not a duration source.
+        label(ax + 20 * u, wy + 9 * u, "the rtc is read once at boot and never corrected - there is", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 20 * u, wy + 24 * u, "no ntp on this machine, so it drifts and nothing observes it.", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 20 * u, wy + 39 * u, "every duration above is read from ticks(), not from the rtc.", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
     return 0
 }
@@ -342,10 +354,19 @@ fn ca_draw(ax, ay, aw, ah) {
         label(bx + CA_BTN * u / 2 - 4 * u, by + CA_BTN * u / 2 - 8 * u, ca_btn_label(i), kc, T_BODY, W_BOLD)
         i = i + 1
     }
-    # the reference's note, and it is a real figure from this project
+    # THE NOTE WAS A WRITTEN FIGURE STANDING BESIDE ITS OWN NATIVE. It said
+    # "241690 kHz is the measured pixel clock" as a literal - a number this
+    # project did measure once, on one machine, quoted here forever. gpu_clk()
+    # reads it live, and returns 0 where there is no Intel pipe to read, which
+    # is the case the literal silently denied.
     ny = gy + 4 * CA_BTN * u + 6 * u
     ui_caps(ax + 12 * u, ny, "NOTE", theme(TH_TEXT_2), T_CAPTION)
-    label(ax + 60 * u, ny, "241690 kHz is the measured pixel clock", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    if gpu_clk() > 0 {
+        num_aa(ax + 60 * u, ny, gpu_clk(), theme(TH_TEXT_2))
+        label(ax + 60 * u + s3_numw(gpu_clk()), ny, " kHz, the pixel clock read from this pipe", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        label(ax + 60 * u, ny, "no intel pipe here - the pixel clock cannot be read", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
     return 0
 }
 

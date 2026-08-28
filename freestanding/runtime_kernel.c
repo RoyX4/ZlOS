@@ -569,6 +569,8 @@ extern int  wm_ws(void);
 extern int  wm_set_ws(int n);
 extern int  wm_win_ws(int win);
 extern int  fs_why(void);
+extern int  term_lines(void);
+extern int  term_ch(int line, int col);
 extern int  wm_win_us(int win);   /* per-window app time; wm_frame_us is the whole frame */
 extern int  wm_set_win_ws(int win, int n);
 extern int  wm_set_ws_n(int n);
@@ -1654,6 +1656,8 @@ Value zl_calln(const char *name, int n, ...)
         term_complete((int)a[0].num, (int)a[1].num); return zl_nil();
     }
     if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
+    if (streq(name, "term_lines")) return zl_num((double)term_lines());
+    if (streq(name, "term_ch"))    return zl_num((double)term_ch((int)a[0].num, (int)a[1].num));
     if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
                                                (unsigned int)(unsigned long long)a[4].num,
                                                (unsigned int)(unsigned long long)a[5].num,

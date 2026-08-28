@@ -129,6 +129,8 @@ fn s2_strip_h(aw, n, minw) {
 # fixed, as the reference's are - nothing records a per-subsystem boot time.
 # ==============================================================================
 KL_N = 14
+KL_MAXCOL = 200                    # term.c TERM_COLS
+KL_SUBMAX = 16                     # a colon past here is prose, not a prefix
 kl_filter = 0                       # 0 all, 1 warnings, 2 errors
 
 fn kl_time(i) {
@@ -244,90 +246,157 @@ KL_C_TIME = 13
 KL_C_LVL  = 14
 KL_C_SUB  = 12
 
+# ---- THE LOG IS READ NOW, NOT WRITTEN ---------------------------------------
+#
+# This pane used to draw FOURTEEN FIXED ROWS. kl_time() returned 2, 11, 17, 34,
+# 48, 63, 95, 140 - hand-written boot timestamps - and kl_msg() returned
+# hand-written messages, all presented as this machine's kernel log. A whole
+# pane of fiction shaped exactly like measurement, in a system whose entire
+# argument is that its instruments are read. It even printed "ring 14 records -
+# 0 dropped", asserting a loss figure about a ring that was not a ring.
+#
+# The real thing was already in the tree. term_putc is tee'd from every kernel
+# print, so term.c's scrollback holds what this machine actually said, in the
+# order it said it - the same text the Terminal window shows. term_lines() and
+# term_ch() expose it.
+#
+# zllog cannot serve this and it is worth writing down why, so nobody goes
+# looking: it is a telemetry emitter to a host - counters and structured events
+# - with no stored message text and no read-back of any kind.
+#
+# WHAT THE REFERENCE HAS THAT THIS CANNOT FILL: a per-record timestamp and a
+# per-record level. Neither is recorded. term_putc stores characters, not
+# records, so there is no time and no severity to read, and deriving a level by
+# looking for words like "fail" would be guessing dressed as parsing. Those two
+# columns are gone rather than filled with something plausible. The subsystem
+# column IS derivable and is kept: this kernel prints "zlfs: ...", "xhci: ..."
+# and so on, so the text before the first colon is read out of the line itself.
+
+# How many characters this line holds.
+fn kl_len(line) {
+    n = 0
+    while n < KL_MAXCOL {
+        if term_ch(line, n) == 0 { return n }
+        n = n + 1
+    }
+    return KL_MAXCOL
+}
+
+# Where the subsystem prefix ends, or -1 when the line has no prefix. Only a
+# colon inside the first KL_SUBMAX columns counts - a colon later in the line is
+# part of the message ("magic is 0x0: expected...") and splitting on it would
+# invent a subsystem out of prose.
+fn kl_colon(line) {
+    n = 0
+    lim = kl_len(line)
+    if lim > KL_SUBMAX { lim = KL_SUBMAX }
+    while n < lim {
+        if term_ch(line, n) == 58 { return n }
+        n = n + 1
+    }
+    return 0 - 1
+}
+
+# Draw characters [from, to) of a real scrollback line.
+fn kl_chars(x, y, line, from, to, col) {
+    cx = x
+    i = from
+    while i < to {
+        c = term_ch(line, i)
+        if c > 32 { char_aa(cx, y, c, col) }
+        cx = cx + cell_w()
+        i = i + 1
+    }
+    return cx
+}
+
+fn kl_lines() { return term_lines() }
+
+fn kl_sel_clamped() {
+    s = kl_sel()
+    if s >= kl_lines() { return kl_lines() - 1 }
+    if s < 0 { return 0 }
+    return s
+}
+
+# `dm` is declared and unused, exactly as it was before this rewrite. Two call
+# sites pass it and one reads the return value, so the signature stays; dropping
+# it here would have been a five-line change to three files for a parameter
+# nobody reads. Left as found rather than tidied, and named so the next reader
+# does not go looking for its meaning.
 fn kl_ui(ax, ay, aw, ah, dm) {
     u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     sbh = ui_sb_h()
-    hdh = 22 * u
+    hdh = 30 * u
 
-    # ---- the head: dmesg, the counts, and what the ring holds ----------------
-    ui_caps(ax + 10 * u, ay + 6 * u, "DMESG", theme(TH_TEXT_2), T_CAPTION)
-    hx2 = ax + 66 * u
-    ui_txtn(hx2, ay + 6 * u, KL_N, theme(TH_TEXT_HI), S2_SM, 0)
-    hx2 = hx2 + ui_tnw(KL_N, S2_SM, 0) + 4 * u
-    ui_txt(hx2, ay + 6 * u, "records", theme(TH_TEXT_DIM), S2_SM, 0)
-    hx2 = hx2 + ui_tw("records", S2_SM, 0) + 12 * u
-    ui_txtn(hx2, ay + 6 * u, kl_warns(), theme(TH_WARN), S2_SM, 0)
-    hx2 = hx2 + ui_tnw(kl_warns(), S2_SM, 0) + 4 * u
-    ui_txt(hx2, ay + 6 * u, "warn", theme(TH_TEXT_DIM), S2_SM, 0)
-    # right-aligned: what the ring is, and that nothing was lost. Both true -
-    # the log is fourteen fixed rows, so nothing can have been dropped.
-    klrw = ui_tw("ring 14 records - 0 dropped", S2_SM, 0)
-    ui_txt(ax + aw - 10 * u - klrw, ay + 6 * u, "ring 14 records - 0 dropped", theme(TH_TEXT_DIM), S2_SM, 0)
+    # ---- the head -----------------------------------------------------------
+    ui_caps(ax + 10 * u, ay + 6 * u, "SYSTEM LOG", theme(TH_TEXT_2), S2_SM)
+    hx2 = ax + 10 * u + ui_capsw("SYSTEM LOG", S2_SM) + 12 * u
+    ui_txtn(hx2, ay + 6 * u, kl_lines(), theme(TH_TEXT_HI), S2_SM, 0)
+    hx2 = hx2 + ui_tnw(kl_lines(), S2_SM, 0) + 4 * u
+    ui_txt(hx2, ay + 6 * u, "lines", theme(TH_TEXT_DIM), S2_SM, 0)
+    # THE RING IS DESCRIBED, NOT ITS LOSSES. "0 dropped" was asserted about a
+    # ring that did not exist; this one is real and DOES drop - it is 160 rows
+    # and wraps - but nothing counts what fell off the back, so the honest thing
+    # is to say how deep it is and not to claim a figure for what it lost.
+    klrw = ui_tw("scrollback ring, 160 rows, oldest first", S2_SM, 0)
+    ui_txt(ax + aw - 10 * u - klrw, ay + 6 * u, "scrollback ring, 160 rows, oldest first", theme(TH_TEXT_DIM), S2_SM, 0)
 
     # ---- the table ----------------------------------------------------------
     ty2 = ay + hdh
-    # THE TRACKS ARE DECLARED ONCE and both the header and every cell read them.
-    # ui_colhead iterates the grid's column count, so without this it draws the
-    # band and none of the labels - which is what it did on the first render.
-    # Design units with `*` for the column that takes the remainder, which is
-    # the reference's 61% message column.
-    # 84 for the subsystem, not 64: `virtio-net` is eleven characters and at 64
-    # it overran into the message column, which is the one thing a grid is for.
-    ui_grid("64|76|84|*")
-    ui_colhead(ax, ty2, aw, "time|level|subsys|message", 0 - 1, 0)
+    ui_grid("120|*")
+    ui_colhead(ax, ty2, aw, "subsys|message", 0 - 1, 0)
     ty2 = ty2 + ui_colhead_h()
     rowh = ui_growh()
     wellh = 46 * u
     limit = ay + ah - sbh - wellh - 8 * u
+
+    # NEWEST-FIRST WOULD BE WRONG HERE. A log is read in the order it happened,
+    # and term.c's own draw walks backwards only because it bottom-anchors the
+    # newest line against the prompt. This is a table, not a tail.
     i = 0
     shown = 0
-    while i < KL_N {
-        if kl_shown(i) == 1 {
-            if ty2 + rowh <= limit {
-                ui_grow(ax, ty2, aw, shown, kl_sel_is(i))
-                # time, right-aligned inside its column
-                # time is RIGHT aligned, as the reference marks that column
-                ui_gcelln(ax, aw, ty2, rowh, 0, kl_time(i), theme(TH_TEXT_DIM), KL_M_NUM)
-                # the reference's `sw()`: a dot of the level's colour, then the
-                # word. The dot sits at the track's left edge and the word is
-                # inset past it, so both live inside the column.
-                kdx = ui_gspanx(ax, aw, 1)
-                ui_dot(kdx + 3 * u, ty2 + rowh / 2, kl_kindcol(kl_kind(i)), 0)
-                # the word is placed past the dot rather than in the cell: a
-                # grid cell starts at the track's own padding, which is exactly
-                # where the dot is, so the two collided.
-                klty = ty2 + (rowh - ui_th(S2_SM)) / 2
-                ui_txt(kdx + 14 * u, klty, kl_level(i), kl_kindcol(kl_kind(i)), S2_SM, 0)
-                ui_gcell(ax, aw, ty2, rowh, 2, kl_sub(i), theme(TH_TEXT_2), KL_M_MONO)
-                ui_gcell(ax, aw, ty2, rowh, 3, kl_msg(i), theme(TH_TEXT_HI), S2_SM)
-                ty2 = ty2 + rowh
-                shown = shown + 1
+    sel = kl_sel_clamped()
+    while i < kl_lines() {
+        if ty2 + rowh <= limit {
+            ui_grow(ax, ty2, aw, shown, sel == i)
+            cy2 = ty2 + (rowh - ui_th(S2_SM)) / 2
+            col = kl_colon(i)
+            if col >= 0 {
+                kl_chars(ui_gspanx(ax, aw, 0) + 4 * u, cy2, i, 0, col, theme(TH_TEXT_2))
+                kl_chars(ui_gspanx(ax, aw, 1) + 4 * u, cy2, i, col + 2, kl_len(i), theme(TH_TEXT_HI))
+            } else {
+                kl_chars(ui_gspanx(ax, aw, 1) + 4 * u, cy2, i, 0, kl_len(i), theme(TH_TEXT_HI))
             }
+            ty2 = ty2 + rowh
+            shown = shown + 1
         }
         i = i + 1
     }
 
-    # ---- the rule, and the selected record in full --------------------------
+    # ---- the rule, and the selected line in full ----------------------------
     wy = ay + ah - sbh - wellh
     fill_rgb(ax + 10 * u, wy - 6 * u, aw - 20 * u, 1, theme(TH_CUT))
     ui_mono(ax + 10 * u, wy, aw - 20 * u, wellh - 6 * u, S2_PANEL_LOG)
-    ui_txt(ax + 20 * u, wy + 10 * u, kl_sub(kl_sel()), theme(TH_TEXT_2), S2_SM, S2_MONO)
-    kmy = wy + 10 * u + ui_th(S2_SM) + 4 * u
-    ui_txt(ax + 20 * u, kmy, kl_msg(kl_sel()), theme(TH_TEXT_HI), S2_SM, S2_MONO)
+    kl_chars(ax + 20 * u, wy + 10 * u, sel, 0, kl_len(sel), theme(TH_TEXT_HI))
 
     # ---- the band -----------------------------------------------------------
     sy = ay + ah - sbh
     ui_sb(ax, sy, aw, sbh)
     ty = s2_cy(sy, sbh, S2_SM)
     tx = ax + 11 * u
-    n = kl_count()
-    ui_txtn(tx, ty, n, theme(TH_TEXT_DIM), S2_SM, 0)
-    tx = tx + ui_tnw(n, S2_SM, 0)
+    ui_txtn(tx, ty, shown, theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tnw(shown, S2_SM, 0)
     ui_txt(tx, ty, " of ", theme(TH_TEXT_DIM), S2_SM, 0)
     tx = tx + ui_tw(" of ", S2_SM, 0)
-    ui_txtn(tx, ty, KL_N, theme(TH_TEXT_DIM), S2_SM, 0)
-    tx = tx + ui_tnw(KL_N, S2_SM, 0)
-    ui_txt(tx, ty, " messages", theme(TH_TEXT_DIM), S2_SM, 0)
+    ui_txtn(tx, ty, kl_lines(), theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tnw(kl_lines(), S2_SM, 0)
+    # ONLY ASK FOR MORE ROOM WHEN ROOM IS SHORT. "7 of 7 lines fit - make the
+    # window taller" is advice against a problem the reader does not have, and a
+    # pane that asks for something it does not need teaches people to ignore it
+    # when it does.
+    if shown < kl_lines() { ui_txt(tx, ty, " lines fit - make the window taller", theme(TH_TEXT_DIM), S2_SM, 0) } else { ui_txt(tx, ty, " lines", theme(TH_TEXT_DIM), S2_SM, 0) }
     return 0
 }
 

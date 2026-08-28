@@ -105,6 +105,33 @@ void term_putc(char c)
     else commit_row();              /* wrap rather than truncate */
 }
 
+/* THE SCROLLBACK, READABLE.
+ *
+ * The Kernel Log app drew FOURTEEN FIXED ROWS with hand-written timestamps -
+ * kl_time() returned 2, 11, 17, 34, 48, 63, 95, 140 - and presented them as
+ * this machine's boot log. A whole pane of fiction shaped exactly like
+ * measurement, in a system whose argument is that its instruments are read.
+ *
+ * The real thing was already here. term_putc is tee'd from every kernel print,
+ * so this ring holds what the machine actually said, in the order it said it.
+ * zllog cannot serve: it is a telemetry emitter to a host - counters and events
+ * - with no stored text and no read-back at all.
+ *
+ * Line 0 is the OLDEST live row, which is the order a log is read in, and the
+ * reverse of term_draw's own walk (it counts back from s_head to bottom-anchor
+ * the newest against the prompt). Both are correct for their caller; they must
+ * not be confused, so the ring arithmetic lives here once. */
+int term_lines(void) { return s_live; }
+
+int term_ch(int line, int col)
+{
+    if (line < 0 || line >= s_live) return 0;
+    if (col < 0 || col >= TERM_COLS) return 0;
+    int first = s_head - s_live;
+    while (first < 0) first += TERM_ROWS;
+    return (unsigned char)scroll[(first + line) % TERM_ROWS][col];
+}
+
 void term_clear(void)
 {
     s_head = 0; s_live = 0; s_col = 0; in_len = 0; in_cursor = 0;
