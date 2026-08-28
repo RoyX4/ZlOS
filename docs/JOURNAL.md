@@ -7,6 +7,25 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — fix(test): synchronize the network fetch gate (f3a929c)
+
+`codex/presswork-local-closure` · 3 files changed, 55 insertions(+), 39 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>3 file(s)</summary>
+
+- `kernel/tools/checks/check-land-gate.py`
+- `kernel/tools/checks/verify-net.sh`
+- `kernel/tools/probes/probe-net.py`
+
+</details>
+
 ## 2026-08-28 — chore: refresh system repair provenance (51ea034)
 
 `codex/presswork-local-closure` · 9 files changed, 39 insertions(+), 39 deletions(-)
