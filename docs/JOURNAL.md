@@ -7,6 +7,31 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-28 — chore: refresh system repair provenance (51ea034)
+
+`codex/presswork-local-closure` · 9 files changed, 39 insertions(+), 39 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/source-snapshot-2026-08-24.json`
+- `kernel/docs/receipts/source-snapshot-build-inputs-2026-08-24.tar`
+- `kernel/metadata/build-graph.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/dependency-lock.json`
+- `kernel/metadata/license-registry.json`
+- `kernel/metadata/toolchain-manifest.json`
+- `kernel/metadata/wrapper-registry.json`
+
+</details>
+
 ## 2026-08-28 — fix(test): allow rtc time to advance during boot (8422208)
 
 `codex/presswork-local-closure` · 1 file changed, 21 insertions(+), 7 deletions(-)
