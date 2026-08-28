@@ -536,15 +536,48 @@ int fs_mkfs(void)
 
 /* ---- mount ---------------------------------------------------------------
  * Every refusal below prints the value that caused it. */
+/* The ten distinct answers to "why is nothing mounted". These are #defines and
+ * not an enum so that check-header-mirror.py can compare kernel.zl's copies
+ * against them - zl cannot include this file, so its copies are hand-made and
+ * the only thing standing between them and drift is that checker. */
+#define FS_WHY_OK          0
+#define FS_WHY_NODISK      1
+#define FS_WHY_UNREADABLE  2
+#define FS_WHY_UNFORMATTED 3
+#define FS_WHY_VERSION     4
+#define FS_WHY_DAMAGED     5
+#define FS_WHY_BLOCKSIZE   6
+#define FS_WHY_MAXFILES    7
+#define FS_WHY_GEOMETRY    8
+#define FS_WHY_DIRLOAD     9
+#define FS_WHY_DIRENTRY    10
+
+/* WHY THE LAST MOUNT FAILED.
+ *
+ * fs_mounted() answers only yes or no, and fs_mount_impl can answer no from TEN
+ * distinct places. The Files app collapsed all ten into one printed sentence -
+ * "the disk is present and unformatted" - and then offered SHIFT F to format on
+ * that same unguarded arm. Exactly one of the ten is the state that sentence
+ * describes. One of the other nine is the checksum failure directly below,
+ * where this file goes out of its way to print "the volume is damaged, not
+ * empty. Nothing was read." - and the app answered that by inviting the user to
+ * erase it.
+ *
+ * The pattern is already established twice in this tree: rtc_why() returns an
+ * int consumed in zl, br_why() returns a string printed in zl. This is the one
+ * subsystem that was missing it. An int, not a string, because zl can compare
+ * ints and has no string values to compare. */
+int fs_why_code;
+
 static int fs_mount_impl(void)
 {
     mounted = 0;
-    if (!probe_device()) return 0;
+    if (!probe_device()) { fs_why_code = FS_WHY_NODISK; return 0; }
 
     if (!fsdev_read(start_lba(), sbbuf)) {
         p_str("  zlfs: cannot read the superblock at LBA ");
         p_u32(start_lba()); zl_putc_pub('\n');
-        return 0;
+        { fs_why_code = FS_WHY_UNREADABLE; return 0; }
     }
 
     u32 magic = rd32(sbbuf + SB_MAGIC);
@@ -554,19 +587,19 @@ static int fs_mount_impl(void)
             p_str(", expected "); p_hex(FS_MAGIC);
             p_str("\n  zlfs: format it first\n");
         }
-        return 0;
+        { fs_why_code = FS_WHY_UNFORMATTED; return 0; }
     }
     u32 ver = rd32(sbbuf + SB_VERSION);
     if (ver != FS_VERSION && ver != FS_VERSION_V1) {
         p_str("  zlfs: on-disk version "); p_u32(ver);
         p_str(", this kernel speaks "); p_u32(FS_VERSION);
         p_str(" - refusing\n");
-        return 0;
+        { fs_why_code = FS_WHY_VERSION; return 0; }
     }
     if (sb_sum(sbbuf, dev_bsize) != 0) {
         p_str("  zlfs: superblock checksum is bad - refusing to mount\n");
         p_str("  zlfs: the volume is damaged, not empty. Nothing was read.\n");
-        return 0;
+        { fs_why_code = FS_WHY_DAMAGED; return 0; }
     }
 
     u32 bs = rd32(sbbuf + SB_BSIZE);
@@ -574,13 +607,13 @@ static int fs_mount_impl(void)
         p_str("  zlfs: volume was made with "); p_u32(bs);
         p_str("-byte blocks, this disk has "); p_u32(dev_bsize);
         p_str(" - refusing\n");
-        return 0;
+        { fs_why_code = FS_WHY_BLOCKSIZE; return 0; }
     }
     if (rd32(sbbuf + SB_MAXFILES) != FS_MAXFILES) {
         p_str("  zlfs: directory holds "); p_u32(rd32(sbbuf + SB_MAXFILES));
         p_str(" entries, this kernel expects "); p_u32(FS_MAXFILES);
         p_str(" - refusing\n");
-        return 0;
+        { fs_why_code = FS_WHY_MAXFILES; return 0; }
     }
 
     disk_version   = ver;
@@ -605,10 +638,10 @@ static int fs_mount_impl(void)
         sb_data_lba   >  dev_nblocks ||
         sb_data_blocks > dev_nblocks - sb_data_lba) {
         p_str("  zlfs: superblock geometry does not fit this disk - refusing\n");
-        return 0;
+        { fs_why_code = FS_WHY_GEOMETRY; return 0; }
     }
 
-    if (!dir_load()) return 0;
+    if (!dir_load()) { fs_why_code = FS_WHY_DIRLOAD; return 0; }
 
     /* A directory entry also decides which LBAs get written. One with a run
      * outside the data area, or a length longer than its run, is corruption
@@ -627,7 +660,7 @@ static int fs_mount_impl(void)
             ln > nb * dev_bsize) {
             p_str("  zlfs: directory entry "); p_u32((u32)i);
             p_str(" is out of range - refusing to mount\n");
-            return 0;
+            { fs_why_code = FS_WHY_DIRENTRY; return 0; }
         }
     }
 
@@ -646,6 +679,7 @@ int fs_mount(void)
 }
 
 int fs_mounted(void) { return mounted; }
+int fs_why(void)     { return mounted ? FS_WHY_OK : fs_why_code; }
 
 /* ---- allocation ----------------------------------------------------------
  * First fit over the gaps between existing runs, which is O(n^2) with n = 32

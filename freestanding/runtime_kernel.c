@@ -568,6 +568,7 @@ extern int  wm_win_app(int win);
 extern int  wm_ws(void);
 extern int  wm_set_ws(int n);
 extern int  wm_win_ws(int win);
+extern int  fs_why(void);
 extern int  wm_win_us(int win);   /* per-window app time; wm_frame_us is the whole frame */
 extern int  wm_set_win_ws(int win, int n);
 extern int  wm_set_ws_n(int n);
@@ -2460,6 +2461,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_format"))  return zl_num((double)fs_mkfs());
     if (streq(name, "fs_mount"))   return zl_num((double)fs_mount());
     if (streq(name, "fs_ok"))      return zl_num((double)fs_mounted());
+    if (streq(name, "fs_why"))    return zl_num((double)fs_why());
     if (streq(name, "fs_n"))       return zl_num((double)fs_count());
     if (streq(name, "fs_max"))     return zl_num((double)fs_maxfiles());
     if (streq(name, "fs_inuse"))   return zl_num((double)fs_used((int)a[0].num));

@@ -84,7 +84,14 @@ def main() -> int:
         m = re.match(r'\s*([A-Z_][A-Z0-9_]*)\s*=\s*(0[xX][0-9a-fA-F]+|\d+)\b(.*)', line)
         if not m:
             continue
-        cite = re.search(r'#.*?\b([A-Za-z0-9_]+\.h)\s+([A-Z_][A-Z0-9_]*)', m.group(3))
+        # .c AS WELL AS .h, AND THIS WAS A REAL MISS. Six FS_WHY_* mirrors were
+        # added citing "fs.c FS_WHY_DAMAGED" - fs.c holds those #defines because
+        # there is no fs.h - and this pattern skipped every one of them while
+        # still reporting OK. A checker that silently matches nothing passes
+        # exactly as loudly as one that matches everything, which is the failure
+        # this file's own selftest case D exists to catch. It caught it here
+        # only because the mirror count did not move.
+        cite = re.search(r'#.*?\b([A-Za-z0-9_]+\.[hc])\s+([A-Z_][A-Z0-9_]*)', m.group(3))
         if not cite:
             continue
         name, val = m.group(1), parse_int(m.group(2))

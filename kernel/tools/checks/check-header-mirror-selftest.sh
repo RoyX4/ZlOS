@@ -56,7 +56,10 @@ restore
 
 # D: every citation removed. A checker that finds nothing must not pass -
 #    silence is how an inert guard looks from the outside.
-sed -i 's/#\( *\)\([A-Za-z0-9_]*\.h\) \([A-Z_][A-Z0-9_]*\)/# \3/' "$ZL"
+# .h AND .c both - the checker reads both, and a case D that only stripped .h
+# stopped catching anything the day fs.c's FS_WHY_* mirrors were added. The
+# selftest found that itself, which is the entire reason it plants this case.
+sed -i -E 's/#( *)([A-Za-z0-9_]*\.[hc]) ([A-Z_][A-Z0-9_]*)/# \3/' "$ZL"
 expect_fail "D no citations at all"
 restore
 

@@ -400,6 +400,16 @@ FOCUS_BAR_D = 3                    # ZD_FOCUS_BAR - the register mark's width
 R_INSET_D   = 4                    # ZD_R_INSET - a row or field inside a plate
 R_CHIP_D    = 2                    # design.h ZD_R_CHIP - the button and chip radius
 
+# WHY NOTHING IS MOUNTED. fs_ok() answers yes or no; fs_mount_impl answers no
+# from ten different places, and the Files pane used to print one sentence for
+# all ten - then offer to format on it.
+FS_WHY_NODISK      = 1             # fs.c FS_WHY_NODISK
+FS_WHY_UNREADABLE  = 2             # fs.c FS_WHY_UNREADABLE
+FS_WHY_UNFORMATTED = 3             # fs.c FS_WHY_UNFORMATTED
+FS_WHY_VERSION     = 4             # fs.c FS_WHY_VERSION
+FS_WHY_DAMAGED     = 5             # fs.c FS_WHY_DAMAGED
+FS_WHY_GEOMETRY    = 8             # fs.c FS_WHY_GEOMETRY
+
 # THE MODULE GRID. ZD_GRID_COLS / ROWS / MARGIN / GUTTER, and there is no
 # ui_metric for them because they are not a widget metric - they are the desk's
 # own ruling, read only by this file.
@@ -1079,7 +1089,15 @@ fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
     # nothing. It is ZD_TEXT_INERT - the structure rung, never a glyph rung -
     # for the same reason the section caption's figure is.
     if running == 1 {
-        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(kpx), ny, kpx, theme(TH_SURF_7))
+    # TH_TEXT_DIM (ZD_TEXT_3), NOT TH_SURF_7. This drew GLYPHS with
+    # ZD_TEXT_INERT, whose assignment in ui.c carries the words "STRUCTURE ONLY.
+    # never a glyph." on the same line. Measured on this ladder it is 2.0222:1
+    # on ZD_RAISE, against 5.3585:1 for ZD_TEXT_3 - and the prototype's own CSS
+    # names that number as the reason there is no fifth text rung, listing the
+    # four things the token may do: scrollbar thumb, resize grip, chart mark,
+    # disabled menu row. A readout is none of them. The prototype uses .ink3 for
+    # both .slot .us and #regcount.
+        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(kpx), ny, kpx, theme(TH_TEXT_DIM))
     }
     return 0
 }
@@ -1133,7 +1151,7 @@ fn draw_rail_win(ry, num, win, hovered) {
     # is measured from the same value that is drawn - a second call is a second
     # chance for a resized window to change the answer between the two.
     tkpx = rail_slot_kpx(win)
-    num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tkpx), ny, tkpx, theme(TH_SURF_7))
+    num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tkpx), ny, tkpx, theme(TH_TEXT_DIM))
     return 0
 }
 
@@ -1181,10 +1199,10 @@ fn rail_sect(ry, nm, n, m) {
         fw = s3_numw(n)
         if m >= 0 { fw = fw + cell_w() + s3_numw(m) }
         fx = rail_w() - pad_d() - fw
-        num_aa(fx, ry + 7 * u, n, theme(TH_SURF_7))
+        num_aa(fx, ry + 7 * u, n, theme(TH_TEXT_DIM))
         if m >= 0 {
-            text_aa(fx + s3_numw(n), ry + 7 * u, "/", theme(TH_SURF_7))
-            num_aa(fx + s3_numw(n) + cell_w(), ry + 7 * u, m, theme(TH_SURF_7))
+            text_aa(fx + s3_numw(n), ry + 7 * u, "/", theme(TH_TEXT_DIM))
+            num_aa(fx + s3_numw(n) + cell_w(), ry + 7 * u, m, theme(TH_TEXT_DIM))
         }
     }
     return ry + RAIL_SECT_H * u
@@ -6849,11 +6867,39 @@ fn files_draw(ax, ay, aw, ah) {
         ui_caps(files_ex, files_ey, "VOLUME", theme(TH_TEXT_2), T_CAPTION)
         fill_rgb(files_ex, files_ey + 16 * files_u, files_ew, 1, theme(TH_CUT))
         label(files_ex, files_ey + 28 * files_u, "no zlfs volume is mounted", theme(TH_TEXT_HI), T_BODY, W_REG)
-        label(files_ex, files_ey + 52 * files_u, "the disk is present and unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # THE CAUSE IS NOW READ, AND FORMAT IS ONLY OFFERED FOR ONE OF THEM.
+        #
+        # This printed "the disk is present and unformatted" whenever fs_ok()
+        # was 0, and offered SHIFT F to erase the disk on the same unguarded
+        # arm. fs_mount_impl returns 0 from TEN distinct places and exactly one
+        # of them is that state. One of the other nine is the checksum failure,
+        # where fs.c prints "the volume is damaged, not empty. Nothing was read."
+        # - and this pane answered that by inviting the user to erase it. A
+        # recoverable volume, described as blank, with the destructive action
+        # already on screen.
+        #
+        # The comment that used to justify the line said QEMU attaches an NVMe
+        # image so fs_ok() == 0 must mean unformatted. That is a claim about the
+        # host, not a reading of it, and it is false on any machine with no NVMe
+        # controller - which fs.c has a distinct message for.
+        files_why = fs_why()
+        files_ok_to_format = 0
+        if files_why == FS_WHY_UNFORMATTED { files_ok_to_format = 1 }
+        if files_why == FS_WHY_NODISK { label(files_ex, files_ey + 52 * files_u, "no disk - the NVMe controller did not come ready", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if files_why == FS_WHY_UNFORMATTED { label(files_ex, files_ey + 52 * files_u, "the disk is present and unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if files_why == FS_WHY_DAMAGED { label(files_ex, files_ey + 52 * files_u, "the volume is DAMAGED, not empty. nothing was read", theme(TH_WARN), T_CAPTION, W_BOLD) }
+        if files_why == FS_WHY_UNREADABLE { label(files_ex, files_ey + 52 * files_u, "the superblock could not be read", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if files_why == FS_WHY_VERSION { label(files_ex, files_ey + 52 * files_u, "an on-disk version this build refuses to mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if files_why == FS_WHY_GEOMETRY { label(files_ex, files_ey + 52 * files_u, "the volume geometry does not fit this disk", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if files_ok_to_format == 0 { if files_why != FS_WHY_NODISK { if files_why != FS_WHY_DAMAGED { if files_why != FS_WHY_UNREADABLE { if files_why != FS_WHY_VERSION { if files_why != FS_WHY_GEOMETRY { label(files_ex, files_ey + 52 * files_u, "the mount was refused - reason not reported", theme(TH_TEXT_DIM), T_CAPTION, W_REG) } } } } } }
         ui_caps(files_ex, files_ey + 82 * files_u, "R", theme(TH_TEXT_2), T_CAPTION)
         label(files_ex + 78 * files_u, files_ey + 82 * files_u, "retry the mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        ui_caps(files_ex, files_ey + 102 * files_u, "SHIFT F", theme(TH_TEXT_2), T_CAPTION)
-        label(files_ex + 78 * files_u, files_ey + 102 * files_u, "format - twice to confirm", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # SHIFT F IS NOT DRAWN UNLESS THE DISK IS ACTUALLY BLANK. Offering an
+        # erase beside "the volume is damaged" is how a person loses a volume
+        # that fsck could have opened.
+        if files_ok_to_format == 1 { ui_caps(files_ex, files_ey + 102 * files_u, "SHIFT F", theme(TH_TEXT_2), T_CAPTION) }
+        if files_ok_to_format == 1 { label(files_ex + 78 * files_u, files_ey + 102 * files_u, "format - twice to confirm", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
+        if files_ok_to_format == 0 { label(files_ex, files_ey + 102 * files_u, "format is not offered for this cause", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
         # ONE key column, so the two descriptions align. They were indented to
         # their own key's width - 24 dp and 78 dp - which set the two hints on
         # two different left edges and made the pair read as unrelated.
@@ -6976,10 +7022,19 @@ fn files_event(win, ety, ecode, ex, ey) {
         if ecode == 110 { fs_nclear()  files_new = 1  files_delete = 0 - 1  wm_dmg(win)  return 1 }
         if ecode == 114 { files_refresh()  wm_dmg(win)  return 1 }
         if ecode == 70 {
+            # THE KEY IS GATED, NOT ONLY THE OFFER. Hiding the SHIFT F hint
+            # while leaving the handler live would be worse than leaving both:
+            # a destructive control that still fires with nothing on screen
+            # saying it is there. fs_format() is fs_mkfs_impl, which zeroes the
+            # superblock FIRST - deliberately, by its own comment, so a failed
+            # reformat cannot leave a mountable half-volume. There is no undo
+            # behind this key.
             if fs_ok() == 0 {
-                if files_format == 1 {
-                    if fs_format() == 1 { files_format = 0  files_select_first()  note_say("zlfs formatted", 300) }
-                } else { files_format = 1 }
+                if fs_why() == FS_WHY_UNFORMATTED {
+                    if files_format == 1 {
+                        if fs_format() == 1 { files_format = 0  files_select_first()  note_say("zlfs formatted", 300) }
+                    } else { files_format = 1 }
+                } else { note_say("format refused - this volume is not blank", 400) }
                 wm_dmg(win)
             }
             return 1
