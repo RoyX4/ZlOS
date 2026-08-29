@@ -19,11 +19,12 @@
 fn ac_cell_idx(ax, ay, cell, gw, gh, ex, ey) {
     if ex < ax { return 0 - 1 }
     if ey < ay { return 0 - 1 }
-    # idiv. `/` is FLOAT division in zl, and this function returns a CELL
-    # INDEX - cr * gw + cc - which callers compare and use to select. A
-    # fractional index matches no cell and selects nothing, so a click landed
-    # only when the offset was an exact multiple of the cell size. This is the
-    # shared grid hit test: every game with a board was reading it.
+    # THE CLAIM THAT WAS HERE WAS WRONG. It said `/` is float division and that
+    # this hit test therefore selected nothing - a failure I never observed and
+    # inferred from the operator. `/` truncates in the compiled kernel (see the
+    # idiv note at the top of kernel.zl), so this function was already returning
+    # an integer cell index. idiv stays because it is not worse; the diagnosis
+    # does not, because it was not true.
     cc = idiv(ex - ax, cell)
     cr = idiv(ey - ay, cell)
     if cc >= gw { return 0 - 1 }

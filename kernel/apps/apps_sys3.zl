@@ -1672,12 +1672,12 @@ fn s3nw_event(win, ety, ecode, ex, ey) {
     cy = ey - wm_cy(win)
     if cx < S3NW_SIDE * u {
         if cy < 29 * u { return 0 }
-        # idiv. This was float division, and every predicate in this pane is
-    # written `if i == 0 { ... } return <eth0 answer>` - so a fractional index
-    # falls through to the eth0 branch EVERYWHERE. Clicking the `lo` row
-    # anywhere but its top scanline set s3nw_sel to 0.5, and the pane then
-    # reported eth0's driver, carrier, address and counters under the loopback's
-    # name, with no row highlighted to say which was selected.
+        # THE FALL-THROUGH DESCRIBED HERE BEFORE WAS INFERRED AND IS NOT REAL:
+        # `/` truncates in the compiled kernel, so this index was always
+        # integral. See the idiv note at the top of kernel.zl for how the wrong
+        # claim got in. The `if i == 0 { ... } return <eth0 answer>` shape IS
+        # worth knowing about - it makes any future out-of-range index silently
+        # answer for eth0 - but nothing produces one today.
     row = idiv(cy - 29 * u, (S3NW_ROW + 2) * u)
         if row < 0 { return 0 }
         if row > 1 { return 0 }

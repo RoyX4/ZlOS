@@ -172,9 +172,10 @@ fn clk_draw(ax, ay, aw, ah) {
 # uptime and its stopwatch, which are driven by ticks() and not by the RTC at
 # all, froze with it.
 #
-# The tick is now the counter the pane actually reads. idiv, not `/`: `/` is
-# float division here, so `ticks() / 100` changes on every tick and the guard
-# never holds - the same bug this file's foot_tick had.
+# The tick is now the counter the pane actually reads. (An earlier version of
+# this note added that `/` is float division and the guard therefore never held;
+# that is wrong in the compiled kernel - see the idiv note at the top of
+# kernel.zl. The RTC problem above is the real one and is unaffected.)
 fn clk_tick() {
     s = idiv(ticks(), 100)
     if s != clk_last_s { clk_last_s = s  return 1 }
@@ -495,17 +496,15 @@ fn ca_event(win, ety, ecode, ex, ey) {
         if cx < 0 { return 0 }
         if cy < 0 { return 0 }
         c = idiv(cx, ca_btn_w(wm_cw(win)))
-        # idiv, NOT `/`. The column above was converted and this line was not,
-        # so `r` was a FRACTION: clicking the centre of '7' gave r = 0.5 and an
-        # index of 2, which is '9'. ca_btn_press is a chain of `if i == N` with
-        # a fall-through to '+', so a non-integer index matched nothing at all
-        # and pressed '+' - every key on the pad either wrong or plus.
+        # "EVERY KEY WRONG OR PLUS" WAS CLAIMED HERE AND WAS NOT OBSERVED. It
+        # rested on `/` being float division, which it is not in the compiled
+        # kernel - see the idiv note at the top of kernel.zl. probe-calckeys
+        # passed before this line changed and after it, which is consistent with
+        # nothing having been broken.
         #
-        # probe-calckeys passed against this the whole time, because it asserts
-        # that the display CHANGED, not that it changed to the right digit. A
-        # probe that measures movement cannot see a key that fires the wrong
-        # value; that is the third time in this session the same shape has hidden
-        # a defect, and it is noted in the probe now.
+        # The probe's real weakness stands and is worth keeping in view: it
+        # asserts the display CHANGED, not that it changed to the right digit,
+        # so it could not tell a correct keypad from a scrambled one either way.
         r = idiv(cy, CA_BTN * u)
         if c > 3 { return 0 }
         if r > 3 { return 0 }

@@ -387,15 +387,11 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     # the END of the ring and kl_scroll walks it backwards from there. Order
     # within the view and position of the view are two different questions and
     # the old code answered only the first.
-    # idiv. `/` is float division in zl, so kl_fit was fractional and kl_first
-    # with it - and that fractional value was the LOOP VARIABLE handed to
-    # term_ch as a line index for the whole pass. It rendered only because
-    # term_ch range-checks and truncates in C, which is exactly the "latent
-    # index surviving on somebody else's check" this file condemns two hundred
-    # lines above, in a comment about the same pane.
-    #
-    # It also broke selection outright: `sel == i` compared an integer
-    # kl_sel_clamped() against a fractional i, so no row ever highlighted.
+    # AN EARLIER COMMENT HERE CLAIMED THIS ROW NEVER HIGHLIGHTED, because `/`
+    # was float. It is not, in the compiled kernel - see the idiv note at the
+    # top of kernel.zl - so kl_fit was already integral and the selection
+    # failure described here was inferred, not seen. idiv is harmless and
+    # stays; the story does not.
     kl_fit = idiv(limit - ty2, rowh)
     if kl_fit < 1 { kl_fit = 1 }
     kl_first = kl_lines() - kl_fit - kl_scroll

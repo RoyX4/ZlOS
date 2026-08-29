@@ -31,22 +31,38 @@ C_CURSOR = 0x0A      # green block cursor
 # screen. RGB remains for generated wallpaper light fields, not UI roles.
 fn rgb(rr, gg, bb) { return rr * 65536 + gg * 256 + bb }
 
-# ---- INTEGER DIVISION, and it is not `/` -------------------------------------
-# Every zl number is a double, so `/` is FLOAT division: `7 / 2` is 3.5 and
-# `4093 / 256` is 15.9883. Verified with ./interp, not assumed.
+# ---- idiv, AND WHAT IT ACTUALLY DIFFERS FROM ---------------------------------
 #
-# For a COORDINATE that is harmless - the builtin boundary casts to int on the
-# way into fb.c, so a fractional pixel is truncated exactly where it would have
-# been anyway. For a COUNT it is not: `drawn < 9.23` admits a tenth row into
-# space that holds nine, and a remainder computed as `inw - cw * cols` is
-# identically zero when cw is fractional, which silently deletes the whole
-# spread-the-remainder rule the module grid is ruled by.
+# THIS COMMENT USED TO SAY "`/` is FLOAT division: 7 / 2 is 3.5. Verified with
+# ./interp, not assumed." The verification was real and it was run on the wrong
+# machine, which is the most expensive kind of citation there is.
 #
-# band() casts both operands to long long, so it truncates toward zero. That is
-# this file's integer division, and the two places it MUST be used are any row
-# or column COUNT and any hit test that has to land on the same index the draw
-# used. 0x7FFFFFFF is the mask rather than a smaller one because a memory
-# address divided down is a legitimate argument here.
+# ./interp is the HOSTED interpreter, built from src/runtime/interp.c and
+# src/runtime/runtime.c, and there `/` is genuinely float (interp.c:1948,
+# `make_num(a / b)`). But THIS FILE IS COMPILED, not interpreted: the C backend
+# emits zl_binop("/", a, b) for every divide, and the runtime every kernel image
+# links is freestanding/runtime_kernel.c, whose zl_binop opens
+#
+#     long long x = (long long)a.num, y = (long long)b.num;
+#
+# and returns (double)(x / y). Truncating integer division. Its own header says
+# so in as many words - "Integer semantics on purpose ... Numbers here are
+# whole" - and src/runtime/runtime.c is not linked into any kernel image at all.
+#
+# So `/` on the desktop's own code has always been integer division, and the
+# sentence above sent a reader (me) chasing a bug class that does not exist
+# here. It was believed precisely BECAUSE it carried evidence.
+#
+# WHAT idiv STILL DIFFERS BY, and it is not the truncation:
+#   * `a / b` with b == 0 calls kfatal("divide by zero") and halts the machine.
+#     idiv returns 0. That is a real trade and it goes the wrong way for a bug:
+#     a zero divisor becomes a plausible index instead of a loud stop.
+#   * idiv masks the result to 0x7FFFFFFF and handles a negative numerator by
+#     negating around the mask. `/` does neither.
+#
+# Use whichever the situation wants, and know which one you are choosing.
+# 0x7FFFFFFF is the mask rather than a smaller one because a memory address
+# divided down is a legitimate argument here.
 fn idiv(a, b) {
     if b <= 0 { return 0 }
     if a < 0 { return 0 - band((0 - a) / b, 0x7FFFFFFF) }
@@ -1692,13 +1708,9 @@ rtc_fails = 0                      # consecutive failed reads, latched at RTC_GI
 
 fn rail_clock_tick() {
     if rtc_fails >= RTC_GIVE_UP { return 0 }
-    # idiv, NOT `/`. Every zl number is a double and `/` is FLOAT division - the
-    # note at the top of this file says so and idiv() exists for exactly this.
-    # `ticks() / 100` at 100 Hz yields 0.01, 0.02, 0.03 ... a different value on
-    # every tick, so a "has the second rolled" guard written that way never
-    # holds and the body runs every frame. Here that meant re-reading the CMOS
-    # a hundred times a second; only the separate minute guard below kept the
-    # damage down, which is why it was never visible.
+    # idiv here is belt-and-braces, not a fix: `/` already truncates in the
+    # compiled kernel. See the note on idiv at the top of this file for why an
+    # earlier version of this comment claimed otherwise.
     csec = idiv(ticks(), 100)
     if csec == rtc_sec_seen { return 0 }
     rtc_sec_seen = csec
@@ -2683,7 +2695,7 @@ fn sm_run_tick() {
 foot_sec_seen = 0 - 1
 
 fn foot_tick() {
-    fsec = idiv(ticks(), 100)   # idiv: `/` is float division here - see rail_clock_tick
+    fsec = idiv(ticks(), 100)   # `/` would do; see the idiv note at the top
     if fsec == foot_sec_seen { return 0 }
     foot_sec_seen = fsec
     if px_w() < 1 { return 0 }
@@ -8001,12 +8013,11 @@ fn files_mouse_slot(win, ey) {
     # that must be one number, which is how they came to be three numbers.
     files_my0 = files_list_top(wm_cy(win))
     if ey < files_my0 { return 0 - 1 }
-    # idiv, NOT `/`. This was float division, and files_slot_at_order walks the
-    # directory with an INTEGER counter returning only on `files_an == want` -
-    # so a fractional want fell out of the loop and returned -1. Selection is
-    # gated on `files_hit >= 0`, which meant a click selected a file only when
-    # (ey - files_my0) happened to be an exact multiple of the row height: one
-    # pixel row in twenty. The list looked like it ignored clicks.
+    # "ONE PIXEL ROW IN TWENTY" WAS WRITTEN HERE AND WAS NEVER MEASURED. The
+    # claim was that `/` is float, so this index missed every row - and `/`
+    # truncates in the compiled kernel (see the idiv note at the top of this
+    # file). files_slot_at_order does return -1 for a `want` it cannot reach,
+    # which is worth knowing, but nothing was producing an unreachable one.
     files_mrow = idiv(ey - files_my0, FILES_ROW * files_mu)
     files_mrows = files_list_rows(wm_ch(win))
     if files_mrow < 0 { return 0 - 1 }
@@ -10751,7 +10762,7 @@ fn app_tick(id, win) {
     # HTTP state machine, and returns 1 only when something actually changed.
     if id == APP_BROWSER { return br_tick() }
     if id == APP_MONITOR {
-        tsec = idiv(ticks(), 100)   # idiv: `/` is float division here - see rail_clock_tick
+        tsec = idiv(ticks(), 100)   # `/` would do; see the idiv note at the top
         if tsec != last_tick_sec {
             last_tick_sec = tsec
             # ...and the two live readouts that are furniture rather than a

@@ -310,25 +310,12 @@ else
     skip "check-header-mirror.py not present"
 fi
 
-# `/` IS FLOAT DIVISION IN zl, AND NINETEEN DEFECTS THIS WEEK CAME FROM IT.
-# A fractional index matches no row, a fractional selection falls through to the
-# default branch, and a fractional once-a-second guard never holds. None of the
-# three reads as a wrong operator - they read as a dead control, a wrong label
-# and a performance problem, which is why they survived review.
-if [ -f kernel/tools/checks/check-intdiv.py ]; then
-    if out=$(python3 kernel/tools/checks/check-intdiv.py 2>&1); then
-        ok "$(printf '%s' "$out" | tail -1)"
-    else
-        hit "$(printf '%s' "$out" | grep -A2 FAIL | head -4)"
-    fi
-    if out=$(bash kernel/tools/checks/check-intdiv-selftest.sh 2>&1); then
-        ok "$(printf '%s' "$out" | grep PASS | head -1)"
-    else
-        hit "$(printf '%s' "$out" | grep -iE 'FAIL' | head -3)"
-    fi
-else
-    skip "check-intdiv.py not present"
-fi
+# A check-intdiv guard was here and is DELETED, not disabled. It enforced a bug
+# class that does not exist in the shipping kernel: the desktop's zl is COMPILED
+# and its `/` goes through freestanding/runtime_kernel.c's zl_binop, which casts
+# both operands to long long and truncates. The guard would have demanded a
+# rewrite of every honest division for ever. See the correction commit.
+
 
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
