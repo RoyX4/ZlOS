@@ -697,6 +697,14 @@ int fs_mount(void)
 }
 
 int fs_mounted(void) { return mounted; }
+
+/* THE DIRECTORY GENERATION, which is this project's own power-cycle evidence
+ * and had no way out of this file. dir_generation is bumped on every directory
+ * commit and written into the superblock, so it survives a cold boot - the
+ * 1 -> 2 -> 3 the disk pane is supposed to show. It was a static with no
+ * accessor, so the pane quoted the prototype's three rows instead of reading
+ * this machine's one number. */
+u32 fs_generation(void) { return dir_generation; }
 int fs_why(void)     { return mounted ? FS_WHY_OK : fs_why_code; }
 
 /* ---- allocation ----------------------------------------------------------

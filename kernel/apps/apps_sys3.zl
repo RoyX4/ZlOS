@@ -317,6 +317,109 @@ fn s3du_mount(x, y, w, nm, flag, used, total, ok) {
     return ty + ui_th(S3_MD) + 6 * u
 }
 
+# ---- THE COMPOSITION BAR, WHICH IS THE PANE'S PRIMARY INSTRUMENT ------------
+#
+# R.disk opens with a segmented bar in a well and a five-row legend under it -
+# kernel+tools 41.2, atlases 22.6, source 18.4, journal 6.1, free 11.7 - and
+# this pane had neither. Two stacked mount rows are the SUPERSEDED document's
+# layout; the authority leads with what the volume is made of.
+#
+# THOSE FIVE CATEGORIES CANNOT BE READ HERE AND ARE NOT COPIED. Nothing in this
+# kernel knows which blocks are "atlases" or "source"; the prototype's numbers
+# describe ITS image, and printing them would be five invented figures in the
+# pane's most prominent instrument. zlfs does not have a journal at all, so
+# that segment names a structure this filesystem lacks.
+#
+# What IS readable is better, because it is this disk: the directory gives a
+# byte count per file, so the bar is the actual files, largest first, with the
+# free remainder last. Same instrument, same shape, this machine's contents.
+S3DU_BARH = 16
+S3DU_LEGN = 5                      # the reference's five rows
+
+# Bytes in the n-th largest file, or 0 past the end.
+fn s3du_part_bytes(n) {
+    sp_i = s3du_at_rank(n)
+    if sp_i < 0 { return 0 }
+    return fs_bytes(sp_i)
+}
+
+# A filename, one character at a time, the same way the largest-files list
+# below draws it - zl has string literals and no string values, so fs_ch(slot,
+# i) is the only route a runtime name has to the screen.
+fn s3du_name(n, nx, ny, col) {
+    sn_i = s3du_at_rank(n)
+    if sn_i < 0 { return 0 }
+    sn_c = 0
+    sn_x = nx
+    while sn_c < 20 {
+        sn_ch = fs_ch(sn_i, sn_c)
+        if sn_ch > 0 { char_aa(sn_x, ny, sn_ch, col) }
+        if sn_ch > 0 { sn_x = sn_x + cell_w() }
+        sn_c = sn_c + 1
+    }
+    return 0
+}
+
+fn s3du_used_bytes() {
+    su_i = 0
+    su_t = 0
+    while su_i < S3DU_SLOTS {
+        if fs_inuse(su_i) == 1 { su_t = su_t + fs_bytes(su_i) }
+        su_i = su_i + 1
+    }
+    return su_t
+}
+
+# One segment's colour. The reference names steel, steel-br, warn, text-inert
+# and well; the first four are the ladder's own instrument inks and the last is
+# the ground the bar is cut into, which is exactly what "free" should read as.
+fn s3du_part_col(n) {
+    if n == 0 { return theme(TH_STEEL) }
+    if n == 1 { return theme(TH_ACCENT_BR) }
+    if n == 2 { return theme(TH_WARN) }
+    if n == 3 { return theme(TH_SURF_7) }
+    return theme(TH_SURF_WELL)
+}
+
+fn s3du_bar(bx, by, bw, total) {
+    pw_well(bx, by, bw, S3DU_BARH * ui() + 14 * ui())
+    ix = bx + 7 * ui()
+    iy = by + 7 * ui()
+    iw = bw - 14 * ui()
+    ih = S3DU_BARH * ui()
+    fill_rgb(ix, iy, iw, ih, theme(TH_CUT))
+    if total < 1 { return by + S3DU_BARH * ui() + 14 * ui() }
+    sx = ix + 1
+    si = 0
+    while si < S3DU_LEGN - 1 {
+        sb = s3du_part_bytes(si)
+        sw2 = (iw - 2) * sb / total
+        if sw2 > 0 { fill_rgb(sx, iy + 1, sw2, ih - 2, s3du_part_col(si)) }
+        if sw2 > 0 { fill_rgb(sx + sw2 - 1, iy + 1, 1, ih - 2, theme(TH_CUT)) }
+        sx = sx + sw2
+        si = si + 1
+    }
+    # the remainder is free, and it is the ground rather than an ink
+    if sx < ix + iw - 1 { fill_rgb(sx, iy + 1, ix + iw - 1 - sx, ih - 2, theme(TH_SURF_WELL)) }
+    return by + S3DU_BARH * ui() + 14 * ui()
+}
+
+# One legend row: a dot of the segment's colour, its name, its share right-flushed.
+fn s3du_leg(lx, ly, lw, n, total) {
+    ui_dot(lx + 4 * ui(), ly + pw_rowh() / 2, s3du_part_col(n), 0)
+    lb = s3du_part_bytes(n)
+    if n == S3DU_LEGN - 1 { lb = total - s3du_used_bytes() }
+    if lb < 0 { lb = 0 }
+    lcy = pw_celly(ly)
+    if n == S3DU_LEGN - 1 { ui_txt(lx + 16 * ui(), lcy, "free", theme(TH_TEXT_2), PW_SM, 0) } else { s3du_name(n, lx + 16 * ui(), lcy, theme(TH_TEXT_2)) }
+    lpc = 0
+    if total > 0 { lpc = lb * 1000 / total }
+    pw_decg(lx + lw - pw_decgw(lpc, 1, PW_SM, PW_MONO) - ui_tw(" %", PW_SM, PW_MONO), lcy, lpc, 1, theme(TH_TEXT_HI), PW_SM, PW_MONO)
+    ui_txt(lx + lw - ui_tw(" %", PW_SM, PW_MONO), lcy, " %", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    pw_row_rule(lx, ly, lw)
+    return ly + pw_rowh()
+}
+
 fn s3du_draw(ax, ay, aw, ah) {
     u = ui()
     ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
@@ -342,6 +445,38 @@ fn s3du_draw(ax, ay, aw, ah) {
     }
     y = y + 22 * u
 
+    # ---- THE COMPOSITION BAR AND ITS LEGEND, in the reference's order -------
+    # The authority leads with what the volume is made of; the two stacked
+    # mount rows below are the superseded document's layout and follow it.
+    s3du_tot = s3du_tmp_total()
+    y = s3du_bar(x, y + 6 * u, w, s3du_tot)
+    # ONLY THE ROWS THAT NAME SOMETHING. The reference always has five parts
+    # because its image always has five; this volume has as many files as it
+    # has, and a legend row reading "0.0 %" beside no name is a row about
+    # nothing. Free is always drawn, because free always exists.
+    s3du_li = 0
+    while s3du_li < S3DU_LEGN - 1 {
+        if s3du_part_bytes(s3du_li) > 0 { y = s3du_leg(x, y, w, s3du_li, s3du_tot) }
+        s3du_li = s3du_li + 1
+    }
+    y = s3du_leg(x, y, w, S3DU_LEGN - 1, s3du_tot)
+    # the 2px struck rule, then the generation this volume is actually on
+    fill_rgb(x, y + 4 * u, w, RULE_H * u, theme(TH_LIT))
+    y = y + 4 * u + RULE_H * u + 6 * u
+    ui_caps(x, y, "GENERATIONS", theme(TH_TEXT_2), T_CAPTION)
+    # THE REFERENCE PRINTS THREE ROWS - 1, 2, 3 with roots and sizes - and they
+    # are ITS image's history, not a reading. This machine knows exactly one
+    # number about its own: dir_generation, bumped on every directory commit and
+    # written into the superblock, so it survives a cold boot. That IS the
+    # 1 -> 2 -> 3 the reference is illustrating, and it had no accessor until
+    # now. One row that is read beats three that are quoted.
+    if fs_ok() == 1 {
+        num_aa(x + 110 * u, y, fs_gen(), theme(TH_TEXT_HI))
+        label(x + 110 * u + s3_numw(fs_gen()), y, " - this volume, survives a cold boot", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        label(x + 110 * u, y, "no volume mounted - nothing to count", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
+    y = y + 22 * u
     y = s3du_mount(x, y, w, "/dev/rd0", "read-only rdfs", S3DU_RD0, S3DU_RD0, 0)
     y = y + S3DU_GAP * u
     # THE `ok` FLAG WAS THE LITERAL 1, WHICH IS THE ONE THING IT MUST NOT BE.

@@ -570,6 +570,7 @@ extern int  wm_ws(void);
 extern int  wm_set_ws(int n);
 extern int  wm_win_ws(int win);
 extern int  fs_why(void);
+extern unsigned fs_generation(void);
 extern int  smp_ready(void);
 extern int  term_lines(void);
 extern int  term_ch(int line, int col);
@@ -2471,6 +2472,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_mount"))   return zl_num((double)fs_mount());
     if (streq(name, "fs_ok"))      return zl_num((double)fs_mounted());
     if (streq(name, "fs_why"))    return zl_num((double)fs_why());
+    if (streq(name, "fs_gen"))    return zl_num((double)fs_generation());
     if (streq(name, "fs_n"))       return zl_num((double)fs_count());
     if (streq(name, "fs_max"))     return zl_num((double)fs_maxfiles());
     if (streq(name, "fs_inuse"))   return zl_num((double)fs_used((int)a[0].num));
