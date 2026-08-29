@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — fix(hex): a loop that ran sixteen times to draw eight, and three numbers for one fact (34cf260)
+
+`design/presswork` · 6 files changed, 87 insertions(+), 16 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+
+</details>
+
 ## 2026-08-29 — fix(type): a check that could not fail, a head that contradicted its own table, and a row that never drew (0716b4d)
 
 `design/presswork` · 6 files changed, 51 insertions(+), 15 deletions(-)

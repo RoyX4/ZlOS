@@ -202,6 +202,11 @@ void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
 int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
 int  snap_state(int win);
+
+/* Maximised is a QUESTION, not a stored flag - the snap system owns the rect
+ * and the truth, so anything that needs to know asks it. Declared here, beside
+ * snap_state, because the chrome reads it long before wm_toggle_max is defined. */
+static int win_maxed(int win) { return snap_state(win) != SNAP_NONE; }
 void snap_note_moved(int win);
 void snap_note_closed(int win);
 void snap_reset(void);
@@ -402,9 +407,20 @@ struct win {
      * readout that must not re-set itself sixty times a second. See
      * band_us_latch() for the cadence and why the shell cache needs it. */
     unsigned app_us, band_us, band_us_tick;
-    /* maximise/restore. The saved rect is only meaningful while maxed. */
-    int  maxed;
-    int  sav_x, sav_y, sav_w, sav_h;
+    /* MAXIMISE IS THE SNAP SYSTEM'S, and these fields were the evidence that
+     * it used to be something else. `maxed` was READ three times and WRITTEN
+     * nowhere in the tree; sav_x/sav_y/sav_w/sav_h had no references at all
+     * outside this declaration. wm_toggle_max is one line - it calls
+     * wm_snap_key(win, SK_UP or SK_DOWN) - and snap owns the saved rect, which
+     * is why restore works and wmtest_feel's "doing it again RESTORES the exact
+     * rect" passes.
+     *
+     * The three reads were not harmless. Each guarded a real difference a
+     * maximised window is supposed to show - a bolt radius instead of a plate
+     * radius, a different glyph on the control, and a cache-key bit - and each
+     * tested a field that is always zero, so none of them ever fired. The
+     * branches were right and had no input. win_maxed() is that input, derived
+     * from the state that actually changes. */
     /* WHICH WORKSPACE. A window is on exactly one, and a workspace is not a
      * second z-order: the stack is global and unchanged, and `ws` is a filter
      * applied at the three places that ask "can this window be seen" -
@@ -3154,7 +3170,7 @@ static void chrome_shell(int win, int focused)
     /* ZD_R_BOLT. A maximised window is BOLTED DOWN: it has no ground to sit on
      * at any edge, so it has no corner to round and its runs go full width and
      * full height. Radius in PRESSWORK encodes how much an object can move. */
-    int r = W->maxed ? UI_DP(t, ZD_R_BOLT) : t->radius;
+    int r = win_maxed(win) ? UI_DP(t, ZD_R_BOLT) : t->radius;
 
     chrome_seat(W, r, focused, win_over_below(win));
 
@@ -3261,7 +3277,7 @@ static void chrome_shell(int win, int focused)
         if (over && (last_btn & 1))
             fb_fill_blend(bx, by, bw, bh, t->cut, 48);
         int glyph = b == TITLE_CLOSE ? 13 :
-                    (b == TITLE_MINIMIZE ? 22 : (wins[win].maxed ? 24 : 23));
+                    (b == TITLE_MINIMIZE ? 22 : (win_maxed(win) ? 24 : 23));
         fb_icon24(bx + (bw - UI_DP(t, 24)) / 2,
                   by + (bh - UI_DP(t, 24)) / 2, glyph, ink);
     }
@@ -3304,7 +3320,7 @@ static unsigned int shell_state_key(int win, int focused)
     key |= (unsigned int)(wins[win].flags & (WF_MODAL | WF_NOCHROME)) << 1;
     key ^= (unsigned int)(wins[win].tab & 0x0f) << 8;
     key ^= (unsigned int)(wins[win].ntab & 0x0f) << 12;
-    key ^= (unsigned int)(wins[win].maxed ? 1 : 0) << 16;
+    key ^= (unsigned int)(win_maxed(win) ? 1 : 0) << 16;
     int over_any = 0;
     for (int b = TITLE_CLOSE; b <= TITLE_MINIMIZE; b++) {
         int x, y, w, h;
