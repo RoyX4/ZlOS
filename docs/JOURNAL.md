@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: nineteen bugs from one operator, and a guard so it stops (0c131ee)
+
+`design/presswork` · 18 files changed, 357 insertions(+), 55 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>18 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_common.zl`
+- `kernel/apps/apps_games1.zl`
+- `kernel/apps/apps_games3.zl`
+- `kernel/apps/apps_games4.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/apps/apps_system.zl`
+- `kernel/apps/apps_utils.zl`
+- `kernel/build_identity_embed.zl`
+- _…and 6 more_
+
+</details>
+
 ## 2026-08-30 — fix: 14 TYPE gets an event arm, and two more fractional indices (d85afc8)
 
 `design/presswork` · 7 files changed, 95 insertions(+), 12 deletions(-)

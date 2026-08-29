@@ -4548,11 +4548,24 @@ fn editor_key(code) {
         editor_save()
         return 1
     }
+    # THE FAILURE HALF CAME FROM THE DEAD COPY BELOW. Three of these branches
+    # existed twice in this function - Ctrl+S, Ctrl+C and Ctrl+V - and the first
+    # of each pair returns, so the second copy was unreachable. The unreachable
+    # Ctrl+C was the one that reported a FAILED copy; the live one said nothing
+    # when the clipboard refused, so a buffer too big to copy looked identical
+    # to a copy that worked.
+    #
+    # Two implementations of one key is a coin flip about which behaviour ships,
+    # and this landed on the one missing the error path.
     if code == 3 {
         clip_new()
         ed_ci = 0
         while ed_ci < ed_len { clip_add(peek8(EDIT_BUF + ed_ci))  ed_ci = ed_ci + 1 }
-        if clip_done() == 1 { note_say("document copied", 180) }
+        if clip_done() == 1 {
+            note_say("document copied", 180)
+        } else {
+            note_say("copy failed - too big for the clipboard", 400)
+        }
         return 1
     }
     if code == 22 {
@@ -4567,38 +4580,12 @@ fn editor_key(code) {
         }
         return 1
     }
-    # Ctrl+S: save without closing. input.c already turns Ctrl+<letter> into
-    # its control code for BOTH keyboards (to_char(), input.c:207-211) - Ctrl+S
-    # is 19 - so nothing below this file has to change for the key to arrive.
-    if code == 19 {
-        editor_save()
-        return 0
-    }
-    # Ctrl+C copies the whole buffer; Ctrl+V pastes the clipboard at the end.
-    # clip.c's own header already documents these two codes as needing no
-    # change to the routing layer - "these arrive at the focused app as an
-    # ordinary EV_CHAR" - this is that caller, the one evidence/system-track.md
-    # describes and this file did not, until now, actually contain.
-    if code == 3 {
-        clip_new()
-        eci = 0
-        while eci < ed_len { clip_add(peek8(EDIT_BUF + eci))  eci = eci + 1 }
-        if clip_done() == 1 {
-            note_say("copied", 200)
-        } else {
-            note_say("copy failed - too big for the clipboard", 400)
-        }
-        return 0
-    }
-    if code == 22 {
-        ecn = clip_n()
-        eci = 0
-        while eci < ecn {
-            if ed_len < EDIT_MAX - 1 { poke8(EDIT_BUF + ed_len, clip_ch(eci))  ed_len = ed_len + 1 }
-            eci = eci + 1
-        }
-        return 1
-    }
+    # THREE UNREACHABLE BRANCHES WERE HERE - a second Ctrl+S, Ctrl+C and Ctrl+V,
+    # each already handled above with a return, along with the comments arguing
+    # for them. They are deleted rather than left: a reader who finds the second
+    # copy first reads behaviour that has never run, and the pair drifted apart
+    # exactly as you would expect - one reported a failed copy and the other did
+    # not. The surviving Ctrl+C now carries that failure branch.
     if code == 8 {
         if ed_len > 0 { ed_len = ed_len - 1  poke8(EDIT_BUF + ed_len, 0)  ed_dirty = 1 }
         return 1
@@ -11007,7 +10994,19 @@ fn ov_win_label(i) {
     # "header is knocked out / at rest" WAS MISSING ENTIRELY. It is the row
     # that names the focus signal this whole design is built on, and it is the
     # second of the two DISABLED rows whose value column carries a live ratio.
-    if i == 6 { return "header is at rest" }
+    # READ, not stated. The authority builds this row as
+    # `'header is ' + (S.focus === id ? 'knocked out' : 'at rest')`, and
+    # wm_focus() is bound and already read in four other places in this file.
+    # This returned the same string for every window in every state - so the row
+    # that names the focus signal the whole design is built on was the one row
+    # that could not tell you whether the window had it.
+    #
+    # Two literals branched on an integer, which is how zl says this: there are
+    # no string values to concatenate.
+    if i == 6 {
+        if wm_focus() == ov_menu_win { return "header is knocked out" }
+        return "header is at rest"
+    }
     if i == 7 { return "-" }
     return "close"
 }
