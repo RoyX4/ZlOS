@@ -2061,6 +2061,25 @@ desk_grid_on = 1
 # THE OTHER THREE THINGS THE PRESS TAB OFFERS TO TURN OFF. Each of these was
 # drawn unconditionally, so the prototype's S.cfg.crop / .ruler / .slug had no
 # counterpart at all - the tab named six switches and this OS had none of them.
+# RE-BAKING THE CACHE IS THREE STEPS, NOT TWO, AND I SHIPPED TWO.
+#
+# Boot does draw_wallpaper() then draw_rail_static() then wall_save(), and
+# fb_wall_save copies WHAT IS CURRENTLY ON SCREEN. draw_wallpaper's first act is
+# to fill the entire screen with TH_BG - the rail's columns included - so a
+# re-bake that skips draw_rail_static captures bare wallpaper across x <
+# rail_w() and the rail's static half is erased from the cache PERMANENTLY. It
+# is drawn once at boot and never again; every later frame blits the cache.
+#
+# So toggling the desk grid destroyed the register rail, which is stated to be
+# the only route to every system function. One missing line between a control
+# that works and a desktop you cannot navigate.
+fn rebake_wallpaper() {
+    draw_wallpaper()
+    draw_rail_static()
+    wall_save()
+    return 0
+}
+
 desk_crop_on = 1
 desk_ruler_on = 1
 desk_slug_on = 1
@@ -9204,13 +9223,13 @@ fn settings_event(win, ety, ecode, ex, ey) {
         if set_tab == SET_PRESS {
             if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 0), setev_w, ex, ey) == 1 {
                 desk_grid_on = 1 - desk_grid_on
-                draw_wallpaper()  wall_save()
+                rebake_wallpaper()
                 wm_damage(0, 0, px_w(), px_h())
                 return 1
             }
             if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 1), setev_w, ex, ey) == 1 {
                 desk_crop_on = 1 - desk_crop_on
-                draw_wallpaper()  wall_save()
+                rebake_wallpaper()
                 wm_damage(0, 0, px_w(), px_h())
                 return 1
             }
@@ -10806,8 +10825,7 @@ fn desk_key(kcode, kmods) {
         # That is a full wallpaper redraw, which is why it does not happen per
         # frame - but this is a keypress, and a keypress may cost a repaint.
         desk_grid_on = 1 - desk_grid_on
-        draw_wallpaper()
-        wall_save()
+        rebake_wallpaper()
         # NOT "nothing else changes". draw_grid's early return also skips the
         # crop marks and the legend, so turning the grid off takes those with
         # it. The prototype toggles crop marks on their own branch and they

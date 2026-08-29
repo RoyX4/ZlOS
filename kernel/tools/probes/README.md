@@ -30,6 +30,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-app-lifecycle.py`
 - `probe-app-routes.py`
 - `probe-apps.py`
+- `probe-calckeys.py`
 - `probe-catalog.py`
 - `probe-dock.py`
 - `probe-drag.py`

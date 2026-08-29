@@ -54,6 +54,24 @@ try:
                     n += 1
         return n / t if t else 0
 
+    # THE RAIL IS SAMPLED TOO, and it is the half this probe could not see.
+    #
+    # Re-baking the wallpaper cache means repeating what boot did:
+    # draw_wallpaper, then draw_rail_static, THEN wall_save - because
+    # fb_wall_save copies what is on screen and draw_wallpaper's first act is to
+    # fill the whole screen, rail included. The first version of this toggle
+    # skipped draw_rail_static, so every press erased the rail's static half
+    # from the cache permanently - and this probe passed it, because it looked
+    # only at the field. A probe that samples one region cannot see a fault in
+    # another, however carefully it measures the one it has.
+    rx0, ry0, rx1, ry1 = 4, int(H * 0.05), 160, int(H * 0.75)
+
+    def rail(img):
+        return [img.getpixel((x, y))
+                for y in range(ry0, ry1, 4) for x in range(rx0, rx1, 4)]
+
+    rail_a = rail(a)
+
     ser.send("\x07")          # CTRL G
     ser.drain(2.5)
     b = shot("after")
@@ -81,6 +99,17 @@ try:
     if d3 > d1 / 2:
         print("\nFAIL - the second CTRL G did not restore the first state")
         sys.exit(1)
-    print("\nPASS - CTRL G changes the desk and changes it back")
+
+    # AND THE RAIL MUST SURVIVE BOTH PRESSES. It carries live readouts, so it is
+    # never pixel-identical; what it must not do is go blank. Comparing it
+    # against its own starting state catches an erase, which is total.
+    rail_c = rail(c)
+    same = sum(1 for p, q in zip(rail_a, rail_c) if p == q)
+    frac = same / len(rail_a) if rail_a else 0
+    print("rail still matches its starting state in %.3f of sampled px" % frac)
+    if frac < 0.90:
+        print("\nFAIL - the rail was erased by the re-bake")
+        sys.exit(1)
+    print("\nPASS - CTRL G changes the desk, changes it back, and leaves the rail intact")
 finally:
     proc.terminate()

@@ -2745,7 +2745,7 @@ static void chrome_seat(const struct win *W, int r, int focused, int over)
  * is rounded at the top to the plate's inner radius - a square band inside a
  * radius-9 plate reads as two shapes that do not fit each other, and at this
  * value it would also be a light square poking out of a dark corner. */
-static void chrome_header(const struct win *W, int r, int focused)
+static void chrome_header(const struct win *W, int win, int r, int focused)
 {
     const struct ui_theme *t = ui_theme();
     int ix = W->x + 1, iw = W->w - 2;
@@ -2782,9 +2782,18 @@ static void chrome_header(const struct win *W, int r, int focused)
      * Both directions are handled here, which is why the unfocused arm draws at
      * all now: a window LOSING focus interpolates from knock back to panel, and
      * without this it would snap out while the other rose in. */
-    /* W points into wins[], so its index is the offset - the animation is
-     * keyed by window index and chrome_header is handed the struct. */
-    int fp = anim_progress((int)(W - wins), ANIM_FOCUS);
+    /* THE INDEX IS PASSED, BECAUSE W IS NOT IN wins[].
+     *
+     * This read `anim_progress((int)(W - wins), ANIM_FOCUS)` under a comment
+     * asserting "W points into wins[], so its index is the offset". It does
+     * not: chrome_shell takes a local copy first - `struct win Wa = wins[win];
+     * struct win *W = &Wa;` - and passes &Wa, a stack object. The difference
+     * between a stack address and a static array is not an index, it was never
+     * in [0, WM_MAX), anim_progress never matched, and the focus animation this
+     * commit's own message called its headline feature HAS NEVER RUN. A comment
+     * asserting a fact about memory layout, wrong, in the file that keeps
+     * catching exactly that. */
+    int fp = anim_progress(win, ANIM_FOCUS);
     if (focused || fp >= 0) {
         int ri = r > 0 ? r - 1 : 0;
         unsigned band = t->knock;
@@ -3151,7 +3160,7 @@ static void chrome_shell(int win, int focused)
 
     if (W->flags & WF_NOCHROME) return;
 
-    chrome_header(W, r, focused);
+    chrome_header(W, win, r, focused);
     chrome_focus_bar(W, r, focused);
     chrome_band(W, focused, band_h_of(W->h, W->flags));
 
@@ -4298,11 +4307,17 @@ static void route_key(int type, int code, int mods)
      * it. ov_active() exists in kernel.zl for exactly this question and had
      * ZERO READERS.
      *
-     * The desk is offered every key now and answers 1 only when it took one -
-     * which, with no overlay up, is just its own three. So the editor still
-     * gets its Escape and the terminal still gets its characters; nothing
-     * changes for a window until something is genuinely in front of it. That
-     * is what the int return added earlier is for. */
+     * The desk is offered every key now and answers 1 only when it took one.
+     *
+     * WHICH KEYS THOSE ARE HAS GROWN, and the comment here said three when it
+     * had become six. With no overlay up the desk claims Super, Escape and F1
+     * as before, AND Ctrl+G, Ctrl+K and Ctrl+L, which the field menu advertises
+     * as global shortcuts and the prototype binds globally too. That is the
+     * intended behaviour - a desktop shortcut that only works when no window
+     * has focus is not a desktop shortcut - but it does mean a focused window
+     * no longer sees those three control codes, and saying "the terminal still
+     * gets its characters" without that qualification was no longer true.
+     * Everything else still falls through untouched. */
     if (type == EV_KEY_DOWN || type == EV_CHAR) {
         if (hook_desk_key && hook_desk_key(code, mods)) return;
     }
