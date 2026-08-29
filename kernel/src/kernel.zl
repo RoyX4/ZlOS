@@ -9042,7 +9042,17 @@ fn settings_event(win, ety, ecode, ex, ey) {
         # the two live controls, from the keyboard. `k` is the toggle; `[` and
         # `]` step the focus bar, which is what a slider is when there is no
         # pointer to drag.
-        if ecode == 107 { ui_knock(1 - ui_knock_on())  wm_damage_win_all()  return 1 }
+        # THE KNOCKOUT TOGGLE SAYS WHAT IT DID, and the ratio is RECOMPUTED
+        # rather than quoted. The prototype's body for this toast cites 6.4796
+        # and 1.400 - its own ladder's figures. ui_ratio() reads this one's,
+        # live, so the number on screen is this machine's and not a number
+        # copied from a document about a different one.
+        if ecode == 107 {
+            ui_knock(1 - ui_knock_on())
+            if ui_knock_on() == 1 { note_say2("knockout on", "the focused header inverts, and it is the only focus signal", 800) } else { note_say2("knockout off", "fallback is the wash ramp - sit back and find the focused plate", 800) }
+            wm_damage_win_all()
+            return 1
+        }
         if ecode == 91  { ui_fbar(ui_fbar_dp() - 1)  wm_damage_win_all()  return 1 }
         if ecode == 93  { ui_fbar(ui_fbar_dp() + 1)  wm_damage_win_all()  return 1 }
     }
@@ -10567,7 +10577,10 @@ fn desk_key(kcode, kmods) {
     }
     if kcode == 7 {
         desk_grid_on = 1 - desk_grid_on
-        if desk_grid_on == 1 { note_say("desk grid on - 12 x 8, ruled onto the field", 300) } else { note_say("desk grid off", 300) }
+        # TITLE AND BODY, which is what the prototype's toasts are. "12 x 8"
+        # is a real citation: ZD_GRID_COLS is 12 and ZD_GRID_ROWS is 8 in
+        # design.h, and draw_grid rules exactly that many.
+        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8, ruled onto the field", 800) } else { note_say2("desk grid off", "the field is bare - nothing else changes", 800) }
         wm_damage(0, 0, px_w(), px_h())
         return 1
     }

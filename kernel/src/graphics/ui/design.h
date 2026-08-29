@@ -722,14 +722,14 @@
 #define ZD_MODAL_R      ZD_R_PLATE
 #define ZD_MODAL_HEAD_H 28      /* == ZD_TITLE_H - a modal has a header too */
 #define ZD_MODAL_FOOT_H 40
-#define ZD_TOAST_W     300
+#define ZD_TOAST_W     340      /* .toast { width: calc(340px * var(--ui)) } */
 #define ZD_TOAST_R      ZD_R_INSET
 #define ZD_TOAST_PY     10
 #define ZD_TOAST_PX     10
-#define ZD_TOAST_GAP     8
+#define ZD_TOAST_GAP     8      /* #toasts { gap: var(--zd-gap) } */
 #define ZD_TOAST_ICON   20
 #define ZD_TOAST_ICON_R ZD_R_CHIP
-#define ZD_TOAST_MS   4200      /* auto-dismiss */
+#define ZD_TOAST_MS   8000      /* auto-dismiss - toast() setTimeout 8000 */
 #define ZD_TOAST_MAX     3
 
 /* chart. An instrument: ZD_STEEL, square ends, ruled grid in ZD_TEXT_INERT. */

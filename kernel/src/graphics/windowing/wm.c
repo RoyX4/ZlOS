@@ -166,6 +166,7 @@ void zllog_frame_observe(unsigned input_us, unsigned tick_us,
 int         notify_tick(unsigned now);
 int         notify_active(void);
 const char *notify_text(void);
+const char *notify_body(void);
 int         notify_post(const char *text, unsigned ticks);
 void        notify_rect(int sw, int sh, int reserve_bot, int scale,
                         int *x, int *y, int *w, int *h);
@@ -3393,12 +3394,34 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     fb_shadow(x, y, w, h, SHADOW_OFF(t), SHADOW_SOFT(t));
     fb_rrect(x, y, w, h, t->radius, t->border);
     fb_rrect(x + 1, y + 1, w - 2, h - 2, t->radius - 1, t->panel_hi);
-    /* one accent stripe down the left edge: the same "this is the one
-     * saturated colour" rule the focused title bar follows */
-    fb_fill_px(x + 1, y + 1, UI_S1(t) / 2, h - 2, t->accent);
+    /* THE BAR IS --zd-focus-bar WIDE, WHICH IS THE FOCUS BAR'S OWN WIDTH.
+     * `.toast .bar { width: var(--zd-focus-bar) }` - the same 3dp the focused
+     * plate uses, because it is the same signal. This drew UI_S1(t)/2, which
+     * is 2dp: a third narrower than the thing it is quoting. */
+    fb_fill_px(x + 1, y + 1, t->focus_bar, h - 2, t->accent);
 
+    /* TITLE AND BODY, WHICH IS WHAT A TOAST IS.
+     *
+     * The prototype's toast is two lines - the title says what happened, the
+     * body says the measurement or the reason - and all sixteen it can raise
+     * use both. This drew one centred line, so a toast could say "knockout on"
+     * or it could say what that means, never both, and the second half is the
+     * half worth reading.
+     *
+     * Left padding is 14dp because the bar occupies the first 3 and the text
+     * must clear it - `.toast { padding-left: calc(14px * var(--ui)) }`. With
+     * no body the title still centres, exactly as before, so every existing
+     * caller looks unchanged. */
     int th = fb_text_prop_h();
-    fb_text_prop(x + UI_S3(t), y + (h - th) / 2, msg, t->text);
+    const char *body = notify_body();
+    int tx = x + UI_DP(t, 14);
+    if (!body) {
+        fb_text_prop(tx, y + (h - th) / 2, msg, t->text);
+    } else {
+        int pad = UI_DP(t, 6);
+        fb_text_prop(tx, y + pad, msg, t->text);
+        fb_text_prop(tx, y + pad + th + UI_DP(t, 2), body, t->text_2);
+    }
 
     if (stash >= 0) {
         fb_clip(cx, cy, cw, ch);

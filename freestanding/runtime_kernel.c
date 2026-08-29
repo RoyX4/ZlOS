@@ -1129,6 +1129,7 @@ extern int  clip_commit(int type);
 extern void clip_clear(void);
 
 extern int  notify_post(const char *text, unsigned ticks);
+extern int  notify_post2(const char *text, const char *body, unsigned ticks);
 extern int  notify_tick(unsigned now);
 extern int  notify_active(void);
 extern int  notify_byte(int i);
@@ -2539,6 +2540,15 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "note_say")) {
         if (a[0].type != V_STR) return zl_num(0);
         return zl_num((double)notify_post(a[0].str, (unsigned)(n > 1 ? a[1].num : 0)));
+    }
+    /* TITLE AND BODY. Every one of the sixteen toasts the prototype raises has
+     * both - the title says what happened, the body says the measurement or
+     * the reason - and note_say could only ever carry the first. Two literals,
+     * same rule as above: check the type, take the pointer, never store it. */
+    if (streq(name, "note_say2")) {
+        if (a[0].type != V_STR || a[1].type != V_STR) return zl_num(0);
+        return zl_num((double)notify_post2(a[0].str, a[1].str,
+                                           (unsigned)(n > 2 ? a[2].num : 0)));
     }
 #endif
 

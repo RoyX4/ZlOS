@@ -7,6 +7,30 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — feat(menus): both menus hold every row, and the keys they advertise now exist (b0ce074)
+
+`design/presswork` · 8 files changed, 128 insertions(+), 17 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>8 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/checks/check-header-mirror.py`
+- `kernel/tools/probes/probe-escape.py`
+
+</details>
+
 ## 2026-08-29 — fix(shell): the band printed an exit status this OS does not have (adbf1e6)
 
 `design/presswork` · 6 files changed, 61 insertions(+), 22 deletions(-)
