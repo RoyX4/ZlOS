@@ -23,9 +23,14 @@ clk_last_s = 0 - 1
 # clock". This drew the RTC's hours, minutes and date, which is the one clock
 # that cannot be trusted for a duration.
 #
-# AND IT IS TRUE HERE, not borrowed reasoning: this machine's RTC runs days slow
-# and NTP corrects it mid-session, so a timestamp taken before the correction and
-# one taken after are not comparable. Durations come from ticks().
+# AND IT IS NOT TRUE HERE, which is the opposite of what this used to say. The
+# line above was "this machine's RTC runs days slow and NTP corrects it
+# mid-session" - a fact about the Linux box this OS is BUILT on, copied out of
+# the prototype and asserted about the guest. There is no NTP client anywhere in
+# this kernel, so nothing ever corrects the RTC and nothing observes it drifting.
+# The conclusion survives and the reason changes: durations come from ticks()
+# because the RTC is a wall clock nobody disciplines, not because something
+# steps it mid-session.
 #
 # The source line says PIT at 100 Hz because that is what this kernel programs -
 # the reference's "apic timer, 1000.15 Hz measured" is its machine, not this one.
@@ -108,7 +113,7 @@ fn clk_draw(ax, ay, aw, ah) {
         ac_draw_base(ax + 108 * u, ky, rtc_h(), 2, 10, theme(TH_TEXT_HI))
         char_aa(ax + 108 * u + 2 * cell_w(), ky, 58, theme(TH_TEXT_DIM))
         ac_draw_base(ax + 108 * u + 3 * cell_w(), ky, rtc_mi(), 2, 10, theme(TH_TEXT_HI))
-        label(ax + 108 * u + 6 * cell_w(), ky, "read once, never differenced", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        label(ax + 108 * u + 6 * cell_w(), ky, "wall clock, never differenced", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     } else {
         ui_caps(ax + 12 * u, ky, "WALL", theme(TH_TEXT_2), T_CAPTION)
         label(ax + 108 * u, ky, "no real-time clock on this machine", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
@@ -127,9 +132,19 @@ fn clk_draw(ax, ay, aw, ah) {
         # NTP client anywhere in this kernel, and nothing ever observes drift.
         # A fact about the host had leaked into the guest's own UI and was being
         # printed as if measured. What IS true is the reason the note exists:
-        # the RTC is read once and never corrected, so it is a wall clock and
-        # not a duration source.
-        label(ax + 20 * u, wy + 9 * u, "the rtc is read once at boot and never corrected - there is", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # "READ ONCE AT BOOT" WAS ALSO WRONG, AND IT WAS TODAY'S CORRECTION.
+        #
+        # Replacing the NTP claim, I wrote that the RTC is read once at boot.
+        # It is not: kernel.zl samples it once before the first frame AND
+        # rail_clock_tick re-reads the CMOS through rtc_up() once per monotonic
+        # second, for as long as a non-minimised window is open. A second false
+        # mechanism in the place a first one was just removed from.
+        #
+        # What is actually true - and is the point the note exists to make - is
+        # that it is never CORRECTED against anything and never DIFFERENCED to
+        # produce a duration. Those two are the reason it cannot time anything,
+        # and neither depends on how often it is sampled.
+        label(ax + 20 * u, wy + 9 * u, "the rtc is re-read once a second and never corrected - there is", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         label(ax + 20 * u, wy + 24 * u, "no ntp on this machine, so it drifts and nothing observes it.", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         label(ax + 20 * u, wy + 39 * u, "every duration above is read from ticks(), not from the rtc.", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
@@ -330,6 +345,20 @@ CA_BTN = 44
 # conversion. The width row states the constraint outright.
 fn ca_val() { if ca_has_entry == 1 { return ca_entry }  return ca_acc }
 
+# WHERE THE KEYPAD STARTS, IN ONE PLACE.
+#
+# ca_draw built it by accumulation - 42 + 16 + 16 + 16 + 18 + 8 = 116 - and
+# ca_event subtracted a flat 46, with a comment directly above asserting
+# "ca_draw's grid starts at (ax + 8u, ay + 46u)". A comment stating the opposite
+# of the code, which is the class this repo keeps catching.
+#
+# The consequence is arithmetic, not opinion: '7' is drawn at ay+116u..ay+160u,
+# so a click on it gives cy in [70u, 114u), r = cy/44u = 1 or 2, and presses '4'
+# or '1'. The bottom row - C, 0, = - is drawn at ay+248u..ay+292u, giving r = 4
+# or 5, which `if r > 3 { return 0 }` rejects outright. Three keys were
+# unreachable and the rest hit the wrong one.
+fn ca_grid_y() { return 116 * ui() }
+
 fn ca_draw(ax, ay, aw, ah) {
     u = ui()
     dw = aw - 16 * u
@@ -354,7 +383,9 @@ fn ca_draw(ax, ay, aw, ah) {
     ky = ky + 18 * u
     fill_rgb(ax + 12 * u, ky, dw - 8 * u, 1, theme(TH_CUT))
 
-    gy = ky + 8 * u
+    # ky has accumulated to exactly ca_grid_y(); use the shared value so the
+    # draw and the hit test cannot drift apart again.
+    gy = ay + ca_grid_y()
     i = 0
     while i < 16 {
         r = i / 4
@@ -401,9 +432,11 @@ fn ca_event(win, ety, ecode, ex, ey) {
         # be subtracted before dividing, and both checked non-negative
         # first - `/` truncates toward zero, so skipping either check would
         # be the same off-by-a-row/column misses this brief already warned
-        # about elsewhere in this suite.
+        # about elsewhere in this suite. The y margin is ca_grid_y(), which
+        # ca_draw also uses; the 46 that used to be here was never the grid's
+        # origin and the comment claiming it was is deleted with it.
         cx = ex - wm_cx(win) - 8 * u
-        cy = ey - wm_cy(win) - 46 * u
+        cy = ey - wm_cy(win) - ca_grid_y()
         if cx < 0 { return 0 }
         if cy < 0 { return 0 }
         c = cx / (CA_BTN * u)
