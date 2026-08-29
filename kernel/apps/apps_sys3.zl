@@ -866,7 +866,13 @@ fn s3sv_calls(ax, ay, aw, ah) {
         ry = ay + 5 * u + i * 20 * u
         if ry + 16 * u < ay + ah {
             s3_num_r(ax + 64 * u, ry, ticks() - (S3SV_CALLS - 1 - i), theme(TH_BORDER))
-            s3_num_r(ax + 107 * u, ry, 1, theme(TH_TEXT_DIM))
+            # NOT THE LITERAL 1. zlOS has no process table - this pane's own
+            # header says so - and the reference renders this column as
+            # `pid: c.pid ? String(c.pid) : '-'`, supplying '-' for exactly the
+            # case where there is no process id. Printing 1 on all twelve rows
+            # asserted a pid that does not exist, in the numeric column, which
+            # reads as measured.
+            s3_mono(ax + 107 * u - s3_mw("-"), ry, "-", theme(TH_TEXT_DIM))
             okv = s3sv_call_ok(i)
             cc = theme(TH_ACCENT)
             if okv == 0 { cc = theme(TH_DANGER) }
@@ -952,7 +958,6 @@ S3AR_HEAD = 24
 S3AR_ROW  = 25
 s3ar_open = 0
 s3ar_sel  = 0 - 1
-s3ar_verified = 0
 
 fn s3ar_count() {
     n = 0
@@ -1073,13 +1078,14 @@ fn s3ar_rows(ax, ay, aw, ah) {
             if s3ar_sel == slot { on = 1 }
             if on == 1 { fill_rgb(ax, ry, aw, S3AR_ROW * u, theme(TH_ACCENT)) }
             if on == 0 { if k % 2 == 1 { blend(ax, ry, aw, S3AR_ROW * u, theme(TH_TEXT_HI), 3) } }
+            # `oc` was the "valid" ink and went with the fabricated checksum -
+            # -Werror=unused-but-set-variable caught the leftover, which is the
+            # guard doing its job on a deletion that stopped one line short.
             nc = theme(TH_TEXT_HI)
             dc = theme(TH_TEXT_DIM)
-            oc = theme(TH_OK)
             if on == 1 {
                 nc = ui_ink_on(theme(TH_ACCENT))
                 dc = nc
-                oc = nc
             }
             ty = ry + 5 * u
             ci = 0
@@ -1094,11 +1100,17 @@ fn s3ar_rows(ax, ay, aw, ah) {
             s3_mono(s3ar_col_x(ax, aw, 2) + 8 * u, ty, "0644", dc)
             s3_mono(s3ar_col_x(ax, aw, 3) + 8 * u, ty, "root/root", dc)
             s3_mono(s3ar_col_x(ax, aw, 4) + 8 * u, ty, "ustar", dc)
-            if s3ar_verified == 1 {
-                s3_mono(s3ar_col_x(ax, aw, 5) + 8 * u, ty, "valid", oc)
-            } else {
-                s3_mono(s3ar_col_x(ax, aw, 5) + 8 * u, ty, "-", dc)
-            }
+            # "valid" WAS A FLAG, NOT A CHECK. The Verify pill's whole handler
+            # was `s3ar_verified = 1` - no byte was read, nothing was summed -
+            # and this column keyed off that flag, so pressing Verify printed
+            # "valid" against every member. There is nothing to sum: this pane's
+            # own header says the archive is a PROJECTION of the zlfs directory,
+            # and no ustar header exists on the volume to checksum.
+            #
+            # A checksum column that says "valid" for a checksum that was never
+            # computed is the worst version of an invented figure - it is a
+            # claim about integrity, which is the one thing a user would act on.
+            s3_mono(s3ar_col_x(ax, aw, 5) + 8 * u, ty, "-", dc)
             k = k + 1
         }
     }
@@ -1153,14 +1165,16 @@ fn s3ar_event(win, ety, ecode, ex, ey) {
         if cx >= x { if cx < x + w {
                 if fs_ok() == 0 { fs_mount() }
                 if s3ar_count() > 0 { s3ar_open = 1 }
-                s3ar_verified = 0
                 wm_dmg(win)
                 return 1
         }}
         x = x + w + 7 * u
         w = s3_btn_w("Verify", 0)
         if cx >= x { if cx < x + w {
-                s3ar_verified = 1
+                # The pill stays because the reference's toolbar has it; what
+                # it does is say why it cannot do anything, which is true and
+                # is more than setting a flag was.
+                note_say2("nothing to verify", "this archive is a view of the zlfs directory - there are no ustar headers to sum", 900)
                 wm_dmg(win)
                 return 1
         }}

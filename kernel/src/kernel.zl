@@ -10993,6 +10993,36 @@ fn ov_pal_run(i) {
     if pa >= 0 { ov_mode = OV_NONE  wm_damage(0, 0, px_w(), px_h())  return reg_open(pa) }
     if i == 6 { ov_mode = OV_NONE  wm_damage(0, 0, px_w(), px_h())  return run_command(46, 0) }
     if i == 11 { ov_mode = OV_LOCK  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
+    # SIX ROWS REFUSED WORK THIS KERNEL ALREADY DOES, four hundred lines from
+    # the code that does it. `tile onto the module`, `workspace 02`,
+    # `toggle the knockout` and `toggle desk grid` are all wired in ov_ctx_run
+    # for the FIELD MENU - the same four actions, named the same way, reachable
+    # by right-clicking the desk - and the palette answered them with "this
+    # machine cannot do yet", which was simply false.
+    #
+    # Routed to the same functions the menu uses rather than reimplemented, so
+    # the two surfaces cannot drift into disagreeing about what the action is.
+    if i == 5  { ov_close_overlay()  return run_command(216, 0) }
+    if i == 9  { ov_close_overlay()  return desk_tile() }
+    if i == 10 { ov_close_overlay()  return ws_hotkey(2) }
+    if i == 12 {
+        ov_close_overlay()
+        ui_knock(1 - ui_knock_on())
+        if ui_knock_on() == 1 { note_say2("knockout on", "the focused header inverts, and it is the only focus signal", 800) } else { note_say2("knockout off", "fallback is the wash ramp - sit back and find the focused plate", 800) }
+        wm_damage_theme()
+        return 1
+    }
+    if i == 14 {
+        ov_close_overlay()
+        desk_grid_on = 1 - desk_grid_on
+        rebake_wallpaper()
+        wm_damage(0, 0, px_w(), px_h())
+        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8 module, ruled to the field margin", 800) } else { note_say2("desk grid off", "crop marks and the slug stay - they have their own switches now", 800) }
+        return 1
+    }
+    # What is left really is absent: rows 7, 8, 13 and 15 name a dmesg filter,
+    # a modeset, an occlusion-edge switch and a second ladder, none of which
+    # this kernel has. Saying so is still better than swallowing the key.
     note_say("that row names something this machine cannot do yet", 400)
     return 1
 }
