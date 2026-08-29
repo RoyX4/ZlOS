@@ -368,6 +368,14 @@
  * coincidence); the right one was never spelled at all, so the control cluster
  * sat flush against the inside face of the ring while the title kept its
  * margin - an asymmetry the header is not supposed to have. */
+/* .wbody's OWN box, from `padding: 6px 9px 6px; gap: 5px` (proto:711-712).
+ * The foot band and the client area both inherit their horizontal extent from
+ * it, and both were reaching for ZD_PAD - the generic 10dp spacing step, which
+ * belongs to no .wbody or .sband rule. One dp per side, everywhere the body
+ * meets the plate. */
+#define ZD_BODY_PX          9      /* .wbody padding-left / padding-right */
+#define ZD_BODY_PY          6      /* .wbody padding-top / padding-bottom */
+#define ZD_BODY_GAP         5      /* .wbody row gap                      */
 #define ZD_HDR_PL          11      /* .hdr padding-left  */
 #define ZD_HDR_PR           6      /* .hdr padding-right */
 #define ZD_WINCTL_INK      ZD_TEXT_3

@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "13e102b1dd952503630a950c62e4b9f6b8058df2"
+    "head": "82e538126153bb1e177121e4016072ecb3a85a3a"
   },
-  "identity_sha256": "189433b6781aa69d87f265dd8e380524e1d3cc0e4074de812cfda82041596720",
+  "identity_sha256": "773ebb0b9835d5822368fda77be2919d28d9439cae28f9c00460b5a8ddfa2189",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -108,7 +108,7 @@
     "kernel/src/graphics/icons/icons.c": "2d7d07beca39fb0db12fc990a4545ee5334d496cc75b124153d6aa97a9d4d910",
     "kernel/src/graphics/image/png.c": "c273ddcb4e751fd4e999a6fa7c40d7706f499ad57d36da9683bb621e334964cd",
     "kernel/src/graphics/image/png.h": "c91befe500618549405b7ba2ef93ddd55c1998614df35a53a855c9e38eeea09a",
-    "kernel/src/graphics/ui/design.h": "0e8a06bb5c1496bbff1b94d4e749d7a302158cb5ed96cdf3bfe8b5451a35ee16",
+    "kernel/src/graphics/ui/design.h": "b7ea54a2f93102673e2c8dba776612dfff8d2202bae0834765baa8fae4c9d254",
     "kernel/src/graphics/ui/ease.c": "e26757324e1ea7387eef66d5125dbb39fca059ba03d63d20e253be95e802dc50",
     "kernel/src/graphics/ui/ease.h": "10b7e842a94feca628dfdfa09b307df51505bc419c616519f0bc8c136f9f9e2c",
     "kernel/src/graphics/ui/notify.c": "46fc08d08c2ab1f164c05ab73e340a601fc5546911863b3d677bf53dd4b3b9a7",
@@ -120,7 +120,7 @@
     "kernel/src/graphics/windowing/clip.c": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886",
     "kernel/src/graphics/windowing/term.c": "51a4a9c357e5fb64dd2506644e32404d727a547c451bc3380570f0e72bf82b81",
     "kernel/src/graphics/windowing/userwin.c": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
-    "kernel/src/graphics/windowing/wm.c": "c7a5ade1520febbac47924ee9a78c5ee1daa1af8c9b62fe2400875bdf53e19d8",
+    "kernel/src/graphics/windowing/wm.c": "f3a8544915a119998660b706aaa49f65316884fe5e839aa7757b16dabede25bb",
     "kernel/src/graphics/windowing/wmglue.c": "0c524f038c6c13579588b9d805c193725e3e28b20e226ed810be20172013cebb",
     "kernel/src/kernel.zl": "371760384df8fe8ce85f4fb4dfcb89e972463ace53bd9fbe61b33022d9168a6a",
     "kernel/src/net/crypto.c": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",

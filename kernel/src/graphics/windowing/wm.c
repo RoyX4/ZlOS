@@ -2751,13 +2751,28 @@ static void chrome_seat(const struct win *W, int r, int focused, int over)
     fb_rrect(W->x, W->y, W->w, W->h, r, over ? t->edge_over : t->border);
     fb_rrect(W->x + 1, W->y + 1, W->w - 2, W->h - 2, ri, t->panel);
 
+    /* THE RUNS LIE ON THE PANEL, ONE PIXEL INSIDE THE RING - not on it.
+     *
+     * They were painted at row W->y and column W->x, straight over the ring
+     * drawn two lines above, so the plate lost its boundary along its whole top
+     * edge and its whole left edge. The comment that justified it claimed
+     * ".trun/.lrun are absolutely positioned at the border box's edge". They are
+     * not: `.win` carries `border: 1px solid var(--zd-cut)` (proto:601) and an
+     * absolutely positioned box is laid out against its containing block's
+     * PADDING edge (CSS 2.1 10.1), so `.trun{top:0}` and `.lrun{left:0}`
+     * (proto:607,610) sit one pixel inside the border, on the panel.
+     *
+     * That is also the only reading that makes sense of what they are FOR. A
+     * struck highlight is light catching the top of a raised surface; painting
+     * it over the surface's own edge deletes the edge and leaves the highlight
+     * floating with nothing to be the top of. */
     int run_w = W->w - 2 * r;
     if (run_w > 0)
-        fb_fill_px(W->x + r, W->y, run_w, 1, focused ? t->knock : t->lit);
+        fb_fill_px(W->x + r, W->y + 1, run_w, 1, focused ? t->knock : t->lit);
 
-    int ly = W->y + ((focused && chrome) ? t->title_h : r);
-    int lh = (W->y + W->h - r) - ly;
-    if (lh > 0) fb_fill_px(W->x, ly, 1, lh, t->litsoft);
+    int ly = W->y + 1 + ((focused && chrome) ? t->title_h : r);
+    int lh = (W->y + W->h - 1 - r) - ly;
+    if (lh > 0) fb_fill_px(W->x + 1, ly, 1, lh, t->litsoft);
 }
 
 /* THE KNOCKOUT, and it is the entire focus signal.
@@ -2807,9 +2822,18 @@ static void chrome_header(const struct win *W, int win, int r, int focused)
      *
      * hh is the header height this window can actually afford. Everything
      * below is derived from it rather than from the theme. */
+    /* BORDER-BOX. The prototype sets `* { box-sizing: border-box }` (proto:325)
+     * and .hdr is `height: var(--zd-title-h)` with `border-bottom: 1px`
+     * (proto:653,657) - so title_h is the TOTAL: 27 rows of ground plus the
+     * groove. As a flex child of .win it starts at the padding edge, row y+1.
+     *
+     * This treated row y as belonging to the header, so the fill was one row
+     * short and the groove one row high. The comment rationalised it as "row y
+     * is the merged top run above", which is the same mistake the two runs make
+     * one function over: the runs are inside the padding box too. */
     int hh = t->title_h;
-    if (hh > W->h) hh = W->h;
-    int foot = W->y + hh - 1;
+    if (hh > W->h - 2) hh = W->h - 2;
+    int foot = W->y + hh;
     if (iw <= 0 || hh < 2) return;
     /* THE BAND IS INTERPOLATED WHILE ANIM_FOCUS RUNS.
      *
@@ -2843,9 +2867,9 @@ static void chrome_header(const struct win *W, int win, int r, int focused)
         } else if (!focused) {
             band = t->panel;
         }
-        /* rows y+1 .. y+hh-2; row y is the merged top run above, row
-         * y+hh-1 is the groove below, so the band is exactly hh */
-        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 2, ri, band, band);
+        /* rows y+1 .. y+hh-1, with the groove at y+hh: border-box, so the
+         * ground is hh-1 rows and the 1px border completes the declared hh. */
+        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 1, ri, band, band);
     }
     fb_fill_px(ix, foot, iw, 1, focused ? t->ko_edge : t->border);
 }
@@ -3117,10 +3141,19 @@ static void chrome_band(const struct win *W, int focused, int bh)
     const struct ui_theme *t = ui_theme();
     (void)focused;                 /* the band is on the PLATE in both states */
     if (bh <= 1) return;
-    int ry = W->y + W->h - 1 - bh;          /* the rule; the ring owns the last row */
-    /* client_of()'s left inset, spelled the same way so the two cannot drift,
-     * plus the body's own ZD_PAD */
-    int pad = UI_DP(t, ZD_PAD);
+    /* .sband IS THE LAST CHILD OF .wbody, NOT THE LAST ROW OF THE PLATE.
+     * .wbody pads 6dp at the foot (proto:711), so 6dp of ground shows BELOW the
+     * band and the band never touches the ring. This put its last row at
+     * W->y + W->h - 2, flush against the frame, which reads as a band welded to
+     * the plate rather than one sitting inside it.
+     *
+     * The inset is .wbody's 9dp for the same reason, not ZD_PAD's 10. The
+     * comment that used to sit here derived the right number off the rendered
+     * reference - "one 9dp body inset on each side" - and then reached for the
+     * generic spacing step anyway. A derivation nobody applied is not a
+     * measurement, it is a note. */
+    int ry = W->y + W->h - 1 - UI_DP(t, ZD_BODY_PY) - bh;
+    int pad = UI_DP(t, ZD_BODY_PX);
     int ix = W->x + 1 + t->focus_bar + pad;
     int iw = W->w - 2 - t->focus_bar - 2 * pad;
     if (iw <= 0) return;

@@ -1652,12 +1652,25 @@ int main(void)
            !escaped);
 
         /* and the control, so this assertion cannot pass by measuring nothing:
-         * the same colour MUST be present inside the frame, on the header's
-         * own foot row. If it is absent there the probe is blind and the line
-         * above is worthless. */
+         * the same colour MUST be present inside the frame. If it is absent the
+         * probe is blind and the line above is worthless.
+         *
+         * THE ROW IS NOT PINNED, AND USED TO BE. This looked at sy + sh - 1
+         * exactly - which is the window's BOTTOM RING ROW, not an interior row.
+         * It passed because the header was laid out from row sy with hh clamped
+         * to the full height, so its groove landed on the ring and painted over
+         * it; the same defect the top run had on the other edge.
+         *
+         * With .hdr treated as border-box (proto:325 sets box-sizing, and
+         * .hdr's declared height includes its 1px border-bottom) the groove
+         * moved one row up, off the ring. Scanning the interior instead of one
+         * chosen row keeps this a real control - nothing drawn still fails it -
+         * without the test encoding a particular geometry it was never trying
+         * to assert. */
         int present = 0;
-        for (int x = sx + 1; x < sx + sw - 1; x++)
-            if (fb_get_px(x, sy + sh - 1) == koe) { present = 1; break; }
+        for (int y = sy + 1; y < sy + sh - 1 && !present; y++)
+            for (int x = sx + 1; x < sx + sw - 1; x++)
+                if (fb_get_px(x, y) == koe) { present = 1; break; }
         ok("control: the header foot rule IS drawn, inside the frame", present);
 
         wm_close(win);
