@@ -340,8 +340,8 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     # ring that did not exist; this one is real and DOES drop - it is 160 rows
     # and wraps - but nothing counts what fell off the back, so the honest thing
     # is to say how deep it is and not to claim a figure for what it lost.
-    klrw = ui_tw("scrollback ring, 160 rows, oldest first", S2_SM, 0)
-    ui_txt(ax + aw - 10 * u - klrw, ay + 6 * u, "scrollback ring, 160 rows, oldest first", theme(TH_TEXT_DIM), S2_SM, 0)
+    klrw = ui_tw("scrollback ring, 160 rows, view held at the newest", S2_SM, 0)
+    ui_txt(ax + aw - 10 * u - klrw, ay + 6 * u, "scrollback ring, 160 rows, view held at the newest", theme(TH_TEXT_DIM), S2_SM, 0)
 
     # ---- the table ----------------------------------------------------------
     ty2 = ay + hdh
@@ -352,15 +352,28 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     wellh = 46 * u
     limit = ay + ah - sbh - wellh - 8 * u
 
-    # NEWEST-FIRST WOULD BE WRONG HERE. A log is read in the order it happened,
-    # and term.c's own draw walks backwards only because it bottom-anchors the
-    # newest line against the prompt. This is a table, not a tail.
-    i = 0
+    # IT SHOWED THE OLDEST TWELVE LINES OF A HUNDRED AND SIXTY.
+    #
+    # The loop walked i = 0 upward and stopped when the rows ran out, with no
+    # offset and no scroll - so the pane showed the first dozen lines of the
+    # boot and NEVER the newest, which in a log is the half you opened it for.
+    # term.c's ring holds 160 and this window fits about twelve.
+    #
+    # The rows still read downward, oldest to newest, because that is the order
+    # things happened. What changed is WHICH twelve: the window is anchored to
+    # the END of the ring and kl_scroll walks it backwards from there. Order
+    # within the view and position of the view are two different questions and
+    # the old code answered only the first.
+    kl_fit = (limit - ty2) / rowh
+    if kl_fit < 1 { kl_fit = 1 }
+    kl_first = kl_lines() - kl_fit - kl_scroll
+    if kl_first < 0 { kl_first = 0 }
+    i = kl_first
     shown = 0
     sel = kl_sel_clamped()
     while i < kl_lines() {
         if ty2 + rowh <= limit {
-            ui_grow(ax, ty2, aw, shown, sel == i)
+            if ui_grow(ax, ty2, aw, shown, sel == i) == 1 { kl_hit = i }
             cy2 = ty2 + (rowh - ui_th(S2_SM)) / 2
             col = kl_colon(i)
             if col >= 0 {
@@ -396,8 +409,11 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     # window taller" is advice against a problem the reader does not have, and a
     # pane that asks for something it does not need teaches people to ignore it
     # when it does.
-    if shown < kl_lines() { ui_txt(tx, ty, " lines fit - make the window taller", theme(TH_TEXT_DIM), S2_SM, 0) } else { ui_txt(tx, ty, " lines", theme(TH_TEXT_DIM), S2_SM, 0) }
-    return 0
+    # SAY WHERE THE VIEW IS, not just how much of it fits. "12 of 160" alone
+    # does not tell you whether you are looking at the start or the end, and
+    # this pane is anchored to the end.
+    if shown < kl_lines() { ui_txt(tx, ty, " lines, newest last", theme(TH_TEXT_DIM), S2_SM, 0) } else { ui_txt(tx, ty, " lines", theme(TH_TEXT_DIM), S2_SM, 0) }
+    return kl_hit
 }
 
 # how many rows are warnings or worse - the head's `M warn`
@@ -412,10 +428,24 @@ fn kl_warns() {
 }
 
 kl_sel_row = 0
+# HOW FAR BACK FROM THE NEWEST LINE THE VIEW SITS. 0 is the tail.
+kl_scroll = 0
+# The line a click landed on, or -1. kl_ui returns it and kl_apply stores it -
+# the same two-pass shape every other pane in this file uses.
+kl_hit = 0 - 1
 fn kl_sel() { return kl_sel_row }
 fn kl_sel_is(i) { if i == kl_sel_row { return 1 }  return 0 }
 
-fn kl_apply(g) { kl_filter = g  return 0 }
+# THE SECOND PASS. kl_ui returns the line a click landed on; this stores it, so
+# the detail well below the rule shows the line the user picked rather than line
+# 0 forever. kl_sel_row was declared, read twice, and ASSIGNED NOWHERE IN THE
+# TREE - so row 0 was highlighted permanently and the well never changed. The
+# whole selection existed except for the part that sets it.
+fn kl_apply(g) {
+    if g >= 0 { kl_sel_row = g }
+    kl_hit = 0 - 1
+    return 0
+}
 
 # ==============================================================================
 # 41  RENDERER - 352 x 326
@@ -965,6 +995,22 @@ fn sys2_draw(id, ax, ay, aw, ah) {
 # app_draw was given - so the widget sequence lays out identically and a
 # control is hit exactly where it was drawn.
 fn sys2_event(id, win, ety, ecode, ex, ey) {
+    # THE WHEEL, for the one pane in this file with more rows than it can show.
+    # kl_scroll counts BACKWARDS from the newest line, so a notch up walks into
+    # the history and a notch down returns to the tail - and it is clamped so it
+    # can neither run past the oldest line nor lift the view off the end.
+    # Without this kl_scroll would be a variable nothing writes, which is the
+    # same dead-control shape this file's own comment warns about below.
+    if ety == 5 {
+        if id != APP_KLOG { return 0 }
+        kl_scroll = kl_scroll + ecode
+        if kl_scroll < 0 { kl_scroll = 0 }
+        kl_max = kl_lines() - 1
+        if kl_max < 0 { kl_max = 0 }
+        if kl_scroll > kl_max { kl_scroll = kl_max }
+        wm_dmg(win)
+        return 1
+    }
     if ety != 4 { return 0 }
     if band(ecode, 1) == 0 { return 0 }
     ui_begin(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 1, ex, ey, 1)

@@ -7,6 +7,29 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — feat(settings): the PRESS tab gets the four controls it can actually back (3f7b04c)
+
+`design/presswork` · 7 files changed, 123 insertions(+), 27 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>7 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/term.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-29 — fix(files): the list's geometry had three owners, and the pane never noticed a mount (a9b529b)
 
 `design/presswork` · 6 files changed, 139 insertions(+), 20 deletions(-)
