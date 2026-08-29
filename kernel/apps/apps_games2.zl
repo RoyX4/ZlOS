@@ -185,7 +185,7 @@ fn wg_draw(ax, ay, aw, ah) {
         }
         ri = ri + 1
     }
-    if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_cat_color(1), T_CAPTION, W_BOLD) }
+    if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_play_color(3), T_CAPTION, W_BOLD) }
     if wg_done == 2 {
         # THE ANSWER, on a loss. Six wrong guesses and then never being told
         # the word is the one outcome of this game that teaches nothing. There
@@ -437,13 +437,13 @@ fn mz_draw(ax, ay, aw, ah) {
         }
         ri = ri + 1
     }
-    fill_rgb(gx + (MAZE_W - 1) * cell + 3 * u, gy + (MAZE_H - 1) * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(1))
-    fill_rgb(gx + mz_px * cell + 3 * u, gy + mz_py * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(2))
+    fill_rgb(gx + (MAZE_W - 1) * cell + 3 * u, gy + (MAZE_H - 1) * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_play_color(3))
+    fill_rgb(gx + mz_px * cell + 3 * u, gy + mz_py * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_play_color(4))
     msg_y = gy + MAZE_H * cell + 8 * u
     if mz_won == 1 {
-        label(gx, msg_y, "found the exit in", ac_cat_color(1), T_CAPTION, W_BOLD)
+        label(gx, msg_y, "found the exit in", ac_play_color(3), T_CAPTION, W_BOLD)
         label_num(gx + 116 * u, msg_y, mz_steps, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
-        label(gx + 146 * u, msg_y, "steps - r generates a new maze", ac_cat_color(1), T_CAPTION, W_BOLD)
+        label(gx + 146 * u, msg_y, "steps - r generates a new maze", ac_play_color(3), T_CAPTION, W_BOLD)
     }
     if mz_won == 0 {
         label(gx, msg_y, "arrows or wasd to the teal exit", theme(TH_TEXT_DIM), T_CAPTION, W_REG)

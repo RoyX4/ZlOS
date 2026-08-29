@@ -191,7 +191,7 @@ fn tt_check() {
 }
 
 fn tt_mark_col(m) {
-    if m == 1 { return ac_cat_color(2) }
+    if m == 1 { return ac_play_color(4) }
     return theme(TH_ACCENT)
 }
 fn tt_draw(ax, ay, aw, ah) {
@@ -215,12 +215,12 @@ fn tt_draw(ax, ay, aw, ah) {
     }
     msg_y = gy + 3 * cell + 8 * u
     if tt_win == 0 { label(gx, msg_y, tt_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-    if tt_win == 1 { label(gx, msg_y, "X wins - r plays again", ac_cat_color(2), T_CAPTION, W_BOLD) }
+    if tt_win == 1 { label(gx, msg_y, "X wins - r plays again", ac_play_color(4), T_CAPTION, W_BOLD) }
     if tt_win == 2 { label(gx, msg_y, "O wins - r plays again", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
     if tt_win == 3 { label(gx, msg_y, "draw - r plays again", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
     # the tally, which is what makes a second round worth playing
     sy = msg_y + 18 * u
-    label(gx, sy, "X", ac_cat_color(2), T_CAPTION, W_BOLD)
+    label(gx, sy, "X", ac_play_color(4), T_CAPTION, W_BOLD)
     label_num(gx + 14 * u, sy, tt_sx, theme(TH_TEXT_HI), T_CAPTION, W_REG)
     label(gx + 44 * u, sy, "O", theme(TH_ACCENT), T_CAPTION, W_BOLD)
     label_num(gx + 58 * u, sy, tt_so, theme(TH_TEXT_HI), T_CAPTION, W_REG)
@@ -378,7 +378,7 @@ fn nim_draw(ax, ay, aw, ah) {
         di = 0
         while di < 7 {
             col = theme(TH_SURF_1)
-            if di < n { col = ac_cat_color(2) }
+            if di < n { col = ac_play_color(4) }
             # the ghost of the machine's last take, so its move is visible
             # rather than only stated in words underneath
             if di >= n { if pi == nim_lastp { if di < n + nim_lastn { col = theme(TH_SURF_5) } } }
@@ -546,7 +546,7 @@ fn ho_draw(ax, ay, aw, ah) {
         w = (d + 2) * 10 * u
         px = ax + p * pw + pw / 2
         py = baseY - (stacklvl + 1) * 12 * u
-        fill_rgb(px - w / 2, py, w, 10 * u, ac_cat_color(2))
+        fill_rgb(px - w / 2, py, w, 10 * u, ac_play_color(4))
         d = d - 1
     }
     if ho_solved() == 1 {
@@ -859,7 +859,12 @@ fn c4_drop(col) {
     return 0 - 1
 }
 
-fn c4_col_color(m) { if m == 1 { return ac_cat_color(2) }  return theme(TH_ACCENT) }
+# RED IS THE VERMILION AND YELLOW IS THE AMBER, in that order, because the two
+# words are printed on screen when somebody wins. Getting distinct colours was
+# not enough - the first pass made player 1 amber while the message said "red
+# wins", so both players were named as the other one's colour. A piece colour
+# that contradicts its own caption is a worse bug than two pieces sharing one.
+fn c4_col_color(m) { if m == 1 { return theme(TH_ACCENT) }  return ac_play_color(4) }
 fn c4_draw(ax, ay, aw, ah) {
     u = ui()
     gs_canvas(ax, ay, aw, ah)
@@ -894,8 +899,8 @@ fn c4_draw(ax, ay, aw, ah) {
     }
     msg_y = gy + C4_H * cell + 8 * u
     if c4_win == 0 { label(gx, msg_y, c4_turn_str(), theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-    if c4_win == 1 { label(gx, msg_y, "red wins - r restarts", ac_cat_color(2), T_CAPTION, W_BOLD) }
-    if c4_win == 2 { label(gx, msg_y, "yellow wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if c4_win == 1 { label(gx, msg_y, "red wins - r restarts", theme(TH_ACCENT), T_CAPTION, W_BOLD) }
+    if c4_win == 2 { label(gx, msg_y, "yellow wins - r restarts", ac_play_color(4), T_CAPTION, W_BOLD) }
     if c4_win == 3 { label(gx, msg_y, "draw - r restarts", theme(TH_TEXT_DIM), T_CAPTION, W_BOLD) }
     gs_bar(ax, ay, aw, ah, GS_C4)
     return 0

@@ -56,6 +56,9 @@ echo "built ./palette       (run: ./palette)"
 gcc $HOST_INCLUDES -O2 -Wall -Wextra -o easetest easetest.c ../../src/graphics/ui/ease.c -lm
 echo "built ./easetest      (run: ./easetest)"
 
+gcc $HOST_INCLUDES -O2 -Wall -Wextra -o retest retest.c
+echo "built ./retest        (run: ./retest)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered

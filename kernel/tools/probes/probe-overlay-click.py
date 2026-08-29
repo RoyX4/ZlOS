@@ -210,9 +210,46 @@ def main():
         check("clicking a palette row opened a window",
               after_row > after_hdr, f"{after_hdr} -> {after_row}")
 
+        # ---- THE FIELD MENU, WHICH RIGHT-CLICK COULD NOT OPEN AT ALL -------
+        #
+        # desk_click read bit 0 of the button mask and never bit 1, so a right
+        # press on the desk produced down == 0 and fell straight out. The menu's
+        # twelve rows had exactly one route: typing `ctxmenu` in the Terminal.
+        #
+        # Asserted the same way as the palette - a row that opens an app, judged
+        # by the window count off the serial log - because "a menu appeared" can
+        # be satisfied by a repaint and "a window opened" cannot.
+        n_before_menu = wincount()
+        fx, fy = W - 320, H - 420          # bare field: right of the windows,
+                                           # above the foot, clear of the rail
+        moveto(qmp, fx, fy, W, H)
+        time.sleep(0.25)
+        qmp.cmd("input-send-event",
+                events=[{"type": "btn", "data": {"down": True, "button": "right"}}])
+        time.sleep(0.2)
+        qmp.cmd("input-send-event",
+                events=[{"type": "btn", "data": {"down": False, "button": "right"}}])
+        time.sleep(0.9)
+
+        menu_ppm = os.path.join(tmp, "menu.ppm")
+        qmp.screendump(menu_ppm)
+        menu_up = sheet_pixels_differ(menu_ppm, W, H, fx, fy + 10, 200)
+        check("right-clicking the field opened a menu", menu_up,
+              "a plate is painted at the pointer" if menu_up else "nothing appeared")
+
+        # Row 10 of the field menu is "open 11 settings". Rows are 20 units with
+        # a 20-unit head and two 7-unit separators above it (after rows 2 and 6),
+        # so its middle is 20 + 8*20 + 2*7 + 10 = 204 units down from the plate.
+        click(qmp, fx + 100, fy + 204, W, H)
+        time.sleep(0.9)
+        n_after_menu = wincount()
+        check("a field-menu row opened its app",
+              n_after_menu > n_before_menu, f"{n_before_menu} -> {n_after_menu}")
+
         print()
         print(f"windows: {base} at boot, {after_open} with the palette up, "
-              f"{after_hdr} after the header click, {after_row} after the row click")
+              f"{after_hdr} after the header click, {after_row} after the row click, "
+              f"{n_after_menu} after the field-menu row")
         print(("FAIL: " + ", ".join(fails)) if fails else "PASS")
         return 1 if fails else 0
     finally:

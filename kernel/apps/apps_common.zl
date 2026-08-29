@@ -60,6 +60,41 @@ fn ac_cat_color(cat) {
     return theme(TH_ACCENT)
 }
 
+# THE GAMES' PIECE COLOURS ARE A DIFFERENT QUESTION FROM THE CATALOGUE'S.
+#
+# ac_cat_color answers "what KIND of app is this" - three semantic categories.
+# The games were borrowing it to answer "give me hues nobody can confuse", and
+# those are not the same question. The moment ac_cat_color moved onto the theme
+# roles - which it had to, the raw literals were from the superseded palette -
+# its three values stopped being disjoint from the roles the games ALSO use
+# directly, and pieces started sharing colours:
+#
+#   Connect Four  red = ac_cat_color(2) = TH_ACCENT, yellow = TH_ACCENT.
+#                 Every piece one colour. The game could not be played.
+#   Tic-tac-toe   X and O both TH_ACCENT.
+#   Tetris        tet_col's own comment claims "exactly seven distinct values";
+#                 it had collapsed to five.
+#
+# One function, two callers wanting different things, is the whole fault. This
+# is the second one, and its contract is exactly "N pairwise-distinct values
+# from the ladder" - no semantics attached, so it can never be pulled toward a
+# meaning the way the other was.
+#
+# Seven roles, checked pairwise against design.h's hexes:
+#   0 TH_ACCENT   #E8734F vermilion   4 TH_WARN     amber
+#   1 TH_STEEL    #7FB2E0 blue        5 TH_TEXT_HI  near-white
+#   2 TH_OK       green               6 TH_DANGER   red
+#   3 TH_STEEL_BR #A9CFF2 pale blue
+fn ac_play_color(i) {
+    if i == 0 { return theme(TH_ACCENT) }
+    if i == 1 { return theme(TH_STEEL) }
+    if i == 2 { return theme(TH_OK) }
+    if i == 3 { return theme(TH_STEEL_BR) }
+    if i == 4 { return theme(TH_WARN) }
+    if i == 5 { return theme(TH_TEXT_HI) }
+    return theme(TH_DANGER)
+}
+
 # A small deterministic PRNG, independent of sn_seed (Snake's own) so two
 # games open at once never share or perturb each other's sequence. Same LCG
 # shape as sn_rand - proven already, not reinvented.

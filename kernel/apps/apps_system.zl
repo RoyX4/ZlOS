@@ -495,7 +495,18 @@ fn ca_event(win, ety, ecode, ex, ey) {
         if cx < 0 { return 0 }
         if cy < 0 { return 0 }
         c = idiv(cx, ca_btn_w(wm_cw(win)))
-        r = cy / (CA_BTN * u)
+        # idiv, NOT `/`. The column above was converted and this line was not,
+        # so `r` was a FRACTION: clicking the centre of '7' gave r = 0.5 and an
+        # index of 2, which is '9'. ca_btn_press is a chain of `if i == N` with
+        # a fall-through to '+', so a non-integer index matched nothing at all
+        # and pressed '+' - every key on the pad either wrong or plus.
+        #
+        # probe-calckeys passed against this the whole time, because it asserts
+        # that the display CHANGED, not that it changed to the right digit. A
+        # probe that measures movement cannot see a key that fires the wrong
+        # value; that is the third time in this session the same shape has hidden
+        # a defect, and it is noted in the probe now.
+        r = idiv(cy, CA_BTN * u)
         if c > 3 { return 0 }
         if r > 3 { return 0 }
         ca_btn_press(r * 4 + c)
