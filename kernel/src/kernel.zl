@@ -4483,6 +4483,8 @@ RASTER_RING   = 0x02215000   # kernel.zl: the raster strip's history, one byte
 # walks - a fixed address declared anywhere
 # else in this file is a fixed address nothing
 # checks against its neighbours.
+PAL_QUERY     = 0x02216000   # kernel.zl: the command palette's typed query,
+# one byte per character, PAL_QMAX long
 MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
 # an iterative backtracker, not a 273-deep zl
 # recursion. boot.S:36 documents this kernel's
@@ -5805,6 +5807,7 @@ fn run_command(cmd, arg) {
     }
     if cmd == 203 {
         if wm_run() == 0 { return needs_wm("the command palette") }
+        pal_clear()
         ov_mode = OV_PALETTE
         ov_sel = 0
         # THE WHOLE SCREEN, because a modal scrims all of it. wm_damage takes
@@ -11051,7 +11054,12 @@ fn ov_pal_app(i) {
 # that name a thing this kernel can actually do are wired; the rest report that
 # they are not, rather than appearing to work. A palette row that swallows
 # Enter silently is worse than one that says no.
-fn ov_pal_run(i) {
+# TAKES THE VISIBLE INDEX. Everything above hands one of these around - the
+# selection, the click, the keyboard - and this is the single place it becomes
+# a real row, so a filtered list cannot run the row above the one chosen.
+fn ov_pal_run(k) {
+    i = ov_pal_nth(k)
+    if i < 0 { return 1 }
     pa = ov_pal_app(i)
     if pa >= 0 { ov_mode = OV_NONE  wm_damage(0, 0, px_w(), px_h())  return reg_open(pa) }
     if i == 6 { ov_mode = OV_NONE  wm_damage(0, 0, px_w(), px_h())  return run_command(46, 0) }
@@ -11104,19 +11112,35 @@ fn ov_draw_palette(u) {
     # the header: "COMMAND  zlsh builtin        N of M"
     ui_caps(sx + 13 * u, sy + 9 * u, "COMMAND", theme(TH_TEXT_2), T_CAPTION)
     label(sx + 92 * u, sy + 9 * u, "zlsh builtin", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-    label_num(sx + sw - 52 * u, sy + 9 * u, OV_PAL_N, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(sx + sw - 52 * u, sy + 9 * u, ov_pal_nvis(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     label(sx + sw - 34 * u, sy + 9 * u, "of", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     label_num(sx + sw - 20 * u, sy + 9 * u, OV_PAL_N, theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     fill_rgb(sx, sy + 26 * u, sw, 1, theme(TH_CUT))
     # the input line: "RUN" and a caret. There is no typed query yet - the row
     # list is the whole surface - and a fake one would be a picture of an input.
     ui_caps(sx + 13 * u, sy + 34 * u, "RUN", theme(TH_TEXT_2), T_CAPTION)
-    fill_rgb(sx + 52 * u, sy + 33 * u, 2 * u, cell_h(), theme(TH_ACCENT))
+    # THE QUERY, drawn a byte at a time - there is no string to hand to a text
+    # call, only the buffer the keystrokes went into. The caret follows it,
+    # which is the difference between an input and a picture of one.
+    pqx = sx + 52 * u
+    pqi = 0
+    while pqi < pal_qlen {
+        char_aa(pqx, sy + 33 * u, peek8(PAL_QUERY + pqi), theme(TH_TEXT_HI))
+        pqx = pqx + cell_w()
+        pqi = pqi + 1
+    }
+    fill_rgb(pqx, sy + 33 * u, 2 * u, cell_h(), theme(TH_ACCENT))
     fill_rgb(sx, sy + 54 * u, sw, 1, theme(TH_CUT))
     # the rows
-    pi = 0
-    while pi < OV_PAL_N {
-        ry = sy + 62 * u + pi * rowh
+    # THE LOOP WALKS WHAT SURVIVES THE QUERY, and pk is the visible position
+    # while pi is the real row. Everything that identifies the row - its number,
+    # its label, its kind, its dispatch - uses pi; everything that places it uses
+    # pk. Mixing those is how a filtered list runs the row above the one clicked.
+    pk = 0
+    pvis = ov_pal_nvis()
+    while pk < pvis {
+        pi = ov_pal_nth(pk)
+        ry = sy + 62 * u + pk * rowh
         # THE SELECTED ROW IS A VALUE FLIP, NOT A COLOURED EDGE, and the mark
         # on it cannot be the overprint.
         #
@@ -11131,7 +11155,7 @@ fn ov_draw_palette(u) {
         pnum = theme(TH_TEXT_DIM)
         ptxt = theme(TH_TEXT_HI)
         pkind = theme(TH_TEXT_2)
-        if pi == ov_sel {
+        if pk == ov_sel {
             fill_rgb(sx, ry, sw, rowh, theme(TH_KNOCK))
             fill_rgb(sx, ry, focus_bar(), rowh, theme(TH_KO_EDGE))
             pnum = theme(TH_KNOCK_INK2)
@@ -11141,7 +11165,7 @@ fn ov_draw_palette(u) {
         label_num(sx + 13 * u, ry + 4 * u, pi + 1, pnum, T_CAPTION, W_REG)
         label(sx + 38 * u, ry + 4 * u, ov_pal_label(pi), ptxt, T_BODY, W_REG)
         ui_caps(sx + sw - 76 * u, ry + 5 * u, ov_pal_kind(pi), pkind, T_CAPTION)
-        pi = pi + 1
+        pk = pk + 1
     }
     # the footer, the prototype's three key hints
     fy = sy + 62 * u + OV_PAL_N * rowh + 6 * u
@@ -11459,13 +11483,71 @@ fn desk_tile() {
 OV_PAL_ROWH = 22
 OV_PAL_TOP  = 62
 
+# THE TYPED QUERY, WHICH THE PALETTE DREW AND DID NOT HAVE.
+#
+# The sheet has always painted "RUN" and a caret, and a comment beside it said
+# so plainly: "There is no typed query yet - the row list is the whole surface -
+# and a fake one would be a picture of an input." True, and the prototype's is
+# real: it filters sixteen rows as you type.
+#
+# zl has string LITERALS and no string VALUES, so a row's label cannot be
+# examined here. The comparison goes to a native instead: str_has takes the
+# label, and the bytes the palette has accumulated, and answers case-insensitively.
+PAL_QMAX = 32
+pal_qlen = 0
+
+fn pal_clear() { pal_qlen = 0  return 0 }
+
+fn pal_push(ch) {
+    if pal_qlen >= PAL_QMAX { return 0 }
+    poke8(PAL_QUERY + pal_qlen, ch)
+    pal_qlen = pal_qlen + 1
+    return 1
+}
+
+fn pal_pop() {
+    if pal_qlen < 1 { return 0 }
+    pal_qlen = pal_qlen - 1
+    return 1
+}
+
+# Does row i survive the query? An empty query matches every row, which is what
+# an empty query means.
+fn ov_pal_match(i) { return str_has(ov_pal_label(i), PAL_QUERY, pal_qlen) }
+
+# How many rows survive, and which real row is the k-th of them. The draw, the
+# hit test and the keyboard all go through these, so a filtered list cannot
+# select the row that merely LOOKS like it is under the pointer.
+fn ov_pal_nvis() {
+    pvn = 0
+    pvi = 0
+    while pvi < OV_PAL_N {
+        if ov_pal_match(pvi) == 1 { pvn = pvn + 1 }
+        pvi = pvi + 1
+    }
+    return pvn
+}
+
+fn ov_pal_nth(k) {
+    pnn = 0
+    pni = 0
+    while pni < OV_PAL_N {
+        if ov_pal_match(pni) == 1 {
+            if pnn == k { return pni }
+            pnn = pnn + 1
+        }
+        pni = pni + 1
+    }
+    return 0 - 1
+}
+
 # THE SHEET'S HEIGHT, PUBLISHED ONCE. The hit test rebuilt it from OV_PAL_TOP,
 # which is the ROW ORIGIN (62) and not the top block's height (66), so the test
 # rectangle was 4dp shorter than the plate and a click on the sheet's bottom
 # edge read as a click on the scrim - dismissing the palette instead of doing
 # nothing. Two expressions for one rectangle, disagreeing by the difference
 # between two numbers that look interchangeable and are not.
-fn ov_pal_sheet_h() { return 66 * ui() + OV_PAL_N * OV_PAL_ROWH * ui() + 24 * ui() }
+fn ov_pal_sheet_h() { return 66 * ui() + ov_pal_nvis() * OV_PAL_ROWH * ui() + 24 * ui() }
 
 # INSIDE THE SHEET IS NOT THE SAME QUESTION AS ON A ROW, and collapsing the two
 # is why a click on the palette's own header dismissed it. The scrim dismisses;
@@ -11479,12 +11561,14 @@ fn ov_pal_in_sheet(cx, cy) {
     return 1
 }
 
+# Returns the VISIBLE index, which is what the selection and the draw both use;
+# ov_pal_nth turns it into the real row at the point of dispatch.
 fn ov_pal_row_at(cx, cy) {
     if ov_pal_in_sheet(cx, cy) == 0 { return 0 - 1 }
     opy = cy - ov_sheet_y() - OV_PAL_TOP * ui()
     if opy < 0 { return 0 - 1 }
     opr = idiv(opy, OV_PAL_ROWH * ui())
-    if opr >= OV_PAL_N { return 0 - 1 }
+    if opr >= ov_pal_nvis() { return 0 - 1 }
     return opr
 }
 
@@ -11563,7 +11647,7 @@ fn ov_close_overlay() {
 # arrive here: ov_menu_row_at skips their bands rather than returning them.
 fn ov_ctx_run(i) {
     if i == 0 { ov_mode = OV_ACTIVITIES  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
-    if i == 1 { ov_mode = OV_PALETTE  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
+    if i == 1 { pal_clear()  ov_mode = OV_PALETTE  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
     if i == 4 {
         ov_close_overlay()
         desk_grid_on = 1 - desk_grid_on
@@ -12203,13 +12287,14 @@ fn desk_key(kcode, kmods) {
     if ov_mode == OV_PALETTE {
         if kcode == K_UP {
             ov_sel = ov_sel - 1
-            if ov_sel < 0 { ov_sel = OV_PAL_N - 1 }
+            if ov_sel < 0 { ov_sel = ov_pal_nvis() - 1 }
+            if ov_sel < 0 { ov_sel = 0 }
             wm_damage(0, 0, px_w(), px_h())
             return 1
         }
         if kcode == K_DOWN {
             ov_sel = ov_sel + 1
-            if ov_sel >= OV_PAL_N { ov_sel = 0 }
+            if ov_sel >= ov_pal_nvis() { ov_sel = 0 }
             wm_damage(0, 0, px_w(), px_h())
             return 1
         }
@@ -12219,6 +12304,28 @@ fn desk_key(kcode, kmods) {
         if kcode == KEY_ENTER_K { return ov_pal_run(ov_sel) }
         if kcode == 13 { return ov_pal_run(ov_sel) }
         if kcode == 10 { return ov_pal_run(ov_sel) }
+        # TYPING FILTERS. Backspace first, because 8 is under 32 and would
+        # otherwise fall out with the other control codes.
+        if kcode == 8 {
+            if pal_pop() == 1 {
+                ov_sel = 0
+                wm_damage(0, 0, px_w(), px_h())
+            }
+            return 1
+        }
+        if kcode >= 32 {
+            if kcode < 127 {
+                if pal_push(kcode) == 1 {
+                    # The selection goes back to the top: after a keystroke the
+                    # list is a different list, and keeping an index into the
+                    # old one selects whatever happens to have moved into that
+                    # position.
+                    ov_sel = 0
+                    wm_damage(0, 0, px_w(), px_h())
+                }
+                return 1
+            }
+        }
     }
     # ---- THE KEYS THE MENUS ADVERTISE ------------------------------------
     #
@@ -12232,6 +12339,7 @@ fn desk_key(kcode, kmods) {
     # Ctrl+letter arrives as the ASCII control code: Ctrl+G is 7, Ctrl+K is 11,
     # Ctrl+L is 12. Alt is read from the modifier bitmap, MOD_ALT.
     if kcode == 11 {
+        pal_clear()
         ov_mode = OV_PALETTE
         ov_sel = 0
         wm_damage(0, 0, px_w(), px_h())

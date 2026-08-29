@@ -1850,6 +1850,36 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_ink"))     return zl_num((double)zl_design_ink((int)a[0].num));
     if (streq(name, "ui_ink_on"))  return zl_num((double)ui_ink_on((unsigned)(unsigned long long)a[0].num));
     if (streq(name, "ui_items"))   { if (a[0].type==V_STR) return zl_num((double)ui_items_count(a[0].str)); return zl_num(0.0); }
+    /* SUBSTRING, CASE-INSENSITIVE, against a byte buffer in RAM.
+     *
+     * The command palette needs to filter its rows by what the user has typed,
+     * and zl has string LITERALS but no string VALUES - it can pass a label to
+     * a native and it cannot look inside one. So the comparison happens here:
+     * the haystack is the label, the needle is `len` bytes at `addr`, which is
+     * where the palette accumulates keystrokes.
+     *
+     * An empty needle matches everything, which is what an empty query means. */
+    if (streq(name, "str_has")) {
+        if (a[0].type != V_STR || !a[0].str) return zl_num(0);
+        const char *h = a[0].str;
+        const unsigned char *n = (const unsigned char *)(unsigned long)(long long)a[1].num;
+        int nl = (int)a[2].num;
+        if (nl <= 0) return zl_num(1);
+        for (int i = 0; h[i]; i++) {
+            int k = 0;
+            while (k < nl) {
+                char hc = h[i + k];
+                if (!hc) break;
+                char lc = (hc >= 'A' && hc <= 'Z') ? (char)(hc + 32) : hc;
+                char nc = (char)n[k];
+                if (nc >= 'A' && nc <= 'Z') nc = (char)(nc + 32);
+                if (lc != nc) break;
+                k++;
+            }
+            if (k == nl) return zl_num(1);
+        }
+        return zl_num(0);
+    }
     if (streq(name, "ui_tw"))      { if (a[0].type==V_STR) return zl_num((double)ui_text_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
     if (streq(name, "ui_th"))      return zl_num((double)ui_text_h((int)a[0].num));
     /* THE TABLE WIDGETS, which uikit has had all along and zl could not reach.
