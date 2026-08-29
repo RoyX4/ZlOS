@@ -7,3 +7,34 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
+## Engine divergence — 2 pinned
+
+`./interp` is ground truth. These engines disagree with it today:
+
+- [ ] `global_writethrough` — `compilel` differs
+- [ ] `global_writethrough` — `nativegen` differs
+
+Both unboxed backends sit on the far side of the scoping decision in
+`docs/design/design_scoping_decision.md`. Delete these pins when it lands;
+`tools/engine-parity.sh` fails if a pin stops being true.
+
+## Documented but not in git
+
+- [ ] `kernel/_gen64.c`
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
+
+## Open tensions (.ultra/TENSIONS.md)
+
+- [ ] **T-8** — Generated evidence manifests disagree on build identity.
+- [ ] **T-9** — Boot recovery policy remains at the kernel root.
+
+---
+
+<!-- BEGIN HAND-WRITTEN -->
+
+## Hand-written
+
+_Items here survive regeneration. Everything above does not._
+
+<!-- END HAND-WRITTEN -->

@@ -1255,12 +1255,33 @@ S3NW_KV   = 8
 S3NW_LOOPBACK = 2130706433            # 127.0.0.1
 s3nw_sel  = 1                         # eth0, the interface with anything to say
 
+# ---- THE LOOPBACK ROW IS INVENTED END TO END --------------------------------
+#
+# Six typed figures for a device this kernel does not have. There is no loopback
+# in this tree at all - no lo device, no 127.0.0.1 route, nothing that would
+# answer a packet sent to it - and yet the row asserted UP unconditionally, an
+# address, an MTU of 65536, and rx 0 / tx 0 as MEASUREMENTS rather than as the
+# absence of a device.
+#
+# The 65536 is the sharpest of them: that is Linux's loopback MTU, a fact about
+# the machine this OS is compiled on, sitting in a table describing the machine
+# it runs on. The same class as the clocks pane's NTP claim, which took two
+# passes to remove.
+#
+# The row is kept, because the reference has two interfaces and the shape is
+# the reference's - but it now says what is true: absent. A row that reports
+# "not present" is a reading. A row that reports UP for something that does not
+# exist is not.
+fn s3nw_present(i) { if i == 0 { return 0 }  return 1 }
 fn s3nw_up(i) {
-    if i == 0 { return 1 }          # lo is always up
+    if i == 0 { return 0 }          # there is no loopback device in this kernel
     return net_ok()
 }
 fn s3nw_name(i) { if i == 0 { return "lo" }  return "eth0" }
-fn s3nw_mtu(i) { if i == 0 { return 65536 }  return 1500 }
+# MTU IS READ FOR THE ONE INTERFACE THAT HAS ONE, and refused for the one that
+# does not. 1500 is virtio-net's own frame ceiling and is a property of this
+# driver; 65536 was the build host's.
+fn s3nw_mtu(i) { if i == 0 { return 0 }  return 1500 }
 # THE DRIVER IS READ, NOT TYPED. This returned the literal "virtio-net" for
 # every non-loopback interface while netdev_kind() sat bound and unused - and
 # the same pane's own head had already shipped a hardcoded "e1000e" beside this
@@ -1272,7 +1293,7 @@ fn s3nw_mtu(i) { if i == 0 { return 65536 }  return 1500 }
 # check-header-mirror.py compares against #define, and these are enumerators -
 # a citation it cannot resolve would fail the build rather than guard anything.
 fn s3nw_drv(i) {
-    if i == 0 { return "loopback" }
+    if i == 0 { return "not present" }
     if net_kind() == 1 { return "virtio-net" }
     if net_kind() == 2 { return "e1000" }
     if net_kind() == 3 { return "cdc-ecm" }
@@ -1505,7 +1526,12 @@ fn s3nw_body(ax, ay, aw, ah) {
     px = px + cell_w()
     num_aa(px, ly, ip_max(), theme(TH_TEXT_DIM))
     px = px + s3_numw(ip_max())
-    s3_mono(px, ly, " ms", theme(TH_TEXT_DIM))
+    # MICROSECONDS, NOT MILLISECONDS. ip_min/avg/max are net_ping_min/avg/max,
+    # whose values come from tsc_to_us() - cycles over kHz - so they are us. The
+    # kernel's own boot gate prints these same three natives with " us" three
+    # times. A thousand-fold unit error on a latency figure, in the same image
+    # that gets it right on the console.
+    s3_mono(px, ly, " us", theme(TH_TEXT_DIM))
     return 0
 }
 
@@ -1551,7 +1577,14 @@ fn s3nw_event(win, ety, ecode, ex, ey) {
     x = x + w + 7 * u
     pw = ui_pill_w("ping", S3_MD, S3_MONO)
     if tx >= x { if tx < x + pw {
-            if ip_live() == 1 { ip_ping(NET_GW, 1000) }
+            # ip_run, NOT ip_ping. net_ping() sends one echo and RETURNS
+            # the rtt, touching none of the six statics the panel reads;
+            # net_ping_run() is what fills sent/recv/min/avg/max/jitter. So the
+            # button sent a packet, threw the answer away, and the panel went on
+            # showing whatever the BOOT gate had left in those statics - a
+            # control that appears to work because the numbers beside it were
+            # already there.
+            if ip_live() == 1 { ip_run(NET_GW, 4, 1000) }
             wm_dmg(win)
             return 1
     }}

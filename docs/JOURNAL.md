@@ -7,6 +7,31 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — feat(disk): the composition bar the pane is supposed to lead with, and a generation that is read (85306b7)
+
+`design/presswork` · 9 files changed, 181 insertions(+), 42 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/fs/fs.c`
+
+</details>
+
 ## 2026-08-29 — fix(wm): the focus animation never ran, and the cache re-bake was two steps of three (e9b7bff)
 
 `design/presswork` · 9 files changed, 111 insertions(+), 25 deletions(-)
