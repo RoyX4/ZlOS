@@ -7770,8 +7770,17 @@ fn fs_stamp_now() {
 }
 
 fn files_list_top(cy) { return cy + 62 * ui() + ui_colhead_h() }
+# THE DETAIL BLOCK'S HEIGHT, reserved out of the list so the two cannot overlap.
+# R.files puts a rule, a selected-file row, four kv rows and a three-button row
+# under its table; this pane had none of it and gave the whole client to the
+# list. One owner, because the list's row count and the block's origin are the
+# same subtraction from opposite ends.
+FILES_DETAIL_H = 116
+
+fn files_detail_y(cy, ch) { return cy + ch - FILES_DETAIL_H * ui() }
+
 fn files_list_rows(ch) {
-    flr = idiv(ch - 104 * ui() - ui_colhead_h(), FILES_ROW * ui())
+    flr = idiv(ch - 104 * ui() - FILES_DETAIL_H * ui() - ui_colhead_h(), FILES_ROW * ui())
     if flr < 1 { return 1 }
     return flr
 }
@@ -7882,6 +7891,83 @@ fn files_draw_name(slot, x, y, colour) {
         if files_cc > 0 { char_aa(x + files_ci * cell_w(), y, files_cc, colour) }
         files_ci = files_ci + 1
     }
+    return 0
+}
+
+# R.files' DETAIL BLOCK AND BUTTON ROW, which this pane did not have.
+#
+# The reference puts a 2dp rule under its table, then a selected-file row, four
+# kv rows, and three buttons - open in editor / hex / stat. Register slot 02 is
+# the second surface a person reads and it was the least converted of the
+# fourteen: a table and a "bytes free" line.
+#
+# WHAT IS DRAWN IS WHAT zlfs CAN ANSWER, and the two it cannot say so:
+#
+#   full path   "/" + the name. zlfs is FLAT - there are no directories - so
+#               this is not a stand-in for a path, it IS the path.
+#   extent      fs_lba and fs_run, read. "contiguous" is not a hope either:
+#               fs.c allocates every file as one contiguous run and says so.
+#   mode        zlfs has no mode field, no uid and no gid. The reference prints
+#               `rw-r--r--  uid 0  gid 0`; copying that would invent a
+#               permission model, which is the same fault as an invented figure
+#               and harder to spot because it looks like every other filesystem.
+#   crc32       nothing computes one. Summing the file on every frame to fill a
+#               row would be work done for a decoration.
+FILES_BTN_GAP = 8
+
+fn files_kv_row(x, y, w, k) {
+    ui_caps(x, y, k, theme(TH_TEXT_DIM), PW_SM)
+    return 0
+}
+
+fn files_detail(ax, ay, aw, ah, sel) {
+    fdu = ui()
+    fdy = files_detail_y(ay, ah)
+    fdx = ax + 12 * fdu
+    fdw = aw - 24 * fdu
+    # the 2dp rule the reference puts between the table and the detail
+    fill_rgb(fdx, fdy, fdw, 2 * fdu, theme(TH_CUT))
+    fdy = fdy + 10 * fdu
+    if sel < 0 {
+        ui_txt(fdx, fdy, "no file selected - arrow keys or a click choose one", theme(TH_TEXT_DIM), PW_SM, 0)
+        return 0
+    }
+    # ---- the selected row: name, size, and the swatch
+    ui_caps(fdx, fdy, "SELECTED", theme(TH_TEXT_DIM), PW_SM)
+    files_draw_name(sel, fdx + 76 * fdu, fdy, theme(TH_TEXT_HI))
+    fdsz = fs_bytes(sel)
+    num_aa(fdx + fdw - 60 * fdu - s3_numw(fdsz), fdy, fdsz, theme(TH_TEXT_2))
+    ui_txt(fdx + fdw - 60 * fdu + s3_numw(fdsz) - s3_numw(fdsz), fdy, "", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    pw_sw(fdx + fdw - ui_capsw("OK", PW_SM) - 12 * fdu, fdy, "OK", theme(TH_OK))
+    fdy = fdy + pw_kvh()
+    # ---- full path. zlfs is flat, so this is the whole of it.
+    files_kv_row(fdx, fdy, fdw, "FULL PATH")
+    ui_txt(fdx + 76 * fdu, fdy, "/", theme(TH_TEXT), PW_SM, PW_MONO)
+    files_draw_name(sel, fdx + 76 * fdu + cell_w(), fdy, theme(TH_TEXT))
+    fdy = fdy + pw_kvh()
+    # ---- the extent, read from the directory entry
+    files_kv_row(fdx, fdy, fdw, "EXTENT")
+    fdex = fdx + 76 * fdu
+    ui_txt(fdex, fdy, "lba ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    fdex = fdex + ui_tw("lba ", PW_SM, PW_MONO)
+    num_aa(fdex, fdy, fs_lba(sel), theme(TH_TEXT))
+    fdex = fdex + s3_numw(fs_lba(sel))
+    ui_txt(fdex, fdy, "  run ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    fdex = fdex + ui_tw("  run ", PW_SM, PW_MONO)
+    num_aa(fdex, fdy, fs_run(sel), theme(TH_TEXT))
+    fdex = fdex + s3_numw(fs_run(sel))
+    ui_txt(fdex, fdy, "  one extent, contiguous", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    fdy = fdy + pw_kvh()
+    # ---- the two the filesystem cannot answer, saying so
+    files_kv_row(fdx, fdy, fdw, "MODE")
+    ui_txt(fdx + 76 * fdu, fdy, "zlfs carries no mode, uid or gid", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    fdy = fdy + pw_kvh()
+    # ---- the buttons
+    fdby = fdy + 4 * fdu
+    fdbx = fdx
+    fdbx = fdbx + s3_btn(fdbx, fdby, "open in editor", 1, 0) + FILES_BTN_GAP * fdu
+    fdbx = fdbx + s3_btn(fdbx, fdby, "hex", 0, 0) + FILES_BTN_GAP * fdu
+    s3_btn(fdbx, fdby, "stat", 0, 0)
     return 0
 }
 
@@ -8057,13 +8143,50 @@ fn files_draw(ax, ay, aw, ah) {
         files_di = files_di + 1
     }
     if fs_n() == 0 { label(ax + 18 * files_u, files_y0 + 8 * files_u, "Empty volume. Press N to create a file.", theme(TH_TEXT_DIM), T_BODY, W_REG) }
+    files_detail(ax, ay, aw, ah, files_sel)
     if files_delete >= 0 {
         label(ax + 12 * files_u, ay + ah - 24 * files_u, "Press Delete again to permanently remove the selected file", theme(TH_DANGER), T_CAPTION, W_BOLD)
     } else {
-        label_num(ax + 12 * files_u, ay + ah - 24 * files_u, fs_free() * fs_bs(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-        label(ax + 90 * files_u, ay + ah - 24 * files_u, "bytes free", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+        # RIGHT-FLUSHED, out of the buttons' way: the detail block now owns the
+        # bottom-left of this pane and the free figure used to sit on top of it.
+        files_fb = fs_free() * fs_bs()
+        files_fw = s3_numw(files_fb) + ui_tw(" bytes free", PW_SM, PW_MONO)
+        num_aa(ax + aw - 12 * files_u - files_fw, ay + ah - 22 * files_u, files_fb, theme(TH_TEXT_DIM))
+        ui_txt(ax + aw - 12 * files_u - files_fw + s3_numw(files_fb), ay + ah - 22 * files_u, " bytes free", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
     }
     return 0
+}
+
+# WHICH BUTTON, OR -1. The x edges are recomputed from the same terms
+# files_detail draws them with, so a pill and its hit rectangle cannot drift -
+# the discipline ca_btn_w and files_list_rows already enforce in this file.
+fn files_btn_at(win, ex, ey) {
+    if files_sel < 0 { return 0 - 1 }
+    fbu = ui()
+    fbay = wm_cy(win)
+    fbah = wm_ch(win)
+    fby = files_detail_y(fbay, fbah) + 10 * fbu + 4 * pw_kvh() + 4 * fbu
+    if ey < fby { return 0 - 1 }
+    if ey >= fby + ui_pill_h(S3_MD) { return 0 - 1 }
+    fbx = wm_cx(win) + 12 * fbu
+    fbw = s3_btn_w("open in editor", 0)
+    if ex >= fbx { if ex < fbx + fbw { return 0 } }
+    fbx = fbx + fbw + FILES_BTN_GAP * fbu
+    fbw = s3_btn_w("hex", 0)
+    if ex >= fbx { if ex < fbx + fbw { return 1 } }
+    fbx = fbx + fbw + FILES_BTN_GAP * fbu
+    fbw = s3_btn_w("stat", 0)
+    if ex >= fbx { if ex < fbx + fbw { return 2 } }
+    return 0 - 1
+}
+
+# `stat` in the reference raises a toast. Here it says what the entry actually
+# holds, which is the same three facts the detail block draws - so the button
+# reports rather than computes, and cannot disagree with the rows above it.
+fn files_stat_say() {
+    if files_sel < 0 { return 1 }
+    note_say2("stat", "size, first block and run length are in the detail block - zlfs holds no mode, owner or checksum", 900)
+    return 1
 }
 
 fn files_mouse_slot(win, ey) {
@@ -8188,6 +8311,18 @@ fn files_event(win, ety, ecode, ex, ey) {
     }
     if ety == 4 {
         if band(ecode, 1) != 0 {
+            # THE THREE BUTTONS, tested BEFORE the list - they sit below it and
+            # a click that reaches the list's hit test from down here would
+            # select whatever row the arithmetic happened to land on.
+            #
+            # Wired in the same commit they are drawn in. Three pills with no
+            # dispatch arm is the dead-control fault this session has spent its
+            # length removing, and adding three more while doing it would be a
+            # poor joke.
+            fbn = files_btn_at(win, ex, ey)
+            if fbn == 0 { files_open_selected()  return 1 }
+            if fbn == 1 { return reg_open(APP_HEXV) }
+            if fbn == 2 { return files_stat_say() }
             files_hit = files_mouse_slot(win, ey)
             if files_hit >= 0 {
                 files_sel = files_hit
