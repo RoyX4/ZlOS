@@ -377,6 +377,19 @@ TITLE_H = 28                       # ZD_TITLE_H - down from 36, see design.h
 # The widest the prototype's default composition reaches: files sits at x 672
 # and is 540 wide. Below this the desk falls back to the stacked layout.
 PROTO_FIT = 1212
+# THE AUTHORITY'S OWN RECT FOR THE FILES WINDOW, named once.
+#
+# presswork-prototype.html gives files p:[672, 12, 540, 400]. The boot
+# composition used those four numbers correctly, and the other two call sites -
+# the shell's `files` command and reopen_files - opened it at
+# desk_x(106), desk_y(300), 672 x 352. The 672 there is the authority's X used
+# as a WIDTH, which is how a transcription error hides: the number is right, it
+# is in the wrong slot, and nothing about 672 looks out of place in a size.
+FILES_X = 672                      # presswork-prototype.html APPS files p[0]
+FILES_Y = 12                       # ...p[1]
+FILES_W = 540                      # ...p[2]
+FILES_H = 400                      # ...p[3]
+
 MON_W = 640                        # presswork-prototype.html APPS mon p[2]
 MON_H = 400                        # presswork-prototype.html APPS mon p[3]
 AB_H  = 150                        # About height; no clipped final line at 2x
@@ -9150,13 +9163,43 @@ fn set_tog_row(x, y, w, n, on, nm, note) {
     return 0
 }
 
+# THE SAME ROW WITH THE MODULE'S DIMENSIONS READ INSTEAD OF SPELLED.
+#
+# The grid row's note was the string "12 x 8, ruled onto the field", and the
+# prototype composes it from live state - `tog('desk module grid', 'grid',
+# S.cols + ' x ' + S.rows)`. GRID_COLS and GRID_ROWS are named constants in this
+# file, are what draw_grid actually loops over, and are already DRAWN AS DIGITS
+# by two other surfaces here: the wallpaper legend and the printer's slug. So
+# the module's size appeared three times as a reading and once as prose, and the
+# prose is the copy that would go stale.
+#
+# zl has no string values, so the note cannot be assembled - it is drawn in
+# pieces, right-flushed off a measured total, the way the legend does it.
+fn set_tog_row_grid(x, y, w, n, on, nm) {
+    stgg_y = set_rowN_y(y, n)
+    if set_vis(stgg_y, set_rowh()) == 0 { return 0 }
+    set_toggle(x, stgg_y + (set_rowh() - set_togh()) / 2, on)
+    label(x + set_togw() + SET_GAP * ui(), stgg_y + (set_rowh() - label_h(T_BODY)) / 2, nm, theme(TH_TEXT), T_BODY, W_REG)
+    stgg_ty = stgg_y + (set_rowh() - cell_h()) / 2
+    stgg_w = s3_numw(GRID_COLS) + ui_tw(" x ", PW_SM, PW_MONO) + s3_numw(GRID_ROWS) + ui_tw(", ruled onto the field", PW_SM, PW_MONO)
+    stgg_x = x + w - stgg_w
+    num_aa(stgg_x, stgg_ty, GRID_COLS, theme(TH_TEXT_DIM))
+    stgg_x = stgg_x + s3_numw(GRID_COLS)
+    text_aa(stgg_x, stgg_ty, " x ", theme(TH_TEXT_DIM))
+    stgg_x = stgg_x + ui_tw(" x ", PW_SM, PW_MONO)
+    num_aa(stgg_x, stgg_ty, GRID_ROWS, theme(TH_TEXT_DIM))
+    stgg_x = stgg_x + s3_numw(GRID_ROWS)
+    text_aa(stgg_x, stgg_ty, ", ruled onto the field", theme(TH_TEXT_DIM))
+    return 0
+}
+
 # THE PRESS TAB'S CONTROLS, WHICH IT HAD NONE OF. The tab named six switches and
 # two segmented controls and offered not one of them - the pane described a set
 # of choices the machine did not have. These four are the ones whose state this
 # OS can actually hold: each gates something kernel.zl was drawing
 # unconditionally. Labels and notes are the prototype's, verbatim.
 fn set_press_ctl(x, y, w) {
-    set_tog_row(x, y, w, 0, desk_grid_on, "desk module grid", "12 x 8, ruled onto the field")
+    set_tog_row_grid(x, y, w, 0, desk_grid_on, "desk module grid")
     set_tog_row(x, y, w, 1, desk_crop_on, "crop marks", "overprint job 3, vermilion, at the margins")
     set_tog_row(x, y, w, 2, desk_ruler_on, "memory map ruler", "Datum, on the foot")
     set_tog_row(x, y, w, 3, desk_slug_on, "printer's slug", "PLATE, one mono line, measured")
@@ -10524,7 +10567,7 @@ fn open_app(cmd, arg) {
         if files_win >= 0 { if wm_open_p(files_win) == 1 {
                 wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
-        files_win = wm_open(APP_FILES, "Files", desk_x(106), desk_y(300), 672 * oa_u, 352 * oa_u)
+        files_win = wm_open(APP_FILES, "Files", desk_x(FILES_X), desk_y(FILES_Y), FILES_W * oa_u, FILES_H * oa_u)
         if files_win < 0 { return 0 }
         files_refresh()
         wm_setfocus(files_win)
@@ -12346,7 +12389,7 @@ fn reopen_about() {
 fn reopen_files() {
     u = ui()
     if files_win >= 0 { if wm_open_p(files_win) == 1 { wm_setfocus(files_win)  wm_raise(files_win)  return 0 } }
-    files_win = wm_open(APP_FILES, "Files", desk_x(106), desk_y(300), 672 * u, 352 * u)
+    files_win = wm_open(APP_FILES, "Files", desk_x(FILES_X), desk_y(FILES_Y), FILES_W * u, FILES_H * u)
     wm_setfocus(files_win)
     wm_raise(files_win)
     return 0
@@ -12589,7 +12632,7 @@ fn wm_boot_start() {
     # composition, not to the panel.
     if field_w() >= PROTO_FIT * u {
         shell_win = create_shell_window()
-        files_win = wm_open(APP_FILES, "Files", desk_x(672), desk_y(12), 540 * u, 400 * u)
+        files_win = wm_open(APP_FILES, "Files", desk_x(FILES_X), desk_y(FILES_Y), FILES_W * u, FILES_H * u)
         # MON_W/MON_H, not a second copy of the size. This line said 424 x 376
         # while reopen_mon() opened MON_W x MON_H, so the monitor was one size at
         # boot and a different size the moment you closed and reopened it - the

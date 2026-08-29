@@ -1118,8 +1118,14 @@ fn sk_event(win, ety, ecode, ex, ey) {
         if ecode == 114 { sk_load(sk_lvl)  wm_dmg(win)  return 1 }
         if ecode == 117 { if sk_undo() == 1 { wm_dmg(win) }  return 1 }
         if ecode == 32 {
-            if sk_win == 1 { sk_next()  wm_dmg(win) }
-            if sk_done == 1 { sk_reset()  wm_dmg(win) }
+            # RETURN BETWEEN THEM. sk_next sets sk_done when the last level is
+            # cleared and returns WITHOUT loading anything - and the second `if`
+            # then read the flag the first had just set, in the same keypress.
+            # So finishing the game reset it instantly: the completed state
+            # never survived to be painted, and "every level cleared" was
+            # unreachable by construction.
+            if sk_win == 1 { sk_next()  wm_dmg(win)  return 1 }
+            if sk_done == 1 { sk_reset()  wm_dmg(win)  return 1 }
             return 1
         }
         return 0
