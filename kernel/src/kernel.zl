@@ -1526,7 +1526,7 @@ fn rail_stat_tick() {
     if rsec == rail_stat_sec { return 0 }
     rail_stat_sec = rsec
     if px_w() < 1 { return 0 }
-    desk_wakes = desk_wakes + 1
+    desk_wakes = desk_wakes + 1  wake_win_c = wake_win_c + 1
     wm_damage(0, rail_stat_y(), rail_w(), RAIL_STAT_H * ui())
     return 1
 }
@@ -1725,7 +1725,7 @@ fn rail_clock_tick() {
     cmin = rtc_h() * 60 + rtc_mi()
     if cmin == rtc_min_seen { return 0 }
     rtc_min_seen = cmin
-    desk_wakes = desk_wakes + 1
+    desk_wakes = desk_wakes + 1  wake_win_c = wake_win_c + 1
     wm_damage(0, px_h() - RAIL_CLOCK_H * ui(), rail_w(), RAIL_CLOCK_H * ui())
     return 1
 }
@@ -2008,8 +2008,7 @@ fn strip_rd_w() {
     # been up a short time, so it is measured like every other number on this
     # band. Reserving one cell for a four-digit figure would have pushed BUDGET
     # off the right edge.
-    rd_up = idiv(ticks(), 100)
-    if rd_up < 1 { w = w + g + cw } else { w = w + g + s3_numw(idiv(desk_wakes * 3600, rd_up)) }
+    if wake_win_n < 1 { w = w + g + cw } else { w = w + g + s3_numw(wake_rate()) }
     w = w + g + ui_capsw("BUDGET", T_CAPTION)
     w = w + g + budget_w()
     return w
@@ -2099,12 +2098,21 @@ fn draw_strip_rd(rx, sh) {
     # about: desk_wakes is incremented by every desk tick that actually damages,
     # and this is that count over the uptime, per hour. Before the machine has
     # run a second there is nothing to divide by and it says so.
-    up_s = idiv(ticks(), 100)
-    if up_s < 1 {
+    # A SINCE-BOOT AVERAGE IS NOT AN IDLE RATE, and the first counted version of
+    # this was one. desk_wakes counts every desk damage since power-on, busy
+    # periods included, so the figure was dominated by the boot burst for the
+    # first minutes and by whatever the machine had been doing after that. It
+    # printed 45000 a few seconds in - honest arithmetic, wrong question.
+    #
+    # The label says PER HOUR and means "at the rate it is going now". That is a
+    # WINDOW, not an average: the wakes counted in the last minute, scaled. A
+    # minute is long enough that the once-a-second ticks dominate the noise and
+    # short enough that it follows what the machine is doing.
+    if wake_win_n < 1 {
         text_aa(rx, ny, "-", val)
         rx = rx + cw + g
     } else {
-        wk = idiv(desk_wakes * 3600, up_s)
+        wk = wake_rate()
         num_aa(rx, ny, wk, val)
         rx = rx + s3_numw(wk) + g
     }
@@ -2170,7 +2178,7 @@ fn raster_tick() {
     # because there is genuinely nothing to plot. That is the reading the strip
     # is supposed to give.
     if rv == rprev { return 0 }
-    desk_wakes = desk_wakes + 1
+    desk_wakes = desk_wakes + 1  wake_win_c = wake_win_c + 1
     wm_damage(rail_w(), 0, px_w() - rail_w(), strip_h())
     return 1
 }
@@ -2672,8 +2680,26 @@ fn mib1(mx, my, bytes, col) {
 #
 # One second, one damage, and only when the second actually rolled - same shape
 # as rail_clock_tick beside it.
-# EVERY DESK-TICK DAMAGE IS COUNTED, because the strip prints the rate.
-desk_wakes = 0
+# EVERY DESK-TICK DAMAGE IS COUNTED, because the strip prints the rate - over a
+# ROLLING MINUTE, not since boot. desk_wakes is the running total; wake_win_*
+# hold the closed minute the readout actually reports, so the figure follows the
+# machine instead of being dragged around by the boot burst for ever.
+desk_wakes  = 0
+wake_win_n  = 0                    # wakes counted in the last CLOSED minute
+wake_win_c  = 0                    # ...and in the minute now filling
+wake_win_m  = 0 - 1                # which minute that is
+
+fn wake_tick() {
+    wkm = idiv(ticks(), 6000)
+    if wkm == wake_win_m { return 0 }
+    if wake_win_m >= 0 { wake_win_n = wake_win_c }
+    wake_win_m = wkm
+    wake_win_c = 0
+    return 0
+}
+
+# Wakes per hour, from the last closed minute. Sixty of them make an hour.
+fn wake_rate() { return wake_win_n * 60 }
 
 # IS THE COMPOSITOR ACTUALLY PAINTING? The System Monitor's swatch asked
 # wm_run(), which is written in exactly two places - `running = 1` in wm_init
@@ -2704,7 +2730,7 @@ fn foot_tick() {
     if fsec == foot_sec_seen { return 0 }
     foot_sec_seen = fsec
     if px_w() < 1 { return 0 }
-    desk_wakes = desk_wakes + 1
+    desk_wakes = desk_wakes + 1  wake_win_c = wake_win_c + 1
     wm_damage(rail_w(), foot_y(), px_w() - rail_w(), foot_h())
     return 1
 }
@@ -10777,6 +10803,7 @@ fn app_tick(id, win) {
     # rail_clock_tick is the wall clock's one sample per second. It draws
     # nothing; it asks for the clock block back when the minute rolls.
     if id < 0 {
+        wake_tick()
         raster_tick()
         sm_run_tick()
         rail_clock_tick()
