@@ -2665,7 +2665,13 @@ static void title_control_rect(const struct win *W, int which,
     const struct ui_theme *t = ui_theme();
     int cw = UI_DP(t, ZD_WINCTL);
     *w = cw;
-    *h = t->title_h - 2;
+    /* THE FULL CONTENT BOX. With .hdr border-box its content is title_h - 1
+     * (28dp total, 1px border-bottom), and `.ctl { align-self: stretch }` with
+     * .cbtn stretching inside it makes each cell that whole height. This was
+     * title_h - 2, left over from when the header was laid out from the ring
+     * row, so the cells were a row short of the band they sit in and the hover
+     * plate stopped one pixel above the groove. */
+    *h = t->title_h - 1;
     if (*h < 1) *h = 1;
     /* which == TITLE_CLOSE is the rightmost cell, and the cluster grows
      * leftward from the header's CONTENT-box right edge - which is the plate's

@@ -86,10 +86,24 @@ fn ac_cat_color(cat) {
 # from the ladder" - no semantics attached, so it can never be pulled toward a
 # meaning the way the other was.
 #
-# Seven roles, checked pairwise against design.h's hexes:
-#   0 TH_ACCENT   #E8734F vermilion   4 TH_WARN     amber
-#   1 TH_STEEL    #7FB2E0 blue        5 TH_TEXT_HI  near-white
-#   2 TH_OK       green               6 TH_DANGER   red
+# SEVEN ROLES, AND THE DISTANCES ARE MEASURED THIS TIME.
+#
+# The first version of this comment said "checked pairwise against design.h's
+# hexes" and listed them. Listing is not comparing: slot 0 was ZD_VERM #E8734F
+# and slot 6 was ZD_BAD #E8664B - thirteen apart in green, four in blue, the
+# same orange-red to any eye - and Tetris draws both. I asserted a measurement
+# instead of taking one, in a comment whose whole job was to record that I had.
+#
+# Taken now, over the weighted RGB distance (2r, 4g, 3b):
+#
+#   before   worst pair 26.9   ZD_VERM / ZD_BAD
+#   after    worst pair 88.7   ZD_STEEL / ZD_STEEL_BR  - two blues, one pale
+#
+# A 3.3x improvement, and every other pair is further apart than that.
+#
+#   0 TH_ACCENT   #E8734F vermilion   4 TH_WARN     #E3A63F amber
+#   1 TH_STEEL    #7FB2E0 blue        5 TH_TEXT_HI  #ECE6DD near-white
+#   2 TH_OK       #7FBF63 green       6 TH_KNOCK    #B6B0AB warm grey
 #   3 TH_STEEL_BR #A9CFF2 pale blue
 fn ac_play_color(i) {
     if i == 0 { return theme(TH_ACCENT) }
@@ -98,7 +112,7 @@ fn ac_play_color(i) {
     if i == 3 { return theme(TH_STEEL_BR) }
     if i == 4 { return theme(TH_WARN) }
     if i == 5 { return theme(TH_TEXT_HI) }
-    return theme(TH_DANGER)
+    return theme(TH_KNOCK)
 }
 
 # A small deterministic PRNG, independent of sn_seed (Snake's own) so two

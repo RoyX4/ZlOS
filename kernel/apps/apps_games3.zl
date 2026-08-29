@@ -190,14 +190,25 @@ fn tet_mask(p, r) {
 # the gate on it. TH_ACCENT / TH_OK / TH_DANGER / TH_TEXT_HI plus the three
 # category hues ac_cat_color() already publishes give exactly seven distinct
 # values with no new colour entering the system.
+# ALL SEVEN THROUGH ONE FUNCTION, which is the point of having it.
+#
+# This mixed ac_play_color for three and direct theme() roles for four, and the
+# two it picked directly - TH_ACCENT and TH_DANGER - are ZD_VERM #E8734F and
+# ZD_BAD #E8664B: the same orange-red, 26.9 apart on a scale where every other
+# pair in the set is over a hundred. So two tetrominoes were indistinguishable,
+# under a comment claiming seven distinct values.
+#
+# Routing the whole table through ac_play_color means the distinctness is
+# guaranteed in ONE place and measured there, instead of being a property each
+# caller has to re-establish and can silently lose.
 fn tet_col(v) {
-    if v == 1 { return theme(TH_ACCENT) }
+    if v == 1 { return ac_play_color(0) }
     if v == 2 { return ac_play_color(1) }
-    if v == 3 { return ac_play_color(3) }
-    if v == 4 { return theme(TH_OK) }
+    if v == 3 { return ac_play_color(2) }
+    if v == 4 { return ac_play_color(3) }
     if v == 5 { return ac_play_color(4) }
-    if v == 6 { return theme(TH_TEXT_HI) }
-    return theme(TH_DANGER)
+    if v == 6 { return ac_play_color(5) }
+    return ac_play_color(6)
 }
 
 fn tet_at(x, y) { return peek8(G3_TETB + y * TET_W + x) }

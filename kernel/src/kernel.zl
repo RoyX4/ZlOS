@@ -1488,9 +1488,14 @@ fn rail_st_word(sy, nm, word, wlen, dotc, wordc) {
     #
     # The word first, measured, then the dot placed against its left edge - one
     # origin, so the dot cannot drift when "UP" becomes "DOWN".
+    # ...AT THE MONO ORIGIN, not the caption's. Moving the word from label() to
+    # text_aa was right and reusing `ty` with it was not: the two faces are
+    # different heights, so the word sat low against the key beside it. The
+    # vertical centre has to be computed from the face that is actually drawn.
     ww = wlen * cell_w()
     wx = rw - pad_d() - ww
-    text_aa(wx, ty, word, wordc)
+    wy2 = sy + (RAIL_STROW_H * u - cell_h()) / 2
+    text_aa(wx, wy2, word, wordc)
     dw = RAIL_DOT * u
     dy = sy + (RAIL_STROW_H * u - dw) / 2
     fill_rgb(wx - RAIL_DOT_GAP * u - dw, dy, dw, dw, dotc)
@@ -3665,23 +3670,32 @@ fn ed_cols(tw) {
 # A line costs ceil(len / cols) rows, and at least one: an empty line still
 # occupies a row. Walking the buffer to add them up is the same shape ed_lines
 # already uses and costs the same once-per-frame pass.
+# COUNTED BY WALKING, THE SAME WALK ed_row_off DOES.
+#
+# The first version used ceil(len / cols) per line, which disagrees with the
+# walk for any line that is an exact multiple of the column count: the ceiling
+# says one row, and the walk - which advances on `c >= cols` and then again on
+# the newline - says two. Two functions describing one layout by different
+# arithmetic will differ somewhere, and here they differed exactly where a line
+# filled the well precisely.
+#
+# Same loop, same conditions, same order. They cannot disagree now because they
+# are the same procedure asked two different questions.
 fn ed_rows_used(tw) {
     eru_i = 0
-    eru_n = 0
+    eru_n = 1
     eru_c = 0
     edc = ed_cols(tw)
     while eru_i < ed_len {
         if peek8(EDIT_BUF + eru_i) == 10 {
-            eru_n = eru_n + idiv(eru_c + edc - 1, edc)
-            if eru_c == 0 { eru_n = eru_n + 1 }
+            eru_n = eru_n + 1
             eru_c = 0
         } else {
             eru_c = eru_c + 1
+            if eru_c >= edc { eru_n = eru_n + 1  eru_c = 0 }
         }
         eru_i = eru_i + 1
     }
-    eru_n = eru_n + idiv(eru_c + edc - 1, edc)
-    if eru_c == 0 { eru_n = eru_n + 1 }
     return eru_n
 }
 
@@ -9978,7 +9992,21 @@ fn settings_body(ax, ay, aw, ah) {
     # not worth drawing, never what is allowed to.
     set_c0 = set_body_y(ay)
     set_c1 = ay + ah
+    # THE SCISSOR, because set_vis alone is not one. set_vis skips a block only
+    # when it is ENTIRELY above the viewport - `if y + h <= set_c0 { return 0 }`
+    # - so a block STRADDLING the fold is drawn in full, up over the tab strip
+    # and the rule under it. The comment above says the compositor keeps a
+    # straddling block "safe" because an app cannot draw over its own title bar;
+    # that is true of the CHROME and says nothing about this pane's own header,
+    # which is inside the client rect and is exactly what got painted over.
+    #
+    # `clip` drives the framebuffer's real scissor and this file already uses it
+    # twice. The hit test gained its floor a commit ago; this is the other half,
+    # and having only one of the two is what let the draw and the click disagree
+    # about where the body begins.
+    clip(setb_x, set_c0, setb_w, set_c1 - set_c0)
     setb_end = set_tab_body(setb_x, set_ctl_y(ay), setb_w)
+    clipoff()
     # WHAT THE DRAW JUST LEARNED, fed to the next one. The content height is
     # taken from the draw that produced it rather than from a second pass that
     # walks the same layout to total it up; a second pass is a second copy of

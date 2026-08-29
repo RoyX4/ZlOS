@@ -736,8 +736,14 @@ fn pt_scan() {
     while t0 <= pt_tlen {
         e = pt_end_here(p0, t0)
         if e >= 0 { pt_ms = t0  pt_me = e  return 1 }
-        if anchored == 1 { return 0 }
+        # THE BUDGET IS TESTED BEFORE THE ANCHORED RETURN. It was after, so a
+        # `^`-anchored pathological pattern - which tries exactly one start
+        # position and can still spend the whole budget there - returned 0 with
+        # pt_over clear, and the pane printed "matches 0" for a search that had
+        # given up. The work was still bounded; only the report was wrong, which
+        # is the invented-figure fault rather than the hang.
         if pt_steps > PT_BUDGET { pt_over = 1  return 0 }
+        if anchored == 1 { return 0 }
         t0 = t0 + 1
     }
     if pt_steps > PT_BUDGET { pt_over = 1 }
