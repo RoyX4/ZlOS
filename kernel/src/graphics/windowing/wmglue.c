@@ -61,6 +61,9 @@ extern Value zl_fn_desk_click(Value, Value, Value) __attribute__((weak));
 
 /* fn desk_key(code, mods) - a system key: Super, today */
 extern Value zl_fn_desk_key(Value, Value) __attribute__((weak));
+
+/* fn app_can_close(win) - 0 refuses the close box and Ctrl+W */
+extern Value zl_fn_app_can_close(Value) __attribute__((weak));
 /* ---- apps that live in C --------------------------------------------------
  * THERE ARE NONE LEFT, AND THIS BLOCK IS THE RECORD OF WHY.
  *
@@ -124,6 +127,13 @@ static void glue_desk_click(int x, int y, int btn)
     zl_fn_desk_click(zl_num(x), zl_num(y), zl_num(btn));
 }
 
+static int glue_can_close(int win)
+{
+    if (!zl_fn_app_can_close) return 1;      /* no arm defined: always closes */
+    Value r = zl_fn_app_can_close(zl_num(win));
+    return (int)r.num != 0;
+}
+
 static int glue_desk_key(int code, int mods)
 {
     if (!zl_fn_desk_key) return 0;
@@ -176,6 +186,7 @@ int wm_bind_zl(void)
     if (zl_fn_win_menu_at) wm_win_menu(glue_win_menu);
     if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
     if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
+    if (zl_fn_app_can_close) wm_can_close(glue_can_close);
     return 1;
 }
 

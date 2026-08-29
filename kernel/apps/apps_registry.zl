@@ -206,12 +206,15 @@ fn reg_w(id) {
     # These fourteen are the prototype's APPS table, p[2] and p[3]. The games
     # and utilities below keep their existing sizes: the prototype has no
     # counterpart for them, so there is nothing to take.
-    if id == APP_KLOG       { return 620 }
-    if id == APP_HEXV       { return 620 }
+    # KLOG, HEXV, DISK and NET ARE NOT ANSWERED HERE. reg_w/reg_h are consulted
+    # only by reg_new's four generic wm_open lines, and those id bands stop short
+    # of the sys2 and sys3 ranges - those four apps open through sys2_new and
+    # sys3_new instead. Arms for them were added here and were unreachable from
+    # the day they were written, while the tables that DO answer kept the older
+    # sizes: one id, two disagreeing numbers, and the wrong one was the readable
+    # one. Their prototype rects now live in sys2_w/sys2_h and sys3_w/sys3_h.
     if id == APP_CALC       { return 360 }
-    if id == APP_NET        { return 600 }
     if id == APP_CLOCK      { return 540 }
-    if id == APP_DISK       { return 580 }
     if id == APP_SYSINFO    { return 600 }
     # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
     # UTILS and GAME_APPS arrays. They were not before: twenty of these
@@ -259,12 +262,8 @@ fn reg_h(id) {
     # These fourteen are the prototype's APPS table, p[2] and p[3]. The games
     # and utilities below keep their existing sizes: the prototype has no
     # counterpart for them, so there is nothing to take.
-    if id == APP_KLOG       { return 400 }
-    if id == APP_HEXV       { return 420 }
     if id == APP_CALC       { return 430 }
-    if id == APP_NET        { return 460 }
     if id == APP_CLOCK      { return 400 }
-    if id == APP_DISK       { return 420 }
     if id == APP_SYSINFO    { return 470 }
     # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
     # UTILS and GAME_APPS arrays. They were not before: twenty of these
@@ -447,9 +446,23 @@ fn reg_find_win(id) {
 # for anything that needs a fresh start each time it is opened - the same
 # rule open_app() already follows for Snake). Returns the new window, or -1.
 fn reg_new(id, u) {
-    # presswork-prototype.html APPS set p[14, 12, 720, 720]
-    if id == APP_SETTINGS { return wm_open(id, "Settings", 14 * u, 12 * u, 720 * u, 720 * u) }
-    if id == APP_CATALOG  { return wm_open(id, "All Applications", 120 * u, 40 * u, CAT_W * u, CAT_H * u) }
+    # THE PROTOTYPE'S COORDINATES ARE FIELD-RELATIVE, NOT SCREEN-RELATIVE.
+    #
+    # `p[14, 12, 720, 720]` was transcribed as raw screen pixels, so Settings
+    # opened at absolute (14, 12) - underneath the register rail and underneath
+    # the raster strip, both of which the field begins after. The rail is stated
+    # to be the only route to every system function, and a 720-square plate
+    # parked on top of it covers that route from the first frame.
+    #
+    # clamp_to_field cannot recover it either: that clamp runs on GRAB_MOVE and
+    # lower-bounds at the window's CURRENT position precisely so a programmatic
+    # placement is never yanked, which means a window opened out of bounds stays
+    # out of bounds until the user drags it. Placement is the only chance.
+    #
+    # desk_x/desk_y are what the boot composition already uses for the same
+    # numbers out of the same file.
+    if id == APP_SETTINGS { return wm_open(id, "Settings", desk_x(14), desk_y(12), 720 * u, 720 * u) }
+    if id == APP_CATALOG  { return wm_open(id, "All Applications", desk_x(120), desk_y(40), CAT_W * u, CAT_H * u) }
     if id == APP_REGEX     { pt_reset() }
     if id == APP_WORDLE    { wg_reset() }
     if id == APP_TICTACTOE { tt_reset() }

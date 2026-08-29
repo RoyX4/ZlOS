@@ -203,10 +203,26 @@ int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
 int  snap_state(int win);
 
-/* Maximised is a QUESTION, not a stored flag - the snap system owns the rect
- * and the truth, so anything that needs to know asks it. Declared here, beside
- * snap_state, because the chrome reads it long before wm_toggle_max is defined. */
-static int win_maxed(int win) { return snap_state(win) != SNAP_NONE; }
+/* TWO QUESTIONS, NOT ONE, and collapsing them bolted down half the desktop.
+ *
+ * Maximised is a QUESTION rather than a stored flag - the snap system owns the
+ * rect and the truth, so anything that needs to know asks it. That much was
+ * right. But the first version of this asked `snap_state(win) != SNAP_NONE`,
+ * and snap.c has SEVEN non-zero states: LEFT, RIGHT, MAX, TL, TR, BL and BR.
+ * So dragging a window to the left edge made win_maxed() true, and the radius
+ * reader below gave it ZD_R_BOLT - square corners and full-bleed runs on all
+ * four edges - for a plate sitting on visible ground down its whole right side.
+ *
+ * The authority has no such state: .win.max is applied by maxWin() alone, and
+ * a half-snapped window in the prototype keeps its radius.
+ *
+ * win_snapped answers "is the snap system holding this rect" - which is what
+ * the restore path and the control glyph want. win_maxed answers "does this
+ * plate touch every edge" - which is what the radius wants. They are different
+ * questions and only one of them is about corners. */
+#define SNAP_MAX  3                    /* snap.c SNAP_MAX */
+static int win_snapped(int win) { return snap_state(win) != SNAP_NONE; }
+static int win_maxed(int win)   { return snap_state(win) == SNAP_MAX; }
 void snap_note_moved(int win);
 void snap_note_closed(int win);
 void snap_reset(void);
@@ -562,6 +578,7 @@ static void app_draw_dispatch(int win, int app, int x, int y, int w, int h,
  * and never will be. */
 static desk_click_fn hook_desk_click;
 static desk_key_fn   hook_desk_key;
+static can_close_fn  hook_can_close;
 
 static void client_surface_free(int win)
 {
@@ -1821,6 +1838,7 @@ void wm_init(void)
 
 void wm_desk_click(desk_click_fn f) { hook_desk_click = f; }
 void wm_desk_key(desk_key_fn f)     { hook_desk_key = f; }
+void wm_can_close(can_close_fn f)   { hook_can_close = f; }
 
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
@@ -2616,8 +2634,12 @@ static void title_control_rect(const struct win *W, int which,
     *h = t->title_h - 2;
     if (*h < 1) *h = 1;
     /* which == TITLE_CLOSE is the rightmost cell, and the cluster grows
-     * leftward from the inside face of the plate's right ring column. */
-    *x = W->x + W->w - 1 - (which + 1) * cw;
+     * leftward from the header's CONTENT-box right edge - which is the plate's
+     * padding-box right minus .hdr's 6dp right padding, not the inside face of
+     * the ring. Growing from the ring itself was the old behaviour and it left
+     * the close box touching the frame while the title kept an 11dp margin on
+     * the other side. Both margins are now the same document's numbers. */
+    *x = W->x + W->w - 1 - UI_DP(t, ZD_HDR_PR) - (which + 1) * cw;
     *y = W->y + 1;
 }
 
@@ -2909,7 +2931,13 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
     /* the prototype's `.hdr` is 11dp of padding inside a 1px ring, which is
      * 12dp from the plate's outer edge - one step of the spacing scale, and
      * the same left margin the module grid's own columns use */
-    int x = W->x + UI_S3(t);
+    /* ZD_HDR_PL, .hdr's own padding-left. This was UI_S3, a generic 12dp
+     * spacing step that happened to sit next to the right answer without being
+     * it - the prototype says 11dp (proto:655) and the header is one pixel per
+     * ui-unit further in than the document it is copying. An uncited constant
+     * that is nearly right is the hardest kind to notice, because nothing looks
+     * broken; it just is not the same drawing. */
+    int x = W->x + 1 + UI_DP(t, ZD_HDR_PL);
     int gut = UI_DP(t, ZD_GAP);
     /* the cluster's inside face, less one gutter, is the hard stop for
      * everything on this line */
@@ -3277,7 +3305,12 @@ static void chrome_shell(int win, int focused)
         if (over && (last_btn & 1))
             fb_fill_blend(bx, by, bw, bh, t->cut, 48);
         int glyph = b == TITLE_CLOSE ? 13 :
-                    (b == TITLE_MINIMIZE ? 22 : (win_maxed(win) ? 24 : 23));
+                    /* win_snapped, not win_maxed: the button RESTORES from
+                     * any snap state - wm_toggle_max sends SK_DOWN whenever
+                     * snap_state is not SNAP_NONE - so the restore glyph has
+                     * to appear for a half-snapped window too. Only the corner
+                     * radius cares specifically about SNAP_MAX. */
+                    (b == TITLE_MINIMIZE ? 22 : (win_snapped(win) ? 24 : 23));
         fb_icon24(bx + (bw - UI_DP(t, 24)) / 2,
                   by + (bh - UI_DP(t, 24)) / 2, glyph, ink);
     }
@@ -3320,7 +3353,12 @@ static unsigned int shell_state_key(int win, int focused)
     key |= (unsigned int)(wins[win].flags & (WF_MODAL | WF_NOCHROME)) << 1;
     key ^= (unsigned int)(wins[win].tab & 0x0f) << 8;
     key ^= (unsigned int)(wins[win].ntab & 0x0f) << 12;
-    key ^= (unsigned int)(win_maxed(win) ? 1 : 0) << 16;
+    /* Both questions go in the key: the glyph follows win_snapped and the
+     * radius follows win_maxed, so a cache keyed on only one of them serves a
+     * stale plate whenever the other changes alone - which is exactly what a
+     * drag-to-edge does. */
+    key ^= (unsigned int)(win_snapped(win) ? 1 : 0) << 16;
+    key ^= (unsigned int)(win_maxed(win) ? 1 : 0) << 17;
     int over_any = 0;
     for (int b = TITLE_CLOSE; b <= TITLE_MINIMIZE; b++) {
         int x, y, w, h;
@@ -4197,7 +4235,16 @@ static void route_mouse(int x, int y, int btn)
         wm_focus(hit);
         wm_raise(hit);
         int dbl = is_double(hit, x, y);
-        if (in_closebox(hit, x, y)) { wm_close_fx(hit); return; }
+        /* THE APP IS ASKED FIRST. There was no close hook anywhere in this
+         * OS - wm.c had no app_close callback and kernel.zl defined only
+         * app_tick - so this line used to destroy an editor holding unsaved
+         * text with no toast, no confirm and no trace. The next open re-read
+         * the file from disk and the edits were simply gone. The pane
+         * advertised the loss in its own footer one frame before it happened. */
+        if (in_closebox(hit, x, y)) {
+            if (hook_can_close && !hook_can_close(hit)) return;
+            wm_close_fx(hit); return;
+        }
         if (in_title_control(hit, TITLE_MAXIMIZE, x, y)) { wm_toggle_max(hit); return; }
         if (in_title_control(hit, TITLE_MINIMIZE, x, y)) { wm_minimize(hit); return; }
         /* DOUBLE-CLICK THE TITLE BAR TO MAXIMISE, again to restore. Checked
@@ -4334,7 +4381,33 @@ static void route_key(int type, int code, int mods)
      * no longer sees those three control codes, and saying "the terminal still
      * gets its characters" without that qualification was no longer true.
      * Everything else still falls through untouched. */
-    if (type == EV_KEY_DOWN || type == EV_CHAR) {
+    /* ONE LOGICAL PRESS, ONE OFFER. This read `EV_KEY_DOWN || EV_CHAR`, which
+     * offered a PS/2 press to the desk TWICE and made every desk toggle a net
+     * no-op on real hardware.
+     *
+     * The reason is one line in input.c:412 - `if (!key && ch) key = ch;`. A
+     * letter has no sc_special() keycode, so its EV_KEY_DOWN is BACKFILLED with
+     * the character. Ctrl+G therefore pushes EV_KEY_DOWN code 7 AND EV_CHAR
+     * code 7 (input.c:436-437), the same number down both, and desk_key ran
+     * `desk_grid_on = 1 - desk_grid_on` on each - back to where it started,
+     * with two toasts, the second announcing the state it had just left.
+     *
+     * NO PROBE IN THIS TREE COULD SEE IT. Every probe-*.py drives COM1, and the
+     * serial path pushes EV_CHAR alone and says so at input.c:851 ("EV_CHAR
+     * ONLY, DELIBERATELY"). The bug existed exclusively on the wire no test
+     * harness uses, which is the whole reason it survived being "verified".
+     *
+     * The split below is by CODE SPACE, not by event type, because that is
+     * what actually distinguishes the two: keycodes are >= 0x100 (KEY_ESC,
+     * KEY_F1, KEY_SUPER, the arrows) and reach us only as EV_KEY_DOWN, since
+     * sc_extended() sets ch = 0. Characters are < 0x100 and are authoritative
+     * on EV_CHAR down both wires. Neither key is now offered twice, and the
+     * serial ESC (27, a character) still arrives - which is why the separate
+     * EV_CHAR-27 arm that used to sit below is gone rather than kept. */
+    if (type == EV_KEY_DOWN && code >= 0x100) {
+        if (hook_desk_key && hook_desk_key(code, mods)) return;
+    }
+    if (type == EV_CHAR && code < 0x100) {
         if (hook_desk_key && hook_desk_key(code, mods)) return;
     }
     if (type == EV_KEY_DOWN && (code == KEY_SUPER || code == KEY_ESC || code == KEY_F1)) {
@@ -4343,21 +4416,13 @@ static void route_key(int type, int code, int mods)
          * editor's Escape still saves and closes. */
         if (code == KEY_SUPER) return;
     }
-    /* ESCAPE ARRIVES TWICE, BY TWO PATHS, AND THIS IS NOT A REDUNDANT TEST.
-     * A real keyboard sends EV_KEY_DOWN with KEY_ESC (0x101). COM1 sends the
-     * raw byte as EV_CHAR 27 and no key event at all - input.c states that
-     * choice and its reason: "a serial ESC would start arriving as KEY_ESC
-     * where the editor has always seen 27". Every probe-*.py drives this
-     * machine down that wire, so a fix that handled only the keycode would be
-     * a fix no probe could reach, and therefore one nobody would notice
-     * breaking again. */
-    if (type == EV_CHAR && code == 27) {
-        if (hook_desk_key && hook_desk_key(code, mods)) return;
-    }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any
      * key", which is the phrase this whole rewrite exists to delete. */
     if (type == EV_CHAR && code == 23) {        /* Ctrl+W */
-        if (focus_win >= 0) wm_close_fx(focus_win);
+        if (focus_win >= 0) {
+            if (hook_can_close && !hook_can_close(focus_win)) return;
+            wm_close_fx(focus_win);
+        }
         return;
     }
     int m = modal_win();
@@ -4551,6 +4616,21 @@ void wm_frame(void)
     /* the foot band's app_us figure, moved on its own slow cadence rather than
      * on the app's. See band_us_latch. */
     band_us_latch();
+
+    /* THE DESK TICKS EVEN WITH NOTHING OPEN. The loop below is the only
+     * per-frame hook the policy layer has, and it is gated twice over - on a
+     * window existing at all, and on that window not being minimised. Anything
+     * the policy layer clocked from inside it therefore STOPPED whenever the
+     * desktop was empty: the raster ring took no samples while the compositor
+     * kept painting frames and kept counting them, so the plot and the ADVANCE
+     * figure beside it drifted apart by exactly the frames composited while the
+     * desk was clear - and the wall clock stopped asking for its own block back.
+     *
+     * A desk-wide tick is passed id -1 and win -1, which no app can be, so the
+     * policy layer branches on it at the top of app_tick and every window arm
+     * below stays untouched. Its return is ignored: it draws nothing and owns
+     * no client rect to invalidate. */
+    if (hook_tick) hook_tick(-1, -1);
 
     if (hook_tick)
         for (int i = 0; i < nz; i++)

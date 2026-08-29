@@ -312,7 +312,30 @@ fn kl_chars(x, y, line, from, to, col) {
 
 fn kl_lines() { return term_lines() }
 
+# THE EMPTY RING IS ITS OWN CASE, and it has to be tested before either clamp.
+#
+# This read `if s >= kl_lines() { return kl_lines() - 1 }` first. With an empty
+# ring that is `0 >= 0`, and it returned kl_lines() - 1 = -1: an out-of-range
+# line index, produced in a language with no bounds checking, handed straight to
+# kl_chars and kl_len as a row number.
+#
+# Reordering the two clamps does NOT fix it - that was the first diagnosis and
+# it is wrong. For every input the two orders agree: with lines == 0 the swapped
+# form tests s < 0 (false, s is 0) and then s >= 0, returning -1 again. The two
+# conditions are mutually exclusive whenever lines > 0. The defect is a missing
+# case, not a misordered one, and only the guard below removes it.
+#
+# It is reachable twice: the shell's `clear` builtin and the Console pane's
+# Reset pill both call term_clear(), which sets s_live = 0. It never faulted
+# because term_ch() range-checks its own argument in C - so the out-of-range
+# index was absorbed on the far side of the language boundary and rendered a
+# byte-identical empty well. That is a latent index surviving on somebody
+# else's check, which is exactly the shape that stops being harmless the day
+# the accessor is inlined or replaced.
+#
+# kl_scroll's clamp two hundred lines down already writes the guard this way.
 fn kl_sel_clamped() {
+    if kl_lines() < 1 { return 0 }
     s = kl_sel()
     if s >= kl_lines() { return kl_lines() - 1 }
     if s < 0 { return 0 }
@@ -702,7 +725,15 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     tx = ax + 9 * u
     ui_txt(tx, ty, "kernel image - live memory - offset 0x", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     tx = tx + ui_tw("kernel image - live memory - offset 0x", S2_SM, S2_MONO)
-    if dm == 1 { ac_draw_base(tx, ty, hx_page * 256, 4, 16, ui_ink(S2_IK_T5)) }
+    # THE STRIDE IS hx_pagesz(ah), NOT 256. The pane's page size became a
+    # function of the window height when the viewer learned to fill its well -
+    # the header, the row loop and the B/page readout were all converted - and
+    # this one multiplication was left behind. The status bar therefore printed
+    # an offset that was correct only at the one window height where the well
+    # happened to hold sixteen rows, and drifted further from the address in
+    # the rows above it at every other size. `ah` is in scope here; it is the
+    # same value the loop three lines up paged with.
+    if dm == 1 { ac_draw_base(tx, ty, hx_page * hx_pagesz(ah), 4, 16, ui_ink(S2_IK_T5)) }
     ui_txt(ax + aw - 9 * u - ui_tw("16 bytes/row - read only", S2_SM, S2_MONO), ty, "16 bytes/row - read only", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     return hit
 }
@@ -958,18 +989,24 @@ fn sys2_mono(id) {
 # window that is the right shape in the wrong box scores wrong however it
 # looks.
 fn sys2_w(id) {
-    if id == APP_KLOG { return 544 }
+    # KLOG and HEXV take the PROTOTYPE's rects. They were added to reg_w in
+    # apps_registry.zl and never reached: reg_w is consulted only by reg_new's
+    # four generic wm_open lines, whose id bands stop short of sys2's range, so
+    # these two apps opened from sys2_new out of this table the whole time and
+    # the tree held two disagreeing sizes for one id. The registry's copies are
+    # deleted; these are the live ones.
+    if id == APP_KLOG { return 620 }
     if id == APP_REND { return 352 }
-    if id == APP_HEXV { return 566 }
+    if id == APP_HEXV { return 620 }
     if id == APP_FBUF { return 600 }
     if id == APP_TTY  { return 616 }
     if id == APP_FONT { return 564 }
     return 480
 }
 fn sys2_h(id) {
-    if id == APP_KLOG { return 320 }
+    if id == APP_KLOG { return 400 }
     if id == APP_REND { return 326 }
-    if id == APP_HEXV { return 340 }
+    if id == APP_HEXV { return 420 }
     if id == APP_FBUF { return 420 }
     if id == APP_TTY  { return 396 }
     if id == APP_FONT { return 396 }

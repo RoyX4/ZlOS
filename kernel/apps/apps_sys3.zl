@@ -131,22 +131,31 @@ fn sys3_mono(id) {
     return "??"
 }
 
-# The reference's own window sizes, ds-reference.html APPS table. Design
-# units; reg_new multiplies by ui().
+# Window sizes in design units; reg_new multiplies by ui().
+#
+# THE CITATION WAS TO THE SUPERSEDED DOCUMENT. This said "ds-reference.html
+# APPS table", and design.h is explicit that where the two disagree the
+# prototype wins. DISK and NET now carry presswork-prototype.html's rects; the
+# other three still hold the older numbers and are marked so, because changing
+# a size nobody has checked against the authority would be inventing one.
+#
+# DISK and NET also had a second, unreachable set of values in reg_w/reg_h -
+# reg_w is never consulted for sys3's id band - so one id had two answers. The
+# registry's copies are gone; these are the live ones.
 fn sys3_w(id) {
-    if id == APP_DISK { return 456 }
+    if id == APP_DISK { return 580 }
     if id == APP_SVC  { return 596 }
     if id == APP_ARCH { return 590 }
     if id == APP_IMG  { return 520 }
-    if id == APP_NET  { return 560 }
+    if id == APP_NET  { return 600 }
     return 480
 }
 fn sys3_h(id) {
-    if id == APP_DISK { return 344 }
+    if id == APP_DISK { return 420 }
     if id == APP_SVC  { return 392 }
     if id == APP_ARCH { return 384 }
     if id == APP_IMG  { return 410 }
-    if id == APP_NET  { return 380 }
+    if id == APP_NET  { return 460 }
     return 340
 }
 
@@ -1346,16 +1355,26 @@ fn s3nw_sidebar(ax, ay, ah) {
             nc = ui_ink_on(theme(TH_ACCENT))
             sc = nc
         }
+        # ABSENT IS NOT THE SAME AS DOWN. s3nw_present was written to say so
+        # and then never called, so the loopback row - a device this kernel does
+        # not have - drew the DOWN treatment: a red state, a dark dot, and the
+        # word "down". That is a failure report about something that cannot
+        # fail, and it sits in the same column where eth0's real down state
+        # means a real problem.
         up = s3nw_up(i)
         dc = theme(TH_OK)
         if up == 0 { dc = theme(TH_BORDER) }
         ui_dot(rx + 9 * u, ry + 18 * u, dc, up)
         tx = rx + 9 * u + ui_dot_sz() + 9 * u
         s3_mono(tx, ry + 8 * u, s3nw_name(i), nc)
-        if up == 1 {
-            s3nw_ip(tx, ry + 25 * u, s3nw_addr(i), sc)
+        if s3nw_present(i) == 0 {
+            s3_mono(tx, ry + 25 * u, "not present", theme(TH_TEXT_DIM))
         } else {
-            s3_mono(tx, ry + 25 * u, "down", sc)
+            if up == 1 {
+                s3nw_ip(tx, ry + 25 * u, s3nw_addr(i), sc)
+            } else {
+                s3_mono(tx, ry + 25 * u, "down", sc)
+            }
         }
         i = i + 1
     }
@@ -1458,14 +1477,25 @@ fn s3nw_body(ax, ay, aw, ah) {
             # carrier. netdev_link_up() reads that and was bound and unused, so
             # a cable-out machine reported RUNNING. The two words are two
             # different facts and are now two different reads.
-            if up == 1 {
-                if net_link() == 1 { s3_mono(vx, ry, "UP RUNNING", theme(TH_TEXT)) } else { s3_mono(vx, ry, "UP NO CARRIER", theme(TH_WARN)) }
+            if s3nw_present(s3nw_sel) == 0 {
+                s3_mono(vx, ry, "NOT PRESENT", theme(TH_TEXT_DIM))
             } else {
-                s3_mono(vx, ry, "DOWN", theme(TH_DANGER))
+                if up == 1 {
+                    if net_link() == 1 { s3_mono(vx, ry, "UP RUNNING", theme(TH_TEXT)) } else { s3_mono(vx, ry, "UP NO CARRIER", theme(TH_WARN)) }
+                } else {
+                    s3_mono(vx, ry, "DOWN", theme(TH_DANGER))
+                }
             }
         }
-        if i == 2 { s3nw_ip(vx, ry, s3nw_addr(s3nw_sel), theme(TH_TEXT)) }
-        if i == 3 { num_aa(vx, ry, s3nw_mtu(s3nw_sel), theme(TH_TEXT)) }
+        # A DASH, NOT A ZERO. num_aa in a numeric column reads as a measurement,
+        # and 0 is not an MTU - it is the absence of one. Same treatment the
+        # disk pane gives an unmounted volume.
+        if i == 2 {
+            if s3nw_present(s3nw_sel) == 0 { s3_mono(vx, ry, "-", theme(TH_TEXT_DIM)) } else { s3nw_ip(vx, ry, s3nw_addr(s3nw_sel), theme(TH_TEXT)) }
+        }
+        if i == 3 {
+            if s3nw_present(s3nw_sel) == 0 { s3_mono(vx, ry, "-", theme(TH_TEXT_DIM)) } else { num_aa(vx, ry, s3nw_mtu(s3nw_sel), theme(TH_TEXT)) }
+        }
         if i == 4 {
             dc = theme(TH_TEXT)
             if s3nw_sel != 0 { dc = theme(TH_DANGER) }

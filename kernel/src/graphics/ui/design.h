@@ -362,6 +362,14 @@
 #define ZD_TITLE_INK_KO    ZD_KNOCK_INK /* reversed out of the knockout     */
 #define ZD_TITLE_INK_OFF   ZD_TEXT_3    /* unfocused                        */
 #define ZD_WINCTL          22      /* the control's width; it is full-height */
+/* THE HEADER'S TWO MARGINS, from .hdr's own padding in the prototype:
+ *   .hdr { padding: 0 calc(6px * var(--ui)) 0 calc(11px * var(--ui)) }
+ * The left one was already being drawn (as an uncited UI_S3, the same number by
+ * coincidence); the right one was never spelled at all, so the control cluster
+ * sat flush against the inside face of the ring while the title kept its
+ * margin - an asymmetry the header is not supposed to have. */
+#define ZD_HDR_PL          11      /* .hdr padding-left  */
+#define ZD_HDR_PR           6      /* .hdr padding-right */
 #define ZD_WINCTL_INK      ZD_TEXT_3
 #define ZD_WINCTL_RULE     ZD_CUT  /* the 1px rule to its left               */
 #define ZD_CLOSE_HOVER_BG  ZD_VERM

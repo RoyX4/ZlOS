@@ -641,6 +641,16 @@ WS_N = 2
 fn cur_ws() { return wm_ws() }
 fn set_ws(n) { return wm_setws(n) }
 
+# The keyboard half of the workspace switch. Damage is claimed only when the
+# switch actually happened - wm_set_ws returns 0 when n is out of range or is
+# already current, and repainting the whole screen for a refused switch is a
+# visible cost for no change.
+fn ws_hotkey(n) {
+    if set_ws(n) == 0 { return 0 }
+    wm_damage(0, 0, px_w(), px_h())
+    return 1
+}
+
 # WHERE AN APP LIVES WHEN NOTHING HAS OPENED IT YET - the reference's own
 # assignment, from ds-reference.html's three tables:
 #
@@ -1894,12 +1904,21 @@ fn draw_strip_rd(rx, sh) {
     g = RD_GAP * u
     ly = (sh - label_h(T_CAPTION)) / 2
     ny = (sh - cell_h()) / 2
-    # the labels take the rung the RASTER label already sits on. This band is
-    # ZD_CUT, which is the darkest ground in the system, and the caption rung
-    # that reads on a panel is not the one that reads here - that judgement was
-    # already made for the label at the other end of the same band, and making
-    # a different one twelve hundred pixels away would be the odd thing.
-    lab = theme(TH_TEXT_2)
+    # THE LEGEND IS THE EXCEPTION, NOT THE RULE, and this had it backwards.
+    #
+    # The RASTER legend at the other end of the band is pinned INLINE in the
+    # prototype - `<span class="lbl t-lab" style="color:var(--zd-text-2)">` -
+    # which is the document going out of its way to lift that ONE label off the
+    # default. .t-lab's own colour is ZD_TEXT_3, and the rule that would lift
+    # `#raster .t-lab` to text-2 wholesale is scoped to
+    # `:root[data-theme="light"]`, a ladder design.h says zlOS deliberately does
+    # not ship.
+    #
+    # So on the only ladder this kernel has, these three captions are ZD_TEXT_3
+    # and the legend is one rung above them on purpose. The old comment reasoned
+    # that matching the legend was the consistent choice - but consistency with
+    # an explicit exception is how an exception gets erased.
+    lab = theme(TH_TEXT_DIM)
     val = theme(TH_TEXT)
     dim = theme(TH_TEXT_DIM)
     ui_caps(rx, ly, "ADVANCE", lab, T_CAPTION)
@@ -2099,9 +2118,31 @@ desk_crop_on = 1
 desk_ruler_on = 1
 desk_slug_on = 1
 
+# THREE SWITCHES, THREE THINGS - the early return made it one switch.
+#
+# This opened `if desk_grid_on == 0 { return 0 }`, which skipped the crop marks
+# and the legend along with the rules. desk_crop_on was declared, toggled and
+# announced, and could not change a single pixel: the only code that reads it
+# sat behind a return that had already fired. A control that is wired to a flag
+# nobody reaches is not a control.
+#
+# The comment further down this function says exactly that in the abstract -
+# "a blanket early return silently removed the crop marks and the legend as
+# well" - and then the function did it anyway. Writing the hazard down is not
+# the same as not having it.
+#
+# The rules are gated where the rules are drawn. Crop marks and the legend keep
+# their own flags, which is what the prototype does: it toggles crop marks on a
+# branch of their own and they survive a grid-off.
 fn draw_grid() {
-    if desk_grid_on == 0 { return 0 }
-    u = ui()
+    if desk_grid_on == 0 {
+        if desk_crop_on == 1 { draw_crop_marks() }
+        if desk_slug_on == 1 { draw_grid_legend() }
+        return 0
+    }
+    # `u = ui()` used to sit here and is gone: the only reader left was the crop
+    # block, which now measures its own. -Werror=unused-but-set-variable caught
+    # it, which is the guard doing exactly its job on a leftover from a split.
     fx = field_x()
     fy = field_y()
     fw = field_w()
@@ -2142,24 +2183,40 @@ fn draw_grid() {
     # return silently removed the crop marks and the legend as well. Writing the
     # same shape one screen below the comment describing it would have been
     # careless twice.
-    if desk_crop_on == 1 {
-        vcol = theme(TH_ACCENT)
-        cl = CROP_LEN * u
-        co = CROP_OFF * u
-        ml = fx + mar
-        mr = fx + fw - mar
-        mt = fy + mar
-        mb = fy + fh - mar
-        fill_rgb(ml, mt - co, cl, 1, vcol)
-        fill_rgb(ml - co, mt, 1, cl, vcol)
-        fill_rgb(mr - cl, mt - co, cl, 1, vcol)
-        fill_rgb(mr + co, mt, 1, cl, vcol)
-        fill_rgb(ml, mb + co, cl, 1, vcol)
-        fill_rgb(ml - co, mb - cl, 1, cl, vcol)
-        fill_rgb(mr - cl, mb + co, cl, 1, vcol)
-        fill_rgb(mr + co, mb - cl, 1, cl, vcol)
-    }
-    draw_grid_legend()
+    if desk_crop_on == 1 { draw_crop_marks() }
+    if desk_slug_on == 1 { draw_grid_legend() }
+    return 0
+}
+
+# THE CROP MARKS, LIFTED OUT so that the switch that claims to control them can.
+# They were inline in draw_grid behind its early return, which meant desk_crop_on
+# was read only on frames where the grid was already being drawn - and never on
+# the frames where it mattered. Recomputes its own margin rather than inheriting
+# draw_grid's locals, because free locals of the same name collide across frames
+# in this language and a silently shared `mar` is the kind of bug that only shows
+# up at one screen size.
+fn draw_crop_marks() {
+    cm_u = ui()
+    cm_fx = field_x()
+    cm_fy = field_y()
+    cm_fw = field_w()
+    cm_fh = field_h()
+    cm_mar = grid_mar()
+    vcol = theme(TH_ACCENT)
+    cl = CROP_LEN * cm_u
+    co = CROP_OFF * cm_u
+    ml = cm_fx + cm_mar
+    mr = cm_fx + cm_fw - cm_mar
+    mt = cm_fy + cm_mar
+    mb = cm_fy + cm_fh - cm_mar
+    fill_rgb(ml, mt - co, cl, 1, vcol)
+    fill_rgb(ml - co, mt, 1, cl, vcol)
+    fill_rgb(mr - cl, mt - co, cl, 1, vcol)
+    fill_rgb(mr + co, mt, 1, cl, vcol)
+    fill_rgb(ml, mb + co, cl, 1, vcol)
+    fill_rgb(ml - co, mb - cl, 1, cl, vcol)
+    fill_rgb(mr - cl, mb + co, cl, 1, vcol)
+    fill_rgb(mr + co, mb - cl, 1, cl, vcol)
     return 0
 }
 
@@ -2399,6 +2456,35 @@ fn mib1(mx, my, bytes, col) {
     return 0
 }
 
+# THE FOOT'S READINGS MOVE, SO THE FOOT HAS TO BE ASKED FOR BACK.
+#
+# draw_foot paints the memory ruler and the printer's slug, and four of the
+# ruler's regions come from the two allocators - they move every time a window
+# opens or a file is written. But nothing damaged the band on a cadence, so the
+# readings only refreshed when something else happened to dirty that rectangle,
+# which in practice meant "while System Monitor is open".
+#
+# A comment on draw_foot_ruler claimed it was "called from draw_clock too, which
+# is the once-a-second pass the slug already uses". draw_clock's only call site
+# is inside the TEXT-MODE loop, and the lines above that loop set running = 0 in
+# graphics mode - the comment directly above it says "TEXT MODE, and only text
+# mode. No framebuffer, so no compositor." So the once-a-second pass it cited
+# does not run on any machine that has a screen. The citation was to a real
+# function on an unreachable path, which reads exactly like a live one.
+#
+# One second, one damage, and only when the second actually rolled - same shape
+# as rail_clock_tick beside it.
+foot_sec_seen = 0 - 1
+
+fn foot_tick() {
+    fsec = ticks() / 100
+    if fsec == foot_sec_seen { return 0 }
+    foot_sec_seen = fsec
+    if px_w() < 1 { return 0 }
+    wm_damage(rail_w(), foot_y(), px_w() - rail_w(), foot_h())
+    return 1
+}
+
 fn draw_foot() {
     u = ui()
     fx = rail_w()
@@ -2604,6 +2690,12 @@ fn slug2(sx, sy, v, col) {
     }
     return sx + 2 * cell_w()
 }
+# THE SLUG'S TWO CONTRAST FIGURES, RECOMPUTED against the live theme rather
+# than quoted. Same two ui_ratio calls the system pane's ladder table makes, so
+# a re-pointed palette moves the foot and the pane together or neither.
+fn slug_minstep() { return ui_ratio(theme(TH_PANEL_HI), theme(TH_SURF_5)) }
+fn slug_knock() { return ui_ratio(theme(TH_KNOCK), theme(TH_PANEL)) }
+
 fn draw_slug(sx, sy) {
     col = theme(TH_TEXT_DIM)
     cw = cell_w()
@@ -2669,6 +2761,37 @@ fn draw_slug(sx, sy) {
     text_aa(sx, sy, "  GUT ", col)
     sx = sx + 6 * cw
     sx = legend_num(sx, sy, grid_gut(), col)
+    # ---- THE THREE FIGURES THE SLUG SAID IT COULD NOT MEASURE ---------------
+    #
+    # A comment in this file declared MIN STEP, KNOCK and SKEW unmeasurable:
+    # "Computing one needs pow(x, 2.4) on a linearised channel, and there are no
+    # floats in this drawing path by design ... design.h states 1.1682 and
+    # 6.4796 in prose and exports neither as a number ... Printing them would
+    # mean a fourth hand-copy of two figures."
+    #
+    # Every clause of that is contradicted by this repo. ui_ratio is a bound
+    # native returning WCAG contrast as an INTEGER times 10^4 - no float, no
+    # hand-copy - and the system pane already recomputes FOURTEEN rows with it
+    # against the live theme. The slug was the only surface that believed the
+    # measurement was impossible, and it wrote that belief down as a reason.
+    #
+    # This is the inverse of the fault this project usually catches: not a
+    # figure written where one could be read, but a reading refused where one
+    # was available. Both come from the same place - nobody checked - and the
+    # refusal is the more durable of the two, because a stated "cannot" is
+    # never revisited.
+    w = 10 * cw + pw_ratw(slug_minstep())
+    if slug_fit(sx, se, w) == 0 { return 0 }
+    text_aa(sx, sy, "  MIN STEP ", col)
+    sx = sx + 11 * cw
+    pw_rat(sx, sy, slug_minstep(), col)
+    sx = sx + pw_ratw(slug_minstep())
+    w = 8 * cw + pw_ratw(slug_knock())
+    if slug_fit(sx, se, w) == 0 { return 0 }
+    text_aa(sx, sy, "  KNOCK ", col)
+    sx = sx + 8 * cw
+    pw_rat(sx, sy, slug_knock(), col)
+    sx = sx + pw_ratw(slug_knock())
     # ---- uptime, off the 100 Hz tick
     up = idiv(ticks(), 100)
     w = 5 * cw + s3_numw(up) + cw
@@ -2925,7 +3048,7 @@ fn mouse_tick() {
 SH_BTNH = 22                       # .btn { height: calc(22px * var(--ui)) }
 SH_BTNPX = 10                      # .btn { padding: 0 calc(10px * var(--ui)) }
 
-sh_cs = 0
+sh_us = 0
 sh_t0 = 0
 
 # .btn, to the prototype's own rule: ZD_RAISE ground, 1px ZD_CUT border, a
@@ -2958,7 +3081,23 @@ fn sh_btnw(nm) { return ui_capsw(nm, PW_SM) + 2 * SH_BTNPX * ui() }
 # under QEMU, where the PIPE_A registers read back zero - the system pane
 # already refuses to print them for exactly this reason. A button that runs and
 # prints zeros is worse than one that says it cannot run.
-fn sh_regdump_on() { return intel_ok() }
+# THE GATE WAS ASKING ABOUT A DEVICE THE BUTTON NEVER TOUCHES.
+#
+# This was `return intel_ok()`, so on every machine without an Intel display
+# pipe - which is every machine the probes and the dev loop use - the button
+# drew disabled and answered a click with "no intel pipe here - PIPE_A reads
+# back zero". But the command behind it is run_command(216), which opens
+# APP_SYSINFO: cpuid, the APIC, core and thread counts. si_draw's own comment
+# says printing the reference's PIPE_A value "would be inventing a reading",
+# which is precisely why that pane shows no display registers at all.
+#
+# So the control was permanently dead for a reason that did not apply to what
+# it did, and the one machine where the gate opened is the one where the pane
+# still would not have shown a pipe. A register dump of the CPU and the
+# interrupt controller is a register dump; it is available everywhere; and the
+# button is now enabled everywhere, which is also what the reference does with
+# it.
+fn sh_regdump_on() { return 1 }
 
 # The reference's row is REBUILD / DMESG / REGDUMP. REBUILD IS NOT OFFERED:
 # there is no compiler and no linker on this machine - exec.c runs a prebuilt
@@ -2986,11 +3125,11 @@ fn sh_buttons(bx, by, bw) {
     # be worse than the 1, not better. The elapsed time IS real - ticks() is
     # the PIT at 100 Hz, so centiseconds, and the reference's own 1.42 s is 142
     # of them - so that is what this prints, and it prints what it is.
-    ew3 = ui_tw("ran in ", PW_SM, PW_MONO) + s3_numw(sh_cs) + ui_tw(" us", PW_SM, PW_MONO)
+    ew3 = ui_tw("ran in ", PW_SM, PW_MONO) + s3_numw(sh_us) + ui_tw(" us", PW_SM, PW_MONO)
     ex3 = bx + bw - ew3
     ui_txt(ex3, ey2, "ran in ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
-    num_aa(ex3 + ui_tw("ran in ", PW_SM, PW_MONO), ey2, sh_cs, theme(TH_TEXT_2))
-    ui_txt(ex3 + ui_tw("ran in ", PW_SM, PW_MONO) + s3_numw(sh_cs), ey2, " us", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    num_aa(ex3 + ui_tw("ran in ", PW_SM, PW_MONO), ey2, sh_us, theme(TH_TEXT_2))
+    ui_txt(ex3 + ui_tw("ran in ", PW_SM, PW_MONO) + s3_numw(sh_us), ey2, " us", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
     return 0
 }
 
@@ -3066,8 +3205,7 @@ fn ed_col() {
 fn ed_nontext() {
     edn_i = 0
     edn_n = 0
-    edn_cap = ed_len
-    if edn_cap > 512 { edn_cap = 512 }
+    edn_cap = ed_sniff()
     while edn_i < edn_cap {
         edn_c = peek8(EDIT_BUF + edn_i)
         if edn_c == 9 or edn_c == 10 or edn_c == 13 {
@@ -3082,9 +3220,7 @@ fn ed_nontext() {
 
 fn ed_is_binary() {
     if ed_len < 1 { return 0 }
-    edb_cap = ed_len
-    if edb_cap > 512 { edb_cap = 512 }
-    if ed_nontext() * 20 > edb_cap { return 1 }
+    if ed_nontext() * 20 > ed_sniff() { return 1 }
     return 0
 }
 
@@ -3111,6 +3247,27 @@ fn ed_namew() {
         edw_i = edw_i + 1
     }
     return edw_n * cell_w()
+}
+
+# HOW FAR THE CLASSIFIER LOOKED. ed_is_binary samples the head of the buffer
+# rather than all of it, and the number it stopped at is part of what the pane
+# reports - a claim about 512 bytes and a claim about the file are different
+# claims. One owner, so the sniffer and the sentence can never disagree.
+fn ed_sniff() {
+    esn = ed_len
+    if esn > 512 { esn = 512 }
+    return esn
+}
+
+# head(), binary branch: buffer | <name> | ... | "binary". Three fields, and
+# deliberately not the four the text branch draws - see editor_draw.
+fn ed_head_bin(hx, hy, hw) {
+    hbu = ui()
+    hby = hy + (pw_headh() - ui_th(PW_SM)) / 2
+    ui_caps(hx, hby, "buffer", theme(TH_TEXT_DIM), PW_SM)
+    ed_name(hx + ui_capsw("buffer", PW_SM) + 10 * hbu, hby, theme(TH_TEXT_HI))
+    ui_caps(hx + hw - ui_capsw("binary", PW_SM), hby, "binary", theme(TH_TEXT_DIM), PW_SM)
+    return hy + pw_headh()
 }
 
 # head(): buffer | <name> | <state> | ... | encoding, in the reference's order.
@@ -3164,11 +3321,25 @@ fn ed_binary_body(bx, by, bw, bh) {
     cy = by + bh / 2 - ui_th(PW_SM)
     ui_caps(bx + (bw - ui_capsw("no text preview", PW_SM)) / 2, cy, "no text preview", theme(TH_TEXT_DIM), PW_SM)
     cy = cy + ui_th(PW_SM) + 8 * bu
-    lw = ui_tw("of the first ", PW_SM, PW_MONO) + s3_numw(ed_nontext()) + ui_tw(" bytes are not text", PW_SM, PW_MONO)
+    # THE COUNT GOES FIRST AND THE SAMPLE SIZE GOES LAST. This printed
+    # "of the first <nontext> bytes are not text", which puts the COUNT of
+    # non-text bytes in the slot where the sample SIZE belongs. Read literally
+    # it asserts that ALL of the first N bytes are non-text - a strictly
+    # stronger claim than the measurement makes, and a false one - while the
+    # count itself never appeared and the 512-byte cap was never printed, so
+    # nothing on the surface said this was a sample of the head of the file
+    # rather than a verdict on the whole of it.
+    #
+    # Both figures are READ: ed_nontext() counts, ed_sniff() is how far it
+    # looked. Same order the commit message described and the code did not do.
+    lw = s3_numw(ed_nontext()) + ui_tw(" of the first ", PW_SM, PW_MONO) + s3_numw(ed_sniff()) + ui_tw(" bytes are not text", PW_SM, PW_MONO)
     lx = bx + (bw - lw) / 2
-    ui_txt(lx, cy, "of the first ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
-    num_aa(lx + ui_tw("of the first ", PW_SM, PW_MONO), cy, ed_nontext(), theme(TH_TEXT_2))
-    ui_txt(lx + ui_tw("of the first ", PW_SM, PW_MONO) + s3_numw(ed_nontext()), cy, " bytes are not text", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    num_aa(lx, cy, ed_nontext(), theme(TH_TEXT_2))
+    lx2 = lx + s3_numw(ed_nontext())
+    ui_txt(lx2, cy, " of the first ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    lx2 = lx2 + ui_tw(" of the first ", PW_SM, PW_MONO)
+    num_aa(lx2, cy, ed_sniff(), theme(TH_TEXT_2))
+    ui_txt(lx2 + s3_numw(ed_sniff()), cy, " bytes are not text", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
     cy = cy + ui_th(PW_SM) + 6 * bu
     ui_txt(bx + (bw - ui_tw("this editor draws one baked glyph per byte", PW_SM, 0)) / 2, cy, "this editor draws one baked glyph per byte", theme(TH_TEXT_DIM), PW_SM, 0)
     cy = cy + ui_th(PW_SM) + 2 * bu
@@ -3217,10 +3388,28 @@ fn editor_draw(ax, ay, aw, ah) {
     ex = ax + ep
     ew2 = aw - 2 * ep
     ey = ay + ep
+    # THE BINARY BRANCH IS A DIFFERENT PANE, not a text pane with one panel
+    # swapped. ed_head and ed_foot were both unconditional, so a binary buffer
+    # was labelled "ascii - lf - N ln" and "saved"/"modified" across its head
+    # and given LN/COL/TAB along its foot - four figures derived from a buffer
+    # the pane had just finished saying it could not read. The line count in
+    # particular is a tally of 0x0A bytes presented in the slot reserved for
+    # lines of text.
+    #
+    # The reference does the opposite: proto:1692-1698 replaces the whole
+    # right-hand span with the single word "binary", and replaces the footer
+    # row with one button. It drops the encoding, the line count and the state,
+    # because none of them are answerable here.
+    if ed_is_binary() == 1 {
+        ey = ed_head_bin(ex, ey, ew2)
+        bh = ah - (ey - ay) - ep
+        ed_binary_body(ex, ey, ew2, bh)
+        return 0
+    }
     ey = ed_head(ex, ey, ew2)
     fh = pw_kvh()
     bh = ah - (ey - ay) - fh - ep
-    if ed_is_binary() == 1 { ed_binary_body(ex, ey, ew2, bh) } else { ed_text_body(ex, ey, ew2, bh) }
+    ed_text_body(ex, ey, ew2, bh)
     ed_foot(ex, ay + ah - fh + (fh - ui_th(PW_SM)) / 2, ew2)
     return 0
 }
@@ -3929,8 +4118,41 @@ fn editor_save() {
 
 # One key. Returns 1 if it changed anything, 2 if the editor is done.
 fn editor_key(code) {
+    # A BINARY FILE IS NOT EDITABLE, AND UNTIL NOW ONLY THE DRAWING CODE KNEW.
+    #
+    # ed_is_binary() was consulted in editor_draw and nowhere else, so the well
+    # said "no text preview" while every printable keystroke still appended to
+    # EDIT_BUF - invisibly, since the binary branch draws no caret and no text -
+    # and ESC or Ctrl+S then wrote the mutated buffer back over the file. A
+    # user could destroy a binary by opening it and leaning on the keyboard,
+    # with the pane showing nothing at all.
+    #
+    # The reference's binary state is a dead end by construction: a head, a
+    # well and one button, with no editable surface in the branch. This OS had
+    # reached the state that branch exists to PREVENT, from the other side.
+    #
+    # ESC still closes, because after this guard there is nothing to save.
+    if ed_is_binary() == 1 {
+        if code == 27 { return 2 }
+        return 0
+    }
+    # ESC SAVES ONLY WHAT WAS CHANGED.
+    #
+    # This called editor_save() unconditionally. fs_write is copy-on-write
+    # ALWAYS - fs.c says so at the top of fs_write_impl, "every replacement is
+    # copy-on-write, even when it fits the old run" - so opening a file and
+    # pressing Escape without typing allocated a fresh run, copied every block,
+    # synced, and bumped FE_MTIME. An untouched file got a new extent and a new
+    # modified time for being looked at.
+    #
+    # ed_dirty already tracks the answer and the footer is drawing it in the
+    # same frame. The refusal half is kept: a dirty buffer that cannot be
+    # flushed still refuses to close, because alloc_run can genuinely fail on a
+    # fragmented volume and closing would be the moment the edits are lost.
     if code == 27 {
+        if ed_dirty == 0 { return 2 }
         if editor_save() == 1 { return 2 }
+        note_say2("could not save", "the volume has no contiguous run this size - the window stays open", 900)
         return 1
     }
     if code == 19 {
@@ -4874,8 +5096,21 @@ fn run_command(cmd, arg) {
         if rtc_mi() < 10 { put("0") }   put(rtc_mi())  put(":")
         if rtc_s()  < 10 { put("0") }   print(rtc_s())
         put("    epoch=")  print(rtc_epoch())
-        # a file's mtime comes from here once the disk is mounted
-        fs_stamp(rtc_epoch())
+        # ONE TIME BASE FOR mtime, AND IT IS SECONDS SINCE MIDNIGHT.
+        #
+        # This called fs_stamp(rtc_epoch()) - seconds since 1970 - while
+        # fs_stamp_now() stamps seconds since midnight, and both write the same
+        # static in fs.c that becomes FE_MTIME. So running `;` once poisoned
+        # every later file write with a ~1.79e9 stamp, and the Files column
+        # renders it as idiv(secs, 3600) = about 497,000 hours: clock_field
+        # draws all six digits but advances by only two cells, so the colon and
+        # the minutes were printed on top of the overflow.
+        #
+        # Seconds-since-midnight is the honest domain here - this kernel has no
+        # epoch anywhere else, and the column shows hh:mm - so the epoch reading
+        # stays as something the shell PRINTS and stops being something it
+        # writes into the filesystem.
+        fs_stamp_now()
         return 0
     }
     # ' - write the clipboard to a file on disk, as "clip.txt".
@@ -6922,14 +7157,21 @@ FILES_ROW = 20
 # THE FILESYSTEM'S CLOCK, WHICH NOTHING HAD EVER SET.
 #
 # fs.c writes FE_MTIME on every create and every write - from `now_secs`, which
-# fs_set_time() sets and which is bound to zl as `fs_stamp`. That native had
-# ZERO CALLERS, so now_secs stayed 0, every file's mtime was 0, and the Files
-# pane's "modified" column printed 0 for every row. The column was reading a
-# field that was faithfully written with a number nobody had supplied.
+# fs_set_time() sets and which is bound to zl as `fs_stamp`. Until a file is
+# written after the clock has been read, now_secs is 0, every mtime is 0, and
+# the Files pane's "modified" column prints 00:00 for every row.
 #
-# Third time today: wm_set_status was bound and uncalled, hook_desk_key was
-# wired and unreached, and this. A complete implementation with no caller looks
-# exactly like a working one from the outside.
+# THE FIRST VERSION OF THIS COMMENT SAID fs_stamp HAD "ZERO CALLERS". It had
+# one, in the shell's `;` command, and it had had it since the command was
+# written - `git log -S` finds it immediately. Worse than being wrong, the claim
+# was load-bearing: believing the field was unwritten is exactly what made it
+# reasonable to add a SECOND writer in a different unit, and the two then took
+# turns filling one field with seconds-since-1970 and seconds-since-midnight.
+#
+# The check that would have caught it is the one this file keeps asking for
+# elsewhere and did not run here: grep for the name before describing what
+# calls it. A negative existence claim is a measurement, and this one was
+# asserted rather than taken.
 #
 # SECONDS SINCE MIDNIGHT, not since an epoch. This kernel has no epoch - the RTC
 # gives wall-clock fields and nothing converts them - so the stamp is what it
@@ -6939,6 +7181,16 @@ FILES_ROW = 20
 # clock uses - a clock that reads "9:5" is worse than no clock, as that helper's
 # own comment says.
 fn files_hhmm(hx, hy, secs, col) {
+    # A STAMP THAT IS NOT A TIME OF DAY IS NOT DRAWN AS ONE. An existing volume
+    # can still be carrying epoch-based mtimes written before the two time bases
+    # were merged, and clock_field does not clamp - it draws every digit it is
+    # given and then advances by exactly two cells, so a six-digit hour runs
+    # straight through the colon and the minute field. There is no way to
+    # recover a wall time from such a stamp, so the column says it has none.
+    if secs < 0 or secs >= 86400 {
+        label(hx, hy, "--:--", col, T_CAPTION, W_REG)
+        return 0
+    }
     fx2 = clock_field(hx, hy, idiv(secs, 3600), CLOCK_DIGIT * ui(), T_CAPTION, col)
     label(fx2, hy, ":", col, T_CAPTION, W_REG)
     clock_field(fx2 + CLOCK_DIGIT * ui(), hy, idiv(secs, 60) % 60, CLOCK_DIGIT * ui(), T_CAPTION, col)
@@ -9495,8 +9747,7 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                 # same claim as "it fires".
                 shb = sh_btn_hit(win, ex, ey)
                 if shb == 0 { return run_command(210, 0) }
-                if shb == 1 { if sh_regdump_on() == 1 { return run_command(216, 0) } }
-                if shb == 1 { note_say("no intel pipe here - PIPE_A reads back zero", 400)  return 1 }
+                if shb == 1 { return run_command(216, 0) }
             }
             return 1
         }
@@ -9541,8 +9792,26 @@ fn app_event(id, win, ety, ecode, ex, ey) {
                         # and the readout can show what a command actually
                         # cost. A zero or uncalibrated rate falls back rather
                         # than dividing by it.
+                        # CYCLES TIMES 1000 OVER kHz, BECAUSE kHz IS CYCLES
+                        # PER MILLISECOND.
+                        #
+                        # This was `(cpu_tsc() - sh_t0) / sh_khz`, which is
+                        # MILLISECONDS, printed under a " us" label - a
+                        # thousand-fold unit error committed on the same day I
+                        # fixed a thousand-fold unit error in the network pane's
+                        # rtt row, and in a readout added specifically because
+                        # the previous one always printed 0.00 s. It then always
+                        # printed 0 us, which is the same failure in new units.
+                        #
+                        # cpu_tsc_khz() returns cycles / (elapsed * 10) where
+                        # elapsed counts 10 ms ticks - kHz, cycles per
+                        # millisecond. Three places in this tree already get it
+                        # right and all three multiply by 1000: wm.c's
+                        # cycles_per_us, net.c's tsc_to_us, zllog.c's cycles_us.
+                        # The old variable name sh_us - centiseconds, from the
+                        # PIT version before it - was the tell.
                         sh_khz = cpu_khz()
-                        if sh_khz > 0 { sh_cs = (cpu_tsc() - sh_t0) / sh_khz } else { sh_cs = 0 }
+                        if sh_khz > 0 { sh_us = (cpu_tsc() - sh_t0) * 1000 / sh_khz } else { sh_us = 0 }
                         term_complete(tc, td_result)
                     } else { term_complete(tc, 0) }
                 }
@@ -9810,25 +10079,57 @@ fn wm_damage_shell_input() {
     return 0
 }
 
+# THE ONE APP THAT CAN REFUSE TO CLOSE.
+#
+# wm.c consults this from the close box and from Ctrl+W. Returning 0 keeps the
+# window open. Before this existed there was no close hook in the OS at all,
+# and clicking the close box on an editor whose footer read UNSAVED threw the
+# buffer away without a word - the next open re-read the file from disk.
+#
+# Refusing is the cheap honest answer. A confirm dialog would need a modal this
+# compositor does not have, and saving silently on close is the behaviour that
+# just got deleted from ESC one function up: writing a file the user did not
+# ask to write is not a safe default, it is the same fault pointed the other
+# way. So the window stays, and the toast says which key resolves it.
+fn app_can_close(win) {
+    if win == edit_win {
+        if ed_dirty == 1 {
+            note_say2("unsaved changes", "ESC saves and closes - Ctrl+S saves and stays", 900)
+            return 0
+        }
+    }
+    return 1
+}
+
 fn app_tick(id, win) {
-    # THE RASTER STRIP'S RING, which belongs to no window's tick - it is a
-    # history of COMPOSITES, and app_tick is the only per-frame hook the policy
-    # layer has. Guarded inside itself on wm_painted(), so this costs a
-    # comparison per call and a sample per composite rather than per window.
+    # id == -1 IS THE DESK, not an app. wm.c calls this once per composite
+    # before it walks the z-order, so everything that belongs to the DESKTOP
+    # rather than to a window is clocked here - and goes on being clocked when
+    # every window is closed or minimised.
     #
-    # This replaces dock_dot_tick(), whose job was the pulsing running-app dot.
-    # PRESSWORK has no pulse anywhere: ZD_PULSE_FLOOR is 255, which is design.h
-    # saying the infinite pulse is deleted rather than merely unused. A register
-    # mark that breathes is decoration on a control, and the mark is a reading.
-    raster_tick()
-    # THE WALL CLOCK'S ONE SAMPLE PER SECOND, here for the same reason
-    # raster_tick is: app_tick is the only per-frame hook the policy layer has,
-    # and this is furniture rather than any window's business. It is guarded on
-    # its own seconds counter, so it costs one comparison per call and one CMOS
-    # read per second no matter how many windows are open - and unlike the
-    # APP_MONITOR block below it keeps ticking when Monitor is closed. It draws
+    # These two used to sit in the per-window body below, which meant they ran
+    # once per open window per frame (wasteful but harmless, since both guard
+    # themselves) and ZERO times per frame when the desk was empty (not
+    # harmless at all). The raster ring stopped sampling while wm_painted()
+    # kept counting, so the plot and the ADVANCE figure printed beside it drifted
+    # apart by exactly the frames composited with nothing open - and the comment
+    # here asserted they "cannot drift". They could, and the way to see it was
+    # to close everything and watch.
+    #
+    # raster_tick is a history of COMPOSITES. It replaces dock_dot_tick(), whose
+    # job was the pulsing running-app dot; PRESSWORK has no pulse anywhere -
+    # ZD_PULSE_FLOOR is 255, design.h deleting the infinite pulse rather than
+    # merely not using it. A register mark that breathes is decoration on a
+    # control, and the mark is a reading.
+    #
+    # rail_clock_tick is the wall clock's one sample per second. It draws
     # nothing; it asks for the clock block back when the minute rolls.
-    rail_clock_tick()
+    if id < 0 {
+        raster_tick()
+        rail_clock_tick()
+        foot_tick()
+        return 0
+    }
     if id == APP_SNAKE { return sn_step() }
     # The browser drives its own fetch from the frame loop. app_tick MUST NOT
     # DRAW and must be cheap; br_tick pumps the link, the TCP timers and the
@@ -9965,7 +10266,7 @@ fn ov_pal_label(i) {
     if i == 2 { return "open 11 settings" }
     if i == 3 { return "open 05 kernel log" }
     if i == 4 { return "open 13 registers" }
-    if i == 5 { return "regdump --pipe A" }
+    if i == 5 { return "regdump cpuid apic" }
     if i == 6 { return "zlfs fsck rd0" }
     if i == 7 { return "dmesg --level warn" }
     if i == 8 { return "modeset 1600x1000" }
@@ -10854,19 +11155,29 @@ fn desk_key(kcode, kmods) {
         # frame - but this is a keypress, and a keypress may cost a repaint.
         desk_grid_on = 1 - desk_grid_on
         rebake_wallpaper()
-        # NOT "nothing else changes". draw_grid's early return also skips the
-        # crop marks and the legend, so turning the grid off takes those with
-        # it. The prototype toggles crop marks on their own branch and they
-        # survive a grid-off; until this OS has that second switch, the honest
-        # thing is to name what actually goes. "12 x 8" stays a real citation:
-        # ZD_GRID_COLS is 12 and ZD_GRID_ROWS is 8.
-        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8, with the crop marks and the legend", 800) } else { note_say2("desk grid off", "the crop marks and the legend go with it - one switch, three things", 800) }
+        # The crop marks and the slug now survive a grid-off, on their own
+        # flags, which is what the prototype does. This comment used to explain
+        # why they could not - "until this OS has that second switch" - and the
+        # switch is draw_crop_marks() plus the desk_slug_on test in draw_grid.
+        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8 module, ruled to the field margin", 800) } else { note_say2("desk grid off", "crop marks and the slug stay - they have their own switches now", 800) }
         wm_damage(0, 0, px_w(), px_h())
         return 1
     }
+    # ALT+1 AND ALT+2 ARE ONE-BASED, because wm_set_ws is.
+    #
+    # These passed 0 and 1. wm.c refuses anything below 1 outright
+    # (`if (n < 1 || n > ws_n || n == ws_cur) return 0;`), so Alt+1 switched to
+    # nothing at all and Alt+2 switched to workspace 01 - one dead key and one
+    # off by one, with a full-screen damage claimed either way. The comment in
+    # the shortcut column above states the correct behaviour and has stated it
+    # the whole time; only the two numbers were wrong.
+    #
+    # Routed through set_ws so the keyboard and the .wsb click share one entry
+    # point, and returning set_ws's own answer so a refused switch (already on
+    # that workspace) does not repaint the screen to accomplish nothing.
     if band(kmods, MOD_ALT_K) != 0 {
-        if kcode == 49 { wm_setws(0)  wm_damage(0, 0, px_w(), px_h())  return 1 }
-        if kcode == 50 { wm_setws(1)  wm_damage(0, 0, px_w(), px_h())  return 1 }
+        if kcode == 49 { return ws_hotkey(1) }
+        if kcode == 50 { return ws_hotkey(2) }
     }
     if kcode == KEY_SUPER_K { return open_menu() }
     return 0

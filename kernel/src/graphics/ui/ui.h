@@ -302,6 +302,11 @@ typedef void (*desk_click_fn)(int x, int y, int btn);
  * one is up, the app otherwise - and that is a question only the desktop
  * can answer, so it has to be able to answer it. */
 typedef int (*desk_key_fn)(int code, int mods);
+/* An app may REFUSE to be closed. Returns 0 to keep the window open. The only
+ * caller that matters today is the editor with an unsaved buffer: before this
+ * existed, the close box tore the window down and the edits went with it,
+ * silently, one frame after the footer had drawn the word UNSAVED. */
+typedef int (*can_close_fn)(int win);
 
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
@@ -332,6 +337,7 @@ void wm_win_menu(win_menu_fn f);
 int  wm_thumb(int win, int dx, int dy, int dw, int dh);
 void wm_desk_click(desk_click_fn f);
 void wm_desk_key(desk_key_fn f);
+void wm_can_close(can_close_fn f);
 
 int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);

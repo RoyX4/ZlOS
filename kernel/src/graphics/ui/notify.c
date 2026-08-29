@@ -121,6 +121,13 @@ int notify_post2(const char *text, const char *body, u32 ticks)
     p_str("  notify: queue full, dropped an older message\n");
     for (int i = 1; i < NOTE_SLOTS - 1; i++) q[i] = q[i + 1];
     copy_text(q[NOTE_SLOTS - 1].text, text);
+    /* THE BODY IS PART OF THE MESSAGE AND HAS TO BE OVERWRITTEN WITH IT.
+     * The shift above leaves the last slot holding the EVICTED toast's fields;
+     * only .text and .ticks were being replaced, so a one-line message landing
+     * in a full queue inherited the previous message's second line and showed
+     * it as its own. Two toasts' worth of text, attributed to one of them. */
+    if (body) copy_text(q[NOTE_SLOTS - 1].body, body);
+    else      q[NOTE_SLOTS - 1].body[0] = 0;
     q[NOTE_SLOTS - 1].ticks = ticks;
     return 0;
 }
@@ -129,6 +136,7 @@ static void retire(void)
 {
     for (int i = 0; i < NOTE_SLOTS - 1; i++) q[i] = q[i + 1];
     q[NOTE_SLOTS - 1].text[0] = 0;
+    q[NOTE_SLOTS - 1].body[0] = 0;   /* same reason as the drop path above */
     if (qn > 0) qn--;
     showing = 0;
 }
