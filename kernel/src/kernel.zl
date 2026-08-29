@@ -631,7 +631,13 @@ CLOCK_CELL_LG = 14                 # the T_TITLE digit cell, design units
 # HOW MANY there are stays here, because that is policy: three buttons, three
 # workspaces. wm_wsn() tells the compositor the ceiling so Super+9 is refused
 # rather than switching to an empty ninth workspace with no button to return from.
-WS_N = 3
+# TWO, NOT THREE. The comment above said "The reference has three" and cited
+# ds-reference.html - the SUPERSEDED document. presswork-prototype.html has two:
+# renderRail maps [1, 2], the key handler answers alt+1 and alt+2 only, the ws
+# toggle flips between 1 and 2, and the palette lists exactly "workspace 02".
+# The alt+1/alt+2 bindings wired earlier today already assumed two, so the rail
+# was drawing a third button no key could reach and no command could name.
+WS_N = 2
 fn cur_ws() { return wm_ws() }
 fn set_ws(n) { return wm_setws(n) }
 
@@ -1305,7 +1311,16 @@ fn draw_rail_ws() {
         if wsi == cur_ws() { ground = theme(TH_KNOCK)  ink = theme(TH_KNOCK_INK) }
         fill_rgb(bx, wy, bwi, rh, ground)
         if wsi < WS_N { fill_rgb(bx + bwi - 1, wy, 1, rh, theme(TH_CUT)) }
-        num_aa(bx + (bwi - cell_w()) / 2, wy + (rh - cell_h()) / 2, wsi, ink)
+        # "WS 01", NOT A BARE DIGIT. The prototype's button is
+        # `<span class="t-lab">ws 0' + n + '</span>`, and .t-lab is tracked
+        # uppercase - so it reads WS 01 / WS 02. A lone numeral in a 85dp cell
+        # says nothing about what it selects; the label is the half that does.
+        # Zero-padded because the register beside it is, and two rows of
+        # numbers that pad differently read as two different kinds of number.
+        wsw = ui_capsw("ws 0", PW_SM) + s3_numw(wsi)
+        wsx = bx + (bwi - wsw) / 2
+        ui_caps(wsx, wy + (rh - ui_th(PW_SM)) / 2, "ws 0", ink, PW_SM)
+        num_aa(wsx + ui_capsw("ws 0", PW_SM), wy + (rh - cell_h()) / 2, wsi, ink)
         wsi = wsi + 1
     }
     return 0

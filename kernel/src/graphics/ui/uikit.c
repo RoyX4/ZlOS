@@ -444,11 +444,21 @@ int  ui_caps_w(const char *s, int size)
 void ui_caps(int x, int y, const char *s, unsigned rgb, int size)
 { ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_LAB); }
 
+/* THE WIDTH MUST CARRY THE SAME FLAGS AS THE DRAW. Uppercase changes advances -
+ * a capital is not the same width as its lower-case twin in a proportional
+ * face - so a measure without UI_F_CAPS beside a draw with it puts every
+ * right-flushed thing on that row in the wrong place. Measuring one string and
+ * drawing another is how a layout goes subtly wrong everywhere at once. */
 int  ui_display_w(const char *s, int size)
-{ return ui_text_tracked_w(s, size, UI_F_BOLD, ZD_TR_BIG); }
+{ return ui_text_tracked_w(s, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_BIG); }
 
+/* UI_F_CAPS, because .t-big carries `text-transform: uppercase` and this is the
+ * style that renders it. The rail's identity word is written "zlos" in the
+ * source - as the prototype writes it - and drew lowercase, while the comment
+ * at its call site said "LG, bold, UPPERCASE, tracked by ZD_TR_BIG". The
+ * transform was named in two places and applied in neither. */
 void ui_display(int x, int y, const char *s, unsigned rgb, int size)
-{ ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD, ZD_TR_BIG); }
+{ ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_BIG); }
 
 /* the widget-side pair: the LABEL style at SM, gated for the hit-test pass */
 static int lab_w(const char *s) { return ui_caps_w(s, UI_SM); }
