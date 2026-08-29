@@ -310,6 +310,26 @@ else
     skip "check-header-mirror.py not present"
 fi
 
+# `/` IS FLOAT DIVISION IN zl, AND NINETEEN DEFECTS THIS WEEK CAME FROM IT.
+# A fractional index matches no row, a fractional selection falls through to the
+# default branch, and a fractional once-a-second guard never holds. None of the
+# three reads as a wrong operator - they read as a dead control, a wrong label
+# and a performance problem, which is why they survived review.
+if [ -f kernel/tools/checks/check-intdiv.py ]; then
+    if out=$(python3 kernel/tools/checks/check-intdiv.py 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -A2 FAIL | head -4)"
+    fi
+    if out=$(bash kernel/tools/checks/check-intdiv-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | grep PASS | head -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -iE 'FAIL' | head -3)"
+    fi
+else
+    skip "check-intdiv.py not present"
+fi
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"

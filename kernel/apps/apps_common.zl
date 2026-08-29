@@ -19,8 +19,13 @@
 fn ac_cell_idx(ax, ay, cell, gw, gh, ex, ey) {
     if ex < ax { return 0 - 1 }
     if ey < ay { return 0 - 1 }
-    cc = (ex - ax) / cell
-    cr = (ey - ay) / cell
+    # idiv. `/` is FLOAT division in zl, and this function returns a CELL
+    # INDEX - cr * gw + cc - which callers compare and use to select. A
+    # fractional index matches no cell and selects nothing, so a click landed
+    # only when the offset was an exact multiple of the cell size. This is the
+    # shared grid hit test: every game with a board was reading it.
+    cc = idiv(ex - ax, cell)
+    cr = idiv(ey - ay, cell)
     if cc >= gw { return 0 - 1 }
     if cr >= gh { return 0 - 1 }
     return cr * gw + cc

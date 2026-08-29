@@ -443,7 +443,7 @@ fn ca_draw(ax, ay, aw, ah) {
     gy = ay + ca_grid_y()
     i = 0
     while i < 16 {
-        r = i / 4
+        r = idiv(i, 4)                        # idiv: a row number
         c = i % 4
         bx = ax + 8 * u + c * ca_btn_w(aw)
         by = gy + r * CA_BTN * u

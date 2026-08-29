@@ -611,7 +611,7 @@ cat_scroll = 0
 cat_hover  = 0 - 1
 
 fn cat_cols(win) {
-    cc = wm_cw(win) / (CAT_TILE_W * ui())
+    cc = idiv(wm_cw(win), CAT_TILE_W * ui())      # idiv: a column COUNT
     if cc < 1 { cc = 1 }
     return cc
 }
@@ -632,9 +632,9 @@ fn cat_hit(win, ex, ey) {
     if cx < 0 { return 0 - 1 }
     if cy < 0 { return 0 - 1 }
     cols = cat_cols(win)
-    col = cx / (CAT_TILE_W * u)
+    col = idiv(cx, CAT_TILE_W * u)           # idiv: a tile INDEX, see ac_grid_hit
     if col >= cols { return 0 - 1 }
-    row = cy / (CAT_TILE_H * u) + cat_scroll
+    row = idiv(cy, CAT_TILE_H * u) + cat_scroll   # idiv: a tile INDEX
     idx = row * cols + col
     if idx < 0 { return 0 - 1 }
     if idx >= reg_count() { return 0 - 1 }
@@ -643,7 +643,7 @@ fn cat_hit(win, ex, ey) {
 
 fn cat_max_scroll(win) {
     cols = cat_cols(win)
-    rows = (reg_count() + cols - 1) / cols
+    rows = idiv(reg_count() + cols - 1, cols)     # idiv: a row COUNT
     vis  = (wm_ch(win) - CAT_HEADER * ui()) / (CAT_TILE_H * ui())
     if vis < 1 { vis = 1 }
     ms = rows - vis
@@ -671,14 +671,14 @@ fn cat_draw(ax, ay, aw, ah) {
     }
 
     cols = 1
-    cc = aw / (CAT_TILE_W * u)
+    cc = idiv(aw, CAT_TILE_W * u)                 # idiv: a column COUNT
     if cc >= 1 { cols = cc }
     gy = ay + CAT_HEADER * u
 
     i = 0
     while i < reg_count() {
         id = reg_id_at(i)
-        crow = i / cols - cat_scroll
+        crow = idiv(i, cols) - cat_scroll         # idiv: a row number
         ccol = i % cols
         ty = gy + crow * CAT_TILE_H * u
         # only the rough vertical band, to skip work for rows scrolled off -

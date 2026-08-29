@@ -3589,7 +3589,7 @@ ed_scroll = 0
 # How many text rows the well can show. One owner, because the draw, the scroll
 # clamp and the key handler must agree or the caret leaves the viewport.
 fn ed_rows(th) {
-    edr = (th - 12 * ui()) / cell_h()
+    edr = idiv(th - 12 * ui(), cell_h())     # idiv: a row COUNT that clamps the viewport
     if edr < 1 { edr = 1 }
     return edr
 }
@@ -4292,7 +4292,7 @@ fn paint_draw(ax, ay, aw, ah) {
     pt_i = 0
     while pt_i < p_n {
         pt_w = peek32(PAINT_BUF + pt_i * 4)
-        pt_c = pt_w / 16777216
+        pt_c = idiv(pt_w, 16777216)              # idiv: a channel byte
         pt_y = band(pt_w / 4096, 4095)
         pt_x = band(pt_w, 4095)
         fill_rgb(ax + pt_x, ay + pt_y, 5, 5, paint_col(pt_c))
@@ -6949,7 +6949,7 @@ fn sys_body(ax, ay, aw, ah) {
 
     sb_y = pw_sect(sb_x, sb_y + pad_d(), sb_w, "measured contrast, this ladder, right now", SYSG_N, " pairs")
     sb_y = sysg_head(sb_x, sb_y, sb_w)
-    sb_shown = (sb_bot - sb_y) / pw_rowh()
+    sb_shown = idiv(sb_bot - sb_y, pw_rowh())   # idiv: a row COUNT
     if sb_shown > SYSG_N { sb_shown = SYSG_N }
     # A window dragged short enough leaves no room at all and this goes
     # negative; `-3 of 14 rows fit` is a worse readout than `0 of 14`.
@@ -7441,9 +7441,23 @@ sn_next = 0
 sn_seed = 12345
 sn_ready = 0
 
+# THE GENERATOR ac_rand SAID IT WAS COPYING - "proven already, not reinvented".
+#
+# It has the identical fault, and the citation is how it spread: zl values are
+# doubles, zl_binop casts to long long and back, and after two steps the product
+# passes 2^53 so the round trip zeroes the low bits of the state. `sn_seed / 256`
+# then takes bits whose bottom two are the dead ones, and every modulus that is
+# a multiple of two collapses - which for Snake is the direction the food spawns
+# in.
+#
+# "Proven" meant "already in the tree", which is not the same claim.
+#
+# MINSTD, same as ac_rand: the largest product is 16807 * 2147483646 = 3.61e13
+# against 2^53 = 9.01e15, so nothing rounds and the low bits stay alive.
 fn sn_rand(n) {
-    sn_seed = sn_seed * 1103515245 + 12345
-    r = band(sn_seed / 256, 1023) % n
+    sn_seed = (sn_seed * 16807) % 2147483647
+    if sn_seed < 1 { sn_seed = 1 }
+    r = idiv(sn_seed, 64) % n
     if r < 0 { r = 0 - r }
     return r
 }
@@ -11452,7 +11466,7 @@ fn ov_draw_activities(u) {
     if n < 1 { return 0 }
     cols = n
     if cols > OV_ACT_COLS { cols = OV_ACT_COLS }
-    rows = (n + cols - 1) / cols
+    rows = idiv(n + cols - 1, cols)          # idiv: a row COUNT
     cw = (gw - (cols - 1) * OV_ACT_GAP * u) / cols
     ch = (gh - (rows - 1) * OV_ACT_GAP * u) / rows
     # ONE SCALE FOR THE WHOLE WORKSPACE, taken from the largest window, so the
@@ -12257,7 +12271,7 @@ fn desk_r(w) { return field_x() + field_w() - w }
 fn reopen_browser() {
     u = ui()
     if browser_win >= 0 { if wm_open_p(browser_win) == 1 { wm_setfocus(browser_win)  wm_raise(browser_win)  return 0 } }
-    browser_win = wm_open(APP_BROWSER, "Browser", field_x() + (field_w() - 800 * u) / 2, desk_y(220), 800 * u, 440 * u)
+    browser_win = wm_open(APP_BROWSER, "Browser", field_x() + (field_w() - 800 * u) / 2, desk_y(220), 800 * u, 440 * u)   # float ok - a centring offset, not an index; the name ends in "win"
     wm_setfocus(browser_win)
     wm_raise(browser_win)
     return 0
@@ -12424,7 +12438,7 @@ fn menu_draw(ax, ay, aw, ah) {
 
 fn menu_row_at(win, ey) {
     cy = wm_cy(win)
-    r = (ey - cy - ui_metric(0)) / (ui_metric(2) + ui_metric(1))
+    r = idiv(ey - cy - ui_metric(0), ui_metric(2) + ui_metric(1))   # idiv: a row INDEX
     if r < 0 { return 0 - 1 }
     if r >= MENU_ROWS { return 0 - 1 }
     return r
@@ -13157,7 +13171,7 @@ while running == 1 {
         tk = ticks()
 
         # clock + text-cursor blink
-        sec = tk / 100
+        sec = idiv(tk, 100)                  # idiv: whole seconds
         if sec != last_sec {
             draw_clock(sec)
             last_sec = sec

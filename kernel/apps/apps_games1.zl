@@ -204,7 +204,7 @@ fn tt_draw(ax, ay, aw, ah) {
     ci = 0
     while ci < 9 {
         cx = gx + (ci % 3) * cell
-        cy = gy + (ci / 3) * cell
+        cy = gy + idiv(ci, 3) * cell         # idiv: a row number, see ac_grid_hit
         # the three cells that won, lit before the marks go on top
         if tt_won_cell(ci) == 1 { fill_rgb(cx + 1, cy + 1, cell - 1, cell - 1, theme(TH_SURF_5)) }
         m = tt_at(ci)
@@ -425,14 +425,14 @@ fn nim_event(win, ety, ecode, ex, ey) {
     # shape and are fixed with it.
     if cy < 10 * u { return 0 }
     if cx < 10 * u { return 0 }
-    pi = (cy - 10 * u) / (NIM_ROW * u)
+    pi = idiv(cy - 10 * u, NIM_ROW * u)      # idiv: a PILE INDEX
     if pi > 2 { return 0 }
     into = cy - 10 * u - pi * NIM_ROW * u
     if into >= 16 * u { return 0 }
     # NO + 1. Clicking stick k leaves k sticks, so clicking the first stick
     # empties the pile - which is the only way anyone ever takes the last
     # object, and therefore the only way this game ends.
-    cut = (cx - 10 * u) / (NIM_DOT * u)
+    cut = idiv(cx - 10 * u, NIM_DOT * u)     # idiv: this is a COUNT, see ac_grid_hit
     if nim_take(pi, cut) == 0 { return 0 }
     wm_dmg(win)
     return 1
@@ -917,7 +917,7 @@ fn c4_event(win, ety, ecode, ex, ey) {
     gx = wm_cx(win) + (wm_cw(win) - C4_W * cell) / 2
     cx = ex - gx
     if cx < 0 { return 0 }
-    col = cx / cell
+    col = idiv(cx, cell)                     # idiv: a column INDEX, see ac_grid_hit
     if col >= C4_W { return 0 }
     # A refused drop - a full column - changes nothing, so it must not damage
     # the window either. Reporting the event handled is still right: the click

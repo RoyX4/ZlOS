@@ -106,9 +106,9 @@ fn s2_thresh(v, lim) { if v > lim { return ui_ink(S2_IK_WARN) }  return ui_ink(S
 fn s2_strip_h(aw, n, minw) {
     u = ui()
     sch = 14 * u + ui_th(S2_SM) + 2 * u + ui_th(S2_MD)
-    cols = aw / (minw * u)
+    cols = idiv(aw, minw * u)                 # idiv: a column COUNT, bounds a loop
     if cols < 1 { cols = 1 }
-    rows = (n + cols - 1) / cols
+    rows = idiv(n + cols - 1, cols)           # idiv: a row COUNT, bounds a loop
     # the gap is DP(1), not 1: it is 1 px at ui 1 and 2 px at ui 2, and hard-
     # coding the 1 would have drifted this strip a row-count of pixels away
     # from where ui_stat_end() says it ends on a 4K panel.
@@ -619,7 +619,7 @@ hx_page = 0
 # the cursor and the loop cannot disagree again.
 fn hx_bodyh(ah) { return ah - ui_tb_h() - ui_sb_h() - ui_colhead_h() }
 fn hx_rows(ah) {
-    hr = (hx_bodyh(ah) - 7 * ui()) / ui_mono_h(S2_PANEL_HEX)
+    hr = idiv(hx_bodyh(ah) - 7 * ui(), ui_mono_h(S2_PANEL_HEX))   # idiv: a row COUNT, bounds the page
     if hr < 1 { return 1 }
     return hr
 }

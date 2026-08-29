@@ -319,8 +319,8 @@ fn s3du_mount(x, y, w, nm, flag, used, total, ok) {
         s3_mono(x, by + 18 * u, "not mounted - no capacity to report", theme(TH_TEXT_DIM))
         return by + 18 * u + ui_th(S3_MD) + 6 * u
     }
-    uk = used / 1024
-    tk = total / 1024
+    uk = idiv(used, 1024)                    # idiv: whole KiB
+    tk = idiv(total, 1024)                   # idiv: whole KiB
     num_aa(x, ty, uk, theme(TH_TEXT_DIM))
     s3_mono(x + s3_numw(uk), ty, " KiB used", theme(TH_TEXT_DIM))
     tw = s3_numw(tk) + s3_mw(" KiB")
@@ -913,7 +913,7 @@ fn s3sv_event(win, ety, ecode, ex, ey) {
         return 0
     }
     if s3sv_tab != 0 { return 0 }
-    row = (cy - S3SV_TAB_H * u) / (S3SV_ROW * u)
+    row = idiv(cy - S3SV_TAB_H * u, S3SV_ROW * u)  # idiv: a row INDEX
     if row < 0 { return 0 }
     if row >= S3SV_N { return 0 }
     # `start` on zlfs.mount is the one action this kernel can honestly
@@ -1175,7 +1175,7 @@ fn s3ar_event(win, ety, ecode, ex, ey) {
     ry = cy - S3AR_TB * u - S3AR_HEAD * u
     if ry < 0 { return 0 }
     if cy > ah - s3_stat_h() { return 0 }
-    slot = s3ar_slot_at(ry / (S3AR_ROW * u))
+    slot = s3ar_slot_at(idiv(ry, S3AR_ROW * u))   # idiv: a slot INDEX
     if slot < 0 { return 0 }
     s3ar_sel = slot
     wm_dmg(win)

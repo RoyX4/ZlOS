@@ -1210,7 +1210,7 @@ fn fl_pitch(aw) { return (aw + FL_PIPEW * ui()) / 2 }
 fn fl_gapy(ph) {
     u = ui()
     lo = FL_GAP * u / 2 + 12 * u
-    hi = ph - FL_GAP * u / 2 - 20 * u
+    hi = ph - FL_GAP * u / 2 - 20 * u        # float ok - a pixel height, halved gap; C truncates it
     if hi <= lo { return ph / 2 }
     return lo + ac_rand(hi - lo)
 }
