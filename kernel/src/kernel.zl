@@ -3865,6 +3865,7 @@ fn editor_open_default() {
 }
 
 fn editor_save() {
+    fs_stamp_now()
     if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
         note_say("file save failed", 400)
         return 0
@@ -4790,6 +4791,16 @@ fn run_command(cmd, arg) {
         # ...and say so on the desktop too. A toast is the right shape for
         # this: it is worth knowing and not worth a window.
         note_say("zlfs mounted", 300)
+        # AND TELL THE FILES PANE, WHICH OTHERWISE NEVER FINDS OUT.
+        #
+        # A window's client is a RETAINED surface: it is re-rendered when
+        # something invalidates it, not every frame. Mounting a volume from the
+        # shell changes what files_draw would draw and damages nothing, so the
+        # pane went on showing "no zlfs volume is mounted / the disk is present
+        # and unformatted" over a mounted, freshly formatted disk - and the only
+        # way to clear it was to move the window. Caught by screenshotting after
+        # a successful format and reading the pane rather than the terminal.
+        if files_win >= 0 { if wm_is_open(files_win) == 1 { files_refresh()  wm_dmg(files_win) } }
         return 0
     }
     # ; - the real time, off the CMOS clock. The header draws this too, but the
@@ -6837,7 +6848,54 @@ fn sn_draw(ax, ay, aw, ah) {
 }
 
 # ---- Files: the persistent zlfs file manager ------------------------------
-FILES_ROW = 24
+# 20, not 24. design.h ZD_LISTROW_H is 20 and decomposes exactly against the
+# prototype: --lh-sm 15 leading + td padding 2+2 + a 1px groove. ui_grid_row_h()
+# already returns that; this list was the one table not using it.
+FILES_ROW = 20
+
+# THE LIST'S GEOMETRY, IN ONE PLACE. Where row 0 starts and how many rows fit
+# were each computed in three different places, and two of the three copies
+# were wrong in different ways. Both take the client's own y or height so the
+# draw, the hit test and the keyboard cannot drift apart again.
+# THE FILESYSTEM'S CLOCK, WHICH NOTHING HAD EVER SET.
+#
+# fs.c writes FE_MTIME on every create and every write - from `now_secs`, which
+# fs_set_time() sets and which is bound to zl as `fs_stamp`. That native had
+# ZERO CALLERS, so now_secs stayed 0, every file's mtime was 0, and the Files
+# pane's "modified" column printed 0 for every row. The column was reading a
+# field that was faithfully written with a number nobody had supplied.
+#
+# Third time today: wm_set_status was bound and uncalled, hook_desk_key was
+# wired and unreached, and this. A complete implementation with no caller looks
+# exactly like a working one from the outside.
+#
+# SECONDS SINCE MIDNIGHT, not since an epoch. This kernel has no epoch - the RTC
+# gives wall-clock fields and nothing converts them - so the stamp is what it
+# can honestly be, and the column head says so. rtc_up() re-reads the CMOS;
+# rtc_here() guards a machine with no CMOS at all.
+# hh:mm from seconds-since-midnight, using the same zero-padded field the rail's
+# clock uses - a clock that reads "9:5" is worse than no clock, as that helper's
+# own comment says.
+fn files_hhmm(hx, hy, secs, col) {
+    fx2 = clock_field(hx, hy, idiv(secs, 3600), CLOCK_DIGIT * ui(), T_CAPTION, col)
+    label(fx2, hy, ":", col, T_CAPTION, W_REG)
+    clock_field(fx2 + CLOCK_DIGIT * ui(), hy, idiv(secs, 60) % 60, CLOCK_DIGIT * ui(), T_CAPTION, col)
+    return 0
+}
+
+fn fs_stamp_now() {
+    if rtc_here() == 0 { return 0 }
+    if rtc_up() == 0 { return 0 }
+    fs_stamp(rtc_h() * 3600 + rtc_mi() * 60 + rtc_s())
+    return 1
+}
+
+fn files_list_top(cy) { return cy + 62 * ui() + ui_colhead_h() }
+fn files_list_rows(ch) {
+    flr = (ch - 104 * ui() - ui_colhead_h()) / (FILES_ROW * ui())
+    if flr < 1 { return 1 }
+    return flr
+}
 files_sel = 0 - 1
 files_scroll = 0
 files_new = 0
@@ -7062,8 +7120,8 @@ fn files_draw(ax, ay, aw, ah) {
     # Name, size and mtime are all real reads: fs_ch, fs_bytes, fs_when.
     ui_grid("*|90|110")
     ui_colhead(ax, ay + 62 * files_u, aw, "name|size|modified", 0 - 1, 0)
-    files_y0 = ay + 62 * files_u + ui_colhead_h()
-    files_rows = (ah - 104 * files_u - ui_colhead_h()) / files_rh
+    files_y0 = files_list_top(ay)
+    files_rows = files_list_rows(ah)
     if files_rows < 1 { files_rows = 1 }
     files_keep_visible(files_rows)
     files_di = 0
@@ -7080,14 +7138,39 @@ fn files_draw(ax, ay, aw, ah) {
                         # ZD_RAISE with the overprint on its left edge now, which
                         # is ZD_SEL_BAR_W / ZD_FOCUS_BAR and the same mark the
                         # register uses for the same meaning: this is the one.
-                        rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, R_INSET_D * files_u, theme(TH_PANEL_HI))
-                        fill_rgb(ax + 8 * files_u, files_ry, focus_bar(), files_rh - 2 * files_u, theme(TH_ACCENT))
+                        # SELECTION IS THE KNOCKOUT, NOT THE HOVER PLUS A BAR.
+                        # The prototype separates them explicitly:
+                        #   tr.pick:hover:not(.sel) td { background: ZD_RAISE }
+                        #   tr.sel td { background: ZD_KNOCK; color: ZD_KNOCK_INK }
+                        # and its comment calls the second "the same value flip
+                        # the focused header uses". This drew ZD_RAISE - the
+                        # HOVER treatment - and added an overprint bar the
+                        # reference does not have on a row at all, so the
+                        # selected row was the hover state wearing a mark, and
+                        # nothing on the pane could show hover afterwards.
+                        rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, R_INSET_D * files_u, theme(TH_KNOCK))
                     }
-                    files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
+                    # ONE INK FOR THE WHOLE TABLE. presswork-prototype.html:784
+                    # is `td { color: var(--zd-text-2) }` - one value for every
+                    # cell. This drew the name at ZD_TEXT_0 and the two figures
+                    # at ZD_TEXT_3: three rungs across one table, which reads as
+                    # three kinds of information where the reference has one.
+                    files_ink = theme(TH_TEXT_2)
+                    if files_di == files_sel { files_ink = theme(TH_KNOCK_INK) }
+                    files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, files_ink)
                     # size and mtime, in their own tracks and right-aligned as
                     # the reference marks both with `r: 1`
-                    ui_gcelln(ax, aw, files_ry, files_rh, 1, fs_bytes(files_di), theme(TH_TEXT_DIM), FILES_M_NUM)
-                    ui_gcelln(ax, aw, files_ry, files_rh, 2, fs_when(files_di), theme(TH_TEXT_DIM), FILES_M_NUM)
+                    ui_gcelln(ax, aw, files_ry, files_rh, 1, fs_bytes(files_di), files_ink, FILES_M_NUM)
+                    # A CLOCK, NOT A COUNT OF SECONDS. fs_stamp_now stores
+                    # seconds since midnight - this kernel has no epoch, the RTC
+                    # gives wall-clock fields and nothing converts them - so the
+                    # raw number under a head reading "modified" would be a
+                    # figure implying something it is not. Drawn hh:mm, which is
+                    # what it actually says. A file written before the stamp
+                    # existed reads 0 and shows a dash rather than 00:00, which
+                    # is a real time and would be a lie.
+                    files_wt = fs_when(files_di)
+                    if files_wt > 0 { files_hhmm(ui_gspanx(ax, aw, 2), pw_mcelly(files_ry), files_wt, files_ink) } else { ui_txt(ui_gspanx(ax, aw, 2) + 4 * files_u, pw_mcelly(files_ry), "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO) }
                     files_dn = files_dn + 1
             }}
             files_seen = files_seen + 1
@@ -7106,10 +7189,22 @@ fn files_draw(ax, ay, aw, ah) {
 
 fn files_mouse_slot(win, ey) {
     files_mu = ui()
-    files_my0 = wm_cy(win) + 72 * files_mu
+    # THE DRAW AND THE HIT TEST DISAGREED ABOUT WHERE ROW 0 IS.
+    #
+    # files_draw puts the first row at `ay + 62*u + ui_colhead_h()`; this
+    # computed `wm_cy(win) + 72*u`, a bare 72 with no column-head term. Both
+    # start from the same client y, so the two are directly comparable and they
+    # differ by ui_colhead_h() - 10 dp. Every click landed on a row above the
+    # one under the pointer for most of each row's height.
+    #
+    # And the ROW COUNT was computed three times in three places, two of them
+    # dropping the `- ui_colhead_h()` term, so the hit test and the keyboard
+    # both believed in one row the draw never puts on screen. Three expressions
+    # that must be one number, which is how they came to be three numbers.
+    files_my0 = files_list_top(wm_cy(win))
     if ey < files_my0 { return 0 - 1 }
     files_mrow = (ey - files_my0) / (FILES_ROW * files_mu)
-    files_mrows = (wm_ch(win) - 104 * files_mu) / (FILES_ROW * files_mu)
+    files_mrows = files_list_rows(wm_ch(win))
     if files_mrow < 0 { return 0 - 1 }
     if files_mrow >= files_mrows { return 0 - 1 }
     return files_slot_at_order(files_scroll + files_mrow)
@@ -7131,7 +7226,7 @@ fn files_event(win, ety, ecode, ex, ey) {
         return 1
     }
     if ety == 1 {
-        files_rows_now = (wm_ch(win) - 104 * ui()) / (FILES_ROW * ui())
+        files_rows_now = files_list_rows(wm_ch(win))
         if files_rows_now < 1 { files_rows_now = 1 }
         if ecode == K_UP { files_prev()  files_keep_visible(files_rows_now)  wm_dmg(win)  return 1 }
         if ecode == K_DOWN { files_next()  files_keep_visible(files_rows_now)  wm_dmg(win)  return 1 }
