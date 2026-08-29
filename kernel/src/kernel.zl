@@ -2645,6 +2645,28 @@ fn mib1(mx, my, bytes, col) {
 # EVERY DESK-TICK DAMAGE IS COUNTED, because the strip prints the rate.
 desk_wakes = 0
 
+# IS THE COMPOSITOR ACTUALLY PAINTING? The System Monitor's swatch asked
+# wm_run(), which is written in exactly two places - `running = 1` in wm_init
+# and `running = 0` in wm_stop - so it is 1 for the entire life of every pane
+# that can display it. The swatch had one state and a two-state legend.
+#
+# What "RUN" should mean on a sampler is that samples are arriving. That is
+# whether wm_painted() moved since the last second, which is a real edge and
+# the same one raster_tick clocks on.
+sm_run_seen = 0 - 1
+sm_run_sec  = 0 - 1
+sm_run_live = 0
+
+fn sm_run_tick() {
+    smsec = idiv(ticks(), 100)
+    if smsec == sm_run_sec { return 0 }
+    sm_run_sec = smsec
+    smp = wm_painted()
+    if smp == sm_run_seen { sm_run_live = 0 } else { sm_run_live = 1 }
+    sm_run_seen = smp
+    return 0
+}
+
 foot_sec_seen = 0 - 1
 
 fn foot_tick() {
@@ -6223,11 +6245,11 @@ fn sysmon_body(sx, sy, sw, sh) {
     # the RUN dot - the note's width changes with the sample count and the
     # swatch's changes with the word, so neither may be assumed.
     runw = pw_sww("RUN")
-    if wm_run() != 1 { runw = pw_sww("IDLE") }
+    if sm_run_live != 1 { runw = pw_sww("IDLE") }
     swx = mx + mw - runw
     runc = theme(TH_WARN)
-    if wm_run() == 1 { runc = theme(TH_OK) }
-    if wm_run() == 1 { pw_sw(swx, hy, "RUN", runc) } else { pw_sw(swx, hy, "IDLE", runc) }
+    if sm_run_live == 1 { runc = theme(TH_OK) }
+    if sm_run_live == 1 { pw_sw(swx, hy, "RUN", runc) } else { pw_sw(swx, hy, "IDLE", runc) }
     nwx = mx + ui_capsw("sampling", PW_SM) + 12 * u
     num_aa(nwx, hy, wm_sn(), theme(TH_TEXT_2))
     # "N PER COMPOSITED FRAME" READ AS A RATE AND IS A CEILING. wm_sn() is
@@ -10661,6 +10683,7 @@ fn app_tick(id, win) {
     # nothing; it asks for the clock block back when the minute rolls.
     if id < 0 {
         raster_tick()
+        sm_run_tick()
         rail_clock_tick()
         rail_stat_tick()
         foot_tick()

@@ -461,7 +461,20 @@ fn reg_new(id, u) {
     #
     # desk_x/desk_y are what the boot composition already uses for the same
     # numbers out of the same file.
-    if id == APP_SETTINGS { return wm_open(id, "Settings", desk_x(14), desk_y(12), 720 * u, 720 * u) }
+    # settings_win IS RECORDED HERE TOO. There are two ways to open Settings and
+    # only one of them was recording the window: reopen_settings assigns
+    # settings_win, and this path - taken by the shell command, the command
+    # palette row and the catalogue tile - returned the index without touching
+    # it. So the pane's own "THIS PANE, LAST DRAW" figure read wm_appus(-1) and
+    # printed 0, and reopen_settings would open a SECOND Settings window over
+    # the first.
+    #
+    # zl globals are one namespace across the whole program, so this file can
+    # assign kernel.zl's global directly - which is the smallest correct fix.
+    if id == APP_SETTINGS {
+        settings_win = wm_open(id, "Settings", desk_x(14), desk_y(12), 720 * u, 720 * u)
+        return settings_win
+    }
     if id == APP_CATALOG  { return wm_open(id, "All Applications", desk_x(120), desk_y(40), CAT_W * u, CAT_H * u) }
     if id == APP_REGEX     { pt_reset() }
     if id == APP_WORDLE    { wg_reset() }
