@@ -7,16 +7,6 @@ Every item below was measured by a command, not remembered. Regenerate with:
 tools/todo.sh
 ```
 
-## EFI warning-contract failures — 1 sites
-
-The live warning-strict EFI flags reject the dedicated pointer-truncation
-probe, but compiling the shipped EFI translation units reported errors.
-
-- [ ] inspect and repair the reported translation units:
-
-  - [ ] `freestanding/runtime_kernel.c` — 1 site(s)
-- [ ] then run the static hazard scan; leave hardware/QEMU proof for its explicit gate
-
 ## Engine divergence — 2 pinned
 
 `./interp` is ground truth. These engines disagree with it today:
