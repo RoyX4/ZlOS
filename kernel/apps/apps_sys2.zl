@@ -576,6 +576,23 @@ fn rd_tick(win) {
 HX_BASE = 0x100000                  # where boot.S is loaded; always mapped
 hx_page = 0
 
+# HOW MANY ROWS AND HOW BIG A PAGE, FROM THE CLIENT HEIGHT.
+#
+# The header printed "256 B/page", the chips stepped by 256, and the loop drew
+# whatever fitted - eight rows, 128 bytes, at the shipped geometry. Three
+# numbers for one fact, none of them agreeing, and the one in the reference's
+# computed-value slot was the written one.
+#
+# Both take the same client height the body is laid out from, so the caption,
+# the cursor and the loop cannot disagree again.
+fn hx_bodyh(ah) { return ah - ui_tb_h() - ui_sb_h() - ui_colhead_h() }
+fn hx_rows(ah) {
+    hr = (hx_bodyh(ah) - 7 * ui()) / ui_mono_h(S2_PANEL_HEX)
+    if hr < 1 { return 1 }
+    return hr
+}
+fn hx_pagesz(ah) { return hx_rows(ah) * 16 }
+
 fn hx_ui(ax, ay, aw, ah, dm) {
     u = ui()
     cw = cell_w()
@@ -613,11 +630,23 @@ fn hx_ui(ax, ay, aw, ah, dm) {
         # through peek8. Saying so is both true and more useful: it tells the
         # reader what they are looking at.
         ui_txt(lx + 9 * u, s2_mcy(wy, wh), "phys 0x100000, the loaded image", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
-        ui_txt(lx + ww - 9 * u - ui_tw("256 B/page", S2_MD, S2_MONO), s2_mcy(wy, wh), "256 B/page", ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+        # "256 B/page" WAS WRITTEN AND THE PANE DELIVERS WHAT IT CAN DRAW.
+        # Eight rows of sixteen bytes is 128 at the shipped geometry, not 256,
+        # and the number sits in the slot the reference fills with a computed
+        # value - so it reads as measured. It is measured now: rows times
+        # sixteen, from the same function the loop and the chips use.
+        hx_bw = ui_tnw(hx_pagesz(ah), S2_MD, S2_MONO) + ui_tw(" B/page", S2_MD, S2_MONO)
+        ui_txtn(lx + ww - 9 * u - hx_bw, s2_mcy(wy, wh), hx_pagesz(ah), ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+        ui_txt(lx + ww - 9 * u - hx_bw + ui_tnw(hx_pagesz(ah), S2_MD, S2_MONO), s2_mcy(wy, wh), " B/page", ui_ink(S2_IK_T5), S2_MD, S2_MONO)
     }
-    if ui_chip(cx0, chy, "+0", hx_page == 0) == 1 { hit = 0 }
-    if ui_chip(cx1, chy, "+256", hx_page == 1) == 1 { hit = 1 }
-    if ui_chip(cx2, chy, "+512", hx_page == 2) == 1 { hit = 2 }
+    # THREE FIXED CHIPS ADDRESSED 768 BYTES OF A WHOLE ADDRESS SPACE, and only
+    # 384 of those were ever drawn. They also stepped by 256 while the pane
+    # showed 128, so "+256" skipped a page. The chips are a PAGE CURSOR now -
+    # back, forward, and the current offset - so the whole image is walkable
+    # instead of the first three pages of it.
+    if ui_chip(cx0, chy, "<", hx_page > 0) == 1 { hit = 0 }
+    if ui_chip(cx1, chy, ">", 0) == 1 { hit = 1 }
+    ui_txtn(cx2, chy + 4 * u, hx_page * hx_pagesz(ah), ui_ink(S2_IK_T5), S2_MD, S2_MONO)
 
     # ---- the column header, as the reference has it -------------------------
     # R.hex is a TBL of offset / bytes / ascii at 16, 62 and 22 percent, and the
@@ -635,11 +664,17 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     bx = ax + 9 * u
     hx0 = bx + 8 * cw + 13 * u
     as0 = hx0 + 35 * cw + 13 * u
+    # HOW MANY ROWS FIT, COMPUTED ONCE. This looped `while r < 16` with the body
+    # guarded on the row fitting AND `by = by + lh` INSIDE that guard - so once
+    # a row stopped fitting, by never advanced, every remaining iteration
+    # re-tested the same failing condition and drew nothing. The loop ran
+    # sixteen times to draw eight. The 16 is ds-reference.html's "16 bytes per
+    # row" confused with a row count.
     by = py + 7 * u
     r = 0
-    while r < 16 {
+    while r < hx_rows(ah) {
         if by + lh <= py + ph {
-            addr = HX_BASE + hx_page * 256 + r * 16
+            addr = HX_BASE + hx_page * hx_pagesz(ah) + r * 16
             if dm == 1 { ac_draw_base(bx, by, addr, 8, 16, ui_ink(S2_IK_DIM)) }
             if dm == 1 { char_aa(as0, by, 124, ui_ink(S2_IK_DIM)) }
             if dm == 1 { char_aa(as0 + 17 * cw, by, 124, ui_ink(S2_IK_DIM)) }
@@ -672,7 +707,21 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     return hit
 }
 
-fn hx_apply(g) { hx_page = g  return 0 }
+# THE CHIPS ARE A CURSOR NOW, so the hit is a direction and not a page number.
+# hx_page = g worked when g was 0, 1 or 2 and the chips were "+0/+256/+512";
+# with back and forward it has to step. Clamped at zero, and at the top by the
+# image this pane can actually reach - HX_BASE is the load address and there is
+# no accessor for the image's length, so the ceiling is stated as what it is:
+# a bound this pane cannot read, held at 64 pages so a wrong keypress cannot
+# walk the viewer off into unmapped memory and fault the machine.
+HX_MAXPAGE = 64
+fn hx_apply(g) {
+    if g == 0 { hx_page = hx_page - 1 }
+    if g == 1 { hx_page = hx_page + 1 }
+    if hx_page < 0 { hx_page = 0 }
+    if hx_page > HX_MAXPAGE { hx_page = HX_MAXPAGE }
+    return 0
+}
 
 # ==============================================================================
 # 43  FRAMEBUFFER - 600 x 420
