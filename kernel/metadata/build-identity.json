@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "82e538126153bb1e177121e4016072ecb3a85a3a"
+    "head": "189079d8230a7311d9e7849a5a8cabb3d4108f91"
   },
-  "identity_sha256": "773ebb0b9835d5822368fda77be2919d28d9439cae28f9c00460b5a8ddfa2189",
+  "identity_sha256": "f59f2eba94a54ae617543dfc4efbbd9e847e3082f3974c8e0972ff0a190b9af7",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -103,12 +103,12 @@
     "kernel/src/graphics/fonts/font_prop.h": "db9195ea42a855de5ad4945b6e1c4dd45009772814aaa12efdf6e7b026d1faa1",
     "kernel/src/graphics/fonts/font_prop.inc": "42f69ac420935245296beacd772a4cc5e7e783f5b424adbb0dcc61d89d65aa02",
     "kernel/src/graphics/fonts/font_sub.c": "7c290296512ea687acb4d5dce30908d55950bb662375e6af4218896abe00439f",
-    "kernel/src/graphics/framebuffer/fb.c": "1e4ef59eb210c430bc13e38ca651f3c4a2225a0a7ed806a58e8553c14c12763a",
+    "kernel/src/graphics/framebuffer/fb.c": "4aa273266a037f49590d3660c889433bf6dfa3268df8b5e07570c8cf4c6fd69e",
     "kernel/src/graphics/framebuffer/fb3d.c": "b6259dc2c67fcdb0189678ce5667517cdbc6b934d14ef6ef4df436099fc47d56",
     "kernel/src/graphics/icons/icons.c": "2d7d07beca39fb0db12fc990a4545ee5334d496cc75b124153d6aa97a9d4d910",
     "kernel/src/graphics/image/png.c": "c273ddcb4e751fd4e999a6fa7c40d7706f499ad57d36da9683bb621e334964cd",
     "kernel/src/graphics/image/png.h": "c91befe500618549405b7ba2ef93ddd55c1998614df35a53a855c9e38eeea09a",
-    "kernel/src/graphics/ui/design.h": "b7ea54a2f93102673e2c8dba776612dfff8d2202bae0834765baa8fae4c9d254",
+    "kernel/src/graphics/ui/design.h": "58faa955922d5c566f163a3c4d94829967c136754da133c0c3dea7a8beef6ed4",
     "kernel/src/graphics/ui/ease.c": "e26757324e1ea7387eef66d5125dbb39fca059ba03d63d20e253be95e802dc50",
     "kernel/src/graphics/ui/ease.h": "10b7e842a94feca628dfdfa09b307df51505bc419c616519f0bc8c136f9f9e2c",
     "kernel/src/graphics/ui/notify.c": "46fc08d08c2ab1f164c05ab73e340a601fc5546911863b3d677bf53dd4b3b9a7",
@@ -120,7 +120,7 @@
     "kernel/src/graphics/windowing/clip.c": "33361f8fa6d5cda2c277f68b4ed03761966b8f5a088e6c52fe918ed5badc3886",
     "kernel/src/graphics/windowing/term.c": "51a4a9c357e5fb64dd2506644e32404d727a547c451bc3380570f0e72bf82b81",
     "kernel/src/graphics/windowing/userwin.c": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
-    "kernel/src/graphics/windowing/wm.c": "f3a8544915a119998660b706aaa49f65316884fe5e839aa7757b16dabede25bb",
+    "kernel/src/graphics/windowing/wm.c": "79d6f1d9818927f03c3c400d04af16d763d133edb44e1ad3493046256e162c12",
     "kernel/src/graphics/windowing/wmglue.c": "0c524f038c6c13579588b9d805c193725e3e28b20e226ed810be20172013cebb",
     "kernel/src/kernel.zl": "371760384df8fe8ce85f4fb4dfcb89e972463ace53bd9fbe61b33022d9168a6a",
     "kernel/src/net/crypto.c": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",

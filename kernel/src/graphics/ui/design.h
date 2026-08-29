@@ -362,6 +362,10 @@
 #define ZD_TITLE_INK_KO    ZD_KNOCK_INK /* reversed out of the knockout     */
 #define ZD_TITLE_INK_OFF   ZD_TEXT_3    /* unfocused                        */
 #define ZD_WINCTL          22      /* the control's width; it is full-height */
+/* .cbtn's glyph is `<svg width="11" height="11" ...>` (proto:2282-2284) - HALF
+ * the cell. The controls were drawn at 24dp, so the glyph box was wider than
+ * the 22dp cell holding it and the centring arithmetic went negative. */
+#define ZD_WINCTL_GLYPH    11
 /* THE HEADER'S TWO MARGINS, from .hdr's own padding in the prototype:
  *   .hdr { padding: 0 calc(6px * var(--ui)) 0 calc(11px * var(--ui)) }
  * The left one was already being drawn (as an uncited UI_S3, the same number by

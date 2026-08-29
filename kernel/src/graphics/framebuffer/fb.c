@@ -3663,6 +3663,38 @@ extern const int icons_n;
  * Now each scale reads the atlas that was RASTERIZED for it. Only a scale
  * neither atlas covers (3x and up, which F4's fractional UI scale will want)
  * resamples - and it interpolates rather than copies, from the 48x48 set. */
+/* AN ICON AT A SIZE THE CALLER CHOOSES.
+ *
+ * fb_icon24 cannot do this: its size is not a parameter, and it FLOORS at
+ * ICON_W - `if (dst < ICON_W) dst = ICON_W` - so it can never draw smaller than
+ * 24 device pixels whatever the caller wants. That floor is why the window
+ * controls were drawn at 24dp inside a 22dp cell: the glyph box was WIDER than
+ * the cell it sat in, and the centring arithmetic went negative.
+ *
+ * The authority draws these at 11dp - `.cbtn`'s svg is width="11" height="11"
+ * (proto:2282-2284) in a 22dp cell, half the cell's width. More than a
+ * two-fold difference, on the three controls that appear on every window.
+ *
+ * No floor here, and one bilinear resample rather than nearest-neighbour, for
+ * the same reason fb_icon24 gives: fractional desktop scaling must not turn
+ * glyphs into blocks. The two native atlas sizes are still used directly when
+ * the request lands on one of them.
+ */
+void fb_icon_dp(int px, int py, int n, int dp, unsigned int fg)
+{
+    if (n < 0 || n >= icons_n || dp <= 0) return;
+    int dst = (dp * ui_scale_q8 + 128) / 256;
+    if (dst < 1) dst = 1;
+
+    if (dst == ICON_W)  { blend_cov(px, py, &icons24[n][0][0], ICON_W,  ICON_H,  fg); return; }
+    if (dst == ICON2_W) { blend_cov(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, fg); return; }
+
+    if (dst < 36)
+        blend_cov_scaled(px, py, &icons24[n][0][0], ICON_W, ICON_H, dst, dst, fg);
+    else
+        blend_cov_scaled(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, dst, dst, fg);
+}
+
 void fb_icon24(int px, int py, int n, unsigned int fg)
 {
     if (n < 0 || n >= icons_n) return;

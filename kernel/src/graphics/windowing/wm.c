@@ -53,6 +53,9 @@ void fb_blur_free(int slot);
 void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
 void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_icon24(int px, int py, int n, unsigned int fg);
+/* The same atlas at a size the caller picks. fb_icon24 floors at ICON_W and so
+ * physically cannot draw the window controls at the size the authority uses. */
+void fb_icon_dp(int px, int py, int n, int dp, unsigned int fg);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
  * That is the single change docs/desktop/desktop-look.md item 4 asks for at this layer. */
@@ -2477,6 +2480,17 @@ enum title_control { TITLE_CLOSE = 0, TITLE_MAXIMIZE = 1, TITLE_MINIMIZE = 2 };
 /* How wide the three-control cluster is, together. The title's safe margin and
  * the tab strip's available width both need it, and two copies of `3 * 22` is
  * how a title ends up running under a close box at one UI scale only. */
+/* THE CLUSTER'S INSIDE FACE, PUBLISHED ONCE. Three places need it: the rect of
+ * each control, and the two hard stops that keep the title run and the module
+ * code clear of it. When the cluster moved left by .hdr's 6dp right padding,
+ * only the first of the three moved - so the intended 8dp gutter between the
+ * title and the controls silently became 2dp, and the comment above each stop
+ * went on describing the old arithmetic. Three copies of one edge is three
+ * chances to update two of them. */
+static int title_controls_w(const struct ui_theme *t);
+static int title_cluster_x(const struct win *W, const struct ui_theme *t)
+{ return W->x + W->w - 1 - UI_DP(t, ZD_HDR_PR) - title_controls_w(t); }
+
 static int title_controls_w(const struct ui_theme *t)
 {
     return 3 * UI_DP(t, ZD_WINCTL);
@@ -2641,7 +2655,10 @@ static void title_control_rect(const struct win *W, int which,
      * the ring. Growing from the ring itself was the old behaviour and it left
      * the close box touching the frame while the title kept an 11dp margin on
      * the other side. Both margins are now the same document's numbers. */
-    *x = W->x + W->w - 1 - UI_DP(t, ZD_HDR_PR) - (which + 1) * cw;
+    /* TITLE_MINIMIZE == 2 is the LEFTMOST cell, so it sits at the cluster's
+     * inside face and the others step right from it. Byte-identical to the
+     * arithmetic this replaces; it just goes through the one owner now. */
+    *x = title_cluster_x(W, t) + (TITLE_MINIMIZE - which) * cw;
     *y = W->y + 1;
 }
 
@@ -2967,7 +2984,7 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
     int gut = UI_DP(t, ZD_GAP);
     /* the cluster's inside face, less one gutter, is the hard stop for
      * everything on this line */
-    int stop = W->x + W->w - 1 - title_controls_w(t) - gut;
+    int stop = title_cluster_x(W, t) - gut;
 
     unsigned ink_dim = focused ? t->knock_ink2 : t->text_dim;
     /* ZD_TITLE_INK. The name is ZD_TEXT_2 at rest - 7.8606:1 on the plate -
@@ -3074,7 +3091,7 @@ static void chrome_module(int win, int focused)
     } else {
         x = chrome_title_run(W, focused, hh, 0);
     }
-    int stop = W->x + W->w - 1 - title_controls_w(t) - gut;
+    int stop = title_cluster_x(W, t) - gut;
 
     char code[16];
     module_code(win, code, (int)sizeof code);
@@ -3346,8 +3363,15 @@ static void chrome_shell(int win, int focused)
                      * to appear for a half-snapped window too. Only the corner
                      * radius cares specifically about SNAP_MAX. */
                     (b == TITLE_MINIMIZE ? 22 : (win_snapped(win) ? 24 : 23));
-        fb_icon24(bx + (bw - UI_DP(t, 24)) / 2,
-                  by + (bh - UI_DP(t, 24)) / 2, glyph, ink);
+        /* ZD_WINCTL_GLYPH, not 24. The authority's .cbtn svg is 11x11 in a
+         * 22dp cell - the glyph is half the cell's width. At 24dp the box was
+         * two dp WIDER than the cell it was being centred in, so the centring
+         * term went negative and the glyph overhung on both sides at every
+         * scale. The comment that used to defend this measured the INK's extent
+         * and concluded it did not cross the cell - which is true and is not
+         * the same claim as the glyph being the right size. */
+        int gd = UI_DP(t, ZD_WINCTL_GLYPH);
+        fb_icon_dp(bx + (bw - gd) / 2, by + (bh - gd) / 2, glyph, ZD_WINCTL_GLYPH, ink);
     }
 
     /* THE RESIZE GRIP, drawn. A corner you cannot see is a corner nobody finds,
