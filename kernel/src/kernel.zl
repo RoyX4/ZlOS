@@ -5454,14 +5454,23 @@ fn sm_core_head(hx, hy, hw) {
 # answers "yes" to whether or not it is true.
 fn sm_core_row(rx, ry, rw, i) {
     cy = pw_celly(ry)
-    # WHICH CORE, NOT HOW MANY. This read `i < smp_n()`, comparing a core
-    # INDEX against a COUNT of online cores - so if cores 0 and 2 came up and
-    # core 1 did not, it would report 0 and 1 UP and 2 DOWN, naming the wrong
-    # core in both directions. smp_mask() is the bitmap that records which ones
-    # actually answered, and it was already bound and already used elsewhere in
-    # this file.
+    # `i < smp_n()` IS CORRECT HERE, AND I BROKE IT ONCE BY "FIXING" IT.
+    #
+    # An audit reported that comparing an index against a count would name the
+    # wrong core if cores came up sparsely, and I replaced it with a smp_mask()
+    # bit test without reading smp.c. smp_mask() is `ap_mask | 1u`, and ap_mask
+    # is built as `ap_mask |= (1u << id)` where id is CPUID.1:EBX[31:24] - the
+    # INITIAL APIC ID. It is keyed by APIC id and those are not dense; kernel.zl
+    # prints the same value as "APIC id bitmap" elsewhere. Indexing it with a
+    # loop counter reads the wrong bit.
+    #
+    # The slots ARE dense, and smp.c says so on the line that fills them:
+    # "Claim a slot by arrival order, not by APIC id - ids are not dense and a
+    # sparse array would leave the dispatcher spinning on a slot nobody owns."
+    # slot = ap_online, and smp_online() is ap_online + 1. So cores 0..smp_n()-1
+    # are exactly the ones that answered, and the count IS the membership test.
     on = 0
-    if band(shr(smp_mask(), i), 1) == 1 { on = 1 }
+    if i < smp_n() { on = 1 }
     num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, i, theme(TH_TEXT_2))
     if on == 1 {
         num_aa(pw_right(pw_colx(rx, rw, 30), pw_colw(rw, 30), s3_numw(smp_id(i))), cy, smp_id(i), theme(TH_TEXT_2))
@@ -10576,11 +10585,30 @@ fn desk_key(kcode, kmods) {
         return 1
     }
     if kcode == 7 {
+        # THE TOGGLE WAS INERT AND THE TOAST WAS THE ONLY EVIDENCE IT HAD RUN.
+        #
+        # draw_grid() is reached from draw_wallpaper() and desk_ground(), and
+        # draw_wallpaper() is called ONCE, at boot, immediately followed by the
+        # single wall_save(). Every later paint takes the `if wall_ok() == 1
+        # { wall_paint(...) }` branch, which blits a bitmap baked with the grid
+        # ON. So this flipped a flag, fired a toast saying the desk had changed,
+        # and the desk did not change - a control that reports success and does
+        # nothing, which is worse than one that visibly fails. I shipped it this
+        # morning while fixing five other controls that did exactly that.
+        #
+        # The grid is IN the cache, so changing it means re-baking the cache.
+        # That is a full wallpaper redraw, which is why it does not happen per
+        # frame - but this is a keypress, and a keypress may cost a repaint.
         desk_grid_on = 1 - desk_grid_on
-        # TITLE AND BODY, which is what the prototype's toasts are. "12 x 8"
-        # is a real citation: ZD_GRID_COLS is 12 and ZD_GRID_ROWS is 8 in
-        # design.h, and draw_grid rules exactly that many.
-        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8, ruled onto the field", 800) } else { note_say2("desk grid off", "the field is bare - nothing else changes", 800) }
+        draw_wallpaper()
+        wall_save()
+        # NOT "nothing else changes". draw_grid's early return also skips the
+        # crop marks and the legend, so turning the grid off takes those with
+        # it. The prototype toggles crop marks on their own branch and they
+        # survive a grid-off; until this OS has that second switch, the honest
+        # thing is to name what actually goes. "12 x 8" stays a real citation:
+        # ZD_GRID_COLS is 12 and ZD_GRID_ROWS is 8.
+        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8, with the crop marks and the legend", 800) } else { note_say2("desk grid off", "the crop marks and the legend go with it - one switch, three things", 800) }
         wm_damage(0, 0, px_w(), px_h())
         return 1
     }

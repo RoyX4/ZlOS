@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — feat(motion): the focus change animates, and every duration comes from design.h (7a59600)
+
+`design/presswork` · 4 files changed, 114 insertions(+), 14 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>4 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/tests/host/wmtest.c`
+
+</details>
+
 ## 2026-08-29 — feat(menus): both menus hold every row, and the keys they advertise now exist (b0ce074)
 
 `design/presswork` · 8 files changed, 128 insertions(+), 17 deletions(-)
