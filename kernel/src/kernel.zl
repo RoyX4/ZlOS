@@ -11180,6 +11180,13 @@ fn ov_draw_palette(u) {
     # pk. Mixing those is how a filtered list runs the row above the one clicked.
     pk = 0
     pvis = ov_pal_nvis()
+    # A QUERY THAT MATCHES NOTHING SAYS SO. Without this the sheet shrinks to a
+    # header, an input line and a blank strip, which reads as the palette having
+    # broken rather than as the query having found nothing. The row list IS the
+    # answer here, so an empty list needs a sentence.
+    if pvis < 1 {
+        ui_txt(sx + 38 * u, sy + 66 * u, "no command matches", theme(TH_TEXT_DIM), PW_SM, 0)
+    }
     while pk < pvis {
         pi = ov_pal_nth(pk)
         ry = sy + 62 * u + pk * rowh
@@ -11589,7 +11596,11 @@ fn ov_pal_nth(k) {
 # edge read as a click on the scrim - dismissing the palette instead of doing
 # nothing. Two expressions for one rectangle, disagreeing by the difference
 # between two numbers that look interchangeable and are not.
-fn ov_pal_sheet_h() { return 66 * ui() + ov_pal_nvis() * OV_PAL_ROWH * ui() + 24 * ui() }
+fn ov_pal_sheet_h() {
+    psh = ov_pal_nvis()
+    if psh < 1 { psh = 1 }        # the "no command matches" line needs the row
+    return 66 * ui() + psh * OV_PAL_ROWH * ui() + 24 * ui()
+}
 
 # INSIDE THE SHEET IS NOT THE SAME QUESTION AS ON A ROW, and collapsing the two
 # is why a click on the palette's own header dismissed it. The scrim dismisses;

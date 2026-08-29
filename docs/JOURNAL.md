@@ -7,6 +7,34 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — feat: three more Settings controls, and the BOUNDARY tab gets its first ever (e55e2ba)
+
+`design/presswork` · 12 files changed, 153 insertions(+), 16 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 1 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>12 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/ui.c`
+- `kernel/src/graphics/ui/ui.h`
+- `kernel/src/graphics/ui/uikit.c`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-30 — feat: the command palette filters as you type (4f8e933)
 
 `design/presswork` · 7 files changed, 184 insertions(+), 23 deletions(-)
