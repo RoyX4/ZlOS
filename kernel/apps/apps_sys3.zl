@@ -1429,10 +1429,25 @@ fn s3nw_toolbar(ax, ay, aw) {
     x = x + tw + 7 * u
     pw = ui_pill_w("ping", S3_MD, S3_MONO)
     ui_pill(x, py, pw, ph, "ping", S3_MD, S3_BTN_PRIMARY, S3_MONO)
-    mtu = s3nw_mtu(s3nw_sel)
-    mx = ax + aw - 10 * u - s3_mw("mtu ") - s3_numw(mtu)
-    s3_mono(mx, ay + 11 * u, "mtu ", theme(TH_TEXT_DIM))
-    num_aa(mx + s3_mw("mtu "), ay + 11 * u, mtu, theme(TH_TEXT_DIM))
+    # THE SECOND COPY OF THE SAME FIGURE, and the fix landed on only one of
+    # them. The KV row below already draws "-" for an interface that is not
+    # present; this strip kept drawing num_aa(0), so selecting the loopback row
+    # showed "mtu 0" in the toolbar and "mtu -" twelve pixels underneath, in the
+    # same frame. A surface contradicting itself is worse than either answer.
+    #
+    # The right edge has to be measured inside each arm: "-" is one cell and
+    # 1500 is four, so a single flush computed outside would put one of them in
+    # the wrong place.
+    if s3nw_present(s3nw_sel) == 0 {
+        mx = ax + aw - 10 * u - s3_mw("mtu ") - s3_mw("-")
+        s3_mono(mx, ay + 11 * u, "mtu ", theme(TH_TEXT_DIM))
+        s3_mono(mx + s3_mw("mtu "), ay + 11 * u, "-", theme(TH_TEXT_DIM))
+    } else {
+        mtu = s3nw_mtu(s3nw_sel)
+        mx = ax + aw - 10 * u - s3_mw("mtu ") - s3_numw(mtu)
+        s3_mono(mx, ay + 11 * u, "mtu ", theme(TH_TEXT_DIM))
+        num_aa(mx + s3_mw("mtu "), ay + 11 * u, mtu, theme(TH_TEXT_DIM))
+    }
     return 0
 }
 
@@ -1455,12 +1470,26 @@ fn s3nw_head(hx, hy, hw, sel) {
     hu = ui()
     ui_caps(hx + 13 * hu, hy, "LINK", theme(TH_TEXT_2), T_CAPTION)
     label(hx + 58 * hu, hy, s3nw_name(sel), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    # THE THIRD PLACE THIS PANE ANSWERS THE SAME QUESTION, and the fix reached
+    # the other two. The sidebar row and the KV state row both branch on
+    # s3nw_present now; this header did not, so selecting the loopback drew a
+    # red dot and a bold red DOWN at the top of a pane that says NOT PRESENT
+    # four rows below, in the same frame.
+    #
+    # Red is a claim about a fault. There is no loopback device in this kernel,
+    # so there is nothing to have failed - and a danger colour spent on a
+    # non-event is a danger colour that means less when eth0 really does drop.
     up = s3nw_up(sel)
-    dc = theme(TH_OK)
-    if up == 0 { dc = theme(TH_DANGER) }
-    ui_dot(hx + 108 * hu, hy + 5 * hu, dc, 0)
-    if up == 1 { label(hx + 120 * hu, hy, "UP", dc, T_CAPTION, W_BOLD) }
-    if up == 0 { label(hx + 120 * hu, hy, "DOWN", dc, T_CAPTION, W_BOLD) }
+    if s3nw_present(sel) == 0 {
+        ui_dot(hx + 108 * hu, hy + 5 * hu, theme(TH_BORDER), 0)
+        label(hx + 120 * hu, hy, "ABSENT", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    } else {
+        dc = theme(TH_OK)
+        if up == 0 { dc = theme(TH_DANGER) }
+        ui_dot(hx + 108 * hu, hy + 5 * hu, dc, 0)
+        if up == 1 { label(hx + 120 * hu, hy, "UP", dc, T_CAPTION, W_BOLD) }
+        if up == 0 { label(hx + 120 * hu, hy, "DOWN", dc, T_CAPTION, W_BOLD) }
+    }
     # FLUSH RIGHT: THE DRIVER THIS INTERFACE ACTUALLY HAS, read rather than
     # written. This said "e1000e - dhcp" and the driver row two lines below it
     # said `virtio-net` - because I typed a device name instead of asking for

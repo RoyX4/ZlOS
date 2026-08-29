@@ -6539,7 +6539,15 @@ fn sys_row_val(vx, vy, i, dr) {
         sv_x = sys_vn(sv_x, vy, px_w(), dr)
         sv_x = sys_vs(sv_x, vy, " x ", dr)
         sv_x = sys_vn(sv_x, vy, px_h(), dr)
-        sv_x = sys_vs(sv_x, vy, " x 32", dr)
+        # THE DEPTH IS READ LIKE THE OTHER TWO. This was the literal " x 32"
+        # sitting between px_w() and px_h(), both of which ARE measurements - so
+        # on a machine whose firmware handed back 24-bpp packed or 16-bpp 565
+        # the row would have printed two true numbers and one false one in the
+        # same sentence, and the false one is the one that changes what you do
+        # about it. fb_bpp comes from fb_setup, which takes whatever the
+        # bootloader reported.
+        sv_x = sys_vs(sv_x, vy, " x ", dr)
+        sv_x = sys_vn(sv_x, vy, fb_bpp(), dr)
         return sv_x
     }
     if i == 1 {
@@ -11453,7 +11461,16 @@ fn open_snake() {
 # function is the rail's hit test and nothing else. The dock's three bands (the
 # Activities corner, the pip row, the strip) are gone with the dock.
 rail_hover = 0 - 1                 # which register row the pointer is over
-rail_press = 0                     # ...and whether the button is down
+# THE RIGHT BUTTON'S EDGE. `rail_press` used to live here, tracking the LEFT
+# button so it could damage the register band on press and again on release -
+# for a pressed state that nothing draws. Its three occurrences in the tree were
+# its declaration and its own assignment; draw_rail_row has four states and
+# pressed is not one of them, and the prototype has no `:active` rule on .slot
+# either. Two full repaints of a 170-wide column per click, to change nothing.
+#
+# What replaces it tracks the RIGHT button, and is read: it is the edge that
+# stops a held right button reopening the field menu on every pointer event.
+rail_rpress = 0
 
 fn desk_click(cx, cy, cbtn) {
     down = band(cbtn, 1)
@@ -11469,9 +11486,22 @@ fn desk_click(cx, cy, cbtn) {
         rail_hover = nh
         wm_damage(0, rail_dmg_y(), rail_w(), rail_dmg_h())
     }
-    if down != rail_press {
-        rail_press = down
-        wm_damage(0, rail_dmg_y(), rail_w(), rail_dmg_h())
+    # RIGHT-CLICK OPENS THE FIELD MENU. Bit 1 is the right button - wm.c states
+    # that mask where it explains why the double-click bit had to move - and
+    # this function read bit 0 and nothing else, so a right press on the desk
+    # produced down == 0 and fell straight out.
+    #
+    # The consequence was that a twelve-row surface had exactly one route: type
+    # the word `ctxmenu` in the Terminal, which opens it at a fixed point. A
+    # context menu reachable only by typing a command is not a context menu.
+    #
+    # Guarded on the same edge state the removed press-repaint used, so a held
+    # right button opens it once rather than on every pointer event that arrives
+    # while it is down.
+    rdn = band(cbtn, 2)
+    if rdn != rail_rpress {
+        rail_rpress = rdn
+        if rdn != 0 { return desk_menu_at(cx, cy) }
     }
 
     if down == 0 { return 0 }

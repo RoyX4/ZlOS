@@ -952,6 +952,7 @@ extern void wm_resize(int win, int w, int h);
  * than including ui.h, so a new binding needs its extern here too - the build
  * catches the omission as an implicit declaration, which is what -Werror is
  * for on a freestanding target where an implicit int return is a real bug. */
+extern unsigned int fb_bits_per_pixel(void);
 extern void wm_move(int win, int x, int y);
 extern void wm_minimize(int win);
 extern void wm_max_toggle(int win);
@@ -2319,6 +2320,14 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "intel_pipe"))  return zl_num((double)intel_pipe_enabled());
     if (streq(name, "intel_surf"))  return zl_num((double)intel_surface());
     if (streq(name, "loader"))     return zl_num((double)console_loader());
+    /* THE MODE'S REAL DEPTH. Two panes printed the literal "32" beside px_w
+     * and px_h, which ARE read - so a machine the firmware handed 24-bpp packed
+     * or 16-bpp 565 would have shown two measured numbers and one invented one
+     * in the same sentence, and the invented one is the one that would have
+     * mattered. fb_bpp is assigned in fb_setup from whatever the bootloader
+     * reported; all three entry points (multiboot, UEFI GOP, raw_boot VBE)
+     * pass the firmware's own value through. */
+    if (streq(name, "fb_bpp"))     return zl_num((double)fb_bits_per_pixel());
     if (streq(name, "px_w"))       return zl_num((double)console_pxw());
     if (streq(name, "px_h"))       return zl_num((double)console_pxh());
     if (streq(name, "fill_rect")) { console_fill((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }

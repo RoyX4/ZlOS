@@ -188,7 +188,7 @@ fn kl_msg(i) {
     if i == 4 { return "local APIC enabled" }
     if i == 5 { return "application processors started" }
     if i == 6 { return "configuration space enumerated" }
-    if i == 7 { return "linear framebuffer mapped, 32 bpp" }
+    if i == 7 { return "linear framebuffer mapped, no blitter" }
     if i == 8 { return "usb host controller claimed" }
     if i == 9 { return "keyboard and pointer attached" }
     if i == 10 { return "namespace 1 identified" }
@@ -808,7 +808,12 @@ fn fbv_ui(ax, ay, aw, ah, dm) {
     pk = S2_BTN_P
     if fbv_on == 1 { pk = S2_BTN_N }
     if ui_pill(ax + 10 * u, py, pw, ph, fbv_label(), S2_MD, pk, 0) == 1 { hit = 0 }
-    ui_txt(ax + 10 * u + pw + 8 * u, s2_mcy(ty, tbh), "32 bpp - software raster - no gpu blitter", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    # THE DEPTH IS READ. This was the literal "32 bpp"; fb_bpp() is the value
+    # fb_setup was handed by the bootloader, and the rest of the sentence is
+    # still true by construction - there is no blitter in this kernel.
+    fbx = ax + 10 * u + pw + 8 * u
+    ui_txtn(fbx, s2_mcy(ty, tbh), fb_bpp(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    ui_txt(fbx + ui_tnw(fb_bpp(), S2_SM, S2_MONO), s2_mcy(ty, tbh), " bpp - software raster - no gpu blitter", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
     return hit
 }
 
@@ -850,10 +855,22 @@ fn cn_ui(ax, ay, aw, ah, dm) {
     s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
 
     ui_stat(ax, ay + ch, aw, 84)
-    ui_statn("CELLS WRITTEN", con_cols() * con_rows(), theme(TH_TEXT))
+    # "CELLS WRITTEN" WAS THE SCREEN'S SIZE, NOT A COUNT. con_cols() * con_rows()
+    # is the text grid - fixed for the whole session once the mode is set - so
+    # this printed 18000 on the first frame and 18000 for ever, under a label
+    # that reads as a running total. A machine that had printed nothing at all
+    # still showed 18000.
+    #
+    # Nothing in this kernel counts cells written, and adding a counter to the
+    # console's hot path to satisfy a caption would be the tail wagging the dog.
+    # The grid IS worth showing, so it is shown under the label it deserves.
+    ui_statn("CONSOLE COLS", con_cols(), theme(TH_TEXT))
     ui_statn("COMMANDS PARSED", term_cmd(), theme(TH_TEXT))
     ui_statn("UNSUPPORTED", term_bad(), s2_thresh(term_bad(), 0))
-    ui_statn("SCROLLBACK", con_rows(), theme(TH_TEXT_DIM))
+    # SCROLLBACK WAS ALSO THE SCREEN, con_rows() - the number of rows VISIBLE,
+    # not the number retained. term.c keeps a real ring and term_lines() reports
+    # how much of it is live, which is the figure this label was promising.
+    ui_statn("SCROLLBACK", term_lines(), theme(TH_TEXT_DIM))
     ui_statn("BLIT US", wm_us(), s2_thresh(wm_us(), 16000))
     ui_stat_end()
 
