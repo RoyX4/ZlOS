@@ -1492,6 +1492,7 @@ fn rail_stat_tick() {
     if rsec == rail_stat_sec { return 0 }
     rail_stat_sec = rsec
     if px_w() < 1 { return 0 }
+    desk_wakes = desk_wakes + 1
     wm_damage(0, rail_stat_y(), rail_w(), RAIL_STAT_H * ui())
     return 1
 }
@@ -1694,6 +1695,7 @@ fn rail_clock_tick() {
     cmin = rtc_h() * 60 + rtc_mi()
     if cmin == rtc_min_seen { return 0 }
     rtc_min_seen = cmin
+    desk_wakes = desk_wakes + 1
     wm_damage(0, px_h() - RAIL_CLOCK_H * ui(), rail_w(), RAIL_CLOCK_H * ui())
     return 1
 }
@@ -1941,7 +1943,7 @@ raster_seen = 0 - 1                # the wm_painted() value the last column came
 #                           wm_painted() is the compositor's own count of frames
 #                           that repainted, and it is the same edge raster_tick
 #                           clocks on, so the counter and the plot cannot drift.
-#   IDLE WAKEUPS/H 0        what the clocking COSTS. See below.
+#   IDLE WAKEUPS/H <n>      what the clocking COSTS, counted. See below.
 #   BUDGET 16 667 us        what full height means. wm_budget(), not a literal.
 #
 # MEASURED, NOT DECORATIVE, with one exception which is called out where it is
@@ -1971,7 +1973,13 @@ fn strip_rd_w() {
     w = w + g + RD_ADV_CELLS * cw
     w = w + g + 9 * cw                                  # "composite"
     w = w + g + ui_capsw("IDLE WAKEUPS/H", T_CAPTION)
-    w = w + g + cw                                      # the zero
+    # THE WAKEUP FIGURE'S WIDTH, which used to reserve one cell for a literal
+    # "0". It is a counted rate now and can be four digits on a machine that has
+    # been up a short time, so it is measured like every other number on this
+    # band. Reserving one cell for a four-digit figure would have pushed BUDGET
+    # off the right edge.
+    rd_up = idiv(ticks(), 100)
+    if rd_up < 1 { w = w + g + cw } else { w = w + g + s3_numw(idiv(desk_wakes * 3600, rd_up)) }
     w = w + g + ui_capsw("BUDGET", T_CAPTION)
     w = w + g + budget_w()
     return w
@@ -2042,20 +2050,34 @@ fn draw_strip_rd(rx, sh) {
     rx = rx + 9 * cw + g
     ui_caps(rx, ly, "IDLE WAKEUPS/H", lab, T_CAPTION)
     rx = rx + ui_capsw("IDLE WAKEUPS/H", T_CAPTION) + g
-    # THE ONE FIGURE HERE THAT IS NOT A MEASUREMENT, and it is printed anyway
-    # because it is the reading that justifies the whole re-clocking. The strip
-    # arms no timer: raster_tick() is edge-triggered on wm_painted() and returns
-    # on its first line when nothing has composited, so an idle machine performs
-    # exactly zero wakeups on the strip's account. A strip clocked per FRAME
-    # would cost one wakeup per vblank whether or not anything moved, which at
-    # this panel's 59.998 Hz is about 216 000 an hour - the reference prints
-    # that figure against the other setting for exactly this comparison.
-    # It is a zero DERIVED FROM THE MECHANISM, not sampled from a counter, and
-    # if the strip ever grows a timer this line becomes a lie. It is written as
-    # a literal for that reason: there is no counter to read, and inventing one
-    # that always answers zero would hide the fact.
-    text_aa(rx, ny, "0", val)
-    rx = rx + cw + g
+    # THIS WAS THE LITERAL "0", AND THE COMMENT HERE PREDICTED ITS OWN FAILURE.
+    #
+    # It argued the zero was derived from the mechanism rather than sampled: the
+    # strip arms no timer, raster_tick is edge-triggered on wm_painted(), so an
+    # idle machine performs no wakeups on the strip's account. Then it said, in
+    # as many words, "if the strip ever grows a timer this line becomes a lie".
+    #
+    # The strip never grew a timer. The DESK did - foot_tick, rail_stat_tick and
+    # rail_clock_tick each ask for their block back on a cadence, which is two
+    # damages a second and about 7,200 an hour. And until a few lines above this
+    # one, raster_tick damaged unconditionally too, so its own repaint forced the
+    # composite that triggered the next: the surface printing the zero was the
+    # thing making it false.
+    #
+    # A prediction that came true from a direction nobody was watching is still
+    # the prediction being right. So it is counted now rather than reasoned
+    # about: desk_wakes is incremented by every desk tick that actually damages,
+    # and this is that count over the uptime, per hour. Before the machine has
+    # run a second there is nothing to divide by and it says so.
+    up_s = idiv(ticks(), 100)
+    if up_s < 1 {
+        text_aa(rx, ny, "-", val)
+        rx = rx + cw + g
+    } else {
+        wk = idiv(desk_wakes * 3600, up_s)
+        num_aa(rx, ny, wk, val)
+        rx = rx + s3_numw(wk) + g
+    }
     ui_caps(rx, ly, "BUDGET", lab, T_CAPTION)
     rx = rx + ui_capsw("BUDGET", T_CAPTION) + g
     bg = wm_budget()
@@ -2090,13 +2112,35 @@ fn raster_tick() {
     rv = idiv(wm_us() * RASTER_SCALE, wm_budget())
     if rv > 255 { rv = 255 }
     if rv < 1 { rv = 1 }
+    # THE PREVIOUS SAMPLE, read before the ring moves on.
+    rprev = 0 - 1
+    if raster_n > 0 {
+        rpi = raster_head - 1
+        if rpi < 0 { rpi = RASTER_CAP - 1 }
+        rprev = peek8(RASTER_RING + rpi)
+    }
     poke8(RASTER_RING + raster_head, rv)
     raster_head = raster_head + 1
     if raster_head >= RASTER_CAP { raster_head = 0 }
     if raster_n < RASTER_CAP { raster_n = raster_n + 1 }
-    # ...and ask for the band back. Without this the ring advances and nothing
-    # ever repaints it, which is exactly the failure the dock's pulse had: an
-    # animation with no end has no finished frame to damage on.
+    # ...and ask for the band back, BUT ONLY WHEN THE COLUMN ACTUALLY CHANGED.
+    #
+    # This damaged unconditionally, and that made the strip a perpetual motion
+    # machine: the damage forces a composite, the composite moves wm_painted(),
+    # the next tick sees the change and damages again. The desktop never idled,
+    # and the figure printed two inches to the right - "IDLE WAKEUPS/H 0" - was
+    # false BECAUSE of the surface printing it. A twelve-line comment above that
+    # figure argued the zero was honest on the grounds that "the strip arms no
+    # timer"; it does not arm a timer, it arms itself.
+    #
+    # Skipping the identical column breaks the loop where it starts. On a busy
+    # machine the values vary and the plot moves as before. On an idle one they
+    # repeat, the damage stops, composites stop, and raster_tick then returns on
+    # its first line - so the ring stops advancing too, and the plot stops
+    # because there is genuinely nothing to plot. That is the reading the strip
+    # is supposed to give.
+    if rv == rprev { return 0 }
+    desk_wakes = desk_wakes + 1
     wm_damage(rail_w(), 0, px_w() - rail_w(), strip_h())
     return 1
 }
@@ -2489,7 +2533,7 @@ RULER_MIN_BAR = 240                # dp of bar the readout will not shrink past
 # roughly 0xFD000000 - the prototype's own readout reads "0x00100000 ..
 # 0xC0611000" for the same reason, and for the same reason it is a caption.
 fn mem_top() {
-    return vram() + px_w() * px_h() * 4
+    return vram() + fb_pitch() * px_h()   # see ruler_fb for why not w * h * 4
 }
 fn foot_y() { return px_h() - foot_h() }
 
@@ -2524,7 +2568,13 @@ fn ruler_heap() {
     if hr < 0 { hr = 0 }
     return hr
 }
-fn ruler_fb()   { return px_w() * px_h() * 4 }              # the framebuffer
+# THE FRAMEBUFFER'S REAL SPAN, which is pitch times height and not width times
+# four. fb.c accepts 24bpp as well as 32 - so the old arithmetic overstated a
+# 24bpp mode by a third - and it keeps fb_pitch as its own field from its own
+# argument to fb_setup, because firmware pads scanlines for alignment. fb.c
+# computes the mapped span as pitch * height itself, three lines from where it
+# stores both.
+fn ruler_fb()   { return fb_pitch() * px_h() }              # the framebuffer
 fn ruler_free() { return arena_free() + heap_free() }       # headroom in both
 fn ruler_mapped() {
     return ruler_lo() + ruler_ar() + ruler_zl() + ruler_dma() + ruler_srf() + ruler_heap() + ruler_fb()
@@ -2592,6 +2642,9 @@ fn mib1(mx, my, bytes, col) {
 #
 # One second, one damage, and only when the second actually rolled - same shape
 # as rail_clock_tick beside it.
+# EVERY DESK-TICK DAMAGE IS COUNTED, because the strip prints the rate.
+desk_wakes = 0
+
 foot_sec_seen = 0 - 1
 
 fn foot_tick() {
@@ -2599,6 +2652,7 @@ fn foot_tick() {
     if fsec == foot_sec_seen { return 0 }
     foot_sec_seen = fsec
     if px_w() < 1 { return 0 }
+    desk_wakes = desk_wakes + 1
     wm_damage(rail_w(), foot_y(), px_w() - rail_w(), foot_h())
     return 1
 }
