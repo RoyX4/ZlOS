@@ -684,7 +684,16 @@ fn cat_draw(ax, ay, aw, ah) {
         # only the rough vertical band, to skip work for rows scrolled off -
         # fb_clip (set to the client rect before app_draw runs) is what makes
         # this an optimisation rather than a correctness requirement.
-        if ty + CAT_TILE_H * u >= ay {
+        # CULL AGAINST THE BODY, NOT THE CLIENT. This admitted a row as soon as
+        # any part of it reached the top of the CLIENT rect - but the legend
+        # occupies the top CAT_HEADER units and is drawn first, so with the list
+        # scrolled the row above the viewport had fourteen units of tile drawn
+        # straight over the three legend swatches and their labels. fb_clip is
+        # set to the client, not the body, so nothing stopped it.
+        #
+        # cat_scroll steps in whole rows, so the first visible row has ty == gy
+        # exactly and this loses nothing.
+        if ty >= gy {
             if ty < ay + ah {
                 tx = ax + ccol * CAT_TILE_W * u
                 hv = 0

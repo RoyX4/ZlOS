@@ -66,6 +66,17 @@ fn clk_kv(kx, ky, kw, nm, val, unit) {
 }
 
 fn clk_draw(ax, ay, aw, ah) {
+    # ui_begin FIRST. ui.c keeps the draw/hit-test mode in a file static that
+    # only ui_begin sets, and every gated uikit widget opens with
+    # `if (ui_mode_get() != UI_DRAW) return;`. kernel.zl's menu_event leaves it
+    # at UI_HITTEST after any left-click in the start menu and nothing restores
+    # it - so this pane painted its grid cells, column heads, dots and mono
+    # panels normally until the first menu click, and nothing afterwards.
+    #
+    # apps_utils.zl documents this hazard in as many words, and this file was
+    # one of the two that did not follow it. A written warning nobody applied
+    # is a guess with a citation.
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
     u = ui()
     up = idiv(ticks(), 100)
 
@@ -241,6 +252,17 @@ fn si_val(i) {
 fn si_isflag(i) { if i >= 5 { return 1 }  return 0 }
 
 fn si_draw(ax, ay, aw, ah) {
+    # ui_begin FIRST. ui.c keeps the draw/hit-test mode in a file static that
+    # only ui_begin sets, and every gated uikit widget opens with
+    # `if (ui_mode_get() != UI_DRAW) return;`. kernel.zl's menu_event leaves it
+    # at UI_HITTEST after any left-click in the start menu and nothing restores
+    # it - so this pane painted its grid cells, column heads, dots and mono
+    # panels normally until the first menu click, and nothing afterwards.
+    #
+    # apps_utils.zl documents this hazard in as many words, and this file was
+    # one of the two that did not follow it. A written warning nobody applied
+    # is a guess with a citation.
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
     u = ui()
     hdh = 22 * u
     # the head: which block, and whether it answered
@@ -359,6 +381,20 @@ fn ca_val() { if ca_has_entry == 1 { return ca_entry }  return ca_acc }
 # unreachable and the rest hit the wrong one.
 fn ca_grid_y() { return 116 * ui() }
 
+# THE KEY WIDTH IS DERIVED FROM THE PLATE, not fixed at 44 design units.
+#
+# Four columns of a fixed CA_BTN filled 8 + 4*44 = 184 units of a client the
+# registry gives as 360 - the prototype's own p[2] for `calc` - so nearly half
+# the plate was empty to the right of the keys. The prototype lays the same
+# sixteen keys out as `grid-template-columns: repeat(4, 1fr)` inside the pane's
+# padding: the keys divide the width, they do not sit in a corner of it.
+#
+# One owner, because the draw and the hit test both need it and this suite has
+# already been bitten by those two computing a geometry separately - which is
+# what ca_grid_y exists for. `/` truncates toward zero here, which is what the
+# hit test wants.
+fn ca_btn_w(aw) { return idiv(aw - 16 * ui(), 4) }
+
 fn ca_draw(ax, ay, aw, ah) {
     u = ui()
     dw = aw - 16 * u
@@ -390,7 +426,7 @@ fn ca_draw(ax, ay, aw, ah) {
     while i < 16 {
         r = i / 4
         c = i % 4
-        bx = ax + 8 * u + c * CA_BTN * u
+        bx = ax + 8 * u + c * ca_btn_w(aw)
         by = gy + r * CA_BTN * u
         bg = theme(TH_PANEL_HI)
         kc = theme(TH_TEXT_HI)
@@ -403,8 +439,8 @@ fn ca_draw(ax, ay, aw, ah) {
         # than a mismatch: a decimal point in a calculator whose drawing path
         # has no floats is a key that would do nothing.
         if i == 14 { bg = theme(TH_ACCENT)  kc = theme(TH_INK_ON) }
-        rrect(bx + 2 * u, by + 2 * u, CA_BTN * u - 4 * u, CA_BTN * u - 4 * u, R_INSET_D * u, bg)
-        label(bx + CA_BTN * u / 2 - 4 * u, by + CA_BTN * u / 2 - 8 * u, ca_btn_label(i), kc, T_BODY, W_BOLD)
+        rrect(bx + 2 * u, by + 2 * u, ca_btn_w(aw) - 4 * u, CA_BTN * u - 4 * u, R_INSET_D * u, bg)
+        label(bx + idiv(ca_btn_w(aw), 2) - 4 * u, by + CA_BTN * u / 2 - 8 * u, ca_btn_label(i), kc, T_BODY, W_BOLD)
         i = i + 1
     }
     # THE NOTE WAS A WRITTEN FIGURE STANDING BESIDE ITS OWN NATIVE. It said
@@ -439,7 +475,7 @@ fn ca_event(win, ety, ecode, ex, ey) {
         cy = ey - wm_cy(win) - ca_grid_y()
         if cx < 0 { return 0 }
         if cy < 0 { return 0 }
-        c = cx / (CA_BTN * u)
+        c = idiv(cx, ca_btn_w(wm_cw(win)))
         r = cy / (CA_BTN * u)
         if c > 3 { return 0 }
         if r > 3 { return 0 }
