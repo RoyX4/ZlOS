@@ -7155,8 +7155,28 @@ fn ty_roles(rx, ry, i) {
     return tr_x
 }
 
+# TYPE'S SCROLL OFFSET. The pane's section head counts atlas_n() rows and the
+# loop below stops when it runs out of well, so on any window shorter than the
+# full list it printed a count it then did not show - and there was no way to
+# reach the rest, because app_event had no arm for this pane at all and it fell
+# into reg_event, which has never heard of it.
+ty_scroll = 0
+
+# How many rows fit, so the scroll clamp and the loop agree.
+fn ty_fit(gy, gmax) {
+    tyf = idiv(gmax - gy, pw_rowh())
+    if tyf < 1 { tyf = 1 }
+    return tyf
+}
+
 fn ty_rows(gx, gy, gw, gmax) {
-    tw_i = 0
+    # CLAMPED HERE, where the well's height is known. Scrolling past the end
+    # would leave a blank pane with a head still claiming N rows.
+    tymax = atlas_n() - ty_fit(gy, gmax)
+    if tymax < 0 { tymax = 0 }
+    if ty_scroll > tymax { ty_scroll = tymax }
+    if ty_scroll < 0 { ty_scroll = 0 }
+    tw_i = ty_scroll
     tw_y = gy
     while tw_i < atlas_n() {
         if tw_y + pw_rowh() > gmax { return tw_y }
@@ -7255,6 +7275,30 @@ fn ty_row_val(vx, vy, i, dr) {
         return sys_vs(tv_x, vy, " px between glyphs", dr)
     }
     return sys_vt(tv_x, vy, "case, weight and rule weight. never size", dr)
+}
+
+# 14 TYPE'S EVENT ARM, which did not exist. app_draw tests this id before the
+# registry fall-through and says why - it is above the registry range and
+# reg_draw "has never heard of them and would draw nothing at all" - and
+# app_event was never given the same treatment, so every key and every wheel
+# notch went to reg_event, which does not know it either.
+#
+# A dispatcher corrected on one side and not the other is the same defect twice:
+# the draw path was fixed and the event path kept the bug the fix describes.
+#
+# The system pane is deliberately NOT given an arm here: it has no scrollable
+# list and no controls, so an empty handler would be a claim that it does.
+fn type_event(win, ety, ecode) {
+    if ety == 5 {
+        ty_scroll = ty_scroll + ecode
+        if ty_scroll < 0 { ty_scroll = 0 }
+        wm_dmg(win)
+        return 1
+    }
+    if ety != 3 { return 0 }
+    if ecode == K_UP   { ty_scroll = ty_scroll - 1  if ty_scroll < 0 { ty_scroll = 0 }  wm_dmg(win)  return 1 }
+    if ecode == K_DOWN { ty_scroll = ty_scroll + 1  wm_dmg(win)  return 1 }
+    return 0
 }
 
 fn type_body(ax, ay, aw, ah) {
@@ -10135,6 +10179,17 @@ fn app_event(id, win, ety, ecode, ex, ey) {
     # rather than merely misnamed. It sat ABOVE the `id == APP_FILES` arm
     # below, and APP_FILES is 13, so every key and click aimed at the Files
     # window was routed into cat_event() instead of files_event().
+    # THE SAME TWO ARMS app_draw HAS, AND FOR THE SAME REASON. app_draw tests
+    # these ids before the registry fall-through and explains why: they are
+    # above the registry range and reg_draw "has never heard of them and would
+    # draw nothing at all". app_event was never given the treatment, so 14 TYPE
+    # and the system pane fell into reg_event, which does not know them either -
+    # no scrolling, no clicks, no keys.
+    #
+    # A dispatcher fixed on one side and not the other is the same defect twice
+    # over: the draw path was corrected and the event path was left with the
+    # bug the correction describes.
+    if id == APP_TYPEPANE { return type_event(win, ety, ecode) }
     if id >= REG_FIRST { return reg_event(id, win, ety, ecode, ex, ey) }
     if id == APP_BROWSER {
         # '[' and ']' RESIZE THE WINDOW, and that is the gate rather than a
