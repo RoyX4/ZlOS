@@ -698,8 +698,21 @@ fn cat_draw(ax, ay, aw, ah) {
                 tx = ax + ccol * CAT_TILE_W * u
                 hv = 0
                 if cat_hover == i { hv = 1 }
-                bgc = rgb(26, 32, 48)
-                if hv == 1 { bgc = rgb(46, 58, 84) }
+                # THE TILE FACE COMES FROM THE THEME, NOT FROM THE OLD PALETTE.
+                # These were rgb(26,32,48) and rgb(46,58,84) - #1A2030 and
+                # #2E3A54, cold blue-slate values from the SUPERSEDED document.
+                # PRESSWORK's plate is ZD_BASE #322B27 and its accent is
+                # ZD_VERM #E8734F; neither literal exists anywhere in this
+                # ladder. All Applications was the one window on the desktop
+                # still wearing the predecessor's design, and the one window
+                # that did not answer a theme change at all.
+                #
+                # design.h is explicit that it is the only place a colour
+                # literal may appear. A raw rgb() in an app is that rule being
+                # broken, and here it was broken in the direction of a palette
+                # the project has replaced.
+                bgc = theme(TH_PANEL_HI)
+                if hv == 1 { bgc = theme(TH_SURF_5) }
                 rrect(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, CAT_TILE_H * u - 16 * u, 10 * u, bgc)
                 fill_rgb(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, 3 * u, ac_cat_color(reg_cat(id)))
                 ic = reg_icon(id)

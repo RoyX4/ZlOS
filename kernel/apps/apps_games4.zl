@@ -134,15 +134,39 @@ fn g4_keys(id) {
 # MEANS to a window, and "the second of four pads a player must tell apart" is
 # not a meaning a window frame has. They are restated as rgb() triples because
 # design.h is C and zl cannot include it.
+# THE COMMENTS NAMED FIVE design.h TOKENS AND THE CODE RETURNED NONE OF THEM.
+#
+# Each raw triple was labelled with the token it was supposedly restating, and
+# every one of the five was a different colour from the token it named:
+#
+#   ZD_ACCENT_ALT_1 is ZD_STEEL     #7FB2E0 blue     - code had #4CE0B3 teal
+#   ZD_ACCENT_ALT_2 is ZD_STEEL_BR  #A9CFF2 pale     - code had #57B6FF blue
+#   ZD_ACCENT_ALT_3 is ZD_VERM_BR   #F5A184 apricot  - code had #8F7BFF violet
+#   ZD_ACCENT_ALT_4 is ZD_BAD_INK   #EF9077 soft red - code had #E86EC4 pink
+#   ZD_BAD_SOFT     is ZD_BAD_INK   #EF9077          - code had #FF9C88
+#
+# They are the PREDECESSOR palette's values wearing PRESSWORK's names: a
+# hand-copy that drifted, exactly as design.h's "only place a colour literal may
+# appear" rule exists to prevent. The label made it unfalsifiable by eye - the
+# comment said ZD_STEEL and nobody checks a comment against a hex triple.
+#
+# The excuse given was "design.h is C and zl cannot include it". zl cannot
+# include it; zl CAN ask the theme, which is what every other surface does, and
+# four of these eight lines were already doing it. ZD_BAD_INK had no role at
+# all - design.h calls it failure TEXT and nothing carried it, theme.danger
+# being ZD_BAD, a fill at a different ratio - so ui.h and ui.c gained one.
+#
+# What the pads MEAN is still not a window-frame meaning; that argument was
+# right. It just does not license inventing the colours.
 fn g4_col(i) {
-    if i == 0 { return rgb(0x4C, 0xE0, 0xB3) }      # ZD_ACCENT_ALT_1  teal
-    if i == 1 { return rgb(0x57, 0xB6, 0xFF) }      # ZD_ACCENT_ALT_2  blue
-    if i == 2 { return rgb(0x8F, 0x7B, 0xFF) }      # ZD_ACCENT_ALT_3  violet
-    if i == 3 { return rgb(0xE8, 0x6E, 0xC4) }      # ZD_ACCENT_ALT_4  pink
-    if i == 4 { return theme(TH_WARN) }             # ZD_WARN          amber
-    if i == 5 { return rgb(0xFF, 0x9C, 0x88) }      # ZD_BAD_SOFT      soft red
-    if i == 6 { return theme(TH_ACCENT_BR) }        # ZD_ACCENT_BR     bright lime
-    return theme(TH_SURF_1)                          # ZD_SURF_1        sunken well
+    if i == 0 { return theme(TH_STEEL) }            # ZD_ACCENT_ALT_1
+    if i == 1 { return theme(TH_STEEL_BR) }         # ZD_ACCENT_ALT_2
+    if i == 2 { return theme(TH_ACCENT_BR) }        # ZD_ACCENT_ALT_3 = ZD_VERM_BR
+    if i == 3 { return theme(TH_BAD_INK) }          # ZD_ACCENT_ALT_4 = ZD_BAD_INK
+    if i == 4 { return theme(TH_WARN) }             # ZD_WARN
+    if i == 5 { return theme(TH_BAD_INK) }          # ZD_BAD_SOFT     = ZD_BAD_INK
+    if i == 6 { return theme(TH_ACCENT) }           # ZD_ACCENT
+    return theme(TH_SURF_1)                         # ZD_SURF_1
 }
 
 # A heading line, drawn identically by all eight so the games read as one suite.

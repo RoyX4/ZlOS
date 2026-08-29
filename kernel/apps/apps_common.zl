@@ -46,10 +46,18 @@ fn ac_board_bg(ax, ay, cell, gw, gh, bgcol, linecol) {
 # The three category colours, used by the catalog tiles AND by anything else
 # that wants to show "this is a game / a utility / a system app" at a glance.
 # 0 = system, 1 = utility, 2 = game - matches reg_cat() in apps_registry.zl.
+# THREE MORE RAW LITERALS FROM THE SUPERSEDED PALETTE, and they were the tile
+# stripe and the three legend swatches - the catalogue's only colour coding.
+# A pale blue, a mint and a lilac: nothing in PRESSWORK's ladder is any of
+# those, and design.h states it is the only place a colour literal may appear.
+#
+# The three roles the ladder already has for exactly this job: TH_STEEL is the
+# instrument colour, TH_OK the healthy one, TH_ACCENT the emphasis. They move
+# with the theme, which these did not.
 fn ac_cat_color(cat) {
-    if cat == 0 { return rgb(110, 170, 245) }
-    if cat == 1 { return rgb(110, 225, 200) }
-    return rgb(215, 150, 235)
+    if cat == 0 { return theme(TH_STEEL) }
+    if cat == 1 { return theme(TH_OK) }
+    return theme(TH_ACCENT)
 }
 
 # A small deterministic PRNG, independent of sn_seed (Snake's own) so two

@@ -110,6 +110,13 @@ TH_GRID = 38               # the ruled module grid on the desk
 TH_STEEL = 39              # the machine's own reading. INSTRUMENTS ONLY.
 TH_STEEL_BR = 40
 TH_INK_ON = 41             # text on vermilion, 6.14:1
+# 42 is the slot after ink_on. The mirror guard cannot check this one: the
+# colour roles are an ENUM in ui.h, not defines, so there is no symbol with a
+# value for it to compare against. What holds the two in step is the
+# _Static_assert in ui.h that anchors the LAST field's offset to the last
+# enumerator - it fails to compile if the struct and the enum disagree, which
+# is a stronger check than this comment could make and runs on every build.
+TH_BAD_INK = 42            # failure TEXT, 5.9093:1 - see ui.h's tail assert
 fn theme(role) { return ui_color(role) }
 
 # ---- the metric roles, by index ---------------------------------------------

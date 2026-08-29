@@ -96,6 +96,10 @@ struct ui_theme {
     unsigned steel;       /* 39  INSTRUMENTS ONLY. never a control.          */
     unsigned steel_br;    /* 40  the instrument's own highlight              */
     unsigned ink_on;      /* 41  ink that goes ON the overprint              */
+    unsigned bad_ink;     /* 42  failure TEXT on a dark row. design.h says so
+                           *     and nothing carried it: theme.danger is ZD_BAD,
+                           *     a fill at 4.2591:1, which is a different colour
+                           *     and a different job.                          */
 
     /* metrics, all already multiplied by the UI scale. These are NOT in the
      * flat colour array - ui_metric() is a switch, so appending here is free. */
@@ -143,6 +147,7 @@ enum ui_color_role {
     UI_COLOR_CUT, UI_COLOR_LIT, UI_COLOR_LITSOFT, UI_COLOR_EDGE_OVER,
     UI_COLOR_KNOCK, UI_COLOR_KNOCK_INK, UI_COLOR_KNOCK_INK2, UI_COLOR_KO_EDGE,
     UI_COLOR_GRID, UI_COLOR_STEEL, UI_COLOR_STEEL_BR, UI_COLOR_INK_ON,
+    UI_COLOR_BAD_INK,
     UI_COLOR_COUNT
 };
 enum ui_metric_role {
@@ -165,8 +170,8 @@ enum ui_metric_role {
 _Static_assert(__builtin_offsetof(struct ui_theme, cut)
                    == (unsigned)UI_COLOR_CUT * sizeof(unsigned),
                "struct ui_theme and enum ui_color_role disagree at UI_COLOR_CUT");
-_Static_assert(__builtin_offsetof(struct ui_theme, ink_on)
-                   == (unsigned)UI_COLOR_INK_ON * sizeof(unsigned),
+_Static_assert(__builtin_offsetof(struct ui_theme, bad_ink)
+                   == (unsigned)UI_COLOR_BAD_INK * sizeof(unsigned),
                "struct ui_theme and enum ui_color_role disagree at the end of "
                "the colour array; UI_COLOR_COUNT no longer describes it");
 

@@ -219,6 +219,7 @@ void ui_theme_init_q8(int scale_q8)
     theme.steel      = ZD_STEEL;      /* 39  instruments only               */
     theme.steel_br   = ZD_STEEL_BR;   /* 40 */
     theme.ink_on     = ZD_INK_ON;     /* 41  6.1400:1 on ZD_VERM            */
+    theme.bad_ink    = ZD_BAD_INK;    /* 42  failure TEXT, 5.9093:1         */
 
     /* ---- metrics ------------------------------------------------------------
      * Read off the prototype's stylesheet, not picked by eye and not snapped:
