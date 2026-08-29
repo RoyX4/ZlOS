@@ -10242,6 +10242,44 @@ fn settings_body(ax, ay, aw, ah) {
     # other rank break uses - so the half row above it reads as a column
     # continuing past the trim, which is what it is.
     if set_conth > set_viewh { set_rule2(setb_x, set_c1 - SET_R2 * setb_u, setb_w) }
+    set_scrollbar(ax, aw, set_c0, set_viewh)
+    return 0
+}
+
+# THE SCROLLBAR, AND THE PANE HAD NONE.
+#
+# The prototype styles one - `.scroll::-webkit-scrollbar` and its thumb - and
+# this pane scrolled with no bar and no position indicator at all: nothing on
+# screen said there was more, or how much, or where in it you were. On a tab
+# whose content runs to twice the viewport that is the difference between a
+# short pane and a pane you did not know was long.
+#
+# Geometry from ui.c's own scrollbar so the two agree: SCROLLBAR_W wide against
+# the right edge, the track in ZD_SURF_WELL, the thumb in ZD_SURF_7 with chip
+# ends. The thumb's LENGTH is the viewport's share of the content and its
+# POSITION is the scroll's share of the overrun - both read from the figures the
+# draw just learned, so the bar cannot disagree with what it is describing.
+#
+# Drawn only when there is something to scroll. A full-length thumb in a
+# full-height track is a bar saying nothing, and the prototype's `overflow-y:
+# auto` hides it for the same reason.
+SCROLLBAR_W = 9
+
+fn set_scrollbar(ax, aw, vy, vh) {
+    if set_conth <= vh { return 0 }
+    if vh < 1 { return 0 }
+    ssu = ui()
+    ssw = SCROLLBAR_W * ssu
+    ssx = ax + aw - ssw - 2 * ssu
+    fill_rgb(ssx, vy, ssw, vh, theme(TH_SURF_WELL))
+    # the thumb: the viewport's share of the content, never thinner than a chip
+    ssth = idiv(vh * vh, set_conth)
+    if ssth < 2 * R_CHIP_D * ssu { ssth = 2 * R_CHIP_D * ssu }
+    if ssth > vh { ssth = vh }
+    ssover = set_conth - vh
+    ssty = vy
+    if ssover > 0 { ssty = vy + idiv((vh - ssth) * set_scroll, ssover) }
+    rrect(ssx, ssty, ssw, ssth, R_CHIP_D * ssu, theme(TH_SURF_7))
     return 0
 }
 

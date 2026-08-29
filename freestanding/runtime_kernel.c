@@ -1874,7 +1874,15 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "str_has")) {
         if (a[0].type != V_STR || !a[0].str) return zl_num(0);
         const char *h = a[0].str;
-        const unsigned char *n = (const unsigned char *)(unsigned long)(long long)a[1].num;
+        /* zl_uptr, NOT `unsigned long`. The EFI target is
+         * x86_64-unknown-windows, which is LLP64: `unsigned long` is 4 bytes
+         * there and the cast is a hard -Werror=int-to-pointer-cast failure, so
+         * buildefi.sh - zlOS as its own UEFI application, the ThinkPad's boot
+         * route - could not produce an object at all. Every other raw-address
+         * builtin in this file already uses zl_uptr and the typedef's own
+         * comment says why. This one reached for `unsigned long` and my build
+         * loop only ran the 32-bit build.sh, where it is 8 bytes and harmless. */
+        const unsigned char *n = (const unsigned char *)(zl_uptr)a[1].num;
         int nl = (int)a[2].num;
         if (nl <= 0) return zl_num(1);
         for (int i = 0; h[i]; i++) {
