@@ -260,7 +260,10 @@ S3DU_PAD_Y = 14
 S3DU_GAP   = 14
 S3DU_ROWS  = 7                        # the reference lists the top 7
 S3DU_SLOTS = 32                       # fs.c FS_MAXFILES - the whole directory
-S3DU_RD0   = 4194304                  # ds 3769: /dev/rd0, 4 MiB, full
+# S3DU_RD0 was here: the literal 4194304, cited to the superseded document,
+# passed as both used and total so the pane drew a permanently full ramdisk
+# this kernel has never had. Deleted rather than corrected - there is no rd0 to
+# report a right number for.
 
 # GATED ON THE MOUNT, NOT ON THE ARITHMETIC. fs_cap() keeps reporting a
 # capacity when nothing is mounted while fs_free() reports 0, so
@@ -507,7 +510,28 @@ fn s3du_draw(ax, ay, aw, ah) {
         label(x + 110 * u, y, "no volume mounted - nothing to count", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
     y = y + 22 * u
-    y = s3du_mount(x, y, w, "/dev/rd0", "read-only rdfs", S3DU_RD0, S3DU_RD0, 0)
+    # /dev/rd0 WAS A ROW ABOUT A DEVICE THIS KERNEL DOES NOT HAVE.
+    #
+    # It passed S3DU_RD0 - the literal 4194304, commented "ds 3769", a constant
+    # copied out of the SUPERSEDED reference - as BOTH used and total, with
+    # ok = 0. So every boot of every machine drew a 4 MiB volume reported 100%
+    # full, bar filled edge to edge, flag and bar both in TH_DANGER. Three
+    # invented figures and a failure colour, for a ramdisk that does not exist.
+    #
+    # The real block device here is the NVMe namespace, and nv_ok / nv_blocks /
+    # nv_bsize are all bound. Capacity is READ from the controller. USED is not
+    # reported for a raw namespace and nothing in this kernel tracks it, so the
+    # row passes 0 and the bar draws empty - which is the true statement "we
+    # know the size and not the occupancy", where a filled bar was the false
+    # one. When the controller is absent the row says so rather than inventing
+    # a device to be absent about.
+    if nv_ok() == 1 {
+        y = s3du_mount(x, y, w, "/dev/nvme0n1", "nvme namespace 1", 0, nv_blocks() * nv_bsize(), 1)
+    } else {
+        ui_txt(x, y, "/dev/nvme0n1", theme(TH_TEXT_HI), S3_MD, S3_BOLD)
+        s3_mono(x + w - s3_mw("no controller"), y + 2 * u, "no controller", theme(TH_TEXT_DIM))
+        y = y + 22 * u + ui_th(S3_MD) + 6 * u
+    }
     y = y + S3DU_GAP * u
     # THE `ok` FLAG WAS THE LITERAL 1, WHICH IS THE ONE THING IT MUST NOT BE.
     # /tmp is zlfs, and when nothing is mounted fs_cap() and fs_free() are both

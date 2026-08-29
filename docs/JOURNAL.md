@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: window controls at the authority's 11dp, and the gutter my last commit ate (3e3840a)
+
+`design/presswork` · 6 files changed, 94 insertions(+), 12 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/framebuffer/fb.c`
+- `kernel/src/graphics/ui/design.h`
+- `kernel/src/graphics/windowing/wm.c`
+
+</details>
+
 ## 2026-08-30 — fix: the plate's own boundary, and three band geometries taken from the wrong box (189079d)
 
 `design/presswork` · 6 files changed, 103 insertions(+), 24 deletions(-)

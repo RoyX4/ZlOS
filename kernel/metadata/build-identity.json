@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "189079d8230a7311d9e7849a5a8cabb3d4108f91"
+    "head": "3e3840ad4e11079140a66f3df255ba0c80943a7f"
   },
-  "identity_sha256": "f59f2eba94a54ae617543dfc4efbbd9e847e3082f3974c8e0972ff0a190b9af7",
+  "identity_sha256": "8c44210abb94c2092b457151b8dcd27b889f30f7c47f8c812386219411f37d50",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -14,10 +14,10 @@
   ],
   "schema": "zlos.build-input-identity.v1",
   "source_files_sha256": {
-    "freestanding/runtime_kernel.c": "0cef203005ab29f36830d2b22119b9b77a7a9c9b2bcac7d52499cd6411eba020",
+    "freestanding/runtime_kernel.c": "299b9102f8e2ac30a7cd8c7009f1840dd78c224c4ead9cece9489de34fd5f19d",
     "freestanding/zl_freestanding.h": "5be9db332d6666dd6332643a05b31774b14f3f93c85546f8dbac18144ef7a843",
     "kernel/SOURCES": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
-    "kernel/app_manifest_embed.zl": "c7f575aa999b5df2c08893b17aeccdf56f86c7a45212d31a7b54b19d36cfceba",
+    "kernel/app_manifest_embed.zl": "2ce94879911d2b5d76cc2d2e4f49c6c05e17ecb7a927e92aafd90b01b42021fb",
     "kernel/apps/apps_common.zl": "dc15b6174f21e45a4c51aaa055fa61e56a27f8245e0c4ea99b0a545214bc5df2",
     "kernel/apps/apps_games1.zl": "e64d44bde4aff81bf1b2c8adea2593d99cc5f08c77e931a43effdda7fc884ce1",
     "kernel/apps/apps_games2.zl": "8756a9d4a5159d3628eb41493a071ac51b2bac76f510059a990480ee89fff077",
@@ -25,7 +25,7 @@
     "kernel/apps/apps_games4.zl": "d8bdcbbe6913ca2a87805cd7f4725ee32e95a730269404f9f830bbb0d81aaa8d",
     "kernel/apps/apps_registry.zl": "06de81144d38b26832c61e8b18f0ecefe838d92eff5fe29d571bedf1d3a9d048",
     "kernel/apps/apps_sys2.zl": "52826664410325471e265ec22c9b5dbb4966e2632d208116b6a532a592954d51",
-    "kernel/apps/apps_sys3.zl": "1dd6ceae880a4dcb7b1125ce95912e17dedd75b18a651cc958fd48f8976c824d",
+    "kernel/apps/apps_sys3.zl": "d98790e0ec0bebcc76897f1b7af0db8d0d171511330eed0484f0d39810d91c04",
     "kernel/apps/apps_system.zl": "b767445f5424266bf61a1c8a0a8dc33db28a0a6a70a396f5c79ad1ff163b8d26",
     "kernel/apps/apps_utils.zl": "acac9c8836e32c8fb5c9c16e40106c66b8564f19c845047f50f8570017969da1",
     "kernel/boot/boot.S": "0949e1171f666158091663c701296a49da6a73db49c916bda1e3b5af756df4bc",
@@ -43,7 +43,7 @@
     "kernel/build.sh": "ed63792c70b9d2491e46aec11e79ef0b8b98f2185d6e8ea960b7cce3e598d5f1",
     "kernel/build64.sh": "01a1476a9c0089f7f430a54af521ac9fde84c73b75671f75ca686913afeffde0",
     "kernel/buildefi.sh": "cf8abf6f91ac9a9cdb2e7d9208645b2087d0d8397f75c4ae217ff05d6645ee80",
-    "kernel/metadata/app-manifest.json": "08a21b191f7b11f4f35136256ee6b1ab40a929cdee395c7e998694a0e490a238",
+    "kernel/metadata/app-manifest.json": "c16bca662972c15c027ee25980fc32ccf2a045b61e5d8fe3a29e00fd3cc91c8b",
     "kernel/src/arch/x86/apic.c": "708dae2c5007c0c3b2f0bd3a8fba29f1db022185cfa12c19119fe8ea5e85eb8d",
     "kernel/src/arch/x86/cpu.c": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa",
     "kernel/src/arch/x86/divmod.c": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
@@ -122,7 +122,7 @@
     "kernel/src/graphics/windowing/userwin.c": "f61152649895c2bf5a9916a32f41cc5cec5a79d51c8c6b63eada58f9fa61aece",
     "kernel/src/graphics/windowing/wm.c": "79d6f1d9818927f03c3c400d04af16d763d133edb44e1ad3493046256e162c12",
     "kernel/src/graphics/windowing/wmglue.c": "0c524f038c6c13579588b9d805c193725e3e28b20e226ed810be20172013cebb",
-    "kernel/src/kernel.zl": "371760384df8fe8ce85f4fb4dfcb89e972463ace53bd9fbe61b33022d9168a6a",
+    "kernel/src/kernel.zl": "9f8f96264f90ced72636fb7518d4a87aacfc6b0e1642c781773641b25ffa26ae",
     "kernel/src/net/crypto.c": "1dbf246046ae36e6fda25225e5bc6df1138f4fea2a8314458aaa64d5af5bbcb2",
     "kernel/src/net/crypto.h": "48e7b2e3020c9edccebd7be063646dcbebc753d36c99c1cfef2408cfe34eddaa",
     "kernel/src/net/dhcp.c": "7e3115d9b3334ab7520556c15ec8427fafd488e51238f91f0ecf26798ce33fbb",

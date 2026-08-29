@@ -1662,7 +1662,7 @@ fn draw_rail_reg() {
     # rail_reg_rows() is the same clamped count rail_slot_at hit-tests against.
     # A denominator derived some other way is a denominator that disagrees with
     # the rows on a panel too short to show them all.
-    rail_sect(rail_sect_y(), "REGISTER", rail_running_n(), rail_reg_rows())
+    rail_sect(rail_sect_y(), "REGISTER", rail_running_n(), rail_reg_denom())
     ry = rail_reg_y()
     fit = rail_reg_fit()
     rs = 0
@@ -1732,6 +1732,15 @@ fn rail_slot_at(cx, cy) {
 # HOW MANY ROWS ARE ACTUALLY THERE - the fixed register plus the tail, clamped
 # to what fits. One function, called by the draw and by the hit test, because
 # two counts is how a click lands on a row that was never drawn.
+# THE DENOMINATOR IS ROWS THAT CAN RUN, not rows drawn. The REGISTER caption
+# used rail_reg_rows() - REG_N plus the ALL APPS launcher - so it read "n/15"
+# while the numerator's own loop stops at REG_N and rail_app(14) returns -1.
+# The count was structurally incapable of reaching its own denominator: 15/15
+# could never appear however many apps were open. The prototype's #regcount is
+# `runc + '/' + APPS.length`, and APPS.length is the register, not the register
+# plus its launcher.
+fn rail_reg_denom() { return REG_N }
+
 fn rail_reg_rows() {
     n = REG_ROWS
     ti = 0
@@ -2168,6 +2177,13 @@ fn rebake_wallpaper() {
 desk_crop_on = 1
 desk_ruler_on = 1
 desk_slug_on = 1
+# THE WALLPAPER LEGEND'S OWN SWITCH. It was gated on desk_slug_on, which is the
+# Settings row labelled "printer's slug" and belongs to the FOOT band - one
+# switch owning two unrelated surfaces, which is the same "one switch, three
+# things" fault the grid toggle was rewritten to stop committing. The legend is
+# baked into the wallpaper cache, so whatever changes it must re-bake; nothing
+# in Settings does yet, which is why this has no row there and defaults on.
+desk_legend_on = 1
 
 # THREE SWITCHES, THREE THINGS - the early return made it one switch.
 #
@@ -2188,7 +2204,7 @@ desk_slug_on = 1
 fn draw_grid() {
     if desk_grid_on == 0 {
         if desk_crop_on == 1 { draw_crop_marks() }
-        if desk_slug_on == 1 { draw_grid_legend() }
+        if desk_legend_on == 1 { draw_grid_legend() }
         return 0
     }
     # `u = ui()` used to sit here and is gone: the only reader left was the crop
@@ -2235,7 +2251,7 @@ fn draw_grid() {
     # same shape one screen below the comment describing it would have been
     # careless twice.
     if desk_crop_on == 1 { draw_crop_marks() }
-    if desk_slug_on == 1 { draw_grid_legend() }
+    if desk_legend_on == 1 { draw_grid_legend() }
     return 0
 }
 
@@ -2553,8 +2569,15 @@ fn draw_foot() {
     if desk_ruler_on == 1 { draw_foot_ruler() }
     # ---- row 2: the printer's slug
     sy = fy + fh - band_h()
-    fill_rgb(fx + pad_d(), sy - 2 * u, fw - 2 * pad_d(), 1, theme(TH_CUT))
-    if desk_slug_on == 1 { draw_slug(fx + pad_d(), sy + 2 * u) }
+    # THE HAIRLINE IS THE SLUG ROW'S OWN BORDER, not an independent element.
+    # In the prototype it is `#slugrow { border-top: 1px solid var(--zd-cut) }`
+    # and `body.noslug #slugrow { display: none }` takes the rule away with the
+    # text. Drawn outside the gate, switching the slug off left a full-width
+    # ZD_CUT rule ruling off a band of nothing.
+    if desk_slug_on == 1 {
+        fill_rgb(fx + pad_d(), sy - 2 * u, fw - 2 * pad_d(), 1, theme(TH_CUT))
+        draw_slug(fx + pad_d(), sy + 2 * u)
+    }
     return 0
 }
 
@@ -2714,14 +2737,25 @@ fn hexchar(d) {
 #   LOAD 0.58      there is no load average in this kernel. It needs a run-queue
 #                  sample history and sched.c keeps none; the reference computes
 #                  it from its own two fake CPU meters.
-#   MIN STEP       both are WCAG contrast ratios between two palette rungs.
-#   KNOCK          Computing one needs pow(x, 2.4) on a linearised channel, and
-#   SKEW           there are no floats in this drawing path by design. design.h
-#                  states 1.1682 and 6.4796 in prose and exports neither as a
-#                  number; the host `palette` suite computes them in C. Printing
-#                  them would mean a fourth hand-copy of two figures that already
-#                  drifted once - see the palette suite's own comment on why it
-#                  parses rather than restates.
+#
+# MIN STEP AND KNOCK USED TO BE ON THAT LIST, and the reason given was wrong in
+# every clause: "computing one needs pow(x, 2.4) on a linearised channel, and
+# there are no floats in this drawing path". ui_ratio is a bound native that
+# returns WCAG contrast as an INTEGER times 10^4, the system pane already
+# recomputes fourteen rows with it, and draw_slug prints both from
+# slug_minstep() and slug_knock() a few lines below this comment.
+#
+# The entry is kept rather than deleted because the shape of the mistake is
+# worth more than the space: this is the inverse of the fault the list exists to
+# prevent. Not a figure written where one could be read - a reading REFUSED
+# where one was available, with a technical-sounding reason, which is the more
+# durable of the two because a stated "cannot" is never revisited. It sat here
+# unchallenged while the measurement it called impossible ran on every frame
+# twelve hundred pixels away.
+#
+# SKEW is still absent, and for a real reason: it is a ratio between the two
+# above, and printing a third figure derived from two already on the slug adds
+# a number without adding a reading.
 #
 # What was ADDED is measured: smp_total() is the count of processors that came
 # up, the module's two pixel widths are the real integer division and its
@@ -2837,7 +2871,13 @@ fn draw_slug(sx, sy) {
     # was available. Both come from the same place - nobody checked - and the
     # refusal is the more durable of the two, because a stated "cannot" is
     # never revisited.
-    w = 10 * cw + pw_ratw(slug_minstep())
+    # ELEVEN CELLS RESERVED, ELEVEN ADVANCED. "  MIN STEP " is eleven characters
+    # and the advance below is 11 * cw; this reserved ten, so whenever the room
+    # left fell in [10*cw + ratw, 11*cw + ratw) the field passed slug_fit and
+    # then drew up to a full cell past the right margin. Every other field in
+    # this slug reserves exactly what it advances - GUT 6/6, KNOCK 8/8, UP 5/5 -
+    # and this one was the odd one out.
+    w = 11 * cw + pw_ratw(slug_minstep())
     if slug_fit(sx, se, w) == 0 { return 0 }
     text_aa(sx, sy, "  MIN STEP ", col)
     sx = sx + 11 * cw
@@ -6555,7 +6595,14 @@ fn sys_row_val(vx, vy, i, dr) {
         # constant, so a resolution change moves them.
         sv_x = sys_vn(sv_x, vy, ruler_fb() / 1024, dr)
         sv_x = sys_vs(sv_x, vy, " KiB, stride ", dr)
-        sv_x = sys_vn(sv_x, vy, px_w() * 4, dr)
+        # THE STRIDE IS READ. This computed px_w() * 4, which is the one
+        # framebuffer figure that specifically is NOT width times bytes per
+        # pixel: fb.c keeps fb_pitch as its own field from its own argument to
+        # fb_setup, and firmware pads scanlines for alignment routinely. Every
+        # pixel write in fb.c goes through fb_base + y * fb_pitch, so the pane
+        # was printing a number the driver itself does not use - under the word
+        # "stride", which is exactly the word for the number it is not.
+        sv_x = sys_vn(sv_x, vy, fb_pitch(), dr)
         sv_x = sys_vs(sv_x, vy, " B, no gpu blitter", dr)
         return sv_x
     }
