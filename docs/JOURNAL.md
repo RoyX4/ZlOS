@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: the memory ruler's readout is one ink, and its bar draws three not five (9237566)
+
+`design/presswork` · 6 files changed, 52 insertions(+), 11 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>6 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-30 — fix: two written zeros, a pane frozen by a clock it distrusts, and two stale surfaces (9b0b795)
 
 `design/presswork` · 8 files changed, 106 insertions(+), 18 deletions(-)

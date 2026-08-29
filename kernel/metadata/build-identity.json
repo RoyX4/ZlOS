@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "9b0b7958f315a93a5ec3a4c3a98b29525cb99100"
+    "head": "9237566db05f8ea2827f7f6de41d82e2590504f0"
   },
-  "identity_sha256": "aeb2f63ebb0921335849e61b03eb20f92d472c99204c98b19082177dfa87b7b8",
+  "identity_sha256": "3861fc4a65260b964b82a57c21d36ed85f31cbc114d9620d1bfe6498d29acf12",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -14,7 +14,7 @@
   ],
   "schema": "zlos.build-input-identity.v1",
   "source_files_sha256": {
-    "freestanding/runtime_kernel.c": "299b9102f8e2ac30a7cd8c7009f1840dd78c224c4ead9cece9489de34fd5f19d",
+    "freestanding/runtime_kernel.c": "3d7c70d5af652f8a94630d1faa9ec0107e0eba3220f7f017b706694b655067c3",
     "freestanding/zl_freestanding.h": "5be9db332d6666dd6332643a05b31774b14f3f93c85546f8dbac18144ef7a843",
     "kernel/SOURCES": "380c0a1d892349b3350ec8fc5d961c524965ae44a46db1350b7665d3c0ecf933",
     "kernel/app_manifest_embed.zl": "21250e5f4d0ebf99b4e741b8230ca1485f8fc8cf12da3d7027444e331e2d5c74",

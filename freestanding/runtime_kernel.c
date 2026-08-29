@@ -954,6 +954,7 @@ extern void wm_resize(int win, int w, int h);
  * for on a freestanding target where an implicit int return is a real bug. */
 extern unsigned int fb_bits_per_pixel(void);
 extern unsigned int fb_pitch_bytes(void);
+extern unsigned int intel_refresh_mhz_derived(void);
 extern void wm_move(int win, int x, int y);
 extern void wm_minimize(int win);
 extern void wm_max_toggle(int win);
@@ -1607,7 +1608,19 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_ha"))     return zl_num((double)intel_hactive());
     if (streq(name, "gpu_vt"))     return zl_num((double)intel_vtotal());
     if (streq(name, "gpu_va"))     return zl_num((double)intel_vactive());
-    if (streq(name, "gpu_hz"))     return zl_num((double)intel_refresh_mhz());
+    /* THE COUNTED PROBE IS ZERO ON THE MACHINE THIS PROJECT TARGETS.
+     * intel_refresh_mhz() counts frames off intel_frame_count(), and intel.c
+     * states in its own words that firmware leaves PSR enabled on the test
+     * laptop (EDP_PSR_CTL = 0x81F00406) - with self-refresh on the pipe is not
+     * fetching, the counter does not advance, and the function returns 0.
+     * intel_refresh_mhz_derived() computes it from the pixel clock and the
+     * timings instead, which is immune to that and is why it was written.
+     * It was never bound, so the pane went on asking the probe that cannot
+     * answer. Falls back to the counted one if the derivation has no clock. */
+    if (streq(name, "gpu_hz")) {
+        unsigned int d_ = intel_refresh_mhz_derived();
+        return zl_num((double)(d_ ? d_ : intel_refresh_mhz()));
+    }
     if (streq(name, "gpu_clk"))    return zl_num((double)intel_pixel_clock_khz());
     if (streq(name, "edid_read"))  return zl_num((double)intel_read_edid());
     if (streq(name, "edid_pin"))   return zl_num((double)intel_edid_pin());
