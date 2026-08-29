@@ -957,6 +957,7 @@ extern unsigned int fb_pitch_bytes(void);
 extern unsigned int intel_refresh_mhz_derived(void);
 extern void wm_move(int win, int x, int y);
 extern void wm_minimize(int win);
+extern int  wm_is_minimized(int win);
 extern void wm_max_toggle(int win);
 extern void wm_geometry(int win, int *x, int *y, int *w, int *h);
 
@@ -2174,6 +2175,10 @@ Value zl_calln(const char *name, int n, ...)
      * SK_UP, SK_DOWN and SNAP_NONE are private to that file, and copying them
      * across the boundary is how the two paths would come to disagree. */
     if (streq(name, "wm_move"))    { wm_move((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    /* desk_tile's comment promised to leave minimised windows alone and had no
+     * way to ask: wm_is_minimized existed in wm.c and was declared in ui.h, but
+     * was never bound, so the zl side could not tell one from an open window. */
+    if (streq(name, "wm_min_p"))   return zl_num((double)wm_is_minimized((int)a[0].num));
     if (streq(name, "wm_min"))     { wm_minimize((int)a[0].num); return zl_num(1); }
     if (streq(name, "wm_max"))     { wm_max_toggle((int)a[0].num); return zl_num(1); }
     if (streq(name, "wm_w"))       { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gw); }

@@ -3541,27 +3541,88 @@ fn ed_rows(th) {
 }
 
 # The first line drawn, 0-based. Tail-anchored, then backed off by ed_scroll.
-fn ed_top(th) {
-    edt = ed_lines() - ed_rows(th)
-    if edt < 0 { edt = 0 }
-    edt = edt - ed_scroll
-    if edt < 0 { edt = 0 }
-    return edt
+# HOW MANY COLUMNS THE WELL SHOWS. One owner, because the anchor below and the
+# draw both need it and this file has already been bitten twice by two places
+# computing one geometry. Same terms the draw uses: the gutter, its 8dp gap, and
+# a cell's width for the wrap margin.
+fn ed_cols(tw) {
+    edc = idiv(tw - 5 * cell_w() - 16 * ui(), cell_w())
+    if edc < 1 { edc = 1 }
+    return edc
 }
 
-# Byte offset where line n starts. Walks the buffer rather than keeping an
-# index, for the same reason ed_lines does: the buffer is small, it is walked
-# once per frame anyway, and an index would be one more thing to invalidate.
-fn ed_line_off(n) {
-    if n < 1 { return 0 }
-    elo_i = 0
-    elo_n = 0
-    while elo_i < ed_len {
-        if peek8(EDIT_BUF + elo_i) == 10 {
-            elo_n = elo_n + 1
-            if elo_n >= n { return elo_i + 1 }
+# SCREEN ROWS, NOT LOGICAL LINES - the renderer wraps and the anchor did not
+# know it.
+#
+# ed_top anchored on ed_lines(), a count of 0x0A bytes, while ed_text_body wraps
+# at the well's right edge, so ONE logical line can occupy many screen rows.
+# Typing past a well-full of characters without pressing Enter left ed_lines()
+# at 1, ed_top at 0, and the view pinned to the top while the caret walked off
+# the bottom - the exact blindness the viewport was added to remove, reached by
+# a different route.
+#
+# A line costs ceil(len / cols) rows, and at least one: an empty line still
+# occupies a row. Walking the buffer to add them up is the same shape ed_lines
+# already uses and costs the same once-per-frame pass.
+fn ed_rows_used(tw) {
+    eru_i = 0
+    eru_n = 0
+    eru_c = 0
+    edc = ed_cols(tw)
+    while eru_i < ed_len {
+        if peek8(EDIT_BUF + eru_i) == 10 {
+            eru_n = eru_n + idiv(eru_c + edc - 1, edc)
+            if eru_c == 0 { eru_n = eru_n + 1 }
+            eru_c = 0
+        } else {
+            eru_c = eru_c + 1
         }
-        elo_i = elo_i + 1
+        eru_i = eru_i + 1
+    }
+    eru_n = eru_n + idiv(eru_c + edc - 1, edc)
+    if eru_c == 0 { eru_n = eru_n + 1 }
+    return eru_n
+}
+
+# The first SCREEN ROW drawn. ed_line_off then has to skip that many rows rather
+# than that many newlines - see ed_row_off.
+fn ed_top(th, tw) {
+    edmax = ed_rows_used(tw) - ed_rows(th)
+    if edmax < 0 { edmax = 0 }
+    # THE SCROLL IS CLAMPED HERE, where the well's size is known. editor_key
+    # capped it against ed_lines() - 1, a count of NEWLINES, which for a wrapped
+    # buffer is fewer rows than the buffer occupies: PgUp could not reach the
+    # top of a long unbroken line. It also had no way to know tw. Clamping at
+    # the draw keeps one owner for the wrap rule and makes the cap correct at
+    # whatever size the window currently is.
+    if ed_scroll > edmax { ed_scroll = edmax }
+    if ed_scroll < 0 { ed_scroll = 0 }
+    return edmax - ed_scroll
+}
+
+# Byte offset where screen row n begins, counting wrapped rows. Replaces
+# ed_line_off, which counted newlines and therefore could not find a row in the
+# middle of a wrapped line.
+fn ed_row_off(n, tw) {
+    if n < 1 { return 0 }
+    ero_i = 0
+    ero_r = 0
+    ero_c = 0
+    edc = ed_cols(tw)
+    while ero_i < ed_len {
+        if peek8(EDIT_BUF + ero_i) == 10 {
+            ero_r = ero_r + 1
+            ero_c = 0
+            if ero_r >= n { return ero_i + 1 }
+        } else {
+            ero_c = ero_c + 1
+            if ero_c >= edc {
+                ero_r = ero_r + 1
+                ero_c = 0
+                if ero_r >= n { return ero_i + 1 }
+            }
+        }
+        ero_i = ero_i + 1
     }
     return ed_len
 }
@@ -3573,10 +3634,10 @@ fn ed_text_body(tx, ty, tw, th) {
     fill_rgb(tx + gw, ty + 2, 1, th - 4, theme(TH_CUT))
     px = tx + gw + 8 * tu
     py = ty + 6 * tu
-    etop = ed_top(th)
+    etop = ed_top(th, tw)
     ln = etop + 1
     num_aa(tx + gw - 8 * tu - s3_numw(ln), py, ln, theme(TH_TEXT_DIM))
-    i = ed_line_off(etop)
+    i = ed_row_off(etop, tw)
     cw = cell_w()
     ch = cell_h()
     while i < ed_len {
@@ -4331,6 +4392,21 @@ fn editor_open_default() {
 }
 
 fn editor_save() {
+    # THE SINK CHECKS ITS TARGET TOO. Refusing the delete upstream closes the
+    # only route in the tree today, but ed_slot is an index held across an
+    # arbitrary amount of time and fs_write_impl guards only that the slot is in
+    # use - it has no identity check, so a free-and-reuse from any future caller
+    # would land this buffer on another file's bytes.
+    #
+    # This cannot tell "reused by someone else" from "still mine" - zl has no
+    # string values, so the name cannot be compared - but it does catch the slot
+    # being emptied, which is the first half of every such sequence. Refusing on
+    # a freed slot is cheap and turns a silent overwrite into a message.
+    if fs_ok() == 0 { note_say("no volume mounted - nothing to save to", 500)  return 0 }
+    if fs_inuse(ed_slot) == 0 {
+        note_say2("the file is gone", "its directory slot was freed - saving now could land on another file", 900)
+        return 0
+    }
     fs_stamp_now()
     if fs_wr(ed_slot, EDIT_BUF, ed_len) == 0 {
         note_say("file save failed", 400)
@@ -4375,10 +4451,11 @@ fn editor_key(code) {
     # what it is actually able to show. A wrong guess here would show as a jump,
     # not as corruption.
     if code == K_PGUP_K {
+        # No cap here: this function has neither the well's height nor its
+        # width, and capping against ed_lines() - the newline count - was wrong
+        # for any wrapped buffer. ed_top clamps at the draw, where both are
+        # known and where the wrap rule already lives.
         ed_scroll = ed_scroll + ED_PAGE
-        edm = ed_lines() - 1
-        if edm < 0 { edm = 0 }
-        if ed_scroll > edm { ed_scroll = edm }
         return 1
     }
     if code == K_PGDN_K {
@@ -7820,7 +7897,31 @@ fn files_event(win, ety, ecode, ex, ey) {
         if ecode == K_ENTER { files_open_selected()  return 1 }
         if ecode == K_DEL {
             if files_sel < 0 { return 1 }
+            # DELETING A FILE THE EDITOR HAS OPEN HANDS ITS SLOT TO THE NEXT
+            # CREATE, AND THE EDITOR THEN WRITES OVER WHOEVER GETS IT.
+            #
+            # ed_slot is set once at open and never re-validated; editor_save
+            # calls fs_wr(ed_slot, ...) and fs_write_impl guards only that the
+            # slot is IN USE - it has no identity check. fs_create_impl takes
+            # the first free directory slot. Both windows are live at once (the
+            # Files pane stays open while the editor runs), so: delete the open
+            # file here, create any new one, and the editor's next save lands on
+            # the new file's bytes. Its head prints the NEW name the whole time,
+            # because ed_name reads fs_ch(ed_slot, i) every frame - the surface
+            # asserts the wrong identity while the buffer holds the other file.
+            #
+            # Refused at the source. fs_rm has exactly one caller in the tree,
+            # which is this line, so this is the only entrance to that loss.
             if files_delete == files_sel {
+                if edit_win >= 0 {
+                    if wm_open_p(edit_win) == 1 {
+                        if files_sel == ed_slot {
+                            note_say2("that file is open in 04 EDITOR", "close the editor first - deleting it now would hand its slot to the next new file", 900)
+                            files_delete = 0 - 1
+                            return 1
+                        }
+                    }
+                }
                 fs_rm(files_sel)
                 if fs_sync() == 0 { note_say("delete is not durable", 400) }
                 files_delete = 0 - 1
@@ -10620,7 +10721,7 @@ fn ov_draw_palette(u) {
     sy = ov_sheet_y()
     sw = OV_SHEET_W * u
     rowh = 22 * u
-    sh = 66 * u + OV_PAL_N * rowh + 24 * u
+    sh = ov_pal_sheet_h()
     # the plate, its struck top edge and its cut groove - the same depth the
     # rest of the system uses, because a modal is a plate like any other
     fill_rgb(sx, sy, sw, sh, theme(TH_PANEL))
@@ -10904,6 +11005,15 @@ fn ov_menu_row_at(cx, cy) {
 # MINIMISED WINDOWS ARE LEFT ALONE. Tiling one would restore it as a side
 # effect of a command about layout, and "tile" is not "un-minimise everything".
 # Windows on another workspace are skipped for the same reason.
+# One predicate, so the counting loop and the placing loop cannot disagree
+# about which windows are in the layout - a mismatch there would put windows in
+# the wrong cells rather than merely tiling the wrong set.
+fn tl_tile_p(w) {
+    if wm_winws(w) != cur_ws() { return 0 }
+    if wm_min_p(w) == 1 { return 0 }
+    return 1
+}
+
 fn tile_cols(n) {
     if n <= 1 { return 1 }
     if n <= 4 { return 2 }
@@ -10916,7 +11026,12 @@ fn desk_tile() {
     tl_i = 0
     while tl_i < wm_n() {
         tl_w = wm_zat(tl_i)
-        if wm_winws(tl_w) == cur_ws() { tl_n = tl_n + 1 }
+        # ...AND IT CAN NOW ACTUALLY ASK. The comment above promised to skip
+        # minimised windows and both loops tested only the workspace, because
+        # wm_is_minimized was not bound to zl - so tiling counted a minimised
+        # window into the grid, gave it a cell, and moved it there, which is a
+        # layout command silently un-minimising things.
+        if tl_tile_p(tl_w) == 1 { tl_n = tl_n + 1 }
         tl_i = tl_i + 1
     }
     if tl_n < 1 { note_say("nothing to tile", 400)  return 1 }
@@ -10930,7 +11045,7 @@ fn desk_tile() {
     tl_i = 0
     while tl_i < wm_n() {
         tl_w = wm_zat(tl_i)
-        if wm_winws(tl_w) == cur_ws() {
+        if tl_tile_p(tl_w) == 1 {
             tl_cx = tl_gx + (tl_k % tl_c) * tl_gw
             tl_cy = tl_gy + idiv(tl_k, tl_c) * tl_gh
             wm_move(tl_w, tl_cx, tl_cy)
@@ -10949,6 +11064,14 @@ fn desk_tile() {
 OV_PAL_ROWH = 22
 OV_PAL_TOP  = 62
 
+# THE SHEET'S HEIGHT, PUBLISHED ONCE. The hit test rebuilt it from OV_PAL_TOP,
+# which is the ROW ORIGIN (62) and not the top block's height (66), so the test
+# rectangle was 4dp shorter than the plate and a click on the sheet's bottom
+# edge read as a click on the scrim - dismissing the palette instead of doing
+# nothing. Two expressions for one rectangle, disagreeing by the difference
+# between two numbers that look interchangeable and are not.
+fn ov_pal_sheet_h() { return 66 * ui() + OV_PAL_N * OV_PAL_ROWH * ui() + 24 * ui() }
+
 # INSIDE THE SHEET IS NOT THE SAME QUESTION AS ON A ROW, and collapsing the two
 # is why a click on the palette's own header dismissed it. The scrim dismisses;
 # the sheet does not. A modal that closes when you click its title bar is a
@@ -10957,7 +11080,7 @@ fn ov_pal_in_sheet(cx, cy) {
     if cx < ov_sheet_x() { return 0 }
     if cx >= ov_sheet_x() + OV_SHEET_W * ui() { return 0 }
     if cy < ov_sheet_y() { return 0 }
-    if cy >= ov_sheet_y() + OV_PAL_TOP * ui() + OV_PAL_N * OV_PAL_ROWH * ui() + 24 * ui() { return 0 }
+    if cy >= ov_sheet_y() + ov_pal_sheet_h() { return 0 }
     return 1
 }
 
@@ -10993,6 +11116,17 @@ fn ov_menu_in_plate(cx, cy) {
 # outside any surface dismisses, the way clicking off a menu does everywhere.
 fn ov_click(cx, cy, down) {
     if ov_active() == 0 { return 0 }
+    # THE DESK'S RIGHT-BUTTON LATCH IS RELEASED HERE, because the desk will not
+    # see the release itself. This function consumes every pointer event while
+    # an overlay is up and returns before route_mouse reaches hook_desk_click,
+    # so rail_rpress stayed armed from the press that opened the menu - and the
+    # NEXT right-click compared equal to it and fired nothing. Right-clicking
+    # the desk worked on alternate attempts only.
+    #
+    # The latch belongs to whoever can observe both edges. While an overlay is
+    # up that is this function, and the honest thing for it to say is "the desk
+    # is not holding a button".
+    rail_rpress = 0
     # Releases and moves are still SWALLOWED - the return is 1 either way - so
     # nothing underneath sees a stray drag. But only the press EDGE acts: wm.c
     # passes `down`, not the raw button, because the button is a level and a row

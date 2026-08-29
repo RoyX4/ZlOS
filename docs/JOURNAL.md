@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: the Regex Tester could hang the machine from thirteen keystrokes (7641a11)
+
+`design/presswork` · 14 files changed, 366 insertions(+), 46 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>14 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_common.zl`
+- `kernel/apps/apps_games1.zl`
+- `kernel/apps/apps_games2.zl`
+- `kernel/apps/apps_games3.zl`
+- `kernel/apps/apps_system.zl`
+- `kernel/apps/apps_utils.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/tests/host/build.sh`
+- _…and 2 more_
+
+</details>
+
 ## 2026-08-30 — fix: the rail's status words draw in mono, as their own comment said they should (a85a727)
 
 `design/presswork` · 6 files changed, 49 insertions(+), 19 deletions(-)
