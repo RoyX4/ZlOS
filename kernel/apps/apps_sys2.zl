@@ -629,9 +629,20 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     ui_txt(lx, s2_mcy(ay, tbh), "offset", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     lx = lx + ui_tw("offset", S2_SM, S2_MONO) + 6 * u
 
-    w0 = ui_chip_w("+0")
-    w1 = ui_chip_w("+256")
-    w2 = ui_chip_w("+512")
+    # MEASURE WHAT IS DRAWN. These measured "+0", "+256" and "+512" - the three
+    # fixed chips this pane had before it became a page cursor - and none of
+    # those strings appears anywhere in it any more. So the two chips sat in
+    # slots about four characters too wide, the gaps between them were wrong,
+    # and the well to their left was sized from cx0, which was further left than
+    # anything needed it to be: a stale measurement pushes every element it
+    # anchors, not just itself.
+    #
+    # The third slot holds the offset readout rather than a chip, so it is
+    # measured as the number it is - the same way the " B/page" figure above
+    # already flushes itself.
+    w0 = ui_chip_w("<")
+    w1 = ui_chip_w(">")
+    w2 = ui_tnw(hx_page * hx_pagesz(ah), S2_MD, S2_MONO)
     chh = ui_chip_h()
     chy = ay + (tbh - chh) / 2
     cx2 = ax + aw - 8 * u - w2

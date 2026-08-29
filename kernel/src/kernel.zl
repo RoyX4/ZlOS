@@ -266,6 +266,8 @@ K_TAB = 0x103
 K_ENTER = 0x104
 K_LEFT = 0x110
 K_RIGHT = 0x111
+K_PGUP_K = 0x116                   # keycodes.h KEY_PGUP
+K_PGDN_K = 0x117                   # keycodes.h KEY_PGDN
 K_UP = 0x112
 K_DOWN = 0x113
 K_HOME = 0x114
@@ -1077,6 +1079,9 @@ fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
     if running == 1 { ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT) }
     if focused == 1 { ground = theme(TH_PANEL)  ncol = theme(TH_TEXT_2)  tcol = theme(TH_TEXT_HI)  wgt = W_BOLD }
     fill_rgb(0, ry, rw, rh, ground)
+    # rail edges back on - see draw_rail_win for why every live block owes this
+    fill_rgb(0, ry, 1, rh, theme(TH_LIT))
+    fill_rgb(rw - 1, ry, 1, rh, theme(TH_CUT))
     # the row's own groove. `border-bottom: 1px solid var(--zd-cut)`, and it is
     # 1 PHYSICAL pixel at every scale: a hairline that thickens with ui() stops
     # being a hairline and becomes a rule.
@@ -1153,6 +1158,14 @@ fn draw_rail_win(ry, num, win, hovered) {
     if hovered == 1 { ground = theme(TH_SURF_5) }
     if focused == 1 { ground = theme(TH_PANEL)  tcol = theme(TH_TEXT_HI)  wgt = W_BOLD }
     fill_rgb(0, ry, rw, rh, ground)
+    # THE RAIL'S TWO EDGES GO BACK ON. draw_rail_static bakes a ZD_LIT near edge
+    # and a ZD_CUT far edge down the full height of the rail into the wallpaper
+    # cache; every live-painted block covers them with its own ground and, until
+    # now, left them covered. The rail's frame vanished wherever anything was
+    # actually drawn - which is every row that matters. rail_sect already put
+    # them back and was the only block that did.
+    fill_rgb(0, ry, 1, rh, theme(TH_LIT))
+    fill_rgb(rw - 1, ry, 1, rh, theme(TH_CUT))
     fill_rgb(0, ry + rh - 1, rw, 1, theme(TH_CUT))
     mkh = rh * RAIL_MK_PC / 100
     mky = ry + (rh - mkh) / 2
@@ -1170,7 +1183,27 @@ fn draw_rail_win(ry, num, win, hovered) {
     iw = rail_ico_w()
     icon(tx, ry + (rh - iw) / 2, app_icon(wm_app(win)), ncol)
     tx = tx + iw + RAIL_SLOT_GAP * u
-    label(tx, ry + (rh - label_h(T_CAPTION)) / 2, app_name(wm_app(win)), tcol, T_CAPTION, wgt)
+    # THE NAME IS CLIPPED AT THE FIGURE, because nothing else keeps them apart.
+    # This drew unmeasured and unclipped, so a long app name ran through its own
+    # kpx reading and out past the rail's outer edge - two pieces of text on top
+    # of each other, one of which is a measurement.
+    #
+    # The prototype keeps them apart with the flex box: `.slot .nm` carries
+    # overflow:hidden and text-overflow:ellipsis, `.slot .us` is margin-left:auto
+    # and flex:none. The name yields to the figure there, so it yields here.
+    #
+    # zl has no string VALUES, so the name cannot be shortened before it is
+    # drawn - but `clip` is bound to the framebuffer's real scissor, which is
+    # the same result by a different route. The budget is computed from the
+    # figure that is actually about to be drawn, not from a guess at its width.
+    tkpx = rail_slot_kpx(win)
+    fx = rw - RAIL_SLOT_PR * u - s3_numw(tkpx)
+    nw = fx - RAIL_SLOT_GAP * u - tx
+    if nw > 0 {
+        clip(tx, ry, nw, rh)
+        label(tx, ry + (rh - label_h(T_CAPTION)) / 2, app_name(wm_app(win)), tcol, T_CAPTION, wgt)
+        clipoff()
+    }
     # A tail row exists ONLY because its window is open, so it is running by
     # construction and the figure is unconditional here where it is guarded on
     # the fixed rows. rail_running_n() counts the tail on exactly that reasoning.
@@ -1320,6 +1353,11 @@ fn draw_rail_ws() {
         ink = theme(TH_TEXT_DIM)
         if wsi == cur_ws() { ground = theme(TH_KNOCK)  ink = theme(TH_KNOCK_INK) }
         fill_rgb(bx, wy, bwi, rh, ground)
+        # rail edges back on - see draw_rail_win for why every live block owes
+        # this. Only the first button touches the near edge and only the last
+        # touches the far edge, so each is conditional on being that button.
+        if bx == 0 { fill_rgb(0, wy, 1, rh, theme(TH_LIT)) }
+        if bx + bwi >= rw { fill_rgb(rw - 1, wy, 1, rh, theme(TH_CUT)) }
         if wsi < WS_N { fill_rgb(bx + bwi - 1, wy, 1, rh, theme(TH_CUT)) }
         # "WS 01", NOT A BARE DIGIT. The prototype's button is
         # `<span class="t-lab">ws 0' + n + '</span>`, and .t-lab is tracked
@@ -1418,6 +1456,9 @@ fn draw_rail_stat() {
     rw = rail_w()
     sy = px_h() - rail_bot_h() + RULE_H * ui() + RAIL_SECT_H * ui() + row_h() + RULE_H * ui()
     fill_rgb(0, sy, rw, RAIL_STAT_H * u, theme(TH_PANEL_HI))
+    # rail edges back on - see draw_rail_win for why every live block owes this
+    fill_rgb(0, sy, 1, RAIL_STAT_H * u, theme(TH_LIT))
+    fill_rgb(rw - 1, sy, 1, RAIL_STAT_H * u, theme(TH_CUT))
     ry = sy + 3 * u
     # NET - netdev_link_up(), which is the ONE call the whole net stack answers
     # "is there a link" with. It dispatches to whichever of e1000 / virtio-net /
@@ -1525,6 +1566,9 @@ fn draw_rail_clock() {
     rw = rail_w()
     cy = px_h() - RAIL_CLOCK_H * u
     fill_rgb(0, cy, rw, RAIL_CLOCK_H * u, theme(TH_PANEL_HI))
+    # rail edges back on - see draw_rail_win for why every live block owes this
+    fill_rgb(0, cy, 1, RAIL_CLOCK_H * u, theme(TH_LIT))
+    fill_rgb(rw - 1, cy, 1, RAIL_CLOCK_H * u, theme(TH_CUT))
     # ...and it is rtc_ok() that decides, not rtc_here(): a chip that answers
     # its port but whose two reads never agreed has published nothing, and
     # rtc_valid() is the only flag that distinguishes "l_hour is a time" from
@@ -2438,7 +2482,13 @@ fn ruler_seg(rx, ry, rh, bw, bytes, total, col, xend) {
     if rx + sw > xend { sw = xend - rx }
     if sw < 1 { return rx }
     fill_rgb(rx, ry, sw, rh, col)
-    fill_rgb(rx + sw - 1, ry, 1, rh, theme(TH_CUT))
+    # NOT WHEN THE REGION IS THE SEPARATOR. The clamp above guarantees a region
+    # that exists gets at least one pixel; this line then painted ZD_CUT at
+    # rx + sw - 1, which at sw == 1 is rx itself. So the smallest regions - the
+    # ones the clamp was written to preserve - were overwritten by their own
+    # groove and rendered as the groove colour, indistinguishable from the gaps
+    # between regions. The clamp saved the pixel and the next line spent it.
+    if sw > 1 { fill_rgb(rx + sw - 1, ry, 1, rh, theme(TH_CUT)) }
     return rx + sw
 }
 
@@ -3351,6 +3401,62 @@ fn ed_binary_body(bx, by, bw, bh) {
 # six columns of its own source strings lifted out; this one derives the numbers
 # from the buffer, because the buffer is the truth here and the strings are the
 # mockup's stand-in for one.
+# THE EDITOR HAD NO VIEWPORT: past about fifteen rows it went blind.
+#
+# ed_text_body started at byte 0 every frame and stopped when it ran out of
+# well, and the editor's entire state was ed_slot / ed_len / ed_dirty - there
+# was no scroll offset anywhere. In the window this OS actually opens that is
+# fifteen rows of roughly fifty-five columns, about eight hundred characters,
+# against an EDIT_MAX of eight thousand. Everything past that was appended to a
+# buffer drawn nowhere, with the caret frozen off the bottom edge. You could
+# still type; you just could not see any of it, and neither could the caret.
+#
+# THE VIEW IS DERIVED, NOT STORED. The caret in this editor is always at the end
+# of the buffer - every key appends - so the line that must be visible is
+# ed_lines(), and the top of the view follows from it and the row capacity. That
+# makes the default a READ: nothing has to be kept in sync, and no state can go
+# stale against a resized window. ed_scroll is the user's own offset back from
+# that anchor, exactly the shape the kernel log's kl_scroll already uses.
+#
+# The prototype's body is `class="well scroll"` - overflow-y:auto - so a
+# scrollable body is what the authority asks for; this is the honest minimum of
+# it, and the drawn scrollbar is the step after.
+ed_scroll = 0
+
+# How many text rows the well can show. One owner, because the draw, the scroll
+# clamp and the key handler must agree or the caret leaves the viewport.
+fn ed_rows(th) {
+    edr = (th - 12 * ui()) / cell_h()
+    if edr < 1 { edr = 1 }
+    return edr
+}
+
+# The first line drawn, 0-based. Tail-anchored, then backed off by ed_scroll.
+fn ed_top(th) {
+    edt = ed_lines() - ed_rows(th)
+    if edt < 0 { edt = 0 }
+    edt = edt - ed_scroll
+    if edt < 0 { edt = 0 }
+    return edt
+}
+
+# Byte offset where line n starts. Walks the buffer rather than keeping an
+# index, for the same reason ed_lines does: the buffer is small, it is walked
+# once per frame anyway, and an index would be one more thing to invalidate.
+fn ed_line_off(n) {
+    if n < 1 { return 0 }
+    elo_i = 0
+    elo_n = 0
+    while elo_i < ed_len {
+        if peek8(EDIT_BUF + elo_i) == 10 {
+            elo_n = elo_n + 1
+            if elo_n >= n { return elo_i + 1 }
+        }
+        elo_i = elo_i + 1
+    }
+    return ed_len
+}
+
 fn ed_text_body(tx, ty, tw, th) {
     tu = ui()
     pw_well(tx, ty, tw, th)
@@ -3358,9 +3464,10 @@ fn ed_text_body(tx, ty, tw, th) {
     fill_rgb(tx + gw, ty + 2, 1, th - 4, theme(TH_CUT))
     px = tx + gw + 8 * tu
     py = ty + 6 * tu
-    ln = 1
+    etop = ed_top(th)
+    ln = etop + 1
     num_aa(tx + gw - 8 * tu - s3_numw(ln), py, ln, theme(TH_TEXT_DIM))
-    i = 0
+    i = ed_line_off(etop)
     cw = cell_w()
     ch = cell_h()
     while i < ed_len {
@@ -3377,7 +3484,14 @@ fn ed_text_body(tx, ty, tw, th) {
         }
         if py > ty + th - ch - 4 { i = ed_len } else { i = i + 1 }
     }
-    fill_rgb(px, py, cw, ch - 2, theme(TH_ACCENT))
+    # THE CARET IS ONLY DRAWN WHERE IT ACTUALLY IS. When the view is scrolled
+    # back the caret is below the well, and the loop leaves px/py at wherever it
+    # ran out of room - painting there would put an accent block on the last
+    # visible row that does not mark the insertion point. A caret in the wrong
+    # place is worse than no caret, because it is believed.
+    if ed_scroll == 0 {
+        if py + ch - 2 <= ty + th { fill_rgb(px, py, cw, ch - 2, theme(TH_ACCENT)) }
+    }
     return 0
 }
 
@@ -4076,6 +4190,7 @@ EDIT_MAX = 8000
 ed_slot = 0
 ed_len  = 0
 ed_dirty = 0
+ED_PAGE = 8                        # lines a page key moves the view
 
 fn editor_open_disk(slot) {
     if fs_ok() == 0 { return 0 }
@@ -4085,6 +4200,7 @@ fn editor_open_disk(slot) {
     ed_len = fs_rd(slot, EDIT_BUF, EDIT_MAX - 1)
     ed_slot = slot
     ed_dirty = 0
+    ed_scroll = 0
     return 1
 }
 
@@ -4136,6 +4252,31 @@ fn editor_key(code) {
         if code == 27 { return 2 }
         return 0
     }
+    # SCROLLING BACK THROUGH WHAT WAS TYPED. The view is tail-anchored, so these
+    # only ever move BACKWARDS from the caret - ed_scroll is how far back, and 0
+    # means "showing the caret". Clamped against the real line count so a page
+    # key cannot walk the view off the top of a short buffer.
+    #
+    # ed_rows needs the well height, which this function does not have and must
+    # not guess; ED_PAGE is a fixed step for that reason, and the draw clamps
+    # what it is actually able to show. A wrong guess here would show as a jump,
+    # not as corruption.
+    if code == K_PGUP_K {
+        ed_scroll = ed_scroll + ED_PAGE
+        edm = ed_lines() - 1
+        if edm < 0 { edm = 0 }
+        if ed_scroll > edm { ed_scroll = edm }
+        return 1
+    }
+    if code == K_PGDN_K {
+        ed_scroll = ed_scroll - ED_PAGE
+        if ed_scroll < 0 { ed_scroll = 0 }
+        return 1
+    }
+    # ANY EDIT SNAPS BACK TO THE CARET. Typing into a buffer whose view is
+    # parked twenty lines up would put the character somewhere the user cannot
+    # see, which is the defect this viewport was added to remove.
+    ed_scroll = 0
     # ESC SAVES ONLY WHAT WAS CHANGED.
     #
     # This called editor_save() unconditionally. fs_write is copy-on-write

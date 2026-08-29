@@ -408,6 +408,27 @@ fn s3du_bar(bx, by, bw, total) {
         sx = sx + sw2
         si = si + 1
     }
+    # EVERYTHING PAST THE FOURTH FILE IS STILL A FILE, and the bar used to draw
+    # it as free space. The loop above plots the four largest entries; the
+    # legend's free row computes total - s3du_used_bytes(), which sums ALL 32
+    # directory slots. So on a volume holding five or more files the picture and
+    # the figure printed directly beneath it reported different free space for
+    # the same disk, and the picture was the optimistic one.
+    #
+    # The fifth segment is the same quantity the legend excludes: used bytes
+    # that no plotted segment accounts for. Drawn in the ground-adjacent ink so
+    # it reads as "occupied, not itemised" rather than as a fifth named file.
+    sother = s3du_used_bytes()
+    sk = 0
+    while sk < S3DU_LEGN - 1 {
+        sother = sother - s3du_part_bytes(sk)
+        sk = sk + 1
+    }
+    if sother > 0 {
+        sw3 = (iw - 2) * sother / total
+        if sw3 > 0 { fill_rgb(sx, iy + 1, sw3, ih - 2, theme(TH_SURF_7)) }
+        sx = sx + sw3
+    }
     # the remainder is free, and it is the ground rather than an ink
     if sx < ix + iw - 1 { fill_rgb(sx, iy + 1, ix + iw - 1 - sx, ih - 2, theme(TH_SURF_WELL)) }
     return by + S3DU_BARH * ui() + 14 * ui()
