@@ -162,9 +162,21 @@ fn clk_draw(ax, ay, aw, ah) {
     return 0
 }
 
+# THE PANE REPAINTED ONLY WHEN THE CLOCK IT DOES NOT TRUST TICKED.
+#
+# This opened `if rtc_ok() == 0 { return 0 }` and then compared rtc_s(), which
+# returns a CACHED second refreshed only by rtc_read() through rail_clock_tick.
+# rail_clock_tick latches rtc_fails at RTC_GIVE_UP after three bad reads and
+# stops calling rtc_up() for the rest of the session - so on a machine with no
+# CMOS, or one that glitches three times, this pane froze permanently. Its
+# uptime and its stopwatch, which are driven by ticks() and not by the RTC at
+# all, froze with it.
+#
+# The tick is now the counter the pane actually reads. idiv, not `/`: `/` is
+# float division here, so `ticks() / 100` changes on every tick and the guard
+# never holds - the same bug this file's foot_tick had.
 fn clk_tick() {
-    if rtc_ok() == 0 { return 0 }
-    s = rtc_s()
+    s = idiv(ticks(), 100)
     if s != clk_last_s { clk_last_s = s  return 1 }
     return 0
 }
@@ -400,7 +412,14 @@ fn ca_draw(ax, ay, aw, ah) {
     dw = aw - 16 * u
     # the display: a well, value right-aligned as the reference has it
     rrect(ax + 8 * u, ay + 6 * u, dw, 30 * u, R_INSET_D * u, theme(TH_PANEL_HI))
-    cvw = s3_numw(ca_val())
+    # MEASURE THE FACE YOU DRAW IN. s3_numw is digits times cell_w() - the
+    # fixed 8px advance of the AA console font that num_aa uses - but this line
+    # draws with label_num at T_TITLE, which is the PROPORTIONAL face at roughly
+    # twice that size. So the right-flush subtracted a width the glyphs do not
+    # have and the number hung off the well's right edge, by more the longer it
+    # got. ui_tnw measures a number in the face and size it is about to be drawn
+    # in, which is the whole reason it exists.
+    cvw = ui_tnw(ca_val(), T_TITLE, W_BOLD)
     label_num(ax + 8 * u + dw - 10 * u - cvw, ay + 14 * u, ca_val(), theme(TH_TEXT_HI), T_TITLE, W_BOLD)
 
     # the same number, three other ways

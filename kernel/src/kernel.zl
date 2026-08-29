@@ -1458,10 +1458,38 @@ fn rail_st_word(sy, nm, word, dotc, wordc) {
     return sy + RAIL_STROW_H * u
 }
 
+# THE STAT BLOCK'S ORIGIN, published so the tick can damage exactly what the
+# draw paints. It was computed inline, which is why the block had no
+# invalidation of its own: asking for it back meant copying the expression.
+fn rail_stat_y() { return px_h() - rail_bot_h() + RULE_H * ui() + RAIL_SECT_H * ui() + row_h() + RULE_H * ui() }
+
+# NET / VOL / PWR REFRESH ON THEIR OWN CADENCE NOW.
+#
+# draw_rail_stat samples net_link(), the speaker gate and panel_on() at paint
+# time, and nothing claimed damage when any of those changed. The only
+# once-a-second invalidation of this block sat inside the APP_MONITOR arm of
+# app_tick - so the carrier state, the mute state and the panel state were live
+# only while the System Monitor window happened to be open, and stale the rest
+# of the time. That is precisely the failure rail_clock_tick's own comment
+# describes and avoids for the clock, three rows below in the same rail.
+#
+# Guarded on its own second, so it costs one comparison per frame and one
+# damage of a 170-wide block per second regardless of what is open.
+rail_stat_sec = 0 - 1
+
+fn rail_stat_tick() {
+    rsec = idiv(ticks(), 100)
+    if rsec == rail_stat_sec { return 0 }
+    rail_stat_sec = rsec
+    if px_w() < 1 { return 0 }
+    wm_damage(0, rail_stat_y(), rail_w(), RAIL_STAT_H * ui())
+    return 1
+}
+
 fn draw_rail_stat() {
     u = ui()
     rw = rail_w()
-    sy = px_h() - rail_bot_h() + RULE_H * ui() + RAIL_SECT_H * ui() + row_h() + RULE_H * ui()
+    sy = rail_stat_y()
     fill_rgb(0, sy, rw, RAIL_STAT_H * u, theme(TH_PANEL_HI))
     # rail edges back on - see draw_rail_win for why every live block owes this
     fill_rgb(0, sy, 1, RAIL_STAT_H * u, theme(TH_LIT))
@@ -10370,6 +10398,7 @@ fn app_tick(id, win) {
     if id < 0 {
         raster_tick()
         rail_clock_tick()
+        rail_stat_tick()
         foot_tick()
         return 0
     }

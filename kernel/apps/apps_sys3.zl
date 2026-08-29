@@ -1578,11 +1578,24 @@ fn s3nw_body(ax, ay, aw, ah) {
         if i == 5 { num_aa(vx, ry, s3nw_rx(s3nw_sel), theme(TH_TEXT)) }
         if i == 6 { num_aa(vx, ry, s3nw_tx(s3nw_sel), theme(TH_TEXT)) }
         if i == 7 {
+            # THREE FIGURES, AND ONLY THE MIDDLE ONE WAS READ. The errors count
+            # and the overruns count were both the literal 0, drawn in TH_TEXT -
+            # the same ink as the measured drop beside them - so nothing on the
+            # row distinguished the one real reading from the two written ones.
+            # A zero that was never counted is the most convincing invented
+            # figure there is: it looks like good news.
+            #
+            # errors is now the sum of the rx-side rejects the IP layer actually
+            # counts. overruns has no counter anywhere in this kernel - nothing
+            # tracks ring overflow - so it says so instead of claiming none.
+            erx = ip_short() + ip_badsum() + ip_badver() + ip_badihl() + net_runt()
             drop = net_drop()
-            s3_mono(vx, ry, "0  dropped ", theme(TH_TEXT))
-            px = vx + s3_mw("0  dropped ")
+            num_aa(vx, ry, erx, theme(TH_TEXT))
+            px = vx + s3_numw(erx)
+            s3_mono(px, ry, "  dropped ", theme(TH_TEXT))
+            px = px + s3_mw("  dropped ")
             num_aa(px, ry, drop, theme(TH_TEXT))
-            s3_mono(px + s3_numw(drop), ry, "  overruns 0", theme(TH_TEXT))
+            s3_mono(px + s3_numw(drop), ry, "  overruns not counted", theme(TH_TEXT_DIM))
         }
         i = i + 1
     }
