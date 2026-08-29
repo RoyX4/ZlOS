@@ -1440,18 +1440,28 @@ fn rail_ws_at(hx, hy) {
 # under-signalled rather than mis-signalled - the safe direction, and the same
 # call ui.c already documents for the focused header. Closing it is one theme
 # role in ui.h/ui.c and one TH_ index here.
-fn rail_st_word(sy, nm, word, dotc, wordc) {
+# wlen IS THE WORD'S CHARACTER COUNT, and it has to be an argument because zl
+# has no string length. Six parameters, under the eight-arg cap.
+fn rail_st_word(sy, nm, word, wlen, dotc, wordc) {
     u = ui()
     rw = rail_w()
     ty = sy + (RAIL_STROW_H * u - label_h(T_CAPTION)) / 2
     # the key is `.t-lab` in the prototype's `.strow`; the WORD beside it is
     # `.strow .w`, which is MONO and untracked, so only the key moves here.
     ui_caps(pad_d(), ty, nm, theme(TH_TEXT_DIM), T_CAPTION)
-    # the word first, measured, then the dot placed against its left edge - one
+    # ...AND THE WORD IS DRAWN IN MONO, which the comment above has said the
+    # whole time while the code below drew label() at W_BOLD - the proportional
+    # face at bold weight. `.strow .w` is `font-family: var(--mono)` with no
+    # font-weight, so it inherits regular (proto:472). Every other mono run in
+    # this rail - the register numbers, the row figures, the caption fraction,
+    # the date, the build line - goes through text_aa and cell_w(); these three
+    # words were the exception, and the exception was not deliberate.
+    #
+    # The word first, measured, then the dot placed against its left edge - one
     # origin, so the dot cannot drift when "UP" becomes "DOWN".
-    ww = label_w(word, T_CAPTION, W_BOLD)
+    ww = wlen * cell_w()
     wx = rw - pad_d() - ww
-    label(wx, ty, word, wordc, T_CAPTION, W_BOLD)
+    text_aa(wx, ty, word, wordc)
     dw = RAIL_DOT * u
     dy = sy + (RAIL_STROW_H * u - dw) / 2
     fill_rgb(wx - RAIL_DOT_GAP * u - dw, dy, dw, dw, dotc)
@@ -1500,9 +1510,9 @@ fn draw_rail_stat() {
     # CDC-ECM was selected and returns 0 when none was, so an absent card and a
     # cabled-but-down card both read DOWN, which is true of both.
     if net_link() == 1 {
-        ry = rail_st_word(ry, "NET", "UP", theme(TH_OK), theme(TH_OK))
+        ry = rail_st_word(ry, "NET", "UP", 2, theme(TH_OK), theme(TH_OK))
     } else {
-        ry = rail_st_word(ry, "NET", "DOWN", theme(TH_DANGER), theme(TH_TEXT_HI))
+        ry = rail_st_word(ry, "NET", "DOWN", 4, theme(TH_DANGER), theme(TH_TEXT_HI))
     }
     # VOL - the PC speaker gate, read off port 0x61 bits 0 and 1, which is
     # literally the only audio output this machine has. speaker_on() sets them
@@ -1510,9 +1520,9 @@ fn draw_rail_stat() {
     # beep plays and is a reading rather than a caption. There is no mixer and
     # no level to show: MUTE and ON are the two states that exist.
     if band(inb(0x61), 3) == 3 {
-        ry = rail_st_word(ry, "VOL", "ON", theme(TH_OK), theme(TH_OK))
+        ry = rail_st_word(ry, "VOL", "ON", 2, theme(TH_OK), theme(TH_OK))
     } else {
-        ry = rail_st_word(ry, "VOL", "MUTE", theme(TH_WARN), theme(TH_WARN))
+        ry = rail_st_word(ry, "VOL", "MUTE", 4, theme(TH_WARN), theme(TH_WARN))
     }
     # PWR - the panel power sequencer's PP_STATUS "panel on" bit, through
     # intel_panel_on(), which guards on intel_present() and costs one MMIO read.
@@ -1524,9 +1534,9 @@ fn draw_rail_stat() {
     # state of a panel it does not own. Saying WARN is the honest reading;
     # saying OK would be this file inventing a fact about hardware.
     if panel_on() == 1 {
-        ry = rail_st_word(ry, "PWR", "OK", theme(TH_OK), theme(TH_OK))
+        ry = rail_st_word(ry, "PWR", "OK", 2, theme(TH_OK), theme(TH_OK))
     } else {
-        ry = rail_st_word(ry, "PWR", "WARN", theme(TH_WARN), theme(TH_WARN))
+        ry = rail_st_word(ry, "PWR", "WARN", 4, theme(TH_WARN), theme(TH_WARN))
     }
     return 0
 }
