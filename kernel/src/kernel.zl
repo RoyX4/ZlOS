@@ -5252,6 +5252,10 @@ SM_PAD    = 12
 SM_GAP    = 10
 SM_METERH = 19                     # .meter
 SM_TRACKH = 9                      # .mtrack
+# 8, not 14. Three figures each gained a " ms" and the row stopped fitting -
+# budget's unit was clipped by the column edge, which is the one figure on the
+# row that is a quoted constant and so the one a reader is most likely to check.
+SM_FIGGAP = 8
 SM_SPARKH = 42                     # spark(hist, 300, 42, 100, --zd-steel)
 
 fn sm_lab(lx, ly, lh, s) {
@@ -5353,10 +5357,20 @@ fn sm_spark(gx, gy, gw, gh) {
     return 0
 }
 
+# THE WINDOW THE CHART ACTUALLY DRAWS. The reducers walked the whole 256-deep
+# ring while sm_spark draws the last SPARK_MAX of it, so the printed min could
+# be a frame that is not on the chart - a figure and a picture disagreeing about
+# the same thing, side by side, with no way to tell from the screen.
+fn sm_ring_span() {
+    sn = wm_sn()
+    if sn > SPARK_MAX { return SPARK_MAX }
+    return sn
+}
+
 fn sm_ring_min() {
     sn = wm_sn()
     if sn < 1 { return 0 }
-    i = 0
+    i = sn - sm_ring_span()
     lo = 0 - 1
     while i < sn {
         v = wm_sf(i)
@@ -5371,19 +5385,25 @@ fn sm_ring_min() {
 fn sm_ring_mean() {
     sn = wm_sn()
     if sn < 1 { return 0 }
-    i = 0
+    i = sn - sm_ring_span()
     tot = 0
     while i < sn {
         tot = tot + wm_sf(i)
         i = i + 1
     }
-    return tot / sn
+    return tot / sm_ring_span()
 }
 
 # A label and its number, laid out left to right by measurement. Returns the x
 # the next figure may start at, so a row of them cannot overlap however wide any
 # one of them turns out to be.
-fn sm_fig(fx, fy, nm, v, dp, col) {
+# A READING WITHOUT ITS UNIT IS NOT A READING. The reference prints "min 6.2 ms",
+# "mean 8.9 ms", "budget 16.667 ms"; this drew MIN 18.3 MEAN 20.1 BUDGET 16.667
+# with no ms anywhere - in the one pane whose subject is instrument readings, and
+# beside a spark whose whole point is that those numbers are milliseconds.
+fn sm_fig(fx, fy, nm, v, dp, col) { return sm_figu(fx, fy, nm, v, dp, "", col) }
+
+fn sm_figu(fx, fy, nm, v, dp, unit, col) {
     lw = ui_capsw(nm, PW_SM)
     ui_caps(fx, fy, nm, theme(TH_TEXT_DIM), PW_SM)
     nx = fx + lw + 5 * ui()
@@ -5392,10 +5412,12 @@ fn sm_fig(fx, fy, nm, v, dp, col) {
     # "1." - which reads as a truncated decimal, i.e. as a rendering fault.
     if dp == 0 {
         num_aa(nx, fy, v, col)
-        return nx + s3_numw(v) + 14 * ui()
+        ui_txt(nx + s3_numw(v), fy, unit, theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        return nx + s3_numw(v) + ui_tw(unit, PW_SM, PW_MONO) + SM_FIGGAP * ui()
     }
     pw_decg(nx, fy, v, dp, col, PW_SM, PW_MONO)
-    return nx + pw_decgw(v, dp, PW_SM, PW_MONO) + 14 * ui()
+    ui_txt(nx + pw_decgw(v, dp, PW_SM, PW_MONO), fy, unit, theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    return nx + pw_decgw(v, dp, PW_SM, PW_MONO) + ui_tw(unit, PW_SM, PW_MONO) + SM_FIGGAP * ui()
 }
 
 # THE IRQ TABLE, READ OFF THE IOAPIC.
@@ -5477,7 +5499,13 @@ fn sm_core_row(rx, ry, rw, i) {
         pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "UP", theme(TH_OK))
     } else {
         ui_txt(pw_right(pw_colx(rx, rw, 30), pw_colw(rw, 30), ui_tw("-", PW_SM, PW_MONO)), cy, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
-        pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "DOWN", theme(TH_WARN))
+        # "DOWN" IN THE WARN COLOUR SAYS A CORE FAILED TO START. Nothing tried.
+        # smp_start() has one caller in the tree - the smp_go native, reached
+        # only from the `*` shell command - so on an ordinary boot ap_mask is 0
+        # and every core but the BSP is reported as a failure. A core nobody
+        # woke is not a core that did not wake, and colouring it warn invents an
+        # incident. smp_ready() distinguishes the two.
+        if smp_ready() == 1 { pw_sw(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "DOWN", theme(TH_WARN)) } else { ui_txt(pw_colx(rx, rw, 74) + pw_cellpx(), cy, "not started", theme(TH_TEXT_DIM), PW_SM, 0) }
     }
     pw_row_rule(rx, ry, rw)
     return ry + pw_rowh()
@@ -5531,7 +5559,17 @@ fn sysmon_body(sx, sy, sw, sh) {
     if wm_run() == 1 { pw_sw(swx, hy, "RUN", runc) } else { pw_sw(swx, hy, "IDLE", runc) }
     nwx = mx + ui_capsw("sampling", PW_SM) + 12 * u
     num_aa(nwx, hy, wm_sn(), theme(TH_TEXT_2))
-    ui_txt(nwx + s3_numw(wm_sn()), hy, " per composited frame", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    # "N PER COMPOSITED FRAME" READ AS A RATE AND IS A CEILING. wm_sn() is
+    # sample_n, and wm.c stops it at WM_SAMPLE_N: `if (sample_n < WM_SAMPLE_N)
+    # sample_n++`. A few seconds after boot this line says "256 per composited
+    # frame" and never moves again - a fixed number wearing a rate's grammar,
+    # in the pane whose whole subject is readings that change. What is true is
+    # that the ring HOLDS that many, and that the chart below draws a window of
+    # them.
+    ui_txt(nwx + s3_numw(wm_sn()), hy, " frames held, ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+    nwx2 = nwx + s3_numw(wm_sn()) + ui_tw(" frames held, ", PW_SM, PW_MONO)
+    num_aa(nwx2, hy, sm_ring_span(), theme(TH_TEXT_2))
+    ui_txt(nwx2 + s3_numw(sm_ring_span()), hy, " charted", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
     my = my + pw_headh()
 
     # two columns, as the reference's .cols
@@ -5579,11 +5617,11 @@ fn sysmon_body(sx, sy, sw, sh) {
     sm_spark(rx2, ry2, colw, SM_SPARKH * u)
     ry2 = ry2 + SM_SPARKH * u + 5 * u
     fy = ry2
-    fx = sm_fig(rx2, fy, "min", sm_ring_min() * 10 / 1000, 1, theme(TH_TEXT_2))
-    fx = sm_fig(fx, fy, "mean", sm_ring_mean() * 10 / 1000, 1, theme(TH_TEXT_2))
+    fx = sm_figu(rx2, fy, "min", sm_ring_min() * 10 / 1000, 1, " ms", theme(TH_TEXT_2))
+    fx = sm_figu(fx, fy, "mean", sm_ring_mean() * 10 / 1000, 1, " ms", theme(TH_TEXT_2))
     # budget at three decimals, because 16.667 ms is the figure the reference
     # prints and rounding it to 16.7 loses the point of quoting it at all
-    sm_fig(fx, fy, "budget", wm_budget(), 3, theme(TH_TEXT_HI))
+    sm_figu(fx, fy, "budget", wm_budget(), 3, " ms", theme(TH_TEXT_HI))
     ry2 = ry2 + ui_th(PW_SM) + 8 * u
 
     ry2 = pw_sect(rx2, ry2, colw, "windows", wm_n(), " open")

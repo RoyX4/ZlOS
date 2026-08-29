@@ -570,6 +570,7 @@ extern int  wm_ws(void);
 extern int  wm_set_ws(int n);
 extern int  wm_win_ws(int win);
 extern int  fs_why(void);
+extern int  smp_ready(void);
 extern int  term_lines(void);
 extern int  term_ch(int line, int col);
 extern int  wm_win_us(int win);   /* per-window app time; wm_frame_us is the whole frame */
@@ -2209,6 +2210,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "diag_drop"))  return zl_num((double)zllog_dropped());
     if (streq(name, "diag_err"))   return zl_num((double)zllog_last_error());
     if (streq(name, "smp_go"))     return zl_num((double)smp_start());
+    if (streq(name, "smp_ready"))  return zl_num((double)smp_ready());
     if (streq(name, "smp_n"))      return zl_num((double)smp_online());
     if (streq(name, "smp_total"))  return zl_num((double)smp_cpu_count());
     if (streq(name, "smp_last"))   return zl_num((double)smp_last_id());
