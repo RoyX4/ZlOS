@@ -2669,12 +2669,20 @@ fn draw_foot_ruler() {
         # written by hardware - and not because anything is wrong with it. The
         # vermilion is spent once, on the framebuffer, which is the address this
         # whole project is about.
+        #
+        # AND THE WALK BELOW USED TO DRAW FIVE. The window-surface slice took
+        # ZD_STEEL_BR - a fifth ink, against a comment enumerating three plus
+        # the overprint, and against a prototype whose #rulerbar has no such
+        # value. The slice is an allocator's, like the arena and the heap, so it
+        # takes the allocator's ink; it stays distinguishable by the 1px ZD_CUT
+        # divider ruler_seg already draws between regions, which is exactly what
+        # `#rulerbar span { border-right: 1px solid }` does in the reference.
         sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_lo(), tot, theme(TH_SURF_7), xe)
         sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_ar(), tot, theme(TH_STEEL), xe)
         sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_zl(), tot, theme(TH_SURF_7), xe)
         sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_dma(), tot, theme(TH_WARN), xe)
         sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_heap(), tot, theme(TH_STEEL), xe)
-        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_srf(), tot, theme(TH_STEEL_BR), xe)
+        sx1 = ruler_seg(sx1, sy1, sh1, iw, ruler_srf(), tot, theme(TH_STEEL), xe)
         # THE DATUM MARK. Overprint job 4: one vermilion hairline where the
         # framebuffer starts, because that address is what this whole project is
         # about. It overshoots the bar top and bottom so it reads as a tick
@@ -2701,7 +2709,16 @@ fn draw_foot_ruler() {
         # the words between them take the caption rung, because they are not.
         rx = fx + fw - pad_d() - rdw
         dim = theme(TH_TEXT_DIM)
-        stl = theme(TH_STEEL)
+        # #rulerrd IS ONE SPAN AND IT IS ink3. The prototype's readout is
+    # `<span class="t-num ink3" id="rulerrd">` and .ink3 is ZD_TEXT_3 - there is
+    # no steel anywhere in it. This painted the two addresses and both MiB
+    # figures in ZD_STEEL while only the connecting words took ZD_TEXT_3, so the
+    # numbers read as instrument output and the words as caption, in a readout
+    # the authority draws in one ink throughout.
+    #
+    # ZD_STEEL is INSTRUMENTS ONLY by its own comment in this file. A figure
+    # being numeric does not make its surface an instrument.
+    stl = theme(TH_TEXT_DIM)
         if rdc > 0 {
             text_aa(rx, ry, "0x", dim)
             hexat(rx + 2 * cw, ry, RULER_BASE, stl)
