@@ -1743,7 +1743,13 @@ static int band_h_of(int fh, int flags)
 {
     const struct ui_theme *t = ui_theme();
     if (flags & WF_NOCHROME) return 0;
-    int bh = UI_DP(t, ZD_STATUS_H) + 1;
+    /* BORDER-BOX, like .hdr. `.sband { height: var(--zd-band-h); border-top:
+     * 1px }` with --zd-band-h 20dp means 20dp TOTAL with the rule inside it;
+     * this added a row for the rule on top of the full height, so the band was
+     * 21dp. Identical to the header's fault two commits ago, in the element at
+     * the other end of the plate - both from reading a CSS height as content
+     * when the sheet sets box-sizing: border-box globally. */
+    int bh = t->band_h;
     if (fh - t->title_h - 2 - bh < UI_DP(t, ZD_STATUS_H)) return 0;
     return bh;
 }

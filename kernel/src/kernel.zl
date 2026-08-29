@@ -1036,7 +1036,33 @@ fn app_icon(app) {
 # THE UNIT IS NOT PRINTED, and that is the prototype's shape too: `.slot .us`
 # is a bare figure and the window's own status band carries the word. A unit on
 # every row of a 170 dp rail is thirty characters of the same three letters.
-fn rail_slot_kpx(win) {
+# THE RAIL AND THE STATUS BAND PRINT THE SAME FIGURE, because in the authority
+# one function feeds both. `usOf(id)` is called by renderRail for the slot's
+# figure AND by usBand for the window's band, so a row and the band under that
+# window always agree.
+#
+# Here they did not: the rail printed KILOPIXELS - the client area over a
+# thousand - and the band printed MICROSECONDS. Two quantities, two units, in
+# two places the eye compares directly.
+#
+# usOf offers BOTH units and the choice is a config:
+#   `S.cfg.us === 'measured' ? w.us + ' us' : (w.px / 1000) + ' kpx'`
+#
+# This surface takes the pixel count, and the reason is where it is DRAWN. The
+# register rows are painted into the baked wallpaper by draw_rail_static, which
+# runs once at boot - before any app has drawn a frame, so wins[].app_us is
+# still 0 for every window and stays 0 in the bake for ever.
+#
+# I tried the microsecond figure first and it rendered a column of zeros on
+# screen, which is how this is known rather than reasoned. The pixel count is
+# available at bake time because it is arithmetic on the window's rect, which
+# exists the moment it opens.
+#
+# So the rail and the status band DO print different quantities, and that is a
+# real divergence from the authority - where one function feeds both. Closing it
+# means moving these rows out of the bake, which is a bigger change than this
+# note. Written down rather than papered over.
+fn rail_slot_us(win) {
     if win < 0 { return 0 }
     return idiv(wm_cw(win) * wm_ch(win), 1000)
 }
@@ -1103,7 +1129,7 @@ fn rail_reg_fit() { return idiv(rail_reg_h(), row_h()) }
 # W_BOLD, so the focused row - the one thing bold is for here - had no weight
 # left to take. `.slot .nm` is the face's regular and `.slot.act .nm` is 700;
 # this now says the same thing.
-fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
+fn draw_rail_row(ry, num, nm, ico, us, running, focused, hovered) {
     u = ui()
     rw = rail_w()
     rh = row_h()
@@ -1165,7 +1191,7 @@ fn draw_rail_row(ry, num, nm, ico, kpx, running, focused, hovered) {
     # four things the token may do: scrollbar thumb, resize grip, chart mark,
     # disabled menu row. A readout is none of them. The prototype uses .ink3 for
     # both .slot .us and #regcount.
-        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(kpx), ny, kpx, theme(TH_TEXT_DIM))
+        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(us), ny, us, theme(TH_TEXT_DIM))
     }
     return 0
 }
@@ -1221,7 +1247,7 @@ fn draw_rail_win(ry, num, win, hovered) {
     tx = tx + iw + RAIL_SLOT_GAP * u
     # THE NAME IS CLIPPED AT THE FIGURE, because nothing else keeps them apart.
     # This drew unmeasured and unclipped, so a long app name ran through its own
-    # kpx reading and out past the rail's outer edge - two pieces of text on top
+    # us reading and out past the rail's outer edge - two pieces of text on top
     # of each other, one of which is a measurement.
     #
     # The prototype keeps them apart with the flex box: `.slot .nm` carries
@@ -1232,8 +1258,8 @@ fn draw_rail_win(ry, num, win, hovered) {
     # drawn - but `clip` is bound to the framebuffer's real scissor, which is
     # the same result by a different route. The budget is computed from the
     # figure that is actually about to be drawn, not from a guess at its width.
-    tkpx = rail_slot_kpx(win)
-    fx = rw - RAIL_SLOT_PR * u - s3_numw(tkpx)
+    tus = rail_slot_us(win)
+    fx = rw - RAIL_SLOT_PR * u - s3_numw(tus)
     nw = fx - RAIL_SLOT_GAP * u - tx
     if nw > 0 {
         clip(tx, ry, nw, rh)
@@ -1243,11 +1269,11 @@ fn draw_rail_win(ry, num, win, hovered) {
     # A tail row exists ONLY because its window is open, so it is running by
     # construction and the figure is unconditional here where it is guarded on
     # the fixed rows. rail_running_n() counts the tail on exactly that reasoning.
-    # ONE CALL TO rail_slot_kpx, held in a local, because the x it is drawn at
+    # ONE CALL TO rail_slot_us, held in a local, because the x it is drawn at
     # is measured from the same value that is drawn - a second call is a second
     # chance for a resized window to change the answer between the two.
-    tkpx = rail_slot_kpx(win)
-    num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tkpx), ny, tkpx, theme(TH_TEXT_DIM))
+    tus = rail_slot_us(win)
+    num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tus), ny, tus, theme(TH_TEXT_DIM))
     return 0
 }
 
@@ -1748,21 +1774,21 @@ fn draw_rail_reg() {
         if drawn < fit {
             run = 0
             foc = 0
-            # rkpx, not kpx: draw_rail_row takes the figure as a PARAMETER
-            # called kpx, and this file's own note on zl scope is that params
-            # are frame-scoped while free locals are not. Two distinct names
-            # costs nothing and removes the question entirely.
-            rkpx = 0
+            # rus, distinct from draw_rail_row's own parameter name: this
+            # file's note on zl scope is that params are frame-scoped while free
+            # locals are not. Two distinct names cost nothing and remove the
+            # question entirely.
+            rus = 0
             if rs < REG_N {
                 run = rail_running(rs)
                 if run == 1 {
-                    rkpx = rail_slot_kpx(rail_win(rs))
+                    rus = rail_slot_us(rail_win(rs))
                     if wm_focus() == rail_win(rs) { foc = 1 }
                 }
             }
             hov = 0
             if rail_hover == rs { hov = 1 }
-            draw_rail_row(ry + drawn * row_h(), rs + 1, rail_name(rs), rail_icon(rs), rkpx, run, foc, hov)
+            draw_rail_row(ry + drawn * row_h(), rs + 1, rail_name(rs), rail_icon(rs), rus, run, foc, hov)
             drawn = drawn + 1
         }
         rs = rs + 1
