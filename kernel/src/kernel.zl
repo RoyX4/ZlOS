@@ -6244,7 +6244,7 @@ fn sysg_rows(gx, gy, gw, gmax) {
         } else {
             # A DASH, NOT A ZERO. "0.00" in a FLOOR column reads as a floor of
             # zero, which is a claim; the dash says the question does not apply.
-            ui_txt(pw_right(pw_colx(gx, gw, 62), pw_colw(gw, 16), ui_tw("-", PW_SM, PW_MONO)), pw_mcelly(sg_y), "-", theme(TH_SURF_7), PW_SM, PW_MONO)
+            ui_txt(pw_right(pw_colx(gx, gw, 62), pw_colw(gw, 16), ui_tw("-", PW_SM, PW_MONO)), pw_mcelly(sg_y), "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
             ui_txt(pw_colx(gx, gw, 78) + pw_cellpx(), pw_celly(sg_y), "structure", theme(TH_TEXT_DIM), PW_SM, 0)
         }
         sg_y = pw_row_rule(gx, sg_y, gw)
@@ -6490,12 +6490,12 @@ fn ty_roles(rx, ry, i) {
             ui_txt(tr_x, ry, "DATA", theme(TH_TEXT), PW_SM, PW_MONO)
             tr_x = tr_x + ui_tw("DATA", PW_SM, PW_MONO)
         } else {
-            ui_txt(tr_x, ry, "-", theme(TH_SURF_7), PW_SM, PW_MONO)
+            ui_txt(tr_x, ry, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
             tr_x = tr_x + ui_tw("-", PW_SM, PW_MONO)
         }
     }
     if tr_x == rx {
-        ui_txt(tr_x, ry, "-", theme(TH_SURF_7), PW_SM, PW_MONO)
+        ui_txt(tr_x, ry, "-", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
         tr_x = tr_x + ui_tw("-", PW_SM, PW_MONO)
     }
     return tr_x
@@ -6549,7 +6549,13 @@ fn ty_rows(gx, gy, gw, gmax) {
 # to 12, 12 and 16 device px - caption and body come out the SAME SIZE and the
 # three-step scale is two - which is a fact about the panel in front of you and
 # is exactly what a type pane is for.
-TY_ROWS_N = 4
+# 5, NOT 4. ty_rowk_name has five entries and the loop ran 1..3, so `hierarchy`
+# - which is the DEFAULT return, and the reference's fourth kv row - was never
+# drawn. Index 0 is consumed separately by FACES above the loop, so the row that
+# needed the extra slot was the one at the end. The prototype's R.type carries
+# sizes, styles, tracking AND hierarchy; this drew three of four and the fourth
+# was one comparison away the whole time.
+TY_ROWS_N = 5
 
 fn ty_rowk_name(i) {
     if i == 1 { return "sizes" }
@@ -6571,7 +6577,14 @@ fn ty_row_val(vx, vy, i, dr) {
         tv_x = sys_vn(tv_x, vy, ui_th(PW_MD), dr)
         tv_x = sys_vs(tv_x, vy, " / LG ", dr)
         tv_x = sys_vn(tv_x, vy, ui_th(PW_LG), dr)
-        return sys_vs(tv_x, vy, " px. design.h asks 11 / 13 / 21", dr)
+        # NOT "design.h asks 11 / 13 / 21". Both halves of that comparison
+        # come from design.h - ui_th() resolves the same tokens the literal
+        # quotes - so it can never disagree and is a tautology wearing a
+        # check's clothes. What the left half DOES measure is the scale: these
+        # are design px multiplied by the panel's q8 and rounded, so at any
+        # scale but 1 they differ from the token and that difference is the
+        # only real reading on the row.
+        return sys_vs(tv_x, vy, " px, design px scaled to this panel", dr)
     }
     if i == 2 { return sys_vt(tv_x, vy, "four. DATA mono / LABEL tracked caps / BODY / PLATE", dr) }
     if i == 3 {
@@ -6613,7 +6626,7 @@ fn type_body(ax, ay, aw, ah) {
 
     tb_y = ty_specimen(tb_x, tb_y, tb_w) + PW_CARDGAP * ui()
 
-    tb_y = pw_sect(tb_x, tb_y + pad_d(), tb_w, "every atlas linked into this image", atlas_n(), " rows")
+    tb_y = pw_sect(tb_x, tb_y + pad_d(), tb_w, "every atlas this design names or this image links", atlas_n(), " rows")
     tb_y = ty_head(tb_x, tb_y, tb_w)
     tb_y = ty_rows(tb_x, tb_y, tb_w, tb_bot)
 
