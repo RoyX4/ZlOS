@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — test: the field menu is verified too, and the probe fell into one trap twice (f1c3b7a)
+
+`design/presswork` · 4 files changed, 55 insertions(+), 13 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>4 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/tools/probes/probe-overlay-click.py`
+
+</details>
+
 ## 2026-08-30 — fix: a delete that could hand the editor another file's bytes, and four of mine (a372879)
 
 `design/presswork` · 8 files changed, 217 insertions(+), 40 deletions(-)

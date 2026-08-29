@@ -1773,11 +1773,29 @@ static void client_of(int fx, int fy, int fw, int fh, int flags,
      * that is not cosmetic - the app can never paint over the focus bar. The
      * shell layer is composited BEFORE the client, so without this the bar
      * would be drawn and then two thirds of it immediately overwritten. */
+    /* THE CLIENT MUST MOVE WITH THE CHROME, and two commits ago it did not.
+     *
+     * Making .hdr border-box put its foot rule at row fy + th, and floating the
+     * foot band up by .wbody's 6dp bottom padding freed rows at the other end -
+     * and client_of was left computing the old rectangle for both. The shell is
+     * composited BEFORE the client, so the app won: its first row painted over
+     * the header's knockout edge, and its last rows painted over the foot
+     * band's rule and into the band itself, five rows at scale 1 and eleven at
+     * scale 2.
+     *
+     * That is the cost of a geometry with two readers: moving one is a change,
+     * moving one of two is a bug, and the chrome and the client are the two
+     * readers most likely to be edited apart.
+     *
+     * The header owns rows fy+1 .. fy+th inclusive, so the client starts after
+     * it. The band, when there is one, floats ZD_BODY_PY above the ring, so the
+     * client stops that much earlier. */
     int bl = (flags & WF_NOCHROME) ? 0 : 1 + t->focus_bar;
+    int bpy = bh ? UI_DP(t, ZD_BODY_PY) : 0;
     *x = fx + bl;
-    *y = fy + th;
+    *y = fy + th + 1;
     *w = fw - bl - b;
-    *h = fh - th - b - bh;
+    *h = fh - th - 1 - b - bh - bpy;
     if (*w < 0) *w = 0;
     if (*h < 0) *h = 0;
 }
@@ -4077,7 +4095,11 @@ static int in_titlebar(int win, int x, int y)
 {
     const struct ui_theme *t = ui_theme();
     if (wins[win].flags & WF_NOCHROME) return 0;
-    return y >= wins[win].y && y < wins[win].y + t->title_h &&
+    /* Rows y+1 .. y+title_h inclusive, matching what chrome_header paints and
+     * what client_of now leaves alone. `< y + title_h` stopped one row short of
+     * the header's own foot rule, which is a row the header owns and drags
+     * from - a one-pixel dead stripe along the bottom of every title bar. */
+    return y >= wins[win].y && y <= wins[win].y + t->title_h &&
            x >= wins[win].x && x < wins[win].x + wins[win].w;
 }
 

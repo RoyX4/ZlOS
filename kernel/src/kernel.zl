@@ -7556,7 +7556,7 @@ fn fs_stamp_now() {
 
 fn files_list_top(cy) { return cy + 62 * ui() + ui_colhead_h() }
 fn files_list_rows(ch) {
-    flr = (ch - 104 * ui() - ui_colhead_h()) / (FILES_ROW * ui())
+    flr = idiv(ch - 104 * ui() - ui_colhead_h(), FILES_ROW * ui())
     if flr < 1 { return 1 }
     return flr
 }
@@ -7867,7 +7867,13 @@ fn files_mouse_slot(win, ey) {
     # that must be one number, which is how they came to be three numbers.
     files_my0 = files_list_top(wm_cy(win))
     if ey < files_my0 { return 0 - 1 }
-    files_mrow = (ey - files_my0) / (FILES_ROW * files_mu)
+    # idiv, NOT `/`. This was float division, and files_slot_at_order walks the
+    # directory with an INTEGER counter returning only on `files_an == want` -
+    # so a fractional want fell out of the loop and returned -1. Selection is
+    # gated on `files_hit >= 0`, which meant a click selected a file only when
+    # (ey - files_my0) happened to be an exact multiple of the row height: one
+    # pixel row in twenty. The list looked like it ignored clicks.
+    files_mrow = idiv(ey - files_my0, FILES_ROW * files_mu)
     files_mrows = files_list_rows(wm_ch(win))
     if files_mrow < 0 { return 0 - 1 }
     if files_mrow >= files_mrows { return 0 - 1 }
@@ -9901,12 +9907,12 @@ fn settings_event(win, ety, ecode, ex, ey) {
         if set_tab == SET_FOCUS {
             if set_hit_row(setev_x, set_row1_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
                 ui_knock(1 - ui_knock_on())
-                wm_damage_win_all()
+                wm_damage_theme()
                 return 1
             }
             if set_hit_row(setev_x, set_row2_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
                 ui_fbar(set_slider_v(set_trk_x(setev_x), set_trk_w(setev_x, setev_w), 1, 6, ex))
-                wm_damage_win_all()
+                wm_damage_theme()
                 return 1
             }
         }
@@ -9938,11 +9944,11 @@ fn settings_event(win, ety, ecode, ex, ey) {
         if ecode == 107 {
             ui_knock(1 - ui_knock_on())
             if ui_knock_on() == 1 { note_say2("knockout on", "the focused header inverts, and it is the only focus signal", 800) } else { note_say2("knockout off", "fallback is the wash ramp - sit back and find the focused plate", 800) }
-            wm_damage_win_all()
+            wm_damage_theme()
             return 1
         }
-        if ecode == 91  { ui_fbar(ui_fbar_dp() - 1)  wm_damage_win_all()  return 1 }
-        if ecode == 93  { ui_fbar(ui_fbar_dp() + 1)  wm_damage_win_all()  return 1 }
+        if ecode == 91  { ui_fbar(ui_fbar_dp() - 1)  wm_damage_theme()  return 1 }
+        if ecode == 93  { ui_fbar(ui_fbar_dp() + 1)  wm_damage_theme()  return 1 }
     }
     return 0
 }
@@ -10436,6 +10442,26 @@ shell_win = 0 - 1
 # whole window table, including the shell you typed into - and then run a
 # second frame loop nested inside the first.
 wm_live = 0
+# EVERY OPEN WINDOW, which is what the theme sites actually need.
+#
+# wm_damage_win_all damages the SHELL and nothing else - four of its callers
+# genuinely mean that, so widening it would repaint every window on every shell
+# newline. But five call sites use it after a THEME change (the knockout
+# toggle, the focus-bar slider, the `k` key, `[` and `]`, and the palette's
+# knockout row), and ui.c is explicit that a theme change invalidates every
+# cached window surface in the system and that its own layer does not know
+# about surfaces. Those five left every window but the shell showing the old
+# ladder until something else happened to dirty it.
+fn wm_damage_theme() {
+    wdt_i = 0
+    while wdt_i < wm_n() {
+        wm_dmg(wm_zat(wdt_i))
+        wdt_i = wdt_i + 1
+    }
+    wm_damage(0, 0, px_w(), px_h())
+    return 0
+}
+
 fn wm_damage_win_all() {
     if shell_win >= 0 { wm_dmg(shell_win) }
     return 0
@@ -11181,7 +11207,7 @@ fn ov_ctx_run(i) {
         ov_close_overlay()
         ui_knock(1 - ui_knock_on())
         if ui_knock_on() == 1 { note_say2("knockout on", "the focused header inverts, and it is the only focus signal", 800) } else { note_say2("knockout off", "fallback is the wash ramp - sit back and find the focused plate", 800) }
-        wm_damage_win_all()
+        wm_damage_theme()
         return 1
     }
     if i == 3  { ov_close_overlay()  return desk_tile() }
