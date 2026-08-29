@@ -64,6 +64,9 @@ extern Value zl_fn_desk_key(Value, Value) __attribute__((weak));
 
 /* fn app_can_close(win) - 0 refuses the close box and Ctrl+W */
 extern Value zl_fn_app_can_close(Value) __attribute__((weak));
+
+/* fn ov_click(x, y, down) - non-zero when an overlay consumed the pointer */
+extern Value zl_fn_ov_click(Value, Value, Value) __attribute__((weak));
 /* ---- apps that live in C --------------------------------------------------
  * THERE ARE NONE LEFT, AND THIS BLOCK IS THE RECORD OF WHY.
  *
@@ -127,6 +130,13 @@ static void glue_desk_click(int x, int y, int btn)
     zl_fn_desk_click(zl_num(x), zl_num(y), zl_num(btn));
 }
 
+static int glue_overlay_click(int x, int y, int down)
+{
+    if (!zl_fn_ov_click) return 0;
+    Value r = zl_fn_ov_click(zl_num(x), zl_num(y), zl_num(down));
+    return (int)r.num;
+}
+
 static int glue_can_close(int win)
 {
     if (!zl_fn_app_can_close) return 1;      /* no arm defined: always closes */
@@ -187,6 +197,7 @@ int wm_bind_zl(void)
     if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
     if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
     if (zl_fn_app_can_close) wm_can_close(glue_can_close);
+    if (zl_fn_ov_click) wm_overlay_click(glue_overlay_click);
     return 1;
 }
 

@@ -579,6 +579,7 @@ static void app_draw_dispatch(int win, int app, int x, int y, int w, int h,
 static desk_click_fn hook_desk_click;
 static desk_key_fn   hook_desk_key;
 static can_close_fn  hook_can_close;
+static overlay_click_fn hook_overlay_click;
 
 static void client_surface_free(int win)
 {
@@ -1839,6 +1840,7 @@ void wm_init(void)
 void wm_desk_click(desk_click_fn f) { hook_desk_click = f; }
 void wm_desk_key(desk_key_fn f)     { hook_desk_key = f; }
 void wm_can_close(can_close_fn f)   { hook_can_close = f; }
+void wm_overlay_click(overlay_click_fn f) { hook_overlay_click = f; }
 
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
@@ -4131,6 +4133,13 @@ static void wm_toggle_max(int win)
     wm_snap_key(win, snap_state(win) == SNAP_NONE ? SK_UP : SK_DOWN);
 }
 
+/* THE SAME TOGGLE, REACHABLE FROM zl. The window menu's "maximise" row needs
+ * it, and SK_UP / SK_DOWN / SNAP_NONE are all private to this file - binding
+ * the raw wm_snap_key would mean hand-copying three constants into the runtime,
+ * which is the class of mistake this tree keeps finding. One wrapper instead,
+ * so the menu row and a double-click cannot land in different states. */
+void wm_max_toggle(int win) { wm_toggle_max(win); }
+
 static void route_mouse(int x, int y, int btn)
 {
     int down = (btn & 1) && !(last_btn & 1);
@@ -4206,6 +4215,25 @@ static void route_mouse(int x, int y, int btn)
         }
         return;
     }
+
+    /* 0. AN OVERLAY OUTRANKS EVERYTHING BELOW IT.
+     *
+     * After the pointer-grab block above, so a drag already in flight still
+     * finishes; before modal_win(), so an overlay covers the start menu too.
+     * Every event goes here, not only presses - a release that leaked through
+     * would end up starting or ending a drag on a window the user cannot even
+     * see, which is exactly what used to happen when the window menu was open
+     * on top of the window it belongs to.
+     *
+     * The keyboard has followed this rule since desk_key was wired; the pointer
+     * simply never did, and no hit test for any overlay surface existed in the
+     * tree to make it possible.
+     *
+     * `down` rather than btn is passed deliberately: btn is a LEVEL, so a row
+     * would re-run on every frame the button stayed held. down is the press
+     * edge, computed at the top of this function beside up and rdown for
+     * exactly this reason. last_btn is already stored up there. */
+    if (hook_overlay_click && hook_overlay_click(x, y, down)) return;
 
     int m = modal_win();
     int hit = wm_at(x, y);

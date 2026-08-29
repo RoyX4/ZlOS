@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-29 — test: a probe for the editor viewport, verified against a planted defect (9951b87)
+
+`design/presswork` · 4 files changed, 289 insertions(+), 7 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>4 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/tools/probes/probe-edit-viewport.py`
+
+</details>
+
 ## 2026-08-29 — fix: the editor gets a viewport, and seven more from the round-six fleet (f54fd37)
 
 `design/presswork` · 7 files changed, 192 insertions(+), 19 deletions(-)

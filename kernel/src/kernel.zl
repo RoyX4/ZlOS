@@ -1633,7 +1633,14 @@ rtc_fails = 0                      # consecutive failed reads, latched at RTC_GI
 
 fn rail_clock_tick() {
     if rtc_fails >= RTC_GIVE_UP { return 0 }
-    csec = ticks() / 100
+    # idiv, NOT `/`. Every zl number is a double and `/` is FLOAT division - the
+    # note at the top of this file says so and idiv() exists for exactly this.
+    # `ticks() / 100` at 100 Hz yields 0.01, 0.02, 0.03 ... a different value on
+    # every tick, so a "has the second rolled" guard written that way never
+    # holds and the body runs every frame. Here that meant re-reading the CMOS
+    # a hundred times a second; only the separate minute guard below kept the
+    # damage down, which is why it was never visible.
+    csec = idiv(ticks(), 100)
     if csec == rtc_sec_seen { return 0 }
     rtc_sec_seen = csec
     if rtc_here() == 0 { rtc_fails = RTC_GIVE_UP  return 0 }
@@ -2527,7 +2534,7 @@ fn mib1(mx, my, bytes, col) {
 foot_sec_seen = 0 - 1
 
 fn foot_tick() {
-    fsec = ticks() / 100
+    fsec = idiv(ticks(), 100)   # idiv: `/` is float division here - see rail_clock_tick
     if fsec == foot_sec_seen { return 0 }
     foot_sec_seen = fsec
     if px_w() < 1 { return 0 }
@@ -4190,6 +4197,9 @@ EDIT_MAX = 8000
 ed_slot = 0
 ed_len  = 0
 ed_dirty = 0
+# Set by the first refused close, cleared by anything that resolves the state.
+# The second close in a row discards - see app_can_close.
+ed_discard_armed = 0
 ED_PAGE = 8                        # lines a page key moves the view
 
 fn editor_open_disk(slot) {
@@ -4201,6 +4211,7 @@ fn editor_open_disk(slot) {
     ed_slot = slot
     ed_dirty = 0
     ed_scroll = 0
+    ed_discard_armed = 0
     return 1
 }
 
@@ -4277,6 +4288,10 @@ fn editor_key(code) {
     # parked twenty lines up would put the character somewhere the user cannot
     # see, which is the defect this viewport was added to remove.
     ed_scroll = 0
+    # ANY KEY THAT REACHES THE BUFFER DISARMS THE DISCARD. Someone who is still
+    # working has not confirmed anything, and an arm that outlives the moment it
+    # was set is a trap.
+    ed_discard_armed = 0
     # ESC SAVES ONLY WHAT WAS CHANGED.
     #
     # This called editor_save() unconditionally. fs_write is copy-on-write
@@ -10232,10 +10247,35 @@ fn wm_damage_shell_input() {
 # just got deleted from ESC one function up: writing a file the user did not
 # ask to write is not a safe default, it is the same fault pointed the other
 # way. So the window stays, and the toast says which key resolves it.
+# THE REFUSAL NEEDED A WAY OUT, and the first version did not have one.
+#
+# Refusing to close a dirty buffer is right. But ESC returns 1 rather than
+# closing when editor_save() fails, and ed_dirty is only cleared by a
+# SUCCESSFUL save or by opening a file - which cannot happen while this window
+# is up, because open_disk_editor refuses and run_command raises the existing
+# window instead. So on a volume where alloc_run cannot find a contiguous run,
+# the editor became a window with no exit at all: ESC would not close it,
+# Ctrl+W would not, the close box would not.
+#
+# Trading silent data loss for an unclosable window is not a fix, it is a
+# different bug with better manners.
+#
+# The second close in a row discards. The first says what is unsaved and how to
+# save it; the second is an explicit instruction from someone who has just been
+# told, which is the same shape the Files pane's format already uses ("twice to
+# confirm"). Arming clears the moment anything else resolves the state, so a
+# refusal from ten minutes ago cannot silently authorise a discard now.
 fn app_can_close(win) {
     if win == edit_win {
         if ed_dirty == 1 {
-            note_say2("unsaved changes", "ESC saves and closes - Ctrl+S saves and stays", 900)
+            if ed_discard_armed == 1 {
+                ed_discard_armed = 0
+                ed_dirty = 0
+                note_say2("closed without saving", "the edits are gone - the file on disk is unchanged", 900)
+                return 1
+            }
+            ed_discard_armed = 1
+            note_say2("unsaved changes", "ESC saves and closes - close again to discard", 900)
             return 0
         }
     }
@@ -10277,7 +10317,7 @@ fn app_tick(id, win) {
     # HTTP state machine, and returns 1 only when something actually changed.
     if id == APP_BROWSER { return br_tick() }
     if id == APP_MONITOR {
-        tsec = ticks() / 100
+        tsec = idiv(ticks(), 100)   # idiv: `/` is float division here - see rail_clock_tick
         if tsec != last_tick_sec {
             last_tick_sec = tsec
             # ...and the two live readouts that are furniture rather than a
@@ -10603,9 +10643,15 @@ fn ov_win_label(i) {
     if i == 7 { return "-" }
     return "close"
 }
+# ROW 7 IS THE SEPARATOR, NOT ROW 6. This flagged 3 and 6, but row 6 is
+# "header is at rest" and row 7 is the "-". So the row that names the focus
+# signal this whole design is built on was drawn as a hairline and never said
+# anything, while the literal string "-" was drawn as a menu row underneath it.
+# The labels and the flags were edited at different times and only the labels
+# were renumbered.
 fn ov_win_sep(i) {
     if i == 3 { return 1 }
-    if i == 6 { return 1 }
+    if i == 7 { return 1 }
     return 0
 }
 fn ov_win_haskey(i) {
@@ -10657,28 +10703,277 @@ fn ov_menu_haskey(i) {
     return ov_ctx_haskey(i)
 }
 
+# THE MENU'S GEOMETRY, LIFTED OUT OF ITS DRAW so a hit test can ask for exactly
+# the rectangle that was painted. It was computed inline, which is why no hit
+# test existed: writing one meant copying four calculations, and a copied
+# calculation is a second answer waiting to disagree with the first.
+OV_MENU_ROWH = 20
+OV_MENU_SEPH = 7
+OV_MENU_HEADH = 20
+
+fn ov_menu_h() {
+    mhh = OV_MENU_HEADH * ui()
+    mhi = 0
+    while mhi < ov_menu_rows() {
+        if ov_menu_sep(mhi) == 1 { mhh = mhh + OV_MENU_SEPH * ui() } else { mhh = mhh + OV_MENU_ROWH * ui() }
+        mhi = mhi + 1
+    }
+    return mhh + 6 * ui()
+}
+
+# KEEP IT ON SCREEN. The prototype clamps to the desktop with an 8 px margin; a
+# menu opened near the right or bottom edge otherwise draws off the panel and
+# the rows nearest the pointer are the ones lost.
+fn ov_menu_mx() {
+    omx = ov_menu_x
+    if omx + OV_MENU_W * ui() > px_w() - 8 * ui() { omx = px_w() - OV_MENU_W * ui() - 8 * ui() }
+    if omx < 0 { omx = 0 }
+    return omx
+}
+fn ov_menu_my() {
+    omy = ov_menu_y
+    if omy + ov_menu_h() > px_h() - 8 * ui() { omy = px_h() - ov_menu_h() - 8 * ui() }
+    if omy < 0 { omy = 0 }
+    return omy
+}
+
+# Which row the pointer is over, or -1. Walks the same accumulation the draw
+# does, so a separator's short height is honoured in both.
+fn ov_menu_row_at(cx, cy) {
+    if cx < ov_menu_mx() { return 0 - 1 }
+    if cx >= ov_menu_mx() + OV_MENU_W * ui() { return 0 - 1 }
+    if cy < ov_menu_my() { return 0 - 1 }
+    if cy >= ov_menu_my() + ov_menu_h() { return 0 - 1 }
+    mry = ov_menu_my() + OV_MENU_HEADH * ui()
+    mri = 0
+    while mri < ov_menu_rows() {
+        if ov_menu_sep(mri) == 1 {
+            mry = mry + OV_MENU_SEPH * ui()
+        } else {
+            if cy >= mry { if cy < mry + OV_MENU_ROWH * ui() { return mri } }
+            mry = mry + OV_MENU_ROWH * ui()
+        }
+        mri = mri + 1
+    }
+    return 0 - 1
+}
+
+# ============================================================================
+# WHAT THE MENU ROWS DO. Until now: nothing at all.
+#
+# Twenty-one rows across two menus drew, highlighted, listed their keyboard
+# shortcuts, and could not be clicked - because route_mouse never offered the
+# pointer to the overlay layer, and no hit test for any overlay surface existed
+# anywhere in the tree. The keyboard could drive the palette; the mouse could
+# drive none of it. A control that draws and does nothing is the defect this
+# project ranks second only to an invented figure, and this was thirty-seven of
+# them in one layer.
+#
+# Every arm below routes to the SAME function the keyboard shortcut uses, so
+# the two paths cannot drift. Where a row has no implementation behind it, it
+# is disabled rather than silently inert - see ov_ctx_dis.
+
+# TILE ONTO THE MODULE. Three menu rows have named this action since the menus
+# were written and none of them had anything to call - wm_move was not even
+# bound to zl. It is implemented rather than disabled because the module grid
+# is the one thing this desktop is actually about: the field is 12 x 8 and
+# every window in the boot composition is already placed on it.
+#
+# The arrangement is the smallest square that holds the windows - 1 across for
+# one, 2 for two to four, 3 for five to nine - which is what the prototype's
+# own tile does. Windows are placed in z-order so the front-most lands top-left.
+#
+# MINIMISED WINDOWS ARE LEFT ALONE. Tiling one would restore it as a side
+# effect of a command about layout, and "tile" is not "un-minimise everything".
+# Windows on another workspace are skipped for the same reason.
+fn tile_cols(n) {
+    if n <= 1 { return 1 }
+    if n <= 4 { return 2 }
+    if n <= 9 { return 3 }
+    return 4
+}
+
+fn desk_tile() {
+    tl_n = 0
+    tl_i = 0
+    while tl_i < wm_n() {
+        tl_w = wm_zat(tl_i)
+        if wm_winws(tl_w) == cur_ws() { tl_n = tl_n + 1 }
+        tl_i = tl_i + 1
+    }
+    if tl_n < 1 { note_say("nothing to tile", 400)  return 1 }
+    tl_c = tile_cols(tl_n)
+    tl_r = idiv(tl_n + tl_c - 1, tl_c)
+    tl_gx = field_x()
+    tl_gy = field_y()
+    tl_gw = idiv(field_w(), tl_c)
+    tl_gh = idiv(field_h(), tl_r)
+    tl_k = 0
+    tl_i = 0
+    while tl_i < wm_n() {
+        tl_w = wm_zat(tl_i)
+        if wm_winws(tl_w) == cur_ws() {
+            tl_cx = tl_gx + (tl_k % tl_c) * tl_gw
+            tl_cy = tl_gy + idiv(tl_k, tl_c) * tl_gh
+            wm_move(tl_w, tl_cx, tl_cy)
+            wm_size(tl_w, tl_gw - PAD_D * ui(), tl_gh - PAD_D * ui())
+            tl_k = tl_k + 1
+        }
+        tl_i = tl_i + 1
+    }
+    wm_damage(0, 0, px_w(), px_h())
+    note_say2("tiled onto the module", "one cell per window, front-most top-left", 700)
+    return 1
+}
+
+# THE PALETTE'S ROWS, measured from the same origin ov_draw_palette draws them
+# at: sheet top, plus the 62dp header-and-input block, plus 22dp a row.
+OV_PAL_ROWH = 22
+OV_PAL_TOP  = 62
+
+# INSIDE THE SHEET IS NOT THE SAME QUESTION AS ON A ROW, and collapsing the two
+# is why a click on the palette's own header dismissed it. The scrim dismisses;
+# the sheet does not. A modal that closes when you click its title bar is a
+# modal you lose work in.
+fn ov_pal_in_sheet(cx, cy) {
+    if cx < ov_sheet_x() { return 0 }
+    if cx >= ov_sheet_x() + OV_SHEET_W * ui() { return 0 }
+    if cy < ov_sheet_y() { return 0 }
+    if cy >= ov_sheet_y() + OV_PAL_TOP * ui() + OV_PAL_N * OV_PAL_ROWH * ui() + 24 * ui() { return 0 }
+    return 1
+}
+
+fn ov_pal_row_at(cx, cy) {
+    if ov_pal_in_sheet(cx, cy) == 0 { return 0 - 1 }
+    opy = cy - ov_sheet_y() - OV_PAL_TOP * ui()
+    if opy < 0 { return 0 - 1 }
+    opr = idiv(opy, OV_PAL_ROWH * ui())
+    if opr >= OV_PAL_N { return 0 - 1 }
+    return opr
+}
+
+# The menu's equivalent: its plate, from the geometry the draw uses.
+fn ov_menu_in_plate(cx, cy) {
+    if cx < ov_menu_mx() { return 0 }
+    if cx >= ov_menu_mx() + OV_MENU_W * ui() { return 0 }
+    if cy < ov_menu_my() { return 0 }
+    if cy >= ov_menu_my() + ov_menu_h() { return 0 }
+    return 1
+}
+
+# THE POINTER REACHES THE OVERLAY, which it never did before.
+#
+# wm.c registered exactly one overlay hook and it was a DRAW hook; route_mouse
+# contained no reference to the overlay layer at all. So a click on a menu row
+# or a palette row did nothing AND did not dismiss the surface - and worse, it
+# fell THROUGH: the window menu is drawn on top of the window it belongs to, so
+# clicking "close" on it focused, raised and started an app-drag on that very
+# window instead. Only Escape ever closed any of it.
+#
+# This consumes EVERY event while an overlay is up, presses and releases alike,
+# which is what "modal" means and what the keyboard path already does. A click
+# outside any surface dismisses, the way clicking off a menu does everywhere.
+fn ov_click(cx, cy, down) {
+    if ov_active() == 0 { return 0 }
+    # Releases and moves are still SWALLOWED - the return is 1 either way - so
+    # nothing underneath sees a stray drag. But only the press EDGE acts: wm.c
+    # passes `down`, not the raw button, because the button is a level and a row
+    # driven off the level would re-run on every frame it stayed held.
+    if down == 0 { return 1 }
+    # OFF THE PLATE DISMISSES; ON THE PLATE BUT OFF A ROW DOES NOTHING. Only
+    # the scrim closes these, which is what clicking away from a menu means
+    # everywhere else.
+    if ov_mode == OV_MENU {
+        if ov_menu_in_plate(cx, cy) == 0 { return ov_close_overlay() }
+        ovr = ov_menu_row_at(cx, cy)
+        if ovr < 0 { return 1 }
+        if ov_menu_sep(ovr) == 1 { return 1 }
+        ov_sel = ovr
+        return ov_menu_run(ovr)
+    }
+    if ov_mode == OV_PALETTE {
+        if ov_pal_in_sheet(cx, cy) == 0 { return ov_close_overlay() }
+        ovp = ov_pal_row_at(cx, cy)
+        if ovp < 0 { return 1 }
+        ov_sel = ovp
+        return ov_pal_run(ovp)
+    }
+    # ACTIVITIES and LOCK have no row dispatch yet, and a click that silently
+    # did nothing would be the same defect this function exists to remove. They
+    # dismiss, which is at least an answer.
+    return ov_close_overlay()
+}
+
+fn ov_close_overlay() {
+    ov_mode = OV_NONE
+    wm_damage(0, 0, px_w(), px_h())
+    return 1
+}
+
+# The field menu. Row numbers are ov_ctx_label's.
+# No disabled rows on the field menu - ov_menu_dis says so for this kind, and
+# every actionable row below now has something behind it. Separators never
+# arrive here: ov_menu_row_at skips their bands rather than returning them.
+fn ov_ctx_run(i) {
+    if i == 0 { ov_mode = OV_ACTIVITIES  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
+    if i == 1 { ov_mode = OV_PALETTE  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
+    if i == 4 {
+        ov_close_overlay()
+        desk_grid_on = 1 - desk_grid_on
+        rebake_wallpaper()
+        wm_damage(0, 0, px_w(), px_h())
+        if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8 module, ruled to the field margin", 800) } else { note_say2("desk grid off", "crop marks and the slug stay - they have their own switches now", 800) }
+        return 1
+    }
+    if i == 5 {
+        ov_close_overlay()
+        ui_knock(1 - ui_knock_on())
+        if ui_knock_on() == 1 { note_say2("knockout on", "the focused header inverts, and it is the only focus signal", 800) } else { note_say2("knockout off", "fallback is the wash ramp - sit back and find the focused plate", 800) }
+        wm_damage_win_all()
+        return 1
+    }
+    if i == 3  { ov_close_overlay()  return desk_tile() }
+    if i == 7  { ov_close_overlay()  return ws_hotkey(1) }
+    if i == 8  { ov_close_overlay()  return ws_hotkey(2) }
+    if i == 10 { ov_close_overlay()  return reg_open(APP_SETTINGS) }
+    if i == 11 { ov_mode = OV_LOCK  ov_sel = 0  wm_damage(0, 0, px_w(), px_h())  return 1 }
+    return 1
+}
+
+# The window menu, acting on ov_menu_win - the window that was right-clicked,
+# not the focused one, because those are different the moment a menu is open.
+fn ov_win_run(i) {
+    if ov_win_dis(i) == 1 { return 1 }
+    if ov_menu_win < 0 { return ov_close_overlay() }
+    if wm_is_open(ov_menu_win) == 0 { return ov_close_overlay() }
+    ov_close_overlay()
+    if i == 0 { wm_setfocus(ov_menu_win)  wm_raise(ov_menu_win)  return 1 }
+    if i == 1 { return wm_min(ov_menu_win) }
+    if i == 2 { return wm_max(ov_menu_win) }
+    if i == 4 { return desk_tile() }
+    # THE CLOSE ROW GOES THROUGH THE SAME REFUSAL THE CLOSE BOX DOES. Calling
+    # wm_close directly here would be a second way to destroy an unsaved buffer,
+    # and app_can_close exists precisely because the first one was.
+    if i == 8 {
+        if app_can_close(ov_menu_win) == 0 { return 1 }
+        return wm_close_fx(ov_menu_win)
+    }
+    return 1
+}
+
+fn ov_menu_run(i) {
+    if ov_menu_kind == OV_MENU_WIN { return ov_win_run(i) }
+    return ov_ctx_run(i)
+}
+
 fn ov_draw_menu(u) {
     mw = OV_MENU_W * u
-    rowh = 20 * u
-    seph = 7 * u
-    headh = 20 * u
-    # measure first: separators are shorter than rows, so the height is a sum
-    mh = headh
-    mi = 0
-    while mi < ov_menu_rows() {
-        if ov_menu_sep(mi) == 1 { mh = mh + seph } else { mh = mh + rowh }
-        mi = mi + 1
-    }
-    mh = mh + 6 * u
-    # KEEP IT ON SCREEN. The prototype clamps to the desktop with an 8 px
-    # margin; a menu opened near the right or bottom edge otherwise draws off
-    # the panel and the rows nearest the pointer are the ones lost.
-    mx = ov_menu_x
-    my = ov_menu_y
-    if mx + mw > px_w() - 8 * u { mx = px_w() - mw - 8 * u }
-    if my + mh > px_h() - 8 * u { my = px_h() - mh - 8 * u }
-    if mx < 0 { mx = 0 }
-    if my < 0 { my = 0 }
+    rowh = OV_MENU_ROWH * u
+    seph = OV_MENU_SEPH * u
+    headh = OV_MENU_HEADH * u
+    mh = ov_menu_h()
+    mx = ov_menu_mx()
+    my = ov_menu_my()
     fill_rgb(mx, my, mw, mh, theme(TH_PANEL_HI))
     fill_rgb(mx, my, mw, 1, theme(TH_LIT))
     fill_rgb(mx, my + mh - 1, mw, 1, theme(TH_CUT))

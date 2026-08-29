@@ -948,6 +948,13 @@ extern int  browser_lines(void);
 extern int  browser_runs(void);
 extern int  browser_status(void);
 extern void wm_resize(int win, int w, int h);
+/* The three the overlay menus need. This file declares what it binds rather
+ * than including ui.h, so a new binding needs its extern here too - the build
+ * catches the omission as an implicit declaration, which is what -Werror is
+ * for on a freestanding target where an implicit int return is a real bug. */
+extern void wm_move(int win, int x, int y);
+extern void wm_minimize(int win);
+extern void wm_max_toggle(int win);
 extern void wm_geometry(int win, int *x, int *y, int *w, int *h);
 
 extern void input_poll(void);
@@ -2144,6 +2151,16 @@ Value zl_calln(const char *name, int n, ...)
      * is the first thing that needs it: reflow is only observable if the
      * window can change width while the machine is running. */
     if (streq(name, "wm_size"))    { wm_resize((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    /* THE OVERLAY MENUS NEEDED THESE THREE. wm_move, wm_minimize and the
+     * maximise toggle all existed in wm.c and none was reachable from zl, so
+     * the window menu's "minimise", "maximise" and "tile onto the module" rows
+     * had nothing to call even once the pointer could reach them. wm_max goes
+     * through wm.c's own wrapper rather than reconstructing its test here:
+     * SK_UP, SK_DOWN and SNAP_NONE are private to that file, and copying them
+     * across the boundary is how the two paths would come to disagree. */
+    if (streq(name, "wm_move"))    { wm_move((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    if (streq(name, "wm_min"))     { wm_minimize((int)a[0].num); return zl_num(1); }
+    if (streq(name, "wm_max"))     { wm_max_toggle((int)a[0].num); return zl_num(1); }
     if (streq(name, "wm_w"))       { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gw); }
     if (streq(name, "wm_hh"))      { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gh); }
     if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }

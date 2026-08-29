@@ -308,6 +308,13 @@ typedef int (*desk_key_fn)(int code, int mods);
  * silently, one frame after the footer had drawn the word UNSAVED. */
 typedef int (*can_close_fn)(int win);
 
+/* AN OVERLAY IS MODAL TO THE POINTER, and until this existed it was modal to
+ * nothing at all. The only overlay hook wm.c had was a DRAW hook, so every menu
+ * row, palette row and activities tile was unclickable and clicks fell through
+ * to whatever was painted underneath. Returns non-zero when the overlay
+ * consumed the event. */
+typedef int (*overlay_click_fn)(int x, int y, int down);
+
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
 #define WM_TABS 4        /* apps sharing one window frame */
@@ -338,10 +345,12 @@ int  wm_thumb(int win, int dx, int dy, int dw, int dh);
 void wm_desk_click(desk_click_fn f);
 void wm_desk_key(desk_key_fn f);
 void wm_can_close(can_close_fn f);
+void wm_overlay_click(overlay_click_fn f);
 
 int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
 void wm_minimize(int win);
+void wm_max_toggle(int win);   /* maximise/restore, the same test the title control uses */
 int  wm_is_minimized(int win);
 void wm_raise(int win);
 void wm_focus(int win);
