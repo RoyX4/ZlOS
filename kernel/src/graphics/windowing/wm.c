@@ -1051,6 +1051,17 @@ void wm_damage_win(int win)
 #define ANIM_PRESS  3
 #define ANIM_PULSE  4
 #define ANIM_FADE   5
+/* THE FOCUS CHANGE, WHICH WAS A CUT AND WAS NOT SUPPOSED TO BE.
+ *
+ * design.h on ZD_MS_RISE: "the load-bearing half of the focus signal. A CUT
+ * (0ms) was offered and REFUSED: the knockout is a full value flip and cutting
+ * it makes the whole screen twitch."
+ *
+ * wm_focus invalidated and damaged and nothing else, so the flip happened in
+ * one frame - the refused option, shipped. The prototype transitions six
+ * properties on this change; this animates the one that carries it, the
+ * header band, over RISE. */
+#define ANIM_FOCUS  6
 
 /* THE FURNITURE IDS. Negative, so they cannot collide with a window index, and
  * named, so a reader of a wm_anim_at() call can tell what is animating. wm.c
@@ -1078,13 +1089,32 @@ void wm_damage_win(int win)
  * symmetric, and that is a choice rather than a measurement. */
 #define MS_TO_TICKS(ms) (((ms) + 5) / 10)
 
+/* THE DURATIONS COME FROM design.h NOW, AND THERE ARE THREE OF THEM.
+ *
+ * These read ease.h's EASE_MS_*, whose own comment says they are "exactly as
+ * the reference states them" and cites ds-reference.html - the SUPERSEDED
+ * predecessor. Its scheme had ten durations: 200, 100, 250, 1000, 2600, 160,
+ * 160, 7000.
+ *
+ * design.h replaced that with three - RISE 90, TRAVEL 160, SETTLE 240 - and
+ * defined ZD_MS_WIN / ZD_MS_PRESS / ZD_MS_OV / ZD_MS_PULSE as names mapped onto
+ * them, with the comment "They keep their names so wm.c's timeline keeps
+ * compiling; there are three values here, not ten, and that is the point."
+ *
+ * wm.c never took them up. The mapping was written, the old header stayed
+ * wired, and every animation in the compositor has been running on the
+ * predecessor's numbers since - a press acknowledging in 250 ms where the
+ * design says 90, a window opening in 200 where it says 160. Intent written
+ * down and never connected is this repo's most repeated failure and this is
+ * another instance of it. */
 static const unsigned char anim_ticks[] = {
     /* NONE  */ 0,
-    /* OPEN  */ MS_TO_TICKS(EASE_MS_WIN),     /* zwin   200 ms */
-    /* CLOSE */ MS_TO_TICKS(EASE_MS_WIN),     /* no reference counterpart */
-    /* PRESS */ MS_TO_TICKS(EASE_MS_PRESS),   /* zpress 250 ms */
-    /* PULSE */ MS_TO_TICKS(EASE_MS_PULSE),   /* zpulse 1000 ms */
-    /* FADE  */ MS_TO_TICKS(EASE_MS_OV),      /* zov/ztoast 160 ms */
+    /* OPEN  */ MS_TO_TICKS(ZD_MS_WIN),       /* TRAVEL 160 */
+    /* CLOSE */ MS_TO_TICKS(ZD_MS_WIN),       /* its mirror */
+    /* PRESS */ MS_TO_TICKS(ZD_MS_PRESS),     /* RISE    90 */
+    /* PULSE */ MS_TO_TICKS(ZD_MS_PULSE),     /* SETTLE 240 */
+    /* FADE  */ MS_TO_TICKS(ZD_MS_OV),        /* TRAVEL 160 */
+    /* FOCUS */ MS_TO_TICKS(ZD_MS_RISE),      /* RISE    90 */
 };
 
 /* Which curve each animation runs on. ds-reference.html lines 14-20: only the
@@ -1098,6 +1128,7 @@ static const unsigned char anim_curve[] = {
     /* PRESS */ EASE_STD,
     /* PULSE */ EASE_IN_OUT,
     /* FADE  */ EASE_OUT,
+    /* FOCUS */ EASE_STD,
 };
 
 /* THE ID IS NOT ALWAYS A WINDOW.
@@ -1135,6 +1166,26 @@ static int anim_start(int id, int kind, int x, int y, int w, int h)
             anim_damage(&anims[i]);
             return 1;
         }
+    /* FOCUS NEVER TAKES THE LAST SLOTS.
+     *
+     * The table is eight slots shared by every window and every piece of
+     * furniture, and a focus change starts TWO animations - the window gaining
+     * it and the one losing it. Adding that made focus the most frequent
+     * animation in the system, and it promptly starved a fade: wmtest's
+     * "the alpha really is partial" failed because ANIM_FADE was refused a slot
+     * and never ran, so the window drew opaque. The file's own comment two
+     * hundred lines up describes this hazard from the other direction, when an
+     * open animation that had "previously been REFUSED for want of a slot" got
+     * one and outvoted a fade.
+     *
+     * A focus transition is the cheapest thing here to lose - it degrades to
+     * the cut it replaced, which is what shipped until today - and a fade or an
+     * open degrading is a visible fault. So focus keeps two slots free for
+     * them. */
+    int free_slots = 0;
+    for (int i = 0; i < ANIM_MAX; i++) if (!anims[i].kind) free_slots++;
+    if (kind == ANIM_FOCUS && free_slots <= 2) return 0;
+
     for (int i = 0; i < ANIM_MAX; i++) {
         if (anims[i].kind) continue;
         anims[i].win = id;
@@ -1189,6 +1240,19 @@ int wm_anim_at(int id, int kind, int x, int y, int w, int h)
  * moving. The reference's zwin is 74% of the way there at the same point -
  * hosttest/easetest.c prints both numbers side by side. That single difference
  * is most of why the two desktops feel unalike in motion. */
+/* Two colours, p thousandths of the way from a to b. Integer, per channel, no
+ * float in the drawing path - the same rule fb_mix follows. */
+static unsigned blend_rgb(unsigned a, unsigned b, int p)
+{
+    if (p < 0) p = 0;
+    if (p > 1000) p = 1000;
+    int q = 1000 - p;
+    unsigned r = ((((a >> 16) & 0xFF) * q) + (((b >> 16) & 0xFF) * p)) / 1000;
+    unsigned g = ((((a >> 8)  & 0xFF) * q) + (((b >> 8)  & 0xFF) * p)) / 1000;
+    unsigned c = ((( a        & 0xFF) * q) + (( b        & 0xFF) * p)) / 1000;
+    return (r << 16) | (g << 8) | c;
+}
+
 static int anim_progress(int win, int kind)
 {
     for (int i = 0; i < ANIM_MAX; i++)
@@ -2132,6 +2196,14 @@ void wm_focus(int win)
      * correctness. Move/raise still retain content, which is the hot path. */
     if (wm_is_open(old)) { wm_invalidate_shell(old); wm_invalidate_client(old); }
     if (wm_is_open(win)) { wm_invalidate_shell(win); wm_invalidate_client(win); }
+    /* BOTH ENDS OF THE FLIP ANIMATE. The one gaining focus rises into the
+     * knockout and the one losing it falls back out, so the pair reads as one
+     * movement rather than as two independent twitches. The comment above has
+     * always said "both title bars change"; now both of them do it over time.
+     * The stale half of that comment - "the old loses its HUE and underline" -
+     * describes the predecessor's coloured header, not this knockout. */
+    if (wm_is_open(old)) wm_anim(old, ANIM_FOCUS);
+    if (wm_is_open(win)) wm_anim(win, ANIM_FOCUS);
 }
 
 void wm_minimize(int win)
@@ -2699,12 +2771,32 @@ static void chrome_header(const struct win *W, int r, int focused)
     if (hh > W->h) hh = W->h;
     int foot = W->y + hh - 1;
     if (iw <= 0 || hh < 2) return;
-    if (focused) {
+    /* THE BAND IS INTERPOLATED WHILE ANIM_FOCUS RUNS.
+     *
+     * A focus change used to be one frame: the header went from the plate's own
+     * ground to the full knockout in a single step. design.h calls that the
+     * refused option in as many words - "A CUT (0ms) was offered and REFUSED:
+     * the knockout is a full value flip and cutting it makes the whole screen
+     * twitch."
+     *
+     * Both directions are handled here, which is why the unfocused arm draws at
+     * all now: a window LOSING focus interpolates from knock back to panel, and
+     * without this it would snap out while the other rose in. */
+    /* W points into wins[], so its index is the offset - the animation is
+     * keyed by window index and chrome_header is handed the struct. */
+    int fp = anim_progress((int)(W - wins), ANIM_FOCUS);
+    if (focused || fp >= 0) {
         int ri = r > 0 ? r - 1 : 0;
+        unsigned band = t->knock;
+        if (fp >= 0) {
+            int mix = focused ? fp : 1000 - fp;
+            band = blend_rgb(t->panel, t->knock, mix);
+        } else if (!focused) {
+            band = t->panel;
+        }
         /* rows y+1 .. y+hh-2; row y is the merged top run above, row
          * y+hh-1 is the groove below, so the band is exactly hh */
-        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 2, ri,
-                          t->knock, t->knock);
+        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 2, ri, band, band);
     }
     fb_fill_px(ix, foot, iw, 1, focused ? t->ko_edge : t->border);
 }
