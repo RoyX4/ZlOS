@@ -1333,7 +1333,16 @@ static int streq(const char *a, const char *b)
 Value zl_calln(const char *name, int n, ...)
 {
     __builtin_va_list ap;
-    Value a[8];
+    /* ZEROED, because an under-supplied argument used to be STACK GARBAGE.
+     *
+     * Each builtin reads a fixed number of slots - br_click reads a[0..2] - and
+     * nothing checks that the caller supplied them. `br_click(ex, ey)` passed
+     * two and the third came from whatever was left on the stack, so a browser
+     * click was decided by a value that changed with the call path that reached
+     * it. Zeroing does not make a wrong call right, but it makes it the SAME
+     * wrong every time, which is the difference between a bug you can reproduce
+     * and one you cannot. */
+    Value a[8] = { 0 };
     int i;
     __builtin_va_start(ap, n);
     for (i = 0; i < n && i < 8; i++) a[i] = __builtin_va_arg(ap, Value);

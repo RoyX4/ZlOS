@@ -10352,8 +10352,29 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         # are both unchanged. So calling br_click on every EV_MOUSE meant moving
         # the pointer across a link fired a full fetch. menu_event gets this
         # right with the same test.
+        # THE BUTTON MASK GOES THROUGH. br_click(ex, ey) passed two arguments
+        # and browser_click reads three - cx, cy AND btn - so the third came
+        # from an uninitialised stack slot in the builtin dispatcher.
+        #
+        # The `band(ecode, 1) != 0` gate has to GO rather than move: browser.c
+        # computes its own press EDGE from btn (`down = (btn & 1) && !(click_btn
+        # & 1)`), and it can only do that if it SEES the releases. Filtering
+        # them out left click_btn latched, so the edge fired at most once.
         if ety == 4 {
-            if band(ecode, 1) != 0 { if br_click(ex, ey) == 1 { wm_dmg(win) } }
+            if br_click(ex, ey, ecode) == 1 { wm_dmg(win) }
+            return 1
+        }
+        # ...AND KEYS AND THE WHEEL ARE NOT SWALLOWED. This fell through to a
+        # bare `return 1` that ate every other event type. EV_KEY_DOWN is 1, and
+        # wm.c routes an extended keycode there with no EV_CHAR beside it, so
+        # the arrows, Home, End and the page keys never reached browser_key at
+        # all - a bound native with, from this arm, no caller.
+        if ety == 1 {
+            if br_key(ecode) == 1 { wm_dmg(win) }
+            return 1
+        }
+        if ety == 5 {
+            if br_scroll(0 - ecode * 3 * cell_h()) == 1 { wm_dmg(win) }
             return 1
         }
         return 1
