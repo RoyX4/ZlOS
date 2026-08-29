@@ -7,6 +7,29 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: the client rect follows the chrome, and the Files list becomes clickable (a4f8844)
+
+`design/presswork` · 7 files changed, 89 insertions(+), 21 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>7 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-30 — test: the field menu is verified too, and the probe fell into one trap twice (f1c3b7a)
 
 `design/presswork` · 4 files changed, 55 insertions(+), 13 deletions(-)

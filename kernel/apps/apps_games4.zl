@@ -1787,7 +1787,23 @@ fn bj_shuffle() {
     return 0
 }
 
+# THE SHOE HAS FIFTY-TWO CARDS AND NOTHING PAST THEM IS INITIALISED.
+#
+# bj_shuffle writes BJ_BUF[0..51] and no further. This function had no upper
+# bound at all: the only reshuffle test is in bj_deal, checked ONCE before the
+# four opening cards, so a hand that starts near the end walks straight off the
+# end of the deck. bj_hit keeps dealing while the total is under 22, and a hand
+# of low cards can take eight or more - reading whatever bytes happen to follow
+# the buffer and turning them into cards. Uninitialised RAM dealt as a hand: the
+# values are arbitrary, so the score is arbitrary, and on a different boot it is
+# arbitrary differently.
+#
+# Bounded where the shoe is READ, not only where a hand starts, because the
+# read is the thing that can run past the end. Reshuffling mid-hand is the
+# honest recovery - a real shoe does the same - and it keeps every dealt card a
+# real card.
 fn bj_take(base, nn) {
+    if bj_top >= 52 { bj_shuffle() }
     poke8(base + nn, peek8(BJ_BUF + bj_top))
     bj_top = bj_top + 1
     return nn + 1
