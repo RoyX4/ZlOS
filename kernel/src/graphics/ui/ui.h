@@ -356,6 +356,7 @@ int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
 void wm_minimize(int win);
 void wm_max_toggle(int win);   /* maximise/restore, the same test the title control uses */
+int  wm_over_below(int win);   /* does this plate occlude another - the chrome's own test */
 int  wm_is_minimized(int win);
 void wm_raise(int win);
 void wm_focus(int win);

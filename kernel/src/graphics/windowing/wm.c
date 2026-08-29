@@ -4225,6 +4225,12 @@ static void wm_toggle_max(int win)
  * so the menu row and a double-click cannot land in different states. */
 void wm_max_toggle(int win) { wm_toggle_max(win); }
 
+/* IS THIS PLATE OVER ANOTHER ONE? The chrome has asked this since the occluder
+ * was written; the window menu's row 5 stated the answer as a literal because
+ * nothing published it. Same shape as the row below it, which stated the focus
+ * state until wm_focus() was read instead. */
+int wm_over_below(int win) { return wm_is_open(win) ? win_over_below(win) : 0; }
+
 static void route_mouse(int x, int y, int btn)
 {
     int down = (btn & 1) && !(last_btn & 1);

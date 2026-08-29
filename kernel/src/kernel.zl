@@ -9080,6 +9080,22 @@ fn set_hit_row(x, y, w, ex, ey) {
     return 1
 }
 
+# THE SLIDER'S TARGET IS ITS TRACK, NOT ITS WHOLE ROW.
+#
+# The focus-bar row was hit-tested with set_hit_row, whose x test is the full
+# body width, and the result fed straight into set_slider_v - which CLAMPS an
+# out-of-range x to the nearest end. So clicking the words "focus bar", in the
+# label column, silently set the bar to its minimum; clicking anywhere in the
+# empty space right of the track set it to its maximum. A label is not a
+# control, and a clamp is not a hit test.
+fn set_hit_trk(x, y, w, ex, ey) {
+    if ex < set_trk_x(x) { return 0 }
+    if ex >= set_trk_x(x) + set_trk_w(x, w) { return 0 }
+    if ey < y { return 0 }
+    if ey >= y + set_rowh() { return 0 }
+    return 1
+}
+
 # ---- the slider --------------------------------------------------------------
 # .mtrack with the settings pane's own 11px height override. THE FILL IS STEEL
 # AND THAT IS A RULE, NOT A CHOICE: ZD_STEEL is the machine's own reading and
@@ -10152,7 +10168,7 @@ fn settings_event(win, ety, ecode, ex, ey) {
                 wm_damage_theme()
                 return 1
             }
-            if set_hit_row(setev_x, set_row2_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
+            if set_hit_trk(setev_x, set_row2_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
                 ui_fbar(set_slider_v(set_trk_x(setev_x), set_trk_w(setev_x, setev_w), 1, 6, ex))
                 wm_damage_theme()
                 return 1
@@ -11186,7 +11202,16 @@ fn ov_win_label(i) {
     if i == 2 { return "maximise" }
     if i == 3 { return "-" }
     if i == 4 { return "tile onto the module" }
-    if i == 5 { return "this plate is on the field" }
+    # READ, like row 6 below it. The authority builds this as
+    # `'this plate is ' + (isOver ? 'over another' : 'on the field')`, and the
+    # chrome has asked the same question since the occluder was written - it
+    # just had no way to say so from here. This row stated one of the two
+    # answers for every window in every state, which is the exact fault fixed
+    # one row down a few commits ago; they were adjacent and only one was seen.
+    if i == 5 {
+        if wm_over_p(ov_menu_win) == 1 { return "this plate is over another" }
+        return "this plate is on the field"
+    }
     # "header is knocked out / at rest" WAS MISSING ENTIRELY. It is the row
     # that names the focus signal this whole design is built on, and it is the
     # second of the two DISABLED rows whose value column carries a live ratio.

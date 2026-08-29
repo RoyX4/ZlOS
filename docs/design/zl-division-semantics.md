@@ -129,3 +129,27 @@ ac_rand(4)  after:   24.9 / 25.1 / 25.1 / 24.9
 
 It is what made the `/` claim plausible by association: one real
 double-rounding bug in the same file made a second one easy to believe.
+
+
+## The wrong claim came back as evidence
+
+The audit round that caught this ran while the false comments were still in the
+tree. It returned **four** findings resting on the same premise — including one
+asserting that Reversi "reads the wrong square" because `ix / RV_N` is
+fractional, and another that the Archive's block arithmetic is wrong for the
+same reason. Both were confirmed by an adversarial verifier whose whole job is
+to refuse a finding it cannot re-derive.
+
+It re-derived them correctly. The premise it re-derived them *from* was the
+comment I had written.
+
+That is the failure worth naming: an audit checks code against the repo's stated
+facts, so a wrong stated fact does not get caught by more auditing — it gets
+**amplified**, and comes back wearing the authority of an independent
+confirmation. Two of those findings were on my screen with a `real: true` verdict
+and a plausible failure story, and the only thing that stopped me applying them
+was having corrected the premise an hour earlier.
+
+The practical rule: when a shared premise turns out to be wrong, every finding
+that cites it has to be re-examined, not just the code that was changed on the
+strength of it. Grepping the audit output for the premise took one command.

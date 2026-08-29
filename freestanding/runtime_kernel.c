@@ -958,6 +958,7 @@ extern unsigned int intel_refresh_mhz_derived(void);
 extern void wm_move(int win, int x, int y);
 extern void wm_minimize(int win);
 extern int  wm_is_minimized(int win);
+extern int  wm_over_below(int win);
 extern void wm_max_toggle(int win);
 extern void wm_geometry(int win, int *x, int *y, int *w, int *h);
 
@@ -2188,6 +2189,7 @@ Value zl_calln(const char *name, int n, ...)
      * way to ask: wm_is_minimized existed in wm.c and was declared in ui.h, but
      * was never bound, so the zl side could not tell one from an open window. */
     if (streq(name, "wm_min_p"))   return zl_num((double)wm_is_minimized((int)a[0].num));
+    if (streq(name, "wm_over_p"))  return zl_num((double)wm_over_below((int)a[0].num));
     if (streq(name, "wm_min"))     { wm_minimize((int)a[0].num); return zl_num(1); }
     if (streq(name, "wm_max"))     { wm_max_toggle((int)a[0].num); return zl_num(1); }
     if (streq(name, "wm_w"))       { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gw); }
