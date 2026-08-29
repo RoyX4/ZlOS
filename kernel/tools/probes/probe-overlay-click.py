@@ -24,10 +24,12 @@ The control is a click on the palette's own header - inside the sheet, on no
 row - which must NOT open anything. Without it the assertion would also be
 satisfied by a build that opened an app on any click anywhere.
 
-VERIFIED IN BOTH DIRECTIONS. Measured on this branch, screen 1920x1200:
+VERIFIED IN BOTH DIRECTIONS, both surfaces. Measured, screen 1920x1200:
 
-    with the route_mouse hook       3 windows -> 4   PASS
-    hook removed (the pre-fix state) 3 windows -> 3   FAIL
+    everything wired                  3 -> 4 -> 5   PASS
+    route_mouse's overlay hook removed 3 -> 3        FAIL (palette row)
+    desk_click's right-button arm removed             FAIL (menu never opens,
+                                                            and its row with it)
 
 Both control checks - the header click opening nothing, and the sheet still
 being painted afterwards - PASS IN BOTH BUILDS. That is the point of them: they
@@ -190,7 +192,19 @@ def main():
         # the header click. If it is not, the row assertion below is measuring a
         # desktop rather than a palette, and would read as a dead control.
         #
-        # ROW 2, NOT ROW 0. Row 0 is System Monitor and row 1 is Files, and
+        # ROW 3, "open 05 kernel log", AND EACH SURFACE GETS ITS OWN APP.
+        #
+        # This was row 2, Settings - and the field-menu case further down clicks
+        # ITS "open 11 settings" row. Settings was therefore already open by the
+        # time the menu was tested, reg_open raised the existing window instead
+        # of making a second, the count could not move, and the menu read as
+        # dead. That is the SAME trap as row 0 being System Monitor, hit a
+        # second time from a different direction: an assertion that cannot
+        # succeed is indistinguishable from a feature that does not work.
+        #
+        # Two surfaces, two apps neither of which the boot composition opens.
+        #
+        # ROW 3, NOT ROW 0. Row 0 is System Monitor and row 1 is Files, and
         # BOTH ARE ALREADY OPEN AT BOOT - reg_open raises an open window rather
         # than making a second one, so the window count cannot move and the
         # probe fails against a perfectly working build. Row 2 is Settings,
@@ -204,7 +218,7 @@ def main():
         check("the header click did not dismiss the palette", still_up,
               "sheet still painted" if still_up else "the sheet is gone")
 
-        click(qmp, sheet_x + sheet_w // 2, sheet_y + (62 + 2 * 22 + 11) * u, W, H)
+        click(qmp, sheet_x + sheet_w // 2, sheet_y + (62 + 3 * 22 + 11) * u, W, H)
         time.sleep(0.8)
         after_row = wincount()
         check("clicking a palette row opened a window",
@@ -237,10 +251,14 @@ def main():
         check("right-clicking the field opened a menu", menu_up,
               "a plate is painted at the pointer" if menu_up else "nothing appeared")
 
-        # Row 10 of the field menu is "open 11 settings". Rows are 20 units with
-        # a 20-unit head and two 7-unit separators above it (after rows 2 and 6),
-        # so its middle is 20 + 8*20 + 2*7 + 10 = 204 units down from the plate.
-        click(qmp, fx + 100, fy + 204, W, H)
+        # Row 10 of the field menu is "open 11 settings". Rows are 20 units,
+        # separators 7, under a 20-unit head. THREE separators precede row 10
+        # (ov_ctx_sep flags 2, 6 and 9), not two - the first version of this
+        # counted two and clicked 13 units low, landing on row 11 "lock session",
+        # which opens no window and so read as a dead menu.
+        #
+        #   20 head + 7 rows x 20 + 3 seps x 7 = 181, middle 191.
+        click(qmp, fx + 100, fy + 191, W, H)
         time.sleep(0.9)
         n_after_menu = wincount()
         check("a field-menu row opened its app",
