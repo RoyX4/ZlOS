@@ -9994,6 +9994,19 @@ fn settings_event(win, ety, ecode, ex, ey) {
             wm_dmg(win)
             return 1
         }
+        # THE VIEWPORT FLOOR. Every hit test below this line is against a row
+        # in the SCROLLING body, and the draw clips those rows to the viewport
+        # (set_focus_ctl gates each on set_vis against set_body_y) while the hit
+        # tests did not. So one wheel notch put a control's hit rectangle up
+        # underneath the tab strip, where the row is not drawn at all - clicking
+        # a tab toggled the knockout, and clicking where the control appeared to
+        # be did nothing.
+        #
+        # A draw that clips and a hit test that does not is two different
+        # answers to "where is this control", and the one the user can see is
+        # the one that loses.
+        if ey < set_body_y(setev_ay) { return 1 }
+
         # The two live controls are on the FOCUS tab only, and they are the
         # first two rows of its scrolling body - so their y moves with the
         # scroll and the hit test asks the same functions the draw did.
