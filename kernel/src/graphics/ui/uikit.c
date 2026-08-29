@@ -413,6 +413,13 @@ static int text_run(int x, int y, const char *s, unsigned rgb,
 
 int ui_text_tracked_w(const char *s, int size, int flags, int track_x10)
 {
+    /* THE MEASURE MUST FOLLOW THE SWITCH TOO. If the draw zeroes the tracking
+     * and the measure does not, every right-flushed run in the system is placed
+     * for a width the glyphs no longer have - which is the same
+     * measure-one-thing-draw-another fault this file's own header warns about
+     * for UI_F_CAPS. */
+    if (!ui_track_get()) track_x10 = 0;
+
     /* the mono path has a fixed cell and fb.c ignores a size for it, so a
      * track would be the only thing making a mono run stop lining up with the
      * column beside it. Refused rather than silently applied. */
@@ -423,6 +430,11 @@ int ui_text_tracked_w(const char *s, int size, int flags, int track_x10)
 void ui_text_tracked(int x, int y, const char *s, unsigned rgb,
                      int size, int flags, int track_x10)
 {
+    /* `body.notrack .t-big { letter-spacing: 0 }` is the reference's own switch
+     * for this, and it zeroes the SPACING while keeping the face - which is
+     * what passing 0 here does. */
+    if (!ui_track_get()) track_x10 = 0;
+
     /* UNGATED, deliberately. ui_text() checks ui_mode_get() because ui.c's
      * cursor runs the same widget code twice, once to hit-test and once to
      * draw, and a hit-test pass must record no ink. This pair is a PRIMITIVE

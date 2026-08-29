@@ -232,6 +232,12 @@ unsigned ui_ceil_dn_q4(unsigned rgb);   /* room downward: ratio to black    */
 unsigned ui_ceil_up_q4(unsigned rgb);   /* room upward:   ratio to white    */
 int ui_knockout_get(void);              /* 1 == the knockout is on          */
 int ui_knockout_set(int on);            /* returns the state it settled on  */
+int ui_over_get(void);                  /* the occlusion edge               */
+int ui_over_set(int on);
+int ui_motion_get(void);                /* animation timings                */
+int ui_motion_set(int on);
+int ui_track_get(void);                 /* letter-spacing on tracked faces  */
+int ui_track_set(int on);
 /* the focus bar's width in DESIGN px, and the prototype's own slider range. */
 #define UI_FBAR_MIN 1
 #define UI_FBAR_MAX 6

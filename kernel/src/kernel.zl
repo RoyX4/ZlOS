@@ -9299,7 +9299,15 @@ fn set_press_ctl(x, y, w) {
     set_tog_row(x, y, w, 1, desk_crop_on, "crop marks", "overprint job 3, vermilion, at the margins")
     set_tog_row(x, y, w, 2, desk_ruler_on, "memory map ruler", "Datum, on the foot")
     set_tog_row(x, y, w, 3, desk_slug_on, "printer's slug", "PLATE, one mono line, measured")
-    return 4 * set_rowh()
+    # TWO MORE OF THE PROTOTYPE'S THIRTEEN, and both gate behaviour that
+    # already exists rather than adding any. A switch wired to nothing is the
+    # dead-control fault wearing a nicer surface, which is why these two and not
+    # the other five: `raster clock` and `per window timing` are segmented
+    # controls this pane has no widget for, and `surface ladder` and `ui scale`
+    # would need a second ladder and a mode change respectively.
+    set_tog_row(x, y, w, 4, ui_motion_on(), "motion", "RISE 90 / TRAVEL 160 / SETTLE 240, one curve")
+    set_tog_row(x, y, w, 5, ui_track_on(), "label tracking", "ZD_TR_LAB 1.4 and ZD_TR_BIG 2.6")
+    return 6 * set_rowh()
 }
 fn set_trk_x(x)  { return x + SET_LABW * ui() }
 fn set_trk_w(x, w) { return w - SET_LABW * ui() - SET_VALW * ui() - SET_GAP * ui() }
@@ -9827,6 +9835,13 @@ fn set_bound_row(x, y, w, nm, ground) {
     return set_trow(x, y, w)
 }
 fn set_bound_body(x, y, w) {
+    # THE BOUNDARY TAB'S FIRST CONTROL. It drew two tables and two wells and
+    # nothing you could touch - a whole tab of prose in a pane whose subject is
+    # the switches. `tog('occlusion edge', 'over', ...)` is the reference's, and
+    # the chrome already computes the state; off falls back to the plain ring,
+    # which is exactly what not applying `.win.over` does there.
+    set_tog_row(x, y, w, 0, ui_over_on(), "occlusion edge", "off falls back to the plain ZD_CUT ring")
+    y = y + set_rowh() + SET_STACK * ui()
     setbb_x = x
     setbb_y = y
     setbb_w = w
@@ -10188,6 +10203,33 @@ fn settings_event(win, ety, ecode, ex, ey) {
             if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 3), setev_w, ex, ey) == 1 {
                 desk_slug_on = 1 - desk_slug_on
                 wm_damage(0, 0, px_w(), px_h())
+                return 1
+            }
+            # THE TWO NEW ROWS, wired in the same breath they were drawn in.
+            # Both change how EVERY window is composited, so both damage the
+            # whole screen rather than the pane: motion changes what a
+            # transition looks like and tracking changes the width of every
+            # tracked run in the system.
+            if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 4), setev_w, ex, ey) == 1 {
+                ui_motion(1 - ui_motion_on())
+                if ui_motion_on() == 1 { note_say2("motion on", "RISE 90 / TRAVEL 160 / SETTLE 240, one curve", 800) } else { note_say2("motion off", "every transition completes on the frame it starts", 800) }
+                wm_damage_theme()
+                return 1
+            }
+            if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 5), setev_w, ex, ey) == 1 {
+                ui_track(1 - ui_track_on())
+                if ui_track_on() == 1 { note_say2("label tracking on", "ZD_TR_LAB 1.4 and ZD_TR_BIG 2.6", 800) } else { note_say2("label tracking off", "the letter-spacing goes, the faces stay", 800) }
+                wm_damage_theme()
+                return 1
+            }
+        }
+        # THE BOUNDARY TAB HAS A CONTROL NOW and therefore needs an arm. It had
+        # neither, which is why it needed neither.
+        if set_tab == SET_BOUNDARY {
+            if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 0), setev_w, ex, ey) == 1 {
+                ui_over(1 - ui_over_on())
+                if ui_over_on() == 1 { note_say2("occlusion edge on", "a plate over another gets the lighter ring", 800) } else { note_say2("occlusion edge off", "every plate takes the plain ZD_CUT ring", 800) }
+                wm_damage_theme()
                 return 1
             }
         }

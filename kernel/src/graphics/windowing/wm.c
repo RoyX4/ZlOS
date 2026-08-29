@@ -1292,6 +1292,11 @@ static unsigned blend_rgb(unsigned a, unsigned b, int p)
 
 static int anim_progress(int win, int kind)
 {
+    /* MOTION OFF means every transition completes on the frame it starts. Not
+     * "no animation runs" - the animation still runs, it is just already
+     * finished, so every reader that asks for progress gets the settled value
+     * and nothing has to learn a second code path. */
+    if (!ui_motion_get()) return 1000;
     for (int i = 0; i < ANIM_MAX; i++)
         if (anims[i].kind == kind && anims[i].win == win) {
             unsigned elapsed = idt_ticks() - anims[i].start;
@@ -3282,7 +3287,9 @@ static void chrome_shell(int win, int focused)
      * full height. Radius in PRESSWORK encodes how much an object can move. */
     int r = win_maxed(win) ? UI_DP(t, ZD_R_BOLT) : t->radius;
 
-    chrome_seat(W, r, focused, win_over_below(win));
+    /* the occlusion edge, switchable: off falls back to the plain ring, which
+     * is what the reference's `.win.over` rule does when it is not applied */
+    chrome_seat(W, r, focused, ui_over_get() && win_over_below(win));
 
     if (W->flags & WF_NOCHROME) return;
 

@@ -596,6 +596,12 @@ extern unsigned ui_ceil_dn_q4(unsigned rgb);
 extern unsigned ui_ceil_up_q4(unsigned rgb);
 extern int ui_knockout_get(void);
 extern int ui_knockout_set(int on);
+extern int  ui_over_get(void);
+extern int  ui_over_set(int on);
+extern int  ui_motion_get(void);
+extern int  ui_motion_set(int on);
+extern int  ui_track_get(void);
+extern int  ui_track_set(int on);
 extern int ui_focus_bar_dp(void);
 extern int ui_focus_bar_set(int n);
 extern unsigned ui_ref_color(int which);
@@ -1817,6 +1823,12 @@ Value zl_calln(const char *name, int n, ...)
      * state asked for, because ui_focus_bar_set clamps - a caller that echoed
      * its own argument back into its slider would draw a thumb past the end. */
     if (streq(name, "ui_knock"))   return zl_num((double)ui_knockout_set((int)a[0].num));
+    if (streq(name, "ui_over"))    return zl_num((double)ui_over_set((int)a[0].num));
+    if (streq(name, "ui_over_on")) return zl_num((double)ui_over_get());
+    if (streq(name, "ui_motion"))  return zl_num((double)ui_motion_set((int)a[0].num));
+    if (streq(name, "ui_motion_on")) return zl_num((double)ui_motion_get());
+    if (streq(name, "ui_track"))   return zl_num((double)ui_track_set((int)a[0].num));
+    if (streq(name, "ui_track_on")) return zl_num((double)ui_track_get());
     if (streq(name, "ui_knock_on"))return zl_num((double)ui_knockout_get());
     if (streq(name, "ui_fbar"))    return zl_num((double)ui_focus_bar_set((int)a[0].num));
     if (streq(name, "ui_fbar_dp")) return zl_num((double)ui_focus_bar_dp());

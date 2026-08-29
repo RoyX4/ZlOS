@@ -452,6 +452,31 @@ int ui_ref_num(int which)
  * after. Doing it here would make ui.c depend on the compositor and break the
  * layering ui.h states.
  */
+/* THREE MORE SWITCHES THE PROTOTYPE HAS AND THIS PANE DID NOT.
+ *
+ * Each gates behaviour that already exists rather than adding any - which is
+ * the only kind of control worth drawing. A switch wired to nothing is the
+ * dead-control fault with a nicer surface.
+ *
+ *   over    the occlusion edge. `.win.over` in the reference; the chrome
+ *           already computes it, and off falls back to the plain ring.
+ *   motion  the animation timings. Off means every transition completes on the
+ *           frame it starts, which is what a machine with no motion does.
+ *   track   letter-spacing on the tracked faces. `body.notrack .t-big
+ *           { letter-spacing: 0 }` is the reference's own switch for it.
+ *
+ * Like the knockout above, NONE of these repaints: the caller damages. */
+static int over_off;
+static int motion_off;
+static int track_off;
+
+int ui_over_get(void)     { return !over_off; }
+int ui_over_set(int on)   { over_off   = on ? 0 : 1; return !over_off; }
+int ui_motion_get(void)   { return !motion_off; }
+int ui_motion_set(int on) { motion_off = on ? 0 : 1; return !motion_off; }
+int ui_track_get(void)    { return !track_off; }
+int ui_track_set(int on)  { track_off  = on ? 0 : 1; return !track_off; }
+
 int ui_knockout_get(void) { return !knock_off; }
 int ui_knockout_set(int on)
 {
