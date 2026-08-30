@@ -1226,7 +1226,14 @@ fn draw_rail_row(ry, num, nm, ico, us, running, focused, hovered) {
     # four things the token may do: scrollbar thumb, resize grip, chart mark,
     # disabled menu row. A readout is none of them. The prototype uses .ink3 for
     # both .slot .us and #regcount.
-        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(us), ny, us, theme(TH_TEXT_DIM))
+        # ...AND THE TIMING SWITCH REACHES HERE TOO. proto:446 is
+        # `body.nous .slot .us { display: none }`, toggled at proto:2719 - the
+        # same `per window timing` control the System Monitor's column already
+        # follows. set_us's readers were the monitor and nothing else, so `off`
+        # silenced one surface and left this one printing.
+        if set_us != 2 {
+            num_aa(rw - RAIL_SLOT_PR * u - s3_numw(us), ny, us, theme(TH_TEXT_DIM))
+        }
     }
     return 0
 }
@@ -2014,8 +2021,27 @@ RASTER_SCALE = 128                 # stored units in ONE wm_budget()
 # it, because a threshold rounded up marks one band of frames as fine that the
 # reference marks as late. 108/128 is 84.4 %, and that is the real figure.
 RASTER_WARN  = 108
-RASTER_FOOT  = 4                   # dp from the band's floor to the base rule
-RASTER_HEAD  = 4                   # dp of clear the tallest column keeps
+# THE PLOT'S CANVAS IS THE PADDING BOX, NOT THE BAND.
+#
+# These were applied against strip_h() - the full 30 dp BORDER box - while the
+# authority draws into `#raster`'s canvas, which is its 28 dp padding box
+# (proto:325 sets border-box, proto:486-487 gives the band 30 with a 2 dp
+# border-bottom). Its two figures are `bh = (s.us / budget) * (h - 10)` and a
+# base rule at `h - 5` (proto:2476, :2478), so over h = 28 the usable height is
+# 18 dp and the base sits at 23.
+#
+# The tree had 30 - 4 - 4 = 22 usable and the base at 26. Every column was
+# drawn 22/18 = 1.222x its specified height and the base rule sat 3 dp low - so
+# the raster strip, which is the evidence the whole PRESS argument rests on,
+# read as CLOSER TO THE FRAME BUDGET than the machine actually was. The figures
+# feeding it are correct reads; only the drawing of them was rescaled, which is
+# the worst shape this fault can take.
+#
+# AND probe-field COULD NOT SEE IT. That probe reads the band's outer edges -
+# where the ZD_CUT ground ends and the ZD_LIT rule sits - and never touches the
+# plot's interior. It has an interior case now.
+RASTER_FOOT  = 5                   # proto:2478 - the base rule at h - 5
+RASTER_HEAD  = 5                   # proto:2476 - h - 10 usable, so 5 of clear
 RASTER_GAP   = 12                  # dp of quiet either side of the plot
 RASTER_MIN   = 64                  # columns the plot keeps before the readout goes
 RD_GAP       = 11                  # dp between the readout's fields
@@ -2262,7 +2288,9 @@ fn draw_strip() {
         # something printed, and the plot is what is left between them.
         x0 = raster_x0()
         x1 = raster_x1()
-        base = sh - RASTER_FOOT * u
+        # sh less the band's own border: the canvas is the padding box.
+        canvas = sh - RULE_H * u
+        base = canvas - RASTER_FOOT * u
         top = RASTER_HEAD * u
         if x1 > x0 {
             # THE BASE RULE, and it is the thing that turns a scatter of ticks
@@ -2451,7 +2479,17 @@ fn draw_grid() {
     # same shape one screen below the comment describing it would have been
     # careless twice.
     if desk_crop_on == 1 { draw_crop_marks() }
-    if desk_legend_on == 1 { draw_grid_legend() }
+    # THE LEGEND DESCRIBES THE GRID, SO IT GOES WITH THE GRID.
+    #
+    # This gated only on desk_legend_on, which is initialised to 1 and has no
+    # writer anywhere - no Settings row, no menu item, three mentions in the
+    # whole tree. So with the grid switched OFF the desk still printed
+    # "MODULE 12 x 8 ... GUTTER 12": a legend for ruling that is not on screen.
+    # proto:2440-2442 blanks it whenever S.cfg.grid is false.
+    #
+    # The crop-mark half above is correct as it stands - proto:2427 keeps the
+    # marks on their own switch - and must not be folded in with this.
+    if desk_grid_on == 1 { if desk_legend_on == 1 { draw_grid_legend() } }
     return 0
 }
 
@@ -3269,6 +3307,29 @@ fn info_line(msg) {
     color(C_CYAN)  put(" INFO ")
     color(C_GREY)  put("] ")
     color(C_GREY)  print(msg)
+}
+# A THIRD LEVEL, BECAUSE THERE WERE ONLY TWO AND THE LOG PANE NEEDED A COLUMN.
+#
+# The authority's kernel-log table has a `level` column (proto R.log, 14% wide)
+# and zlOS drew two columns instead of four - because with ok_line and
+# info_line as the ONLY emitters there was nothing for a level column to say.
+# Every degraded condition this kernel reports was reaching the console as
+# INFO or as untagged prose, so a `--level warn` filter over it could only ever
+# show an empty pane.
+#
+# WARN IS FOR A DEGRADED FALLBACK, NOT FOR A DESIGN STATEMENT. "no heap, zlfs
+# mounts on demand, no scheduler" is what this kernel IS and stays INFO; "no
+# APIC - staying on the legacy 8259 PIC" is a capability the machine wanted and
+# did not get, and that is the distinction the column is worth having.
+#
+# The tag is SIX CHARACTERS like the other two, so the message column starts at
+# the same screen position on every line and the pane can read the level off
+# fixed columns rather than parsing.
+fn warn_line(msg) {
+    color(C_GREY)   put("  [")
+    color(C_YELLOW) put(" WARN ")
+    color(C_GREY)   put("] ")
+    color(C_GREY)   print(msg)
 }
 
 # ---- the work the shell can do ---------------------------------------------
@@ -9370,6 +9431,18 @@ SEG_US     = 2                     # PRESS:  per window timing - proto:2188
 # REFERENCE constants. So the control is drawn, it is live, and picking the
 # second rung reports that the rung is not built - which is the same answer the
 # Renderer's wireframe toggle gives, for the same reason.
+# ITS ONLY READER IS ITS OWN HIGHLIGHT, AND THAT IS SAID OUT LOUD.
+#
+# set_ladder has three mentions: this declaration, seg_sel - which is the
+# control's own knocked-out rung - and seg_pick, which is its setter. That is
+# exactly the dead-control signature this round has been removing, and it is
+# here on purpose because there is ONE ladder: design.h:54-59 puts a second
+# light/raking ladder out of scope, so "presswork" is not a choice, it is the
+# state. The rung that does something is the OTHER one, which reports that the
+# thing it names is not built.
+#
+# check-dead-state.py cannot see this class - its rule is exactly one mention,
+# and this has three. `--suspect` lists them instead of pretending otherwise.
 set_ladder = 0                     # 0 presswork, 1 raking
 # PER WINDOW TIMING HAS TWO REAL READINGS AND AN OFF. usOf at proto:1606-1610
 # switches between `w.us + ' us'` and `(w.px / 1000) + ' kpx'`; the System
@@ -9673,7 +9746,7 @@ fn set_pct_q4(v) { return idiv(v * 1000000, set_plate_a()) }
 # agree until one of them is edited.
 fn set_row1_y(y) { return y }
 fn set_row2_y(y) { return y + set_rowh() }
-# The Nth control row. FOCUS has two and PRESS now has four; one function so a
+# The Nth control row. FOCUS has two and PRESS has seven; one function so a
 # fifth cannot be drawn at one pitch and hit-tested at another - which is the
 # fault the Files list had in three places.
 fn set_rowN_y(y, n) { return y + n * set_rowh() }
@@ -9685,6 +9758,31 @@ fn set_tog_row(x, y, w, n, on, nm, note) {
     set_toggle(x, stg_y + (set_rowh() - set_togh()) / 2, on)
     label(x + set_togw() + SET_GAP * ui(), stg_y + (set_rowh() - label_h(T_BODY)) / 2, nm, theme(TH_TEXT), T_BODY, W_REG)
     text_aa(x + w - ui_tw(note, PW_SM, PW_MONO), stg_y + (set_rowh() - cell_h()) / 2, note, theme(TH_TEXT_DIM))
+    return 0
+}
+
+# THE SAME ROW WHOSE NOTE ENDS IN A LIVE RATIO.
+#
+# proto:2144's note is `'off falls back to ZD_CUT at ' + r2('--zd-cut',
+# '--zd-base') + ':1'` - the figure is COMPOSED from the tokens, so it moves
+# when they do. The tree's note was the constant "off falls back to the plain
+# ZD_CUT ring", which is the same sentence with the measurement taken out of
+# it, on the one tab whose subject is measurements. set_r_cut() is that exact
+# ratio and this tab already draws it twice.
+fn set_tog_row_r(x, y, w, n, on, nm, note, v4) {
+    stgr_y = set_rowN_y(y, n)
+    if set_vis(stgr_y, set_rowh()) == 0 { return 0 }
+    set_toggle(x, stgr_y + (set_rowh() - set_togh()) / 2, on)
+    label(x + set_togw() + SET_GAP * ui(), stgr_y + (set_rowh() - label_h(T_BODY)) / 2, nm, theme(TH_TEXT), T_BODY, W_REG)
+    # the ratio is right-flushed and the note runs up to it, so the figure sits
+    # where every other figure on this tab sits
+    stgr_ty = stgr_y + (set_rowh() - cell_h()) / 2
+    set_rat_r(x + w, stgr_ty, v4, 4, theme(TH_TEXT_2))
+    # set_rat_r's own width, from its own two terms: the decimal it draws plus
+    # the ":1" and the two cells it reserves. Measured the way it measures, so
+    # the note cannot overlap the figure at any value.
+    stgr_rw = set_decw(set_q(v4, 4), 4) + 2 * cell_w() + 2 * cell_w()
+    text_aa(x + w - stgr_rw - ui_tw(note, PW_SM, PW_MONO), stgr_ty, note, theme(TH_TEXT_DIM))
     return 0
 }
 
@@ -9735,7 +9833,7 @@ fn set_press_ctl(x, y, w) {
     # controls this pane has no widget for, and `surface ladder` and `ui scale`
     # would need a second ladder and a mode change respectively.
     set_tog_row(x, y, w, 4, ui_motion_on(), "motion", "RISE 90 / TRAVEL 160 / SETTLE 240, one curve")
-    set_tog_row(x, y, w, 5, ui_track_on(), "label tracking", "ZD_TR_LAB 1.4 and ZD_TR_BIG 2.6")
+    set_tog_row(x, y, w, 5, ui_track_on(), "label tracking", "off is what shipping without UI_F_TRACK looks like")
     # `per window timing` IS ONE OF THE TWO THIS PANE HAD NO WIDGET FOR, and it
     # has one now - see the SEG_* block. It is the one of the pair whose data
     # this machine already measures: usOf at proto:1606-1610 switches between
@@ -9747,7 +9845,13 @@ fn set_press_ctl(x, y, w) {
     # kernel counts composites. Drawing a rung for a clock nothing counts would
     # be the dead control this whole round has been removing.
     set_seg_row(x, y, w, 6, SEG_US, "per window timing", "app us, or the client area it repaints")
-    return 6 * set_rowh()
+    # SEVEN ROWS, NOT SIX. This returned 6 while set_press_ctl draws n = 0..6 -
+    # the seventh being `per window timing`, the segmented control added when
+    # the widget existed for it. set_press_body adds this and immediately draws
+    # a head, so the caption and its rule landed INSIDE that row, on top of a
+    # live three-rung bar. The hit test re-derives set_rowN_y(y, 6) so the
+    # control still worked and could not be read.
+    return 7 * set_rowh()
 }
 fn set_trk_x(x)  { return x + SET_LABW * ui() }
 fn set_trk_w(x, w) { return w - SET_LABW * ui() - SET_VALW * ui() - SET_GAP * ui() }
@@ -10316,7 +10420,7 @@ fn set_bound_body(x, y, w) {
     # the switches. `tog('occlusion edge', 'over', ...)` is the reference's, and
     # the chrome already computes the state; off falls back to the plain ring,
     # which is exactly what not applying `.win.over` does there.
-    set_tog_row(x, y, w, 0, ui_over_on(), "occlusion edge", "off falls back to the plain ZD_CUT ring")
+    set_tog_row_r(x, y, w, 0, ui_over_on(), "occlusion edge", "off falls back to ZD_CUT at ", set_r_cut())
     y = y + set_rowh() + SET_STACK * ui()
     setbb_x = x
     setbb_y = y
@@ -10732,7 +10836,7 @@ fn settings_event(win, ety, ecode, ex, ey) {
             }
             if set_hit_row(setev_x, set_rowN_y(set_ctl_y(setev_ay), 5), setev_w, ex, ey) == 1 {
                 ui_track(1 - ui_track_on())
-                if ui_track_on() == 1 { note_say2("label tracking on", "ZD_TR_LAB 1.4 and ZD_TR_BIG 2.6", 800) } else { note_say2("label tracking off", "the letter-spacing goes, the faces stay", 800) }
+                if ui_track_on() == 1 { note_say2("label tracking on", "ZD_TR_LAB and ZD_TR_BIG, on caps and figures", 800) } else { note_say2("label tracking off", "the letter-spacing goes, the faces stay", 800) }
                 wm_damage_theme()
                 return 1
             }
@@ -11614,7 +11718,12 @@ fn ov_pal_label(i) {
     if i == 2 { return "open 11 settings" }
     if i == 3 { return "open 05 kernel log" }
     if i == 4 { return "open 13 registers" }
-    if i == 5 { return "regdump cpuid apic" }
+    # proto:1526 is `regdump --pipe A`. The other fifteen rows match the
+    # authority character for character; this one did not, and because
+    # ov_pal_match filters on the LABEL, typing "pipe" found nothing. The
+    # dispatch was already right - row 5 runs run_command(216) -> reg_open(32),
+    # which is the authority's openWin('regs').
+    if i == 5 { return "regdump --pipe A" }
     if i == 6 { return "zlfs fsck rd0" }
     if i == 7 { return "dmesg --level warn" }
     if i == 8 { return "modeset 1600x1000" }
@@ -11719,7 +11828,11 @@ fn ov_pal_run(k) {
     # A WRONG "not supported" IS NEVER TESTED, because nobody tries what they
     # have been told is missing. That is what kept three of these dark.
     # ROW 7 WAS WIRED TO A DEAD ISLAND, BY ME, IN THE COMMIT THAT CELEBRATED
-    # FINDING ONE.
+    # FINDING ONE - AND THEN THE LEVEL IT NEEDED WAS BUILT.
+    #
+    # It now toggles kl_only_warn, which kl_line_shown reads INSIDE the log's
+    # draw loop, over a level kl_level reads off each line's own [ WARN ] tag.
+    # The history below is kept because the failure is the instructive part.
     #
     # kl_filter existed and kl_shown READ it, which is what made it look
     # reachable. But kl_shown was called only by kl_count, kl_count was called
@@ -11733,15 +11846,14 @@ fn ov_pal_run(k) {
     # WARN and no ERROR anywhere in it. A `--level warn` over a log with no warn
     # level shows an empty pane whatever the filter does.
     #
-    # So the row says the real reason. Giving the console a warn level - and
-    # tagging the sites that already report a degraded condition in prose, "no
-    # xHCI", "no NVMe", "no LPSS" - is the fix, and it is a change to the
-    # kernel's printing rather than to this row. It is in
-    # docs/design/PRESSWORK-BACKLOG.md.
+    # THAT IS WHAT WAS BUILT: warn_line at :3290 is a third emitter, three
+    # genuinely degraded sites carry it, and the pane reads the tag. The fix
+    # was a change to the kernel's PRINTING, not to this row.
     if i == 7 {
         ov_close_overlay()
         if wm_run() == 1 { reg_open(APP_KLOG) }
-        note_say2("this log has no levels to filter", "ok_line and info_line are the only two emitters - there is no warn or error record to keep", 1400)
+        kl_only_warn = 1 - kl_only_warn
+        if kl_only_warn == 1 { note_say2("dmesg --level warn", "showing only lines the kernel tagged WARN", 1000) } else { note_say2("dmesg: every line", "the whole scrollback ring", 900) }
         wm_damage(0, 0, px_w(), px_h())
         return 1
     }
@@ -13868,7 +13980,10 @@ fn wm_boot_start() {
         # now refuses rather than truncating, because the low dword of a high
         # BAR is a different, unrelated physical address.
         if intel_hibar() == 1 {
-            info_line("Intel GPU found but its BAR is above 4 GiB - refused, not truncated")
+            # WARN: a REFUSAL. The GPU is there and this build will not drive
+            # it - the alternative was a truncated pointer, which is the bug
+            # class CLAUDE.md opens with.
+            warn_line("Intel GPU found but its BAR is above 4 GiB - refused, not truncated")
         } else {
             info_line("no Intel GPU on the bus - vblank pacing unavailable here")
         }
@@ -14236,7 +14351,9 @@ if boot_apic == 1 {
     put("  [  OK  ] APIC: IRQs via I/O APIC at 0x")  hex(apic_ib(), 8)
     put(", ")  put(apic_cpus())  print(" CPU(s)")
 } else {
-    info_line("no APIC - staying on the legacy 8259 PIC")
+    # WARN: the machine wanted an APIC and did not get one. Everything still
+    # works on the 8259, which is what makes it a warning rather than a fault.
+    warn_line("no APIC - staying on the legacy 8259 PIC")
 }
 ok_line("PIT timer running at 100 Hz on IRQ0")
 ok_line("keyboard on IRQ1 - no more polling the port")
@@ -14258,7 +14375,9 @@ if diag_boot == 1 {
     # exactly where RAM-only mode must be visible because there may be no
     # serial console to explain why a later crash left no USB record.
     if px_w() > 0 {
-        info_line("persistent boot observer - RAM only; no exact ZLLOG target")
+        # WARN: the observer is up but nothing survives a power cycle, which
+        # is the whole point of a persistent observer.
+        warn_line("persistent boot observer - RAM only; no exact ZLLOG target")
         if diag_err() == 1 {
             put("         MSC init stage ")  put(msc_istage())
             put(", port ")  put(msc_iport())
@@ -14305,9 +14424,19 @@ beep(784, 8)  beep(1046, 12)
 # The boot transcript remains complete on COM1, where diagnostics belong.
 # Once the graphical session is ready, the visible terminal becomes a product
 # surface instead of preserving bring-up noise as the first thing on screen.
-# term_clear() clears only its scrollback tee; it cannot erase serial evidence.
+#
+# HIDDEN FROM THE TERMINAL, NOT DELETED - and the difference is a whole pane.
+# This called term_clear(), which zeroes the ring, and the Kernel Log reads
+# THAT RING. So the boot lines - the only ones carrying an [ OK ] / [ INFO ] /
+# [ WARN ] tag - were destroyed before the log could ever show them, which is
+# why that pane's level column had nothing to read and why it drew two columns
+# where the authority declares four.
+#
+# term_hide_boot moves the TERMINAL's floor instead. The terminal opens on the
+# banner exactly as it did; term_ch and term_lines ignore the floor, so the log
+# gets the whole transcript.
 if wm_boot == 1 {
-    term_clear()
+    term_hide_boot()
     print("zlOS 0.3")
     print("one system, one language")
     print("")

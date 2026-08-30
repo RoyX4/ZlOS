@@ -7,6 +7,8 @@ int virtio_net_init(void);
 int virtio_net_send(const unsigned char *, int);
 int virtio_net_poll(unsigned char *, int);
 int virtio_net_mac(int);
+int virtio_net_mtu(void);
+int e1000_mtu(void);
 int virtio_net_link_up(void);
 int virtio_net_tx_count(void);
 int virtio_net_rx_count(void);
@@ -58,6 +60,11 @@ int netdev_mac(int i)
 int netdev_link_up(void)
 { return selected == NETDEV_CDC_ECM && xhci_ecm_link_up ? xhci_ecm_link_up() : selected == NETDEV_E1000 ? e1000_link_up() : selected == NETDEV_VIRTIO ? virtio_net_link_up() : 0; }
 int netdev_kind(void) { return selected; }
+/* THE SELECTED DRIVER'S FRAME CEILING. CDC-ECM's is the USB stack's and is not
+ * exported, so it answers 0 - which the pane must print as "not reported"
+ * rather than as a number, because 0 is not a ceiling. */
+int netdev_mtu(void)
+{ return selected == NETDEV_E1000 ? e1000_mtu() : selected == NETDEV_VIRTIO ? virtio_net_mtu() : 0; }
 int netdev_device(void) { return selected == NETDEV_E1000 ? e1000_device() : 0; }
 int netdev_tx_count(void)
 { return selected == NETDEV_CDC_ECM && xhci_ecm_tx_count ? xhci_ecm_tx_count() : selected == NETDEV_E1000 ? e1000_tx_count() : selected == NETDEV_VIRTIO ? virtio_net_tx_count() : 0; }

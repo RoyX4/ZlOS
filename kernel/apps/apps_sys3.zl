@@ -1597,9 +1597,19 @@ fn s3nw_up(i) {
 }
 fn s3nw_name(i) { if i == 0 { return "lo" }  return "eth0" }
 # MTU IS READ FOR THE ONE INTERFACE THAT HAS ONE, and refused for the one that
-# does not. 1500 is virtio-net's own frame ceiling and is a property of this
-# driver; 65536 was the build host's.
-fn s3nw_mtu(i) { if i == 0 { return 0 }  return 1500 }
+# does not.
+#
+# IT SAID 1500 AND CALLED THAT "virtio-net's own frame ceiling". It is 2036:
+# virtio_net.c:128-130 defines BUF_SZ 2048 and HDR_LEN 12, FRAME_MAX is their
+# difference, and :488 rejects exactly `len > FRAME_MAX`. The same literal was
+# returned for e1000 (whose ceiling is its 2048 descriptor buffer) and for
+# cdc-ecm (which does not report one at all) - one written number standing in
+# for three different machines, and wrong about every one of them.
+#
+# net_mtu() dispatches per driver through netdev_mtu and answers 0 when the
+# selected driver has no ceiling to report. 0 is not a ceiling, so the caller
+# prints it as an absence rather than as a figure.
+fn s3nw_mtu(i) { if i == 0 { return 0 }  return net_mtu() }
 # THE DRIVER IS READ, NOT TYPED. This returned the literal "virtio-net" for
 # every non-loopback interface while netdev_kind() sat bound and unused - and
 # the same pane's own head had already shipped a hardcoded "e1000e" beside this
@@ -1845,11 +1855,17 @@ fn s3nw_body(ax, ay, aw, ah) {
         if i == 3 {
             if s3nw_present(s3nw_sel) == 0 { s3_mono(vx, ry, "-", theme(TH_TEXT_DIM)) } else { num_aa(vx, ry, s3nw_mtu(s3nw_sel), theme(TH_TEXT)) }
         }
-        if i == 4 {
-            dc = theme(TH_TEXT)
-            if s3nw_sel != 0 { dc = theme(TH_DANGER) }
-            s3_mono(vx, ry, s3nw_drv(s3nw_sel), dc)
-        }
+        # THE DRIVER NAME IS NOT A FAULT REPORT.
+        #
+        # This drew TH_DANGER for every interface except loopback - so eth0,
+        # the only one that carries traffic, printed `virtio-net` in the colour
+        # this system reserves for a failure, while `lo` - a device this kernel
+        # does not have - got ordinary ink. The authority is a plain
+        # `kv('driver', 'e1000e, 8086:15D8, irq 19')` at proto:1817 with no bad
+        # flag, and this same file argues the opposite case at 1780-1783
+        # ("ABSENT IS NOT THE SAME AS DOWN"). The justification cited ds 4054,
+        # the superseded document.
+        if i == 4 { s3_mono(vx, ry, s3nw_drv(s3nw_sel), theme(TH_TEXT)) }
         if i == 5 { num_aa(vx, ry, s3nw_rx(s3nw_sel), theme(TH_TEXT)) }
         if i == 6 { num_aa(vx, ry, s3nw_tx(s3nw_sel), theme(TH_TEXT)) }
         if i == 7 {

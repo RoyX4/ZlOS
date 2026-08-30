@@ -9,6 +9,7 @@ int netdev_poll(unsigned char *out, int max);
 int netdev_mac(int i);
 int netdev_link_up(void);
 int netdev_kind(void);
+int netdev_mtu(void);
 int netdev_device(void);
 int netdev_tx_count(void);
 int netdev_rx_count(void);

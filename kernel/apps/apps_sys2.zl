@@ -190,6 +190,70 @@ fn kl_colon(line) {
     return 0 - 1
 }
 
+# THE LEVEL, READ OFF THE LINE. -1 when the line carries no tag.
+#
+# ok_line / info_line / warn_line (kernel.zl:3261-3296) all emit the same
+# shape: two spaces, '[', a SIX-character tag, ']', a space, then the message.
+# So the tag is at fixed columns 3..8 and the brackets at 2 and 9, and this is
+# a read rather than a parse - which is the only reason the pane can have a
+# level column at all.
+#
+# THE PREDECESSOR CLASSIFIED BY ROW INDEX. kl_kind returned a level from
+# `i == 4` meaning apic, `i == 5` meaning smp - positions in the fourteen fixed
+# rows this pane stopped drawing when it was rewritten to read term.c's real
+# ring. Applied to that ring, line 4 is not apic. It and its eight dead
+# neighbours are gone; this reads the line the pane is actually showing.
+KL_LV_OK   = 0
+KL_LV_INFO = 1
+KL_LV_WARN = 2
+
+# WHICH LEVELS THE PANE SHOWS. 0 every line, 1 tagged WARN only.
+#
+# The predecessor had three settings and a classifier keyed to row indices that
+# no longer exist. Two is what this log can honestly offer: it has three tags
+# and no error level, so "warnings and worse" and "warnings" are the same set.
+kl_only_warn = 0
+
+fn kl_line_shown(line) {
+    if kl_only_warn == 0 { return 1 }
+    if kl_level(line) == KL_LV_WARN { return 1 }
+    return 0
+}
+
+fn kl_level(line) {
+    if term_ch(line, 2) != 91 { return 0 - 1 }        # '['
+    if term_ch(line, 9) != 93 { return 0 - 1 }        # ']'
+    kli = 3
+    while kli < 9 {
+        klc = term_ch(line, kli)
+        if klc == 79 { return KL_LV_OK }              # O of OK
+        if klc == 73 { return KL_LV_INFO }            # I of INFO
+        if klc == 87 { return KL_LV_WARN }            # W of WARN
+        kli = kli + 1
+    }
+    return 0 - 1
+}
+
+fn kl_level_name(lv) {
+    if lv == KL_LV_OK { return "OK" }
+    if lv == KL_LV_INFO { return "INFO" }
+    if lv == KL_LV_WARN { return "WARN" }
+    return ""
+}
+
+fn kl_level_col(lv) {
+    if lv == KL_LV_WARN { return ui_ink(S2_IK_WARN) }
+    if lv == KL_LV_OK { return ui_ink(S2_IK_OK) }
+    return ui_ink(S2_IK_T5)
+}
+
+# WHERE THE MESSAGE STARTS. A tagged line's prefix is eleven columns wide and
+# repeating it in the message column would print the tag twice.
+fn kl_body_from(line) {
+    if kl_level(line) < 0 { return 0 }
+    return 11
+}
+
 # Draw characters [from, to) of a real scrollback line.
 fn kl_chars(x, y, line, from, to, col) {
     cx = x
@@ -261,8 +325,19 @@ fn kl_ui(ax, ay, aw, ah, dm) {
 
     # ---- the table ----------------------------------------------------------
     ty2 = ay + hdh
-    ui_grid("120|*")
-    ui_colhead(ax, ty2, aw, "subsys|message", 0 - 1, 0)
+    # THE AUTHORITY'S COLUMNS. proto R.log declares four - time 13%, level 14%,
+    # subsys 12%, message 61% - and this drew two. The six constants that named
+    # those percentages were still in this file, read by nothing, which is what
+    # led to the four-column table in the first place.
+    #
+    # TIME IS NOT ONE OF THEM AND IS NOT INVENTED. The predecessor's kl_time
+    # returned hand-written boot timestamps - 2, 11, 17, 34 - and term.c's ring
+    # carries no per-line timestamp at all, so there is nothing to read. A
+    # column headed `time` over a figure this machine does not have is the
+    # invented-figure fault the whole round is about, so the pane carries the
+    # three it CAN read and says so in its header rather than printing a fourth.
+    ui_grid("70|110|*")
+    ui_colhead(ax, ty2, aw, "level|subsys|message", 0 - 1, 0)
     ty2 = ty2 + ui_colhead_h()
     rowh = ui_growh()
     wellh = 46 * u
@@ -293,20 +368,54 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     shown = 0
     sel = kl_sel_clamped()
     while i < kl_lines() {
+        # THE FILTER IS APPLIED HERE, WHICH IS WHERE THE PREDECESSOR'S WAS NOT.
+        # kl_shown existed, read kl_filter, and was called only by a kl_count
+        # that nothing called - so the setting was live, readable, and had no
+        # effect on a single pixel. This test is in the draw loop.
+        if kl_line_shown(i) == 0 { i = i + 1 } else {
         if ty2 + rowh <= limit {
             if ui_grow(ax, ty2, aw, shown, sel == i) == 1 { kl_hit = i }
             cy2 = ty2 + (rowh - ui_th(S2_SM)) / 2
+            # THE LEVEL COLUMN, read off the line's own tag.
+            lv = kl_level(i)
+            if lv >= 0 {
+                ui_txt(ui_gspanx(ax, aw, 0) + 4 * u, cy2, kl_level_name(lv), kl_level_col(lv), S2_SM, 0)
+            }
+            # ...and the message starts AFTER the tag, so it is not printed
+            # twice. An untagged line starts at column 0 as before.
+            body = kl_body_from(i)
             col = kl_colon(i)
-            if col >= 0 {
-                kl_chars(ui_gspanx(ax, aw, 0) + 4 * u, cy2, i, 0, col, theme(TH_TEXT_2))
-                kl_chars(ui_gspanx(ax, aw, 1) + 4 * u, cy2, i, col + 2, kl_len(i), theme(TH_TEXT_HI))
+            if col >= body {
+                kl_chars(ui_gspanx(ax, aw, 1) + 4 * u, cy2, i, body, col, theme(TH_TEXT_2))
+                kl_chars(ui_gspanx(ax, aw, 2) + 4 * u, cy2, i, col + 2, kl_len(i), theme(TH_TEXT_HI))
             } else {
-                kl_chars(ui_gspanx(ax, aw, 1) + 4 * u, cy2, i, 0, kl_len(i), theme(TH_TEXT_HI))
+                kl_chars(ui_gspanx(ax, aw, 2) + 4 * u, cy2, i, body, kl_len(i), theme(TH_TEXT_HI))
             }
             ty2 = ty2 + rowh
             shown = shown + 1
         }
         i = i + 1
+        }
+    }
+
+    # AN EMPTY RESULT IS A STATEMENT, NOT A BLANK.
+    #
+    # On a healthy machine this filter matches NOTHING - a clean QEMU boot emits
+    # ten OK lines, one INFO and zero WARN - and a pane that just goes blank is
+    # indistinguishable from one that is broken. That is the failure mode this
+    # repo's own gates keep hitting: silence reads as success, or as breakage,
+    # and nothing on screen says which.
+    #
+    # So it says which, and it says how many lines it looked at.
+    if shown == 0 {
+        if kl_only_warn == 1 {
+            klez = ty2 + 10 * u
+            ui_txt(ax + 14 * u, klez, "no lines in the ring are tagged WARN", theme(TH_TEXT_HI), S2_SM, 0)
+            ui_txt(ax + 14 * u, klez + 18 * u, "this machine has not reported a degraded condition. searched ", theme(TH_TEXT_DIM), S2_SM, 0)
+            klex = ax + 14 * u + ui_tw("this machine has not reported a degraded condition. searched ", S2_SM, 0)
+            ui_txtn(klex, klez + 18 * u, kl_lines(), theme(TH_TEXT_2), S2_SM, 0)
+            ui_txt(klex + ui_tnw(kl_lines(), S2_SM, 0), klez + 18 * u, " lines.", theme(TH_TEXT_DIM), S2_SM, 0)
+        }
     }
 
     # ---- the rule, and the selected line in full ----------------------------

@@ -91,7 +91,7 @@ still absent.** The widget exists for it now; the readings do not. This kernel
 counts composites, and drawing a rung for a clock nothing counts would be the
 dead control this whole round has been removing.
 
-## THE KERNEL LOG HAS NO LEVELS, AND THAT IS THE REAL WORK
+## THE KERNEL LOG HAD NO LEVELS - now it has three, and reads them
 
 The authority's log table has FOUR columns - `time 13%`, `level 14%`,
 `subsys 12%`, `message 61%` (proto R.log) - and zlOS draws TWO,
@@ -116,16 +116,34 @@ kernel has exactly two level emitters, `ok_line` and `info_line`
 lines that DO report a degraded condition - "no xHCI", "no NVMe", "no LPSS",
 "no BIOS", "no heap", "no scheduler" - are printed as prose.
 
-The fix, and it is a change to the kernel's PRINTING rather than to the pane:
+**BUILT.** All four steps, in the order above:
 
-1. add `warn_line` beside `ok_line` and `info_line`
-2. tag the sites that already report a degraded condition
-3. give the log its `level` column, reading the tag off the line
-4. then the filter has something to filter, and `time` and `subsys` can come
-   from the line too - `kl_colon` already splits the `subsys: message` prefix
+1. `warn_line` at kernel.zl:3290, a third emitter beside `ok_line` and
+   `info_line`, six characters wide like the other two so the message column
+   starts at the same screen position on every line.
+2. Three genuinely degraded sites carry it - the APIC fallback, the RAM-only
+   boot observer, and the Intel BAR-above-4-GiB refusal. Design statements
+   stay INFO: "no heap, zlfs mounts on demand, no scheduler" is what this
+   kernel IS, not a degradation.
+3. `kl_level(line)` reads the tag off fixed columns 3..8 - a READ, not a parse,
+   which is the only reason the column can exist. The pane draws
+   `ui_grid("70|110|*")` over `level|subsys|message`.
+4. `kl_line_shown` is tested INSIDE the draw loop, which is exactly where the
+   predecessor's filter was not.
 
-Until then the palette's `dmesg --level warn` row says why it cannot, which is
-what it does now.
+**THERE IS STILL NO `time` COLUMN, AND THAT IS DELIBERATE.** term.c's ring
+carries no per-line timestamp, so there is nothing to read; the predecessor's
+`kl_time` returned hand-written boot times (2, 11, 17, 34...). A column headed
+`time` over a figure this machine does not have is the invented-figure fault
+this round exists to remove. Three of the authority's four columns are read;
+the fourth would have to be written.
+
+**AND THE TAGGING IS INERT ON QEMU, WHICH IS CORRECT.** `verify.sh` passed
+unchanged because a clean boot emits ten OK, one INFO and zero WARN - the three
+retagged conditions are ones a healthy machine does not reach. That makes the
+filter's only visible effect here *emptying the pane*, and a blank pane is what
+a broken filter looks like too, so the pane states the empty result and how many
+lines it searched.
 
 ## FOUND WHILE FIXING, NOT BY THE FLEET
 

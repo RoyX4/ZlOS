@@ -32,6 +32,22 @@ static char scroll[TERM_ROWS][TERM_COLS];
 static int  s_head;                 /* next row to write                  */
 static int  s_live;                 /* how many rows hold anything        */
 static int  s_col;                  /* chars in the row being built       */
+/* HOW MANY OF THE OLDEST LIVE ROWS THE TERMINAL DOES NOT SHOW.
+ *
+ * The compositor used to call term_clear() on the way up, so the visible
+ * terminal would be "a product surface instead of preserving bring-up noise as
+ * the first thing on screen" (kernel.zl:14350-14356). That is a good decision
+ * about the TERMINAL and it destroyed the ring, which the Kernel Log reads.
+ *
+ * So the boot transcript is now HIDDEN rather than deleted: the terminal walks
+ * back only as far as this floor, and term_ch / term_lines - the log's
+ * accessors - ignore it entirely. Nothing is lost and the terminal opens on the
+ * banner exactly as before.
+ *
+ * This is why the log can have a level column at all: ok_line, info_line and
+ * warn_line tag the BOOT lines, and until now those were the ones being
+ * thrown away. */
+static int  s_floor;
 
 static char input[TERM_COLS];       /* the line being typed               */
 static int  in_len;
@@ -132,9 +148,22 @@ int term_ch(int line, int col)
     return (unsigned char)scroll[(first + line) % TERM_ROWS][col];
 }
 
+/* THE TERMINAL STOPS LOOKING BELOW HERE, and the ring keeps everything.
+ * Called once, when the compositor comes up. */
+void term_hide_boot(void)
+{
+    s_floor = s_live;
+    s_col = 0;
+    in_len = 0;
+    in_cursor = 0;
+    history_view = -1;
+}
+
+/* The `clear` COMMAND still means clear - a person asking for an empty
+ * terminal gets one, and the floor goes with it. */
 void term_clear(void)
 {
-    s_head = 0; s_live = 0; s_col = 0; in_len = 0; in_cursor = 0;
+    s_head = 0; s_live = 0; s_col = 0; s_floor = 0; in_len = 0; in_cursor = 0;
     history_view = -1;
     for (int i = 0; i < TERM_ROWS; i++) scroll[i][0] = 0;
 }
@@ -691,7 +720,9 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
      * `first = s_head - show` arithmetic would scroll the newest line off the
      * bottom by however many lines happened to wrap. */
     int nlines = 0, drows = 0;
-    while (nlines < s_live && drows < show) {
+    int reach = s_live - s_floor;       /* the terminal's own scrollback depth */
+    if (reach < 0) reach = 0;
+    while (nlines < reach && drows < show) {
         int idx = s_head - 1 - nlines;
         while (idx < 0) idx += TERM_ROWS;
         drows += wrapped_rows(scroll[idx], cols);

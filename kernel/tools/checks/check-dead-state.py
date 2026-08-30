@@ -43,7 +43,8 @@ rule is strict about zl and generous about everything else:
 Exactly one, not zero: the declaration itself is the one.
 
 Run:  python3 tools/checks/check-dead-state.py
-      python3 tools/checks/check-dead-state.py --list   (every count, ranked)
+      python3 tools/checks/check-dead-state.py --list      (every count, ranked)
+      python3 tools/checks/check-dead-state.py --suspect   (the dead-CONTROL shape)
 """
 import os
 import re
@@ -156,6 +157,30 @@ def main():
         n_other = other_count.get(name, 0)
         rows.append((n_zl + n_other, n_zl, n_other, name, where))
     rows.sort()
+
+    # ---- THE OTHER SIGNATURE, WHICH THIS CHECK CANNOT GATE ON ---------------
+    #
+    # A dead CONTROL is not a dead name. Its state variable has exactly THREE
+    # mentions - its declaration, its setter, and the test that lights its own
+    # pill - so it is read, and the one-mention rule above is blind to it. Every
+    # dead control this round removed had that shape: rd_wire, cn_scan,
+    # s3iv_sel, s3iv_zoom, kl_filter.
+    #
+    # Three mentions is NOT proof, which is why this is a report and not a gate:
+    # set_ladder has three and is deliberate (there is one ladder, so the rung
+    # that matters is the one that refuses), and plenty of small helpers are
+    # legitimately declared, set once and read once. It is a place to look.
+    if "--suspect" in sys.argv:
+        print("  names with THREE mentions - the dead-control shape. A place to")
+        print("  look, not a verdict: check whether anything OUTSIDE the control")
+        print("  reads it.\n")
+        n = 0
+        for total, n_zl, n_other, name, where in rows:
+            if n_zl == 3 and n_other == 0:
+                print("  %-24s %s" % (name, os.path.relpath(where, KERNEL)))
+                n += 1
+        print("\n  %d candidate(s)" % n)
+        return 0
 
     if want_list:
         for total, n_zl, n_other, name, where in rows[:60]:

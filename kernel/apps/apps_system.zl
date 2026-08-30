@@ -96,8 +96,29 @@ fn clk_draw(ax, ay, aw, ah) {
     cy = ay + 26 * u
     cw = (aw - 26 * u) / 3
     chh = 46 * u
-    clk_card(ax + 8 * u, cy, cw, chh, "MONOTONIC", up)
-    clk_card(ax + 13 * u + cw, cy, cw, chh, "SINCE BOOT", up)
+    # TWO LABELS ON ONE VARIABLE CANNOT EVER DIVERGE.
+    #
+    # These were `clk_card(..., "MONOTONIC", up)` and
+    # `clk_card(..., "SINCE BOOT", up)` - the same `up` twice, so the pane drew
+    # two cards that were guaranteed to agree and presented them as two
+    # readings. On this machine they ARE the same quantity: there is no suspend,
+    # so monotonic time and uptime cannot differ, and printing both is a claim
+    # that they might.
+    #
+    # The authority's three are monotonic, boot and process (proto:1841-1843),
+    # and it fakes the spread with `up - i * 41` because it is a mockup. This
+    # kernel has no process table, so the third of those is genuinely absent -
+    # but it HAS a second clock that is not derived from the first: the RTC,
+    # which counts wall seconds across a power cycle where ticks() starts at 0.
+    # rtc_up() is that reading and it is already bound.
+    clk_card(ax + 8 * u, cy, cw, chh, "UPTIME", up)
+    if rtc_ok() == 1 {
+        clk_card(ax + 13 * u + cw, cy, cw, chh, "RTC SECONDS", rtc_up())
+    } else {
+        rrect(ax + 13 * u + cw, cy, cw, chh, R_INSET_D * u, theme(TH_PANEL_HI))
+        ui_caps(ax + 23 * u + cw, cy + 7 * u, "RTC SECONDS", theme(TH_TEXT_2), T_CAPTION)
+        label(ax + 23 * u + cw, cy + 24 * u, "no RTC", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    }
     rrect(ax + 18 * u + 2 * cw, cy, cw, chh, R_INSET_D * u, theme(TH_PANEL_HI))
     ui_caps(ax + 28 * u + 2 * cw, cy + 7 * u, "TICKS", theme(TH_TEXT_2), T_CAPTION)
     label_num(ax + 28 * u + 2 * cw, cy + 24 * u, ticks(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)

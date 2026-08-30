@@ -841,6 +841,7 @@ extern int  netdev_poll(unsigned char *, int);
 extern int  netdev_mac(int);
 extern int  netdev_link_up(void);
 extern int  netdev_kind(void);
+extern int  netdev_mtu(void);
 extern int  netdev_device(void);
 extern int  netdev_tx_count(void);
 extern int  netdev_rx_count(void);
@@ -1169,6 +1170,7 @@ extern int  notify_active(void);
 extern int  notify_byte(int i);
 extern int  notify_dismiss(void);
 extern int  notify_queued(void);
+extern void term_hide_boot(void);
 
 static void zl_putc(char c)
 {
@@ -1712,6 +1714,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "term_complete")) {
         term_complete((int)a[0].num, (int)a[1].num); return zl_nil();
     }
+    if (streq(name, "term_hide_boot")) { term_hide_boot(); return zl_nil(); }
     if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
     if (streq(name, "term_lines")) return zl_num((double)term_lines());
     if (streq(name, "term_ch"))    return zl_num((double)term_ch((int)a[0].num, (int)a[1].num));
@@ -2188,6 +2191,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "net_mac"))    return zl_num((double)netdev_mac((int)a[0].num));
     if (streq(name, "net_link"))   return zl_num((double)netdev_link_up());
     if (streq(name, "net_kind"))   return zl_num((double)netdev_kind());
+    /* THE FRAME CEILING, READ. s3nw_mtu returned the literal 1500 for all three
+     * drivers; virtio's is 2036 (BUF_SZ - HDR_LEN) and e1000's is its 2048
+     * descriptor buffer. 0 means the selected driver does not report one. */
+    if (streq(name, "net_mtu"))    return zl_num((double)netdev_mtu());
     if (streq(name, "net_devid"))  return zl_num((double)netdev_device());
     if (streq(name, "net_tx"))     return zl_num((double)netdev_tx_count());
     if (streq(name, "net_rx"))     return zl_num((double)netdev_rx_count());
