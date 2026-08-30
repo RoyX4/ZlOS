@@ -23,6 +23,7 @@ The unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
+- [ ] `kernel/_gen.c`
 - [ ] `kernel/_gen64.c`
 - [ ] `kernel/_genefi.c`
 - [ ] `kernel/out.c`
