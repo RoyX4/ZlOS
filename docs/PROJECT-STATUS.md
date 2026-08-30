@@ -1,6 +1,6 @@
 # Project Status
 
-Checked 2026-08-27. This page separates repository state, planning state, and
+Checked 2026-08-30. This page separates repository state, planning state, and
 implementation state. They are not the same thing.
 
 ## Read This First
@@ -21,40 +21,29 @@ implementation state. They are not the same thing.
 
 | Repository or checkout | Commit state | Meaning |
 |---|---|---|
-| `RoyX4/zl-linux:main` | Published structure baseline at `26c089947dfa`; current authority is the live remote ref | The structure and directory-documentation series plus the whole-tree repair/evidence closure are published on `main`. Host, build, reproducibility and all six retained QEMU boot routes are covered by current receipts. This is repository closure and QEMU evidence, not product or physical-hardware completion. |
-| This reconciliation worktree | `codex/full-program`, based on `origin/main` at `26c089947dfa` before the closure series | Isolated at `/home/roy/Documents/repos/zl-linux-final`. The cleanup series repairs status and static checker contracts, preserves historical inputs, separates retained evidence from disposable output, groups kernel documentation by purpose/subsystem, and adds eight local documentation surfaces to all 113 repository directories. The final repair pass also closes accepted language/kernel audit findings and refreshes current build/QEMU evidence. [`evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md`](evidence/DIRECTORY-DOCUMENTATION-2026-08-26.md) records the structure rollout. Exact live Git state remains the publication authority. No physical-hardware result is claimed. |
-| Older structure worktree | Dirty `codex/full-restructure`, based on `85fcdf542b9c` | Preserved at `/home/roy/Documents/repos/zl-linux-structure` with 566 pending entries from the older migration. It is input history, not the active finalization tree. |
-| Original shared checkout | Dirty `codex/local-zlos-snapshot-2026-08-24` at `/home/roy/Documents/repos/zl-linux` | Preserved with 183 pending entries. Its untracked display audit has now been recovered into this branch as explicitly historical evidence; the shared checkout itself was not rewritten. |
-| Desktop redesign worktree | `design/desktop-redesign` at `66eadd0` with 143 pending entries on the 2026-08-26 recheck | Preserved at `/home/roy/Documents/repos/zl-linux-desktop-redesign`. The pending design/prototype/render work is concurrent input, was not edited by this reconciliation pass, and is not merged or pushed. No kernel implementation is claimed. |
-| `zl-linux-merge-all` | Clean historical integration checkout at `4b9883123682`; 63 commits behind the fetched `origin/main` on 2026-08-26 | Preserved integration checkpoint, not the current publication checkout. Use this reconciliation worktree or `origin/main` for current state. |
+| `RoyX4/zl-linux:main` | Live remote ref; the final closure begins at `4b4413cd2f489d5179c0e13143ed848fca2b1a7d` and adds ancestry closure `61814bf` plus this receipt | The consolidation and complete Presswork Round 12 landing are published. The whole-home topology cleanup preserves every discovered tip and removes the old refs/checkouts. Host/build/QEMU evidence is recorded in its own receipts; no physical-hardware result is claimed. |
+| Canonical checkout | `/home/roy/Documents/repos/zl-linux`, clean on `main` | This is the sole retained long-term zl-linux checkout after publication cleanup. |
+| Historical zl-linux worktrees and clones | Removed after exhaustive ancestry and dirty-file audit | Fifteen redundant registered worktrees were removed. Eight standalone clones were moved to Trash. Their committed tips are retained in `main` ancestry; dirty historical blobs were either already in `main` history or preserved as `783187a`. See [`WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md`](evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md). |
 | `RoyX4/zl:main` | Pushed at `6f53115` | Separate language repository. Its local `main` matches the remote, but the working directory has untracked local output. |
 | `zl-merge-all` | Local head `5207d5c`, five commits ahead of `RoyX4/zl:main` | The raw GitHub/other-OS research is committed locally. Two repository-pattern commits are on `origin/codex/github-repo-patterns`; the complete merge head is not on remote `main`. |
 | `zl-starred-sources` | Not a Git repository | Local source mirror used for research. It is evidence input, not a committed project snapshot. |
 
-The old `zl-apps`, `zl-browser`, `zl-exec`, `zl-feel`, `zl-main`, `zl-system`,
-and `zl-value16` directories are no longer present. Their historical worktree
-roles remain documented under [`evidence/`](evidence/). The final integration
-receipt is [`MERGE-ALL-2026-08-24.md`](evidence/integration/MERGE-ALL-2026-08-24.md).
+The old zl-linux worktree and clone directories are no longer active. Their
+historical roles remain documented under [`evidence/`](evidence/). The current
+closure receipt is
+[`WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md`](evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md).
 
 ### Registered zl-linux Worktrees
 
-Checked 2026-08-26 against `origin/main` at `26c089947dfa`.
-Published integration heads are ancestors of that ref; intentional local
-preservation and cleanup branches are called out separately rather than folded
-into the ancestry claim. Dirty and untracked content is also explicit. The
-local `main` ref itself is 96 commits behind `origin/main` and is not
-publication authority.
+Checked 2026-08-30 against GitHub `main` and closure commit `61814bf`.
+The audit began with 17 clean registered worktrees. All heads were either
+already ancestors of `main` or were attached by the ancestry-only closure
+merge. Fifteen redundant worktrees were removed; the temporary publication
+checkout is removed after publication, leaving only the canonical checkout.
 
-| Worktree branch | HEAD | Remote/working state |
-|---|---|---|
-| `files-app` | `6b40dfb61cee` | Clean; matches `origin/files-app`. |
-| `secret/desktop-foundry` | `1c96bfebe361` | Clean; matches `origin/secret/desktop-foundry`. |
-| `design/desktop-redesign` | `66eadd0` | Dirty with 143 pending entries; no upstream and no kernel implementation claimed. Preserved untouched. |
-| `codex/master-program-foundation` | `11c711eab261` | Clean; matches `github/codex/master-program-foundation`. |
-| Three detached Claude worktrees | `bb1d623b9b49`, `84cecae63019`, `b8a00ec45ac1` | Clean and preserved; their commits are already in `origin/main`. |
-| `codex/local-zlos-snapshot-2026-08-24` | `85fcdf542b9c` | Dirty shared checkout containing the uncommitted cleanup inputs; do not overwrite it. |
-| `codex/full-restructure` | `85fcdf542b9c` base | Preserved older isolated migration with 566 pending entries. |
-| `codex/full-program` | Base `26c089947dfa` before the current closure edits | Active isolated publication worktree. Exact live status is reported by Git rather than frozen into this row. |
+| Worktree branch | Working state |
+|---|---|
+| `main` at `/home/roy/Documents/repos/zl-linux` | Clean canonical checkout and long-term authority. |
 
 ## Whole Implementation Program
 
@@ -95,7 +84,7 @@ The codebase is substantial but the whole program is partial.
 | Layer | Honest state |
 |---|---|
 | Research inventory and dependency plan | Complete and committed. |
-| Branch/worktree integration discovered on 2026-08-24 | Complete and pushed. Historical refs/directories were not deleted. |
+| Branch/worktree/clone integration and cleanup | Complete topology closure is recorded in the 2026-08-30 receipt. Historical GitHub/local refs were deleted and redundant checkouts were removed after ancestry proof. |
 | Existing local implementation batch | Implemented across many host and QEMU lanes; see the dated receipt under `kernel/docs/evidence/`. |
 | `program/FEATURE-STATUS.json` | Current identity-safe join covers all 906 rows; the generated file is the exact maturity-count authority. EV-004 has a complete current-host offline archive closure for 160 binaries and 104 source-package sets; EV-014 binds seven current host frame distributions and preserves their exact budget outcome in the generated receipt while retaining target and physical performance gaps; EV-015 has a current six-route exact-hash hardware matrix and hostile receipt validator while retaining zero physical runs; EV-016/EV-022 bind four exact current-artifact BIOS/native-UEFI screenshots and strict stable-region goldens while retaining all six variant and physical-display gaps; EV-017/KR-032 bind four exact 240-byte QEMU crash records across BIOS32/native-UEFI64 UD2, native-UEFI64 error-code GP and an IST1-contained double fault while retaining broader vectors, durable storage and recovery gaps; EV-019 binds current 32-position heap and 512-write page-table failure sweeps; EV-020 joins current host rejection evidence for 7 of 9 hostile-input families; EV-021 joins all seven host performance categories while preserving current host regressions and product-build/product-latency gaps in the generated registry. EV-012 has a current-build-bound host receipt. Seven boot rows, seven storage rows, BT-029 RTC, KR-001 bounded typed physical-page allocation, KR-002 heap diagnostics, KR-003 generated address map, KR-004 transactional heap/framebuffer mapping, KR-009 exact lower user-stack guard containment, KR-015 bounded process/anonymous physical-page accounting and quotas, KR-017 guarded TSS stack management, KR-022 scheduler, bounded user-process rows and KR-036 generated syscall admission join exact current evidence while retaining recovery, provider, VFS, unified service/cache/pinned/DMA/surface/kernel accounting, pressure/reclaim, memory above 1 GiB, direct kernel-stack overflow injection, SMP ownership, synchronization, persistent lifecycle, ABI compatibility, per-CPU scheduling, migration, suspend and physical gaps. |
 | Post-restructure static and QEMU verification | Language/build gates, two-build reproducibility, raw BIOS, GRUB32 BIOS/UEFI, GRUB64 BIOS/UEFI and native UEFI64 passed for the current source identity. The complete app route sweep, 47 lifecycle cycles and 64 application-identity open-ready-close checks also passed. No physical boot was run. |
