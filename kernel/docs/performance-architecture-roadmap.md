@@ -8,7 +8,7 @@ Windows, Apple and Linux documentation.
 The locally executable implementation batch has now landed. The exact source
 changes, final BIOS/UEFI/network/SMP evidence and the physical-only acceptance
 gates are recorded in
-[`performance-architecture-implementation-2026-08-22.md`](performance-architecture-implementation-2026-08-22.md).
+[`performance-architecture-implementation-2026-08-22.md`](evidence/performance-architecture-implementation-2026-08-22.md).
 This page remains the architecture and test contract; it must not be read as a
 claim that the ThinkPad gates have run.
 

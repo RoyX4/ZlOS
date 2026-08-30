@@ -678,8 +678,8 @@ fn pt_end_here(pi, ti) {
         }
     }
     if pc == 36 { if pi + 1 == pt_plen {
-        if ti == pt_tlen { return ti }
-        return 0 - 1
+            if ti == pt_tlen { return ti }
+            return 0 - 1
     }}
     if ti >= pt_tlen { return 0 - 1 }
     tc = peek8(PT_TEXT + ti)
@@ -807,7 +807,7 @@ fn bc_draw(ax, ay, aw, ah) {
     y = y + adv
     au_key(ax, y, "char")
     if bc_val > 31 { if bc_val < 127 {
-        char_aa(au_val_x(ax), y, bc_val, theme(TH_ACCENT))
+            char_aa(au_val_x(ax), y, bc_val, theme(TH_ACCENT))
     }}
     if bc_val < 32 { au_val(ax, y, "-", theme(TH_TEXT_6)) }
     if bc_val > 126 { au_val(ax, y, "-", theme(TH_TEXT_6)) }
@@ -1347,9 +1347,9 @@ fn kt_val(ax, y, v, c) {
     num_aa(x, y, code, theme(TH_TEXT_5))
     x = x + au_digits(code) * dw + dw
     if ety == 3 { if code >= 32 { if code < 127 {
-        char_aa(x, y, 39, theme(TH_TEXT_5))
-        char_aa(x + dw, y, code, theme(TH_ACCENT))
-        char_aa(x + 2 * dw, y, 39, theme(TH_TEXT_5))
+                char_aa(x, y, 39, theme(TH_TEXT_5))
+                char_aa(x + dw, y, code, theme(TH_ACCENT))
+                char_aa(x + 2 * dw, y, 39, theme(TH_TEXT_5))
     }}}
     return 0
 }

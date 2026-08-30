@@ -8,7 +8,7 @@
 # Desktop — the task list
 
 > **THE PLATFORM QUEUE IS DONE, 2026-08-18.** All ten items of
-> [`PLATFORM-PROMPT.md`](PLATFORM-PROMPT.md) landed on `desktop/apps-in-windows`,
+> [`PLATFORM-PROMPT.md`](archive/prompts/PLATFORM-PROMPT.md) landed on `desktop/apps-in-windows`,
 > each with a gate. The state below is superseded where the two disagree —
 > the compositor is the boot state, every app runs in a window, the sticker
 > drag is deleted, there is one source list, and the parked cores render.
@@ -25,7 +25,7 @@
 > **A full account of the 2026-08-17/18 overnight run — what landed, the four
 > things it got wrong, the two changes that measured *slower* and are still
 > here, and what is left — is in
-> [`desktop-overnight-run.md`](desktop-overnight-run.md).**
+> [`desktop-overnight-run.md`](evidence/desktop-overnight-run.md).**
 
 
 **For whoever picks this up next, human or agent.** Ordered. Do them top to

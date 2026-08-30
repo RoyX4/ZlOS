@@ -11,7 +11,8 @@ project should do next.
 
 ## What the project believes
 
-[`.ultra/STATE.md`](../../.ultra/STATE.md), the current state doc, under **Open**:
+`.ultra/STATE.md`, the state file used by that 2026-08-19 worktree but not
+present in this checkout, said under **Open**:
 
 > 2. **`RENDER_SURFACE_STATE` bit layout** — the one struct blocking RCS. Searched
 > exhaustively on this box: no genxml, no ISL headers, no i915 files in `libdrm-dev`,

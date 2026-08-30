@@ -11,7 +11,7 @@
 # the display through virtio-gpu, the keyboard and mouse through our xHCI and
 # HID stack, the disk through our NVMe driver. Nothing is using a BIOS call.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 MODE="${1:-gui}"
 DISK=/tmp/zlos-nvme.img
@@ -20,6 +20,7 @@ STICK=/tmp/zlos-stick.img
 [ -f "$DISK" ]  || qemu-img create -f raw "$DISK" 64M >/dev/null
 [ -f "$STICK" ] || qemu-img create -f raw "$STICK" 32M >/dev/null
 
+# shellcheck disable=SC2054 # QEMU suboptions use comma-separated single args.
 COMMON=(
   -m 1G -smp 4 -cpu host -accel kvm
   -drive "file=$DISK,if=none,id=nvm,format=raw"  -device nvme,serial=zlos001,drive=nvm

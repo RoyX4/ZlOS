@@ -35,7 +35,7 @@ fn report() {
 }
 
 huge = pow(10, 20)          # 1e20 - far outside int range. The lexer takes the
-                            # plain-digit form too, but pow() reads better.
+# plain-digit form too, but pow() reads better.
 nan  = sqrt(-1)
 
 # ---------------------------------------------------------------------- len

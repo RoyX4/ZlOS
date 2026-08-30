@@ -513,81 +513,81 @@ fn path_valid(pv_grid, pv_path, pv_start, pv_goal) {
 # 600000000 give a true distance of 1200000000, which is not "< 1000000000",
 # so the edge was never relaxed and a REACHABLE node was reported unreachable.
 fn dj_inf(di_d) {
-  return di_d == nil()
+    return di_d == nil()
 }
 
 fn dj_neighbors(graph, node) {
-  for dn_pair in graph {
-    if dn_pair[0] == node {
-      return dn_pair[1]
+    for dn_pair in graph {
+        if dn_pair[0] == node {
+            return dn_pair[1]
+        }
     }
-  }
-  return []
+    return []
 }
 fn dj_get(dists, node) {
-  for dg_pair in dists {
-    if dg_pair[0] == node {
-      return dg_pair[1]
+    for dg_pair in dists {
+        if dg_pair[0] == node {
+            return dg_pair[1]
+        }
     }
-  }
-  return nil()
+    return nil()
 }
 fn dj_set(dists, node, val) {
-  ds_out = []
-  ds_found = false
-  for ds_pair in dists {
-    if ds_pair[0] == node {
-      ds_out = push(ds_out, [node, val])
-      ds_found = true
-    } else {
-      ds_out = push(ds_out, ds_pair)
+    ds_out = []
+    ds_found = false
+    for ds_pair in dists {
+        if ds_pair[0] == node {
+            ds_out = push(ds_out, [node, val])
+            ds_found = true
+        } else {
+            ds_out = push(ds_out, ds_pair)
+        }
     }
-  }
-  if not ds_found {
-    ds_out = push(ds_out, [node, val])
-  }
-  return ds_out
+    if not ds_found {
+        ds_out = push(ds_out, [node, val])
+    }
+    return ds_out
 }
 fn dijkstra(graph, start) {
-  dk_dists = []
-  for dk_ipair in graph {
-    dk_dists = dj_set(dk_dists, dk_ipair[0], nil())
-  }
-  dk_dists = dj_set(dk_dists, start, 0)
-  dk_visited = []
-  dk_count = len(graph)
-  dk_i = 0
-  while dk_i < dk_count {
-    dk_u = ""
-    dk_best = 0
-    dk_have = false
-    for dk_dp in dk_dists {
-      if not contains(dk_visited, dk_dp[0]) and not dj_inf(dk_dp[1]) {
-        if not dk_have or dk_dp[1] < dk_best {
-          dk_best = dk_dp[1]
-          dk_u = dk_dp[0]
-          dk_have = true
-        }
-      }
+    dk_dists = []
+    for dk_ipair in graph {
+        dk_dists = dj_set(dk_dists, dk_ipair[0], nil())
     }
-    if not dk_have {
-      dk_i = dk_count
-    } else {
-      dk_visited = push(dk_visited, dk_u)
-      dk_nbrs = dj_neighbors(graph, dk_u)
-      for dk_nb in dk_nbrs {
-        dk_v = dk_nb[0]
-        dk_w = dk_nb[1]
-        dk_alt = dk_best + dk_w
-        dk_old = dj_get(dk_dists, dk_v)
-        if dj_inf(dk_old) or dk_alt < dk_old {
-          dk_dists = dj_set(dk_dists, dk_v, dk_alt)
+    dk_dists = dj_set(dk_dists, start, 0)
+    dk_visited = []
+    dk_count = len(graph)
+    dk_i = 0
+    while dk_i < dk_count {
+        dk_u = ""
+        dk_best = 0
+        dk_have = false
+        for dk_dp in dk_dists {
+            if not contains(dk_visited, dk_dp[0]) and not dj_inf(dk_dp[1]) {
+                if not dk_have or dk_dp[1] < dk_best {
+                    dk_best = dk_dp[1]
+                    dk_u = dk_dp[0]
+                    dk_have = true
+                }
+            }
         }
-      }
-      dk_i = dk_i + 1
+        if not dk_have {
+            dk_i = dk_count
+        } else {
+            dk_visited = push(dk_visited, dk_u)
+            dk_nbrs = dj_neighbors(graph, dk_u)
+            for dk_nb in dk_nbrs {
+                dk_v = dk_nb[0]
+                dk_w = dk_nb[1]
+                dk_alt = dk_best + dk_w
+                dk_old = dj_get(dk_dists, dk_v)
+                if dj_inf(dk_old) or dk_alt < dk_old {
+                    dk_dists = dj_set(dk_dists, dk_v, dk_alt)
+                }
+            }
+            dk_i = dk_i + 1
+        }
     }
-  }
-  return dk_dists
+    return dk_dists
 }
 
 # ===========================================================================

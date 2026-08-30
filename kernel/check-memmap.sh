@@ -14,7 +14,7 @@
 # Static: it parses source and does arithmetic. No build, no QEMU, no timing,
 # so it cannot fail because the host is busy.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 SRC=${1:-kernel.zl}
 [ -f "$SRC" ] || { echo "FAIL: no $SRC"; exit 1; }

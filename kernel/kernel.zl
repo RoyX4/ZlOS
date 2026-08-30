@@ -1687,8 +1687,8 @@ MINE_BOARD    = 0x02205000   # apps_games2.zl: Minesweeper, 12x9  = 108 cells
 G2048_BOARD   = 0x02206000   # apps_games2.zl: 2048,         4x4  = 16 cells
 SIMON_SEQ     = 0x02207000   # apps_games2.zl: Simon,        sequence, max 32
 MAZE_BOARD    = 0x02208000   # apps_games2.zl: Maze, 21x13 = 273 cells (the
-                              # count the brief names) - own page, nothing
-                              # else can ever share it
+# count the brief names) - own page, nothing
+# else can ever share it
 WG_BOARD      = 0x02209000   # apps_games2.zl: Word Guess,   6x5  = 30 cells
 LIFE_BOARD    = 0x0220A000   # apps_games2.zl: Conway's Life,24x18= 432 cells
 LIFE_NEXT     = 0x0220B000   # apps_games2.zl: ...next generation, scratch
@@ -1700,16 +1700,16 @@ HASH_BUF      = 0x02210000   # apps_utils.zl:  Checksum, the input bytes
 NOTES_BUF     = 0x02211000   # apps_utils.zl:  Sticky Notes (2 pages)
 FILES_BUF     = 0x02213000   # apps_system.zl: Files, one entry's bytes
 MAZE_STACK    = 0x02214000   # apps_games2.zl: Maze generation's OWN stack -
-                              # an iterative backtracker, not a 273-deep zl
-                              # recursion. boot.S:36 documents this kernel's
-                              # 256 KiB compositor stack as already having
-                              # overflowed once at 16 KiB because "the zl
-                              # compositor nests deep... each zl frame is
-                              # large"; carving a maze from inside a click
-                              # handler (itself several frames into the
-                              # frame loop) is exactly that nesting, so the
-                              # DFS stack is 273 u16 cell indices in RAM
-                              # instead, same idea as the board itself.
+# an iterative backtracker, not a 273-deep zl
+# recursion. boot.S:36 documents this kernel's
+# 256 KiB compositor stack as already having
+# overflowed once at 16 KiB because "the zl
+# compositor nests deep... each zl frame is
+# large"; carving a maze from inside a click
+# handler (itself several frames into the
+# frame loop) is exactly that nesting, so the
+# DFS stack is 273 u16 cell indices in RAM
+# instead, same idea as the board itself.
 
 # ---- a text editor --------------------------------------------------------
 # The text lives in a raw memory buffer, one byte per character. Typing
@@ -2286,7 +2286,7 @@ fn run_command(cmd, arg) {
         # bench. ptr_reports counts every report xhci.c decoded; the difference
         # over one second IS the rate, and reports/s * 127 is the fastest the
         # pointer can possibly travel. It read 1 per frame before the event
-        # ring got a single owner - see docs/POINTER-EVIDENCE.md.
+        # ring got a single owner - see docs/evidence/POINTER-EVIDENCE.md.
         ptrbase = ptr_reports()
         ptrnext = ticks() + 100
         while ticks() < iestop {
@@ -3472,14 +3472,14 @@ fn files_draw(ax, ay, aw, ah) {
     while files_di < fs_max() {
         if fs_inuse(files_di) == 1 {
             if files_seen >= files_scroll { if files_dn < files_rows {
-                files_ry = files_y0 + files_dn * files_rh
-                if files_di == files_sel {
-                    rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, 5 * files_u, rgb(35, 58, 78))
-                }
-                files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
-                label_num(ax + aw - 112 * files_u, files_ry + 4 * files_u, fs_bytes(files_di), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-                label(ax + aw - 58 * files_u, files_ry + 4 * files_u, "bytes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
-                files_dn = files_dn + 1
+                    files_ry = files_y0 + files_dn * files_rh
+                    if files_di == files_sel {
+                        rrect(ax + 8 * files_u, files_ry, aw - 16 * files_u, files_rh - 2 * files_u, 5 * files_u, rgb(35, 58, 78))
+                    }
+                    files_draw_name(files_di, ax + 18 * files_u, files_ry + 4 * files_u, theme(TH_TEXT_HI))
+                    label_num(ax + aw - 112 * files_u, files_ry + 4 * files_u, fs_bytes(files_di), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                    label(ax + aw - 58 * files_u, files_ry + 4 * files_u, "bytes", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+                    files_dn = files_dn + 1
             }}
             files_seen = files_seen + 1
         }
@@ -4357,7 +4357,7 @@ fn open_app(cmd, arg) {
     oa_f = wm_focus()
     if cmd == 103 {
         if snake_win >= 0 { if wm_open_p(snake_win) == 1 {
-            wm_setfocus(snake_win)  wm_raise(snake_win)  return 1
+                wm_setfocus(snake_win)  wm_raise(snake_win)  return 1
         }}
         snake_win = wm_open(APP_SNAKE, "Snake", 120 * oa_u, 70 * oa_u, 420 * oa_u, 360 * oa_u)
         if snake_win < 0 { return 0 }
@@ -4368,7 +4368,7 @@ fn open_app(cmd, arg) {
     }
     if cmd == 100 {
         if paint_win >= 0 { if wm_open_p(paint_win) == 1 {
-            wm_setfocus(paint_win)  wm_raise(paint_win)  return 1
+                wm_setfocus(paint_win)  wm_raise(paint_win)  return 1
         }}
         paint_win = wm_open(APP_PAINT, "Paint", 20 * oa_u, 230 * oa_u, 280 * oa_u, 160 * oa_u)
         if paint_win < 0 { return 0 }
@@ -4378,7 +4378,7 @@ fn open_app(cmd, arg) {
     }
     if cmd == 118 {
         if cube_win >= 0 { if wm_open_p(cube_win) == 1 {
-            wm_setfocus(cube_win)  wm_raise(cube_win)  return 1
+                wm_setfocus(cube_win)  wm_raise(cube_win)  return 1
         }}
         cube_win = wm_open(APP_CUBE, "3D", 310 * oa_u, 60 * oa_u, 160 * oa_u, 160 * oa_u)
         if cube_win < 0 { return 0 }
@@ -4388,7 +4388,7 @@ fn open_app(cmd, arg) {
     }
     if cmd == 97 {
         if anim_win >= 0 { if wm_open_p(anim_win) == 1 {
-            wm_setfocus(anim_win)  wm_raise(anim_win)  return 1
+                wm_setfocus(anim_win)  wm_raise(anim_win)  return 1
         }}
         anim_win = wm_open(APP_ANIM, "zlOS", 480 * oa_u, 60 * oa_u, 160 * oa_u, 160 * oa_u)
         if anim_win < 0 { return 0 }
@@ -4398,8 +4398,8 @@ fn open_app(cmd, arg) {
     }
     if cmd == 105 {
         if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
-            edit_prev_focus = oa_f
-            wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
+                edit_prev_focus = oa_f
+                wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
         if editor_open_default() == 0 {
             note_say("no zlfs volume for /user/notes.txt", 400)
@@ -4418,7 +4418,7 @@ fn open_app(cmd, arg) {
     }
     if cmd == 77 {
         if files_win >= 0 { if wm_open_p(files_win) == 1 {
-            wm_setfocus(files_win)  wm_raise(files_win)  return 1
+                wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
         files_win = wm_open(APP_FILES, "Files", 238 * oa_u, 346 * oa_u, 672 * oa_u, 352 * oa_u)
         if files_win < 0 { return 0 }
@@ -4429,7 +4429,7 @@ fn open_app(cmd, arg) {
     }
     if cmd == 120 {
         if mouse_win >= 0 { if wm_open_p(mouse_win) == 1 {
-            wm_setfocus(mouse_win)  wm_raise(mouse_win)  return 1
+                wm_setfocus(mouse_win)  wm_raise(mouse_win)  return 1
         }}
         mouse_win = wm_open(APP_MOUSE, "Pointer", 310 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
         if mouse_win < 0 { return 0 }
@@ -4442,10 +4442,10 @@ fn open_app(cmd, arg) {
 
 fn open_disk_editor(slot) {
     if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
-        note_say("close the current editor first", 300)
-        wm_setfocus(edit_win)
-        wm_raise(edit_win)
-        return 0
+            note_say("close the current editor first", 300)
+            wm_setfocus(edit_win)
+            wm_raise(edit_win)
+            return 0
     }}
     if editor_open_disk(slot) == 0 {
         note_say("file is missing or too large", 320)
@@ -5815,66 +5815,66 @@ while running == 1 {
         if sec != last_sec {
             draw_clock(sec)
             last_sec = sec
-        # (apps-in-windows had a second copy of this block here, wrapped in
-        #  `if dragging == 0 { if menu_open == 0 {` - guards over two globals
-        #  that belong to its static desktop and do not exist in this tree.)
+            # (apps-in-windows had a second copy of this block here, wrapped in
+            #  `if dragging == 0 { if menu_open == 0 {` - guards over two globals
+            #  that belong to its static desktop and do not exist in this tree.)
 
-        # ---- mouse: the live pointer, and window dragging ------------------
-        # apps-in-windows' static-desktop mouse loop was here: 182 lines of
-        # live pointer, window dragging and start-menu handling, drawn with
-        # mhide/mpoint/raise_windows against a desktop composited by hand.
-        #
-        # It is gone because the compositor replaced it. wm.c owns the pointer,
-        # the drag and the z-order now, off the damage list, and this block's own
-        # comment already said it was unreachable - it sits inside `if px_w() > 0`
-        # and px_w() is 0 wherever the text shell runs. It survived the merge only
-        # because main deleted it outside a conflict region while apps kept it,
-        # and it called raise_windows/close_menu/menu_cmd over menu_open/mnx/mny,
-        # none of which exist in this tree. Dead code that does not compile.
-        phase = tk % 100
-        bon = 0
-        if phase < 50 { bon = 1 }
-        if bon != last_blink {
-            cursor(crow, ccol, bon, C_CURSOR)
-            last_blink = bon
-        }
+            # ---- mouse: the live pointer, and window dragging ------------------
+            # apps-in-windows' static-desktop mouse loop was here: 182 lines of
+            # live pointer, window dragging and start-menu handling, drawn with
+            # mhide/mpoint/raise_windows against a desktop composited by hand.
+            #
+            # It is gone because the compositor replaced it. wm.c owns the pointer,
+            # the drag and the z-order now, off the damage list, and this block's own
+            # comment already said it was unreachable - it sits inside `if px_w() > 0`
+            # and px_w() is 0 wherever the text shell runs. It survived the merge only
+            # because main deleted it outside a conflict region while apps kept it,
+            # and it called raise_windows/close_menu/menu_cmd over menu_open/mnx/mny,
+            # none of which exist in this tree. Dead code that does not compile.
+            phase = tk % 100
+            bon = 0
+            if phase < 50 { bon = 1 }
+            if bon != last_blink {
+                cursor(crow, ccol, bon, C_CURSOR)
+                last_blink = bon
+            }
 
-        # THE MOUSE BLOCK THAT WAS HERE IS GONE, C4. It was 165 lines of
-        # window dragging, hit testing, focus, the close box, the start menu
-        # and the dock - all of it guarded by `if px_w() > 0`, and all of it
-        # now unreachable: a framebuffer means the compositor booted, and this
-        # loop only runs when there is no framebuffer at all. wm.c does every
-        # one of those jobs, with a scissor and a damage list instead of a
-        # 640x480 sprite buffer.
+            # THE MOUSE BLOCK THAT WAS HERE IS GONE, C4. It was 165 lines of
+            # window dragging, hit testing, focus, the close box, the start menu
+            # and the dock - all of it guarded by `if px_w() > 0`, and all of it
+            # now unreachable: a framebuffer means the compositor booted, and this
+            # loop only runs when there is no framebuffer at all. wm.c does every
+            # one of those jobs, with a scissor and a damage list instead of a
+            # 640x480 sprite buffer.
 
-        present()          # push this frame's changes out in one blit
+            present()          # push this frame's changes out in one blit
 
-        ch = key_get()
-        if ch > 0 {
-            if is_digit(ch) == true {
-                cursor(crow, ccol, 0, C_CURSOR)
-                color(C_WHITE)  put(ch - 48)
-                ccol = ccol + 1
-                last_blink = 0 - 1                  # force a redraw at the new spot
-                pending = pending * 10 + (ch - 48)
-            } else {
-                if ch > 32 {
+            ch = key_get()
+            if ch > 0 {
+                if is_digit(ch) == true {
                     cursor(crow, ccol, 0, C_CURSOR)
-                    print("")
-                    draw_status("working")
-                    term_submit(ch, pending, 1)
-                    r = run_command(ch, pending)
-                    term_complete(ch, r)
-                    pending = 0
-                    got = 1
-                    last_sec = 0 - 1                # clock lost to the redraw
-                    draw_status("ready")
-                    if r == 1 { running = 0 }
+                    color(C_WHITE)  put(ch - 48)
+                    ccol = ccol + 1
+                    last_blink = 0 - 1                  # force a redraw at the new spot
+                    pending = pending * 10 + (ch - 48)
+                } else {
+                    if ch > 32 {
+                        cursor(crow, ccol, 0, C_CURSOR)
+                        print("")
+                        draw_status("working")
+                        term_submit(ch, pending, 1)
+                        r = run_command(ch, pending)
+                        term_complete(ch, r)
+                        pending = 0
+                        got = 1
+                        last_sec = 0 - 1                # clock lost to the redraw
+                        draw_status("ready")
+                        if r == 1 { running = 0 }
+                    }
                 }
             }
         }
     }
-}
 
 }
 

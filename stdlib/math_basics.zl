@@ -2,84 +2,84 @@
 # Standalone: no imports, every helper defined here.
 
 fn abs(x) {
-  if x < 0 {
-    return -x
-  } else {
-    return x
-  }
+    if x < 0 {
+        return -x
+    } else {
+        return x
+    }
 }
 
 fn sign(x) {
-  if x > 0 {
-    return 1
-  } else {
-    if x < 0 {
-      return -1
+    if x > 0 {
+        return 1
     } else {
-      return 0
+        if x < 0 {
+            return -1
+        } else {
+            return 0
+        }
     }
-  }
 }
 
 fn min2(a, b) {
-  if a < b {
-    return a
-  } else {
-    return b
-  }
+    if a < b {
+        return a
+    } else {
+        return b
+    }
 }
 
 fn max2(a, b) {
-  if a > b {
-    return a
-  } else {
-    return b
-  }
+    if a > b {
+        return a
+    } else {
+        return b
+    }
 }
 
 # exp assumed >= 0 (integer exponent)
 fn pow(base, exp) {
-  result = 1
-  i = 0
-  while i < exp {
-    result = result * base
-    i = i + 1
-  }
-  return result
+    result = 1
+    i = 0
+    while i < exp {
+        result = result * base
+        i = i + 1
+    }
+    return result
 }
 
 # greatest common divisor via Euclid's algorithm (works on negatives too)
 fn gcd(a, b) {
-  x = abs(a)
-  y = abs(b)
-  while y != 0 {
-    t = y
-    y = x % y
-    x = t
-  }
-  return x
+    x = abs(a)
+    y = abs(b)
+    while y != 0 {
+        t = y
+        y = x % y
+        x = t
+    }
+    return x
 }
 
 # least common multiple; lcm(0,0) defined as 0
 fn lcm(a, b) {
-  if a == 0 {
-    return 0
-  } else {
-    if b == 0 {
-      return 0
+    if a == 0 {
+        return 0
     } else {
-      g = gcd(a, b)
-      return abs(a / g * b)
+        if b == 0 {
+            return 0
+        } else {
+            g = gcd(a, b)
+            return abs(a / g * b)
+        }
     }
-  }
 }
 
 fn is_even(x) {
-  return x % 2 == 0
+    return x % 2 == 0
 }
 
 fn is_odd(x) {
-  return not is_even(x)
+    return not is_even(x)
 }
 
 # ---------------- self-test ----------------

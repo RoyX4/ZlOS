@@ -105,6 +105,10 @@ kernel/hosttest/modeset-*.log
 # screenshots taken by kernel/probe-shot.py - evidence for a visual gate, but
 # regenerable and large. The gate is "run it and look", not "diff a PNG".
 kernel/shots/
+
+# screenshots emitted by kernel/exercise.py. These are run artifacts; keep
+# curated visual evidence in docs/ instead of tracking every harness frame.
+kernel/exercise-out/
 kernel/hosttest/fbbench
 kernel/hosttest/gpu_fillrate
 kernel/hosttest/inputtest

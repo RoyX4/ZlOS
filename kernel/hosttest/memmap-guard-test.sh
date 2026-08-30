@@ -14,7 +14,7 @@
 # Exit status is 0 only if the baseline compiles AND every break is caught.
 set -u
 
-KDIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+KDIR=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 CFLAGS="-m32 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -Wno-unused-parameter"
 # EVERY FILE THAT OWNS A REGION, and four of these were added the day the map
 # stopped being six regions. arena.c, virtio_net.c and intel.c each held a
@@ -92,7 +92,7 @@ echo "each of these breaks the map on purpose; the build MUST refuse it:"
 # The actual reported bug, replayed: HID buffers back inside the blur arena.
 expect_break "the real bug: HID_BUF back at 0x0C900000, inside the blur arena" \
     's/^#define HI_HID    0x0B800000UL/#define HI_HID    0x0C900000UL/' \
-    "out of order: hid >= blur"
+    "out of order: hid >= gpu\|buffers escape their region"
 
 # Ordering: any two bases swapped underflows every "does it fit" subtraction.
 expect_break "map out of order: blur placed below sched" \
@@ -111,10 +111,10 @@ expect_break "back buffer no longer covers 3840x2160" \
     's/^#define HI_APSTK  0x0A800000UL/#define HI_APSTK  0x09000000UL/' \
     "3840x2160"
 
-# The 256 MiB ceiling: crossing it fails as ERR_UNSPEC at run time, not loudly.
-expect_break "virtio-gpu framebuffer pushed over the 256 MiB guest ceiling" \
-    's/^#define HI_VGPU   0x0F000000UL/#define HI_VGPU   0x0F900000UL/' \
-    "256 MiB"
+# The HI_TOP ceiling: crossing it fails as ERR_UNSPEC at run time, not loudly.
+expect_break "virtio-gpu framebuffer pushed over the guest RAM ceiling" \
+    's/^#define HI_VGPU   0x0F000000UL/#define HI_VGPU   0x3F200000UL/' \
+    "framebuffer crosses the guest RAM ceiling"
 
 # The top half of the map, which had no assertion at all before this.
 expect_break "xhci arena pushed into virtio-gpu's region" \
@@ -156,7 +156,7 @@ expect_break "the real bug, again: EDID scratch back at 0x0C980000" \
 # used to start at HI_IMG, so the program arena and kernel.zl's block were
 # outside every check there was.
 expect_break "the program arena grown into kernel.zl's block at 32 MiB" \
-    's/^#define LO_ARENA_END 0x01800000UL/#define LO_ARENA_END 0x02100000UL/' \
+    's/^#define LO_ARENA_END 0x01E00000UL/#define LO_ARENA_END 0x02100000UL/' \
     "has grown into kernel.zl"
 
 
@@ -231,8 +231,8 @@ same virtio_net.c \
 # arena.c held its own two literals AND a restated HI_IMG_BASE that had gone
 # stale by 16 MiB. The extent is from memmap.h now and must not have moved.
 same arena.c \
-    "ARENA_BASE == 0x00800000UL" "ARENA_BYTES == 0x01000000UL" \
-    "ARENA_END == 0x01800000UL"  "HI_IMG_BASE == 0x03000000UL"
+    "ARENA_BASE == 0x00E00000UL" "ARENA_BYTES == 0x01000000UL" \
+    "ARENA_END == 0x01E00000UL"  "HI_IMG_BASE == 0x03000000UL"
 
 # i2c_hid.c and intel.c are the two that are SUPPOSED to have moved - both out
 # of fb.c's blur arena, two reviews apart, for identical reasons.

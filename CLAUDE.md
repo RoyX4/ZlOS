@@ -2,33 +2,24 @@
 
 ## Read first, before changing anything
 
-**`docs/STATE-OF-THE-PROJECT.md` is the one page that says where the project
-actually is.** Twenty-one planning documents (~392 KB) were audited item by item
-against the merged tree on 2026-08-19 and every open item, with its evidence,
-lives there ranked by leverage. The twenty-one now carry banners pointing at it.
-Read it before picking up any task list.
+**`docs/PROJECT-STATUS.md` is the current front door.** It separates repository
+integration, the complete implementation program, raw research, and actual
+implementation evidence. Read it before picking up any task list.
 
-**`docs/ROAD-TO-TEN.md`** is the leverage ranking for the project as a whole —
-what it scores today against a real external rubric, what is already excellent
-and invisible, and the ordered list of what moves it. Read it when deciding
-*what to work on*, as opposed to `STATE-OF-THE-PROJECT.md`, which tells you what
-is broken. It also records the first measured run of the self-hosting fixpoint on
-Linux (it holds), and the fact that no gate runs it.
+`docs/STATE-OF-THE-PROJECT.md` is the detailed 2026-08-19 audit. It remains
+valuable evidence but predates later integration. The archived
+`docs/archive/superseded/ROAD-TO-TEN.md` is also historical, not the queue.
 
-`docs/CODE-MAP.md` says where the code actually lives. The layout is not what
-the directory names imply: the desktop and all eight apps are one zl file
-(`kernel/kernel.zl`), and `kernel/out.c` is generated output that must never be
-edited or counted. Read it before searching for a subsystem — but note it is
-**stale from its "The browser" heading onward**: it says the browser is
-branch-only and that `main` has no windowed desktop, and both are false since
-the merge. `STATE-OF-THE-PROJECT.md` §11 has the corrections.
+`docs/CODE-MAP.md` says where source, generated output, evidence, partial docs
+and archived docs belong. Read it before searching for a subsystem or moving
+files around.
 
-`docs/MERGE-EVIDENCE.md` is the measured account of the eight parallel
+`docs/evidence/MERGE-EVIDENCE.md` is the measured account of the eight parallel
 tracks: the real shared base (`d61a481`, not `44346d6`), the landmines that
 merge clean and then fail, and the landing order. Read it before merging
 anything or starting a ninth track.
 
-**`docs/MERGE-ROUND-2.md` is round 2** — the twelve worktrees standing on
+**`docs/evidence/MERGE-ROUND-2.md` is round 2** — the twelve worktrees standing on
 2026-08-20, measured: 165 commits, 219 files, 129 uncommitted, **0 pushed**, and
 `kernel/kernel.zl` contested by nine branches. It also records why opening a PR
 per branch is the wrong shape here (local `main` is 45 ahead of `origin/main`,
@@ -36,7 +27,7 @@ so every PR would diff against a stale base), the landing order, and two places
 `MERGE-EVIDENCE.md` is now stale in the pessimistic direction. Read it before
 touching any `zl-linux-*` worktree.
 
-`docs/DOCS-RECONCILE-PROMPT.md` is the brief that produced
+`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md` is the brief that produced
 `STATE-OF-THE-PROJECT.md`. Done 2026-08-19; kept for method, not for work.
 
 **`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is five checks in this tree that
@@ -46,8 +37,8 @@ discovery sweep that reads no C at all, and why a gate in this shared checkout
 can fail for reasons that are not the code. Read it before trusting any green
 result here, and before writing a new gate.
 
-`kernel/docs/BROWSER-STORAGE-PROMPT.md` was the brief for that work and it is
-**DONE** - see `kernel/docs/browser-storage-run.md` for the run. The parser's
+`kernel/docs/archive/prompts/BROWSER-STORAGE-PROMPT.md` was the brief for that work and it is
+**DONE** - see `kernel/docs/evidence/browser-storage-run.md` for the run. The parser's
 node array, its text arena, layout's runs and css's selectors were all static
 and all full on a real page; they are the caller's now, in `memmap.h`'s new
 `HI_DOM` region, and a real article parses whole (`8192/8192 with 7,807
@@ -62,12 +53,12 @@ arena refused rules **without setting `css_overflowed()`**, invisible until
 stale when the AP stacks were inserted. `hosttest/parsestat.c` is the
 measuring instrument, committed this time.
 
-`kernel/docs/browser-render-run.md` is the record of the run that produced the
+`kernel/docs/evidence/browser-render-run.md` is the record of the run that produced the
 current state - images, flexbox, grid, `@media`, search, the network at boot -
 with every number and the command that measured it, including the four gates
 that turned out to be testing something other than what they claimed.
 
-`kernel/docs/BROWSER-RENDER-PROMPT.md` is the brief that run worked from, and
+`kernel/docs/archive/prompts/BROWSER-RENDER-PROMPT.md` is the brief that run worked from, and
 both its items are now marked done. Worth reading anyway for two reasons: it
 opens by correcting two things a fresh session is likely to be told to do that
 are already done (Google works, and AES-256 is not needed), and its §1 records
@@ -94,7 +85,7 @@ area:
   much RAM exists) are four different numbers with four different guards. Read
   it before placing any buffer, and before believing a `_Static_assert` covers
   what you think it covers.
-- `kernel/docs/overnight-2026-08-18.md` — one page covering the descriptor-pointer
+- `kernel/docs/evidence/overnight-2026-08-18.md` — one page covering the descriptor-pointer
   bug that made the 64-bit boot layout-sensitive, why three green gates missed it,
   and what is still open.
 - `docs/design/ci-and-agent-pipeline.md` — **design only, not built.** Why the
@@ -160,11 +151,11 @@ fixed form of the bug above. Do not "fix" it back.
 `kernel/HANDOFF.md` is the orientation doc and it is kept honest — it records what
 is *verified* rather than what is intended. Read it before touching `kernel/`.
 
-**All eleven tracks landed on `main` on 2026-08-19.** `docs/MERGE-EVIDENCE.md`
+**All eleven tracks landed on `main` on 2026-08-19.** `docs/evidence/MERGE-EVIDENCE.md`
 §Outcome is the record. Two branches are still out: `fix/pointer-drain` (3
 commits, the written fix for the broken pointer) and `ci/gates-and-agent-brief`
 (11 commits, the only CI and the only copy of `zlfmt.c` anywhere).
-`docs/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
+`docs/archive/superseded/INTEGRATION-PLAN.md` is **superseded** and its figures are wrong — do not
 plan a merge from it.
 
 `kernel/docs/gen9-modeset-plan.txt` is the researched Intel display plan (JSON;

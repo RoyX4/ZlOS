@@ -41,7 +41,7 @@ You have already solved this once, and the solution is in the repo:
 **That practice should be mandatory and mechanical for every gate.** Generalised:
 
 ```
-tools/gate-mutation.sh
+future gate-mutation tool
 ```
 
 For each gate, a registered mutation it MUST detect:
@@ -95,7 +95,7 @@ mutation round costs a compile and a `wmtest` run, no boot.
 cwd = <repo>/kernel, inside a git repo
   ~/.codex/AGENTS.md   (global)   loaded
   <repo>/AGENTS.md     (root)     loaded
-  <repo>/kernel/AGENTS.md (nested) loaded
+  <repo>/kernel nested AGENTS loaded
 ```
 
 Cursor does the same: its rule loader globs `**/AGENTS.md`, `**/.cursor/rules/**`
@@ -107,15 +107,15 @@ tooling. Proposed set:
 
 | file | says |
 |---|---|
-| `kernel/AGENTS.md` | the LLP64 rule, `-mgeneral-regs-only` boundary, the memory map, which gates cover this dir, **panel power can damage hardware** |
-| `kernel/hosttest/AGENTS.md` | these run on Linux against the real GPU; `--survey` is read-only; `modeset-run.sh` blanks the screen and recovers from an EXIT trap |
-| `tools/AGENTS.md` | every check is mechanical; a check that needs judgement belongs in review, not here; every gate needs a registered mutation |
-| `docs/design/AGENTS.md` | status header required; a decision is not landed until the code agrees |
-| `examples/AGENTS.md` | **this directory is a test input set** — `run_tests.sh` globs `*.zl`; scratch files break the suite |
-| `stdlib/AGENTS.md` | names leak into global scope; prefix them |
-| `freestanding/AGENTS.md` | no libc; the binary must have 0 undefined symbols |
+| kernel nested AGENTS | the LLP64 rule, `-mgeneral-regs-only` boundary, the memory map, which gates cover this dir, **panel power can damage hardware** |
+| hosttest nested AGENTS | these run on Linux against the real GPU; `--survey` is read-only; `modeset-run.sh` blanks the screen and recovers from an EXIT trap |
+| tools nested AGENTS | every check is mechanical; a check that needs judgement belongs in review, not here; every gate needs a registered mutation |
+| design-doc nested AGENTS | status header required; a decision is not landed until the code agrees |
+| examples nested AGENTS | **this directory is a test input set** — `run_tests.sh` globs `*.zl`; scratch files break the suite |
+| stdlib nested AGENTS | names leak into global scope; prefix them |
+| freestanding nested AGENTS | no libc; the binary must have 0 undefined symbols |
 
-`examples/AGENTS.md` alone would have prevented the `Zaccoding.zl` breakage.
+An examples nested AGENTS file alone would have prevented the Zaccoding breakage.
 
 **Coverage check:** every directory containing source must have one. Same shape
 as the README check — mechanical, baselined, fails on a new uncovered directory.
@@ -135,7 +135,7 @@ Rules that keep it from rotting into noise:
   No sha, no proposal.
 - **Additions only, never silent edits.** An agent rewriting a hazard it does not
   understand is the failure mode to design against.
-- **A cap.** If `kernel/AGENTS.md` exceeds ~200 lines it stops being read; over
+- **A cap.** If the kernel nested AGENTS file exceeds ~200 lines it stops being read; over
   the cap, a proposal must *replace* something and say what.
 - **Every hazard gets a registered claim** where possible, so the instruction and
   its proof travel together.

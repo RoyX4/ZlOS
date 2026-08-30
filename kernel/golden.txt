@@ -1,4 +1,8 @@
+  USB: no xHCI controller (6 PCI devices seen)
   settings: no NVMe, load skipped
+  arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
+  heap: 64 MiB at 256 MiB, ends at 320 MiB
+  vmm: paging is off on this build - identity, by construction
   zlOS starting
 
   [  OK  ] multiboot handoff, 32-bit protected mode
@@ -11,10 +15,9 @@
   [  OK  ] PIT timer running at 100 Hz on IRQ0
   [  OK  ] keyboard on IRQ1 - no more polling the port
   USB: no xHCI controller (6 PCI devices seen)
-  arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
-  heap: 64 MiB at 256 MiB, ends at 320 MiB
-  vmm: paging is off on this build - identity, by construction
   ring 3: u31 <- from ring 3 via int 0x80, 5 syscalls, returned to ring 0
+  network driver: Intel e1000e/I219 device 0x100E
+  network: link ready, DHCP started
   [  OK  ] zl runtime, kernel subset
   [ INFO ] no heap, zlfs mounts on demand, no scheduler
 
@@ -33,8 +36,8 @@
     x        mouse demo - a cursor driven by the PS/2 mouse
     g        play SNAKE (w a s d to steer)
     d        paint with the mouse
-    <n> i    edit legacy RAM slot n (0-9)
-    l        Files app (graphical mode) / RAM slots (text mode)
+    i        edit persistent /user/notes.txt (graphical mode)
+    l        list persistent zlfs files
     run F    run a program from a file (type it - needs a name)
     .        zlfs on the NVMe disk - mount, and count the boots
     ,        list the files ON DISK, by name

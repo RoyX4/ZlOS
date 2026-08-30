@@ -3,7 +3,7 @@
 **Status:** decision · **Author:** audit pass · **Date:** 2026-08-01
 **Scope:** decides the *policy* for `compiler.zl`. Recommends three small edits to
 `compiler.zl` (~20 lines, no new syntax), one change to `verify.ps1`, and two
-corrections to `MASTER_PLAN.md` / `docs/OVERNIGHT_CAMPAIGN.md`. No code is
+corrections to `MASTER_PLAN.md` / `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md`. No code is
 changed by this document. Line-number citations are against the tree as it stood
 on 2026-08-01; `lexer.c` and `parser.c` were being edited concurrently, so treat
 them as pointers, not as anchors.
@@ -61,7 +61,7 @@ Two planning documents state the opposite:
 
 > Every one of these touches lexer+parser+interp+compile AND must be mirrored in
 > `compiler.zl` or the fixpoint dies.
-> — `docs/OVERNIGHT_CAMPAIGN.md:64-65`, and again at `MASTER_PLAN.md:742`
+> — `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md:64-65`, and again at `MASTER_PLAN.md:742`
 
 The fixpoint does not die. Every W2 feature so far — `elif`, ternary, `in`,
 f-strings, ranged `for`, `do`/`while`, `loop`, `break`/`continue`, compound
@@ -467,7 +467,7 @@ first time. The gate stays two checks and one command.
 ### 6.3 Two documentation corrections
 
 1. Delete the claim at `MASTER_PLAN.md:742` and
-   `docs/OVERNIGHT_CAMPAIGN.md:64-65` that new syntax "must be mirrored in
+   `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md:64-65` that new syntax "must be mirrored in
    `compiler.zl` or the fixpoint dies." It is false, it has never been followed,
    and leaving it in place means every future reader mis-scopes their W2 work.
    Replace it with the subset policy: *new surface lands in `lexer.c`,
@@ -555,7 +555,7 @@ being easy to add; the number `47/110` being aesthetically annoying.
 5. `compiler.zl`'s header states its subset — 12 keywords, its statement forms,
    its escape set, and what it refuses — the way `compilel.c`'s header states
    its own.
-6. `MASTER_PLAN.md:742` and `docs/OVERNIGHT_CAMPAIGN.md:64-65` no longer claim
+6. `MASTER_PLAN.md:742` and `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md:64-65` no longer claim
    that new syntax must be mirrored or the fixpoint dies, and state the subset
    policy instead.
 7. One committed script prints the corpus coverage number, and `47/110` is

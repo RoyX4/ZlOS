@@ -13,7 +13,7 @@
 # Exit 1 on any hit. Run locally, or from .github/workflows/gates.yml.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 COUNT_ONLY=0
 [ "${1:-}" = "--count" ] && COUNT_ONLY=1
@@ -97,7 +97,7 @@ if command -v clang >/dev/null 2>&1; then
             total=$((total+n)); bad=$((bad+1))
         fi
     done
-    popd >/dev/null
+    popd >/dev/null || exit
     if [ "$COUNT_ONLY" -eq 1 ]; then echo "$total"; exit 0; fi
     base=$(grep -E '^efi_truncation_sites=' tools/hazard-baseline.txt 2>/dev/null | cut -d= -f2)
     base=${base:-0}

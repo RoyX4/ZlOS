@@ -25,8 +25,8 @@
 # shape.
 
 APP_SETTINGS = 6                    # settings.c; wmglue.c dispatches its
-                                     # draw/event before zl ever sees them -
-                                     # this only has to know how to OPEN one
+# draw/event before zl ever sees them -
+# this only has to know how to OPEN one
 # "All Applications" - see cat_* below.
 #
 # 70 AND NOT 13, and that one digit is why the catalog never opened. 13 is
@@ -97,8 +97,8 @@ REG_LAST  = 69                      # highest id any slice owns
 fn reg_exists(id) {
     if id < REG_FIRST { return 0 }
     if id > REG_LAST { return 0 }             # incl. APP_CATALOG, which is
-                                              # REG_LAST + 1 and must never
-                                              # appear as a tile in itself
+    # REG_LAST + 1 and must never
+    # appear as a tile in itself
     if id >= 34 { if id <= 39 { return 0 } }   # never allocated
     if id == 51 { return 0 }                   # apps_sys3.zl   spare
     if id == 60 { return 0 }                   # apps_games3.zl spare
@@ -304,7 +304,7 @@ fn reg_icon(id) {
 
     # ---- system (APPS) ------------------------------------------------------
     if id == APP_CLOCK   { return 16 }  # clock - the atlas glyph already IS the
-                                        # reference's, so it is not redrawn
+    # reference's, so it is not redrawn
     if id == APP_SYSINFO { return 55 }  # chip
     if id == APP_CALC    { return 49 }  # calcApp
 
@@ -424,13 +424,13 @@ fn reg_new(id, u) {
     if id == APP_CALC      { ca_clear() }
     if id == APP_MAZE      { mz_reset() }
     if id >= APP_CLIP { if id <= APP_BENCH {
-        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+            return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
     if id >= APP_WORDLE { if id <= APP_CONNECT4 {
-        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+            return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
     if id >= APP_CLOCK { if id <= APP_CALC {
-        return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
+            return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)
     }}
     if id == APP_MAZE {
         return wm_open(id, reg_name(id), 160 * u, 80 * u, reg_w(id) * u, reg_h(id) * u)

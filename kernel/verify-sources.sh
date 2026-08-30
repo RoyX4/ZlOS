@@ -18,7 +18,7 @@
 # alike - the same reason modeset-run.sh does it that way. Leaving a probe file
 # in SOURCES would poison every later build on this machine.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 PROBE=_srcprobe.c
 MARKER=ZL_SOURCES_PROBE_9c3f1a

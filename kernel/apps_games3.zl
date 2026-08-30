@@ -717,10 +717,10 @@ fn bo_step() {
         if cy >= BO_PY {
             if cy <= BO_PY + BO_PH + 6 {
                 if cx >= bo_px { if cx <= bo_px + BO_PW {
-                    bo_by = (BO_PY - BO_BS) * 4
-                    bo_vy = 0 - bo_vy
-                    bo_vx = (cx - (bo_px + BO_PW / 2)) * 11 / (BO_PW / 2)
-                    if bo_vx == 0 { bo_vx = 2 }
+                        bo_by = (BO_PY - BO_BS) * 4
+                        bo_vy = 0 - bo_vy
+                        bo_vx = (cx - (bo_px + BO_PW / 2)) * 11 / (BO_PW / 2)
+                        if bo_vx == 0 { bo_vx = 2 }
                 }}
             }
         }
@@ -896,20 +896,20 @@ fn ms_flood() {
             while x < MS_W {
                 v = ms_at(x, y)
                 if band(v, 32) != 0 { if band(v, 16) == 0 { if band(v, 15) == 0 {
-                    dy = 0 - 1
-                    while dy <= 1 {
-                        dx = 0 - 1
-                        while dx <= 1 {
-                            nx = x + dx
-                            ny = y + dy
-                            if nx >= 0 { if nx < MS_W { if ny >= 0 { if ny < MS_H {
-                                nv = ms_at(nx, ny)
-                                if band(nv, 32) == 0 { if band(nv, 64) == 0 { ms_put(nx, ny, bor(nv, 32))  changed = 1 } }
-                            }}}}
-                            dx = dx + 1
-                        }
-                        dy = dy + 1
-                    }
+                            dy = 0 - 1
+                            while dy <= 1 {
+                                dx = 0 - 1
+                                while dx <= 1 {
+                                    nx = x + dx
+                                    ny = y + dy
+                                    if nx >= 0 { if nx < MS_W { if ny >= 0 { if ny < MS_H {
+                                                    nv = ms_at(nx, ny)
+                                                    if band(nv, 32) == 0 { if band(nv, 64) == 0 { ms_put(nx, ny, bor(nv, 32))  changed = 1 } }
+                                    }}}}
+                                    dx = dx + 1
+                                }
+                                dy = dy + 1
+                            }
                 }}}
                 x = x + 1
             }
@@ -1123,12 +1123,12 @@ fn g48_move(dir) {
         while k < 3 {
             a = peek8(G48_TMP + k)
             if a != 0 { if a == peek8(G48_TMP + k + 1) {
-                poke8(G48_TMP + k, a + 1)
-                g48_score = g48_score + shl(1, a + 1)
-                if a + 1 >= 11 { g48_won = 1 }
-                j = k + 1
-                while j < 3 { poke8(G48_TMP + j, peek8(G48_TMP + j + 1))  j = j + 1 }
-                poke8(G48_TMP + 3, 0)
+                    poke8(G48_TMP + k, a + 1)
+                    g48_score = g48_score + shl(1, a + 1)
+                    if a + 1 >= 11 { g48_won = 1 }
+                    j = k + 1
+                    while j < 3 { poke8(G48_TMP + j, peek8(G48_TMP + j + 1))  j = j + 1 }
+                    poke8(G48_TMP + 3, 0)
             }}
             k = k + 1
         }
@@ -1643,10 +1643,10 @@ fn as_step() {
             k = 0
             while k < AS_ROCKS {
                 if as_slife(i) > 0 { if as_rsize(k) != 0 {
-                    dx = (nx - as_rx(k)) / AS_U
-                    dy = (ny - as_ry(k)) / AS_U
-                    rr = as_rrad(as_rsize(k))
-                    if dx * dx + dy * dy < rr * rr { poke8(G3_SHOTB + i * 8, 0)  as_kill(k) }
+                        dx = (nx - as_rx(k)) / AS_U
+                        dy = (ny - as_ry(k)) / AS_U
+                        rr = as_rrad(as_rsize(k))
+                        if dx * dx + dy * dy < rr * rr { poke8(G3_SHOTB + i * 8, 0)  as_kill(k) }
                 }}
                 k = k + 1
             }
@@ -1867,9 +1867,9 @@ fn iv_shield_hit(x, y) {
     while s < IV_SHIELDS {
         sx = iv_shx(s)
         if x >= sx { if x < sx + IV_SCOLS * IV_SBW {
-            c = (x - sx) / IV_SBW
-            hp = iv_sh(s, c, r)
-            if hp > 0 { iv_setsh(s, c, r, hp - 1)  return 1 }
+                c = (x - sx) / IV_SBW
+                hp = iv_sh(s, c, r)
+                if hp > 0 { iv_setsh(s, c, r, hp - 1)  return 1 }
         }}
         s = s + 1
     }
@@ -1883,13 +1883,13 @@ fn iv_laser_hit() {
         while c < IV_COLS {
             t = iv_alien(c, r)
             if t != 0 { if iv_ly > 0 {
-                axp = iv_ox + c * IV_SX
-                ayp = iv_oy + r * IV_SY
-                if iv_lx >= axp { if iv_lx <= axp + IV_AW { if iv_ly >= ayp { if iv_ly <= ayp + IV_AH {
-                    iv_setalien(c, r, 0)
-                    iv_score = iv_score + t * 10
-                    iv_ly = 0
-                }}}}
+                    axp = iv_ox + c * IV_SX
+                    ayp = iv_oy + r * IV_SY
+                    if iv_lx >= axp { if iv_lx <= axp + IV_AW { if iv_ly >= ayp { if iv_ly <= ayp + IV_AH {
+                                    iv_setalien(c, r, 0)
+                                    iv_score = iv_score + t * 10
+                                    iv_ly = 0
+                    }}}}
             }}
             c = c + 1
         }
@@ -1994,9 +1994,9 @@ fn iv_step() {
                 iv_setbomb(i, 1, bx, by)
                 if iv_shield_hit(bx, by) == 1 { iv_setbomb(i, 0, 0, 0) }
                 if by >= IV_PY { if bx >= iv_px { if bx <= iv_px + IV_PW {
-                    iv_setbomb(i, 0, 0, 0)
-                    iv_lives = iv_lives - 1
-                    if iv_lives <= 0 { iv_state = 1 }
+                            iv_setbomb(i, 0, 0, 0)
+                            iv_lives = iv_lives - 1
+                            if iv_lives <= 0 { iv_state = 1 }
                 }}}
             }
         }

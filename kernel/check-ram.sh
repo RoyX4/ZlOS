@@ -43,7 +43,7 @@
 # Static: greps source and does arithmetic. No build, no QEMU, no timing, so it
 # cannot fail because the host is busy.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 MAP=memmap.h
 [ -f "$MAP" ] || { echo "FAIL: no $MAP"; exit 1; }
@@ -91,7 +91,7 @@ for f in *.sh *.py; do
         END { if (buf != "") print start ":" buf }' "$f" \
         | grep -E 'qemu-system-[a-z0-9_]+' \
         | grep -vE ':[[:space:]]*#' \
-        | grep -vE 'command -v|pgrep|echo |print\(|"qemu-system-[a-z0-9_]+"\]?[[:space:]]*$')
+        | grep -vE 'command -v|pgrep|--version|echo |print\(|"qemu-system-[a-z0-9_]+"\]?,?[[:space:]]*$')
     [ "${#lines[@]}" -gt 0 ] || continue
 
     checked=$((checked + 1))

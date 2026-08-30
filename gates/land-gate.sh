@@ -76,7 +76,7 @@ hf=0; hp=0; hs=0
 for t in "$WT"/kernel/hosttest/*; do
   [ -x "$t" ] && [ ! -d "$t" ] || continue
   case "$(basename "$t")" in
-    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|gpu-dev.sh|modeset-run.sh|jmptest32) continue;;
+    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|jmptest32) continue;;
   esac
   ( cd "$WT/kernel/hosttest" && timeout 180 "./$(basename "$t")" >/dev/null 2>&1 )
   case $? in

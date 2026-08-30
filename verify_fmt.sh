@@ -3,7 +3,7 @@
 #
 # The formatter's whole safety argument is "it only rewrites leading
 # whitespace". This checks that claim against the real corpus rather than
-# trusting it, on every .zl file in the tree:
+# trusting it, on every tracked .zl source file in the tree:
 #
 #   1. it lexes         - zlfmt exits 1 on a file the lexer rejects
 #   2. idempotent       - format(format(x)) == format(x)
@@ -19,7 +19,7 @@
 #
 # Runs in about a second. No QEMU, no host-load sensitivity.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 [ -x ./zlfmt ]      || { echo "verify_fmt: ./zlfmt not built - run ./build.sh"; exit 2; }
 [ -x ./lexer_demo ] || { echo "verify_fmt: ./lexer_demo not built - run ./build.sh"; exit 2; }
@@ -29,7 +29,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 files=0; changed=0; fail=0
 
-while IFS= read -r f; do
+while IFS= read -r -d '' f; do
     files=$((files + 1))
 
     if ! ./zlfmt "$f" > "$tmp/a.zl" 2> "$tmp/err"; then
@@ -48,7 +48,7 @@ while IFS= read -r f; do
     ./lexer_demo "$f"        > "$tmp/o.tok" 2>/dev/null
     ./lexer_demo "$tmp/a.zl" > "$tmp/n.tok" 2>/dev/null
     cmp -s "$tmp/o.tok" "$tmp/n.tok" || { echo "  FAIL  $f - token stream differs"; fail=1; }
-done < <(find . -name '*.zl' -not -path './.git/*' | sort)
+done < <(git ls-files -z '*.zl' | sort -z)
 
 echo "----------------------------------------------"
 echo "  $files files checked, $changed would be re-indented"

@@ -24,7 +24,7 @@
 # it happens (CLAUDE.md, and verify-raw.sh learned this the hard way). This
 # polls for its marker with a generous ceiling.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 IMG=${ZLOS_DISK_IMG:-/tmp/zlos-diskgate.img}
 CEILING=${CEILING:-240}

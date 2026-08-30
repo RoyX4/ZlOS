@@ -179,7 +179,7 @@ fn wg_draw(ax, ay, aw, ah) {
             }
             # the caret, so an empty grid still says where the next key lands
             if wg_done == 0 { if ri == wg_row { if ci == wg_col {
-                fill_rgb(cx + 2 * u, cy + cell - 5 * u, cell - 4 * u, 2 * u, theme(TH_ACCENT))
+                        fill_rgb(cx + 2 * u, cy + cell - 5 * u, cell - 4 * u, 2 * u, theme(TH_ACCENT))
             }}}
             ci = ci + 1
         }
@@ -346,7 +346,7 @@ fn mz_reset() {
                 if d == 2 { ny = cy + 1 }
                 if d == 3 { nx = cx - 1 }
                 if nx >= 0 { if nx < MAZE_W { if ny >= 0 { if ny < MAZE_H {
-                    if mz_visited(nx, ny) == 0 { found = d }
+                                if mz_visited(nx, ny) == 0 { found = d }
                 }}}}
             }
             k = k + 1

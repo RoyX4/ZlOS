@@ -27,7 +27,7 @@
 # If the interp column moves across a runtime.c-only change, the measurement
 # is contaminated by host load and the run should be discarded.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 ROOT=$(cd .. && pwd)
 
 ONLY=""

@@ -6,201 +6,201 @@
 
 # ---- frequency table: list of [char, count] ----
 fn hf_build_freq(hf_s) {
-  hf_ft = []
-  hf_i = 0
-  while hf_i < len(hf_s) {
-    hf_c = at(hf_s, hf_i)
-    hf_idx = -1
-    hf_j = 0
-    while hf_j < len(hf_ft) {
-      hf_pair = hf_ft[hf_j]
-      if hf_pair[0] == hf_c { hf_idx = hf_j }
-      hf_j = hf_j + 1
-    }
-    if hf_idx == -1 {
-      hf_ft = push(hf_ft, [hf_c, 1])
-    } else {
-      hf_new = []
-      hf_k = 0
-      while hf_k < len(hf_ft) {
-        if hf_k == hf_idx {
-          hf_old = hf_ft[hf_k]
-          hf_new = push(hf_new, [hf_old[0], hf_old[1] + 1])
-        } else {
-          hf_new = push(hf_new, hf_ft[hf_k])
+    hf_ft = []
+    hf_i = 0
+    while hf_i < len(hf_s) {
+        hf_c = at(hf_s, hf_i)
+        hf_idx = -1
+        hf_j = 0
+        while hf_j < len(hf_ft) {
+            hf_pair = hf_ft[hf_j]
+            if hf_pair[0] == hf_c { hf_idx = hf_j }
+            hf_j = hf_j + 1
         }
-        hf_k = hf_k + 1
-      }
-      hf_ft = hf_new
+        if hf_idx == -1 {
+            hf_ft = push(hf_ft, [hf_c, 1])
+        } else {
+            hf_new = []
+            hf_k = 0
+            while hf_k < len(hf_ft) {
+                if hf_k == hf_idx {
+                    hf_old = hf_ft[hf_k]
+                    hf_new = push(hf_new, [hf_old[0], hf_old[1] + 1])
+                } else {
+                    hf_new = push(hf_new, hf_ft[hf_k])
+                }
+                hf_k = hf_k + 1
+            }
+            hf_ft = hf_new
+        }
+        hf_i = hf_i + 1
     }
-    hf_i = hf_i + 1
-  }
-  return hf_ft
+    return hf_ft
 }
 
 # ---- remove element at index -> new list ----
 fn hf_remove_at(hr_list, hr_idx) {
-  hr_out = []
-  hr_i = 0
-  while hr_i < len(hr_list) {
-    if hr_i != hr_idx {
-      hr_out = push(hr_out, hr_list[hr_i])
+    hr_out = []
+    hr_i = 0
+    while hr_i < len(hr_list) {
+        if hr_i != hr_idx {
+            hr_out = push(hr_out, hr_list[hr_i])
+        }
+        hr_i = hr_i + 1
     }
-    hr_i = hr_i + 1
-  }
-  return hr_out
+    return hr_out
 }
 
 # ---- index of node with smallest weight ----
 fn hf_min_index(hm_nodes) {
-  hm_best = 0
-  hm_i = 1
-  while hm_i < len(hm_nodes) {
-    hm_a = hm_nodes[hm_i]
-    hm_b = hm_nodes[hm_best]
-    if hm_a[0] < hm_b[0] {
-      hm_best = hm_i
+    hm_best = 0
+    hm_i = 1
+    while hm_i < len(hm_nodes) {
+        hm_a = hm_nodes[hm_i]
+        hm_b = hm_nodes[hm_best]
+        if hm_a[0] < hm_b[0] {
+            hm_best = hm_i
+        }
+        hm_i = hm_i + 1
     }
-    hm_i = hm_i + 1
-  }
-  return hm_best
+    return hm_best
 }
 
 # ---- build Huffman tree from frequency table ----
 fn hf_build_tree(hb_ft) {
-  hb_nodes = []
-  hb_i = 0
-  while hb_i < len(hb_ft) {
-    hb_p = hb_ft[hb_i]
-    hb_nodes = push(hb_nodes, [hb_p[1], "L", hb_p[0]])
-    hb_i = hb_i + 1
-  }
-  # combine two smallest until one node remains
-  while len(hb_nodes) > 1 {
-    hb_i1 = hf_min_index(hb_nodes)
-    hb_left = hb_nodes[hb_i1]
-    hb_nodes = hf_remove_at(hb_nodes, hb_i1)
-    hb_i2 = hf_min_index(hb_nodes)
-    hb_right = hb_nodes[hb_i2]
-    hb_nodes = hf_remove_at(hb_nodes, hb_i2)
-    hb_w = hb_left[0] + hb_right[0]
-    hb_nodes = push(hb_nodes, [hb_w, "N", hb_left, hb_right])
-  }
-  return hb_nodes[0]
+    hb_nodes = []
+    hb_i = 0
+    while hb_i < len(hb_ft) {
+        hb_p = hb_ft[hb_i]
+        hb_nodes = push(hb_nodes, [hb_p[1], "L", hb_p[0]])
+        hb_i = hb_i + 1
+    }
+    # combine two smallest until one node remains
+    while len(hb_nodes) > 1 {
+        hb_i1 = hf_min_index(hb_nodes)
+        hb_left = hb_nodes[hb_i1]
+        hb_nodes = hf_remove_at(hb_nodes, hb_i1)
+        hb_i2 = hf_min_index(hb_nodes)
+        hb_right = hb_nodes[hb_i2]
+        hb_nodes = hf_remove_at(hb_nodes, hb_i2)
+        hb_w = hb_left[0] + hb_right[0]
+        hb_nodes = push(hb_nodes, [hb_w, "N", hb_left, hb_right])
+    }
+    return hb_nodes[0]
 }
 
 # ---- generate codes: list of [char, codeString] ----
 fn hf_gen_codes(hg_node, hg_prefix, hg_acc) {
-  if hg_node[1] == "L" {
-    hg_code = hg_prefix
-    if hg_code == "" { hg_code = "0" }   # single-symbol tree
-    return push(hg_acc, [hg_node[2], hg_code])
-  }
-  hg_acc = hf_gen_codes(hg_node[2], hg_prefix + "0", hg_acc)
-  hg_acc = hf_gen_codes(hg_node[3], hg_prefix + "1", hg_acc)
-  return hg_acc
+    if hg_node[1] == "L" {
+        hg_code = hg_prefix
+        if hg_code == "" { hg_code = "0" }   # single-symbol tree
+        return push(hg_acc, [hg_node[2], hg_code])
+    }
+    hg_acc = hf_gen_codes(hg_node[2], hg_prefix + "0", hg_acc)
+    hg_acc = hf_gen_codes(hg_node[3], hg_prefix + "1", hg_acc)
+    return hg_acc
 }
 
 # ---- look up a char's code string ----
 fn hf_code_for(hc_codes, hc_char) {
-  hc_i = 0
-  while hc_i < len(hc_codes) {
-    hc_pair = hc_codes[hc_i]
-    if hc_pair[0] == hc_char { return hc_pair[1] }
-    hc_i = hc_i + 1
-  }
-  return ""
+    hc_i = 0
+    while hc_i < len(hc_codes) {
+        hc_pair = hc_codes[hc_i]
+        if hc_pair[0] == hc_char { return hc_pair[1] }
+        hc_i = hc_i + 1
+    }
+    return ""
 }
 
 # ---- encode string -> bit string ----
 fn hf_encode(he_s, he_codes) {
-  he_out = ""
-  he_i = 0
-  while he_i < len(he_s) {
-    he_c = at(he_s, he_i)
-    he_out = he_out + hf_code_for(he_codes, he_c)
-    he_i = he_i + 1
-  }
-  return he_out
+    he_out = ""
+    he_i = 0
+    while he_i < len(he_s) {
+        he_c = at(he_s, he_i)
+        he_out = he_out + hf_code_for(he_codes, he_c)
+        he_i = he_i + 1
+    }
+    return he_out
 }
 
 # ---- decode bit string -> original text ----
 fn hf_decode(hd_bits, hd_tree) {
-  # single-symbol tree: every bit is that one char
-  if hd_tree[1] == "L" {
-    hd_out1 = ""
-    hd_j = 0
-    while hd_j < len(hd_bits) {
-      hd_out1 = hd_out1 + hd_tree[2]
-      hd_j = hd_j + 1
+    # single-symbol tree: every bit is that one char
+    if hd_tree[1] == "L" {
+        hd_out1 = ""
+        hd_j = 0
+        while hd_j < len(hd_bits) {
+            hd_out1 = hd_out1 + hd_tree[2]
+            hd_j = hd_j + 1
+        }
+        return hd_out1
     }
-    return hd_out1
-  }
-  hd_out = ""
-  hd_node = hd_tree
-  hd_i = 0
-  while hd_i < len(hd_bits) {
-    hd_b = at(hd_bits, hd_i)
-    if hd_b == "0" {
-      hd_node = hd_node[2]
-    } else {
-      hd_node = hd_node[3]
+    hd_out = ""
+    hd_node = hd_tree
+    hd_i = 0
+    while hd_i < len(hd_bits) {
+        hd_b = at(hd_bits, hd_i)
+        if hd_b == "0" {
+            hd_node = hd_node[2]
+        } else {
+            hd_node = hd_node[3]
+        }
+        if hd_node[1] == "L" {
+            hd_out = hd_out + hd_node[2]
+            hd_node = hd_tree
+        }
+        hd_i = hd_i + 1
     }
-    if hd_node[1] == "L" {
-      hd_out = hd_out + hd_node[2]
-      hd_node = hd_tree
-    }
-    hd_i = hd_i + 1
-  }
-  return hd_out
+    return hd_out
 }
 
 # =====================  SELF-TEST  =====================
 print("=== Huffman coding self-test ===")
 
 fn hf_run(hru_label, hru_s) {
-  print("")
-  print("--- " + hru_label + " ---")
-  print("input      : \"" + hru_s + "\"  (len " + num(len(hru_s)) + ")")
+    print("")
+    print("--- " + hru_label + " ---")
+    print("input      : \"" + hru_s + "\"  (len " + num(len(hru_s)) + ")")
 
-  hru_ft = hf_build_freq(hru_s)
-  hru_fi = 0
-  hru_fline = ""
-  while hru_fi < len(hru_ft) {
-    hru_p = hru_ft[hru_fi]
-    hru_fline = hru_fline + "'" + hru_p[0] + "'=" + num(hru_p[1])
-    if hru_fi < len(hru_ft) - 1 { hru_fline = hru_fline + "  " }
-    hru_fi = hru_fi + 1
-  }
-  print("freq table : " + hru_fline)
+    hru_ft = hf_build_freq(hru_s)
+    hru_fi = 0
+    hru_fline = ""
+    while hru_fi < len(hru_ft) {
+        hru_p = hru_ft[hru_fi]
+        hru_fline = hru_fline + "'" + hru_p[0] + "'=" + num(hru_p[1])
+        if hru_fi < len(hru_ft) - 1 { hru_fline = hru_fline + "  " }
+        hru_fi = hru_fi + 1
+    }
+    print("freq table : " + hru_fline)
 
-  hru_tree = hf_build_tree(hru_ft)
-  hru_codes = hf_gen_codes(hru_tree, "", [])
-  hru_ci = 0
-  hru_cline = ""
-  while hru_ci < len(hru_codes) {
-    hru_cp = hru_codes[hru_ci]
-    hru_cline = hru_cline + "'" + hru_cp[0] + "'=" + hru_cp[1]
-    if hru_ci < len(hru_codes) - 1 { hru_cline = hru_cline + "  " }
-    hru_ci = hru_ci + 1
-  }
-  print("codes      : " + hru_cline)
+    hru_tree = hf_build_tree(hru_ft)
+    hru_codes = hf_gen_codes(hru_tree, "", [])
+    hru_ci = 0
+    hru_cline = ""
+    while hru_ci < len(hru_codes) {
+        hru_cp = hru_codes[hru_ci]
+        hru_cline = hru_cline + "'" + hru_cp[0] + "'=" + hru_cp[1]
+        if hru_ci < len(hru_codes) - 1 { hru_cline = hru_cline + "  " }
+        hru_ci = hru_ci + 1
+    }
+    print("codes      : " + hru_cline)
 
-  hru_enc = hf_encode(hru_s, hru_codes)
-  print("encoded    : " + hru_enc + "  (" + num(len(hru_enc)) + " bits)")
+    hru_enc = hf_encode(hru_s, hru_codes)
+    print("encoded    : " + hru_enc + "  (" + num(len(hru_enc)) + " bits)")
 
-  hru_dec = hf_decode(hru_enc, hru_tree)
-  print("decoded    : \"" + hru_dec + "\"")
+    hru_dec = hf_decode(hru_enc, hru_tree)
+    print("decoded    : \"" + hru_dec + "\"")
 
-  hru_raw = len(hru_s) * 8
-  print("size       : " + num(hru_raw) + " bits raw -> " + num(len(hru_enc)) + " bits huffman")
+    hru_raw = len(hru_s) * 8
+    print("size       : " + num(hru_raw) + " bits raw -> " + num(len(hru_enc)) + " bits huffman")
 
-  if hru_dec == hru_s {
-    print("roundtrip  : PASS")
-  } else {
-    print("roundtrip  : FAIL")
-  }
-  return hru_dec == hru_s
+    if hru_dec == hru_s {
+        print("roundtrip  : PASS")
+    } else {
+        print("roundtrip  : FAIL")
+    }
+    return hru_dec == hru_s
 }
 
 hf_all = true
@@ -212,7 +212,7 @@ if not hf_run("skewed dist", "mississippi") { hf_all = false }
 
 print("")
 if hf_all {
-  print("=== ALL ROUNDTRIPS PASSED ===")
+    print("=== ALL ROUNDTRIPS PASSED ===")
 } else {
-  print("=== SOME ROUNDTRIPS FAILED ===")
+    print("=== SOME ROUNDTRIPS FAILED ===")
 }

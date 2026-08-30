@@ -3,59 +3,59 @@
 
 # Sum of all elements. Empty list -> 0.
 fn sum(list) {
-  total = 0
-  for x in list {
-    total = total + x
-  }
-  return total
+    total = 0
+    for x in list {
+        total = total + x
+    }
+    return total
 }
 
 # Product of all elements. Empty list -> 1 (multiplicative identity).
 fn product(list) {
-  p = 1
-  for x in list {
-    p = p * x
-  }
-  return p
+    p = 1
+    for x in list {
+        p = p * x
+    }
+    return p
 }
 
 # Largest element. Empty list -> 0 (no null in the language).
 fn maximum(list) {
-  if len(list) == 0 {
-    return 0
-  }
-  best = list[0]
-  for x in list {
-    if x > best {
-      best = x
+    if len(list) == 0 {
+        return 0
     }
-  }
-  return best
+    best = list[0]
+    for x in list {
+        if x > best {
+            best = x
+        }
+    }
+    return best
 }
 
 # Smallest element. Empty list -> 0.
 fn minimum(list) {
-  if len(list) == 0 {
-    return 0
-  }
-  best = list[0]
-  for x in list {
-    if x < best {
-      best = x
+    if len(list) == 0 {
+        return 0
     }
-  }
-  return best
+    best = list[0]
+    for x in list {
+        if x < best {
+            best = x
+        }
+    }
+    return best
 }
 
 # How many elements equal `value`.
 fn count(list, value) {
-  n = 0
-  for x in list {
-    if x == value {
-      n = n + 1
+    n = 0
+    for x in list {
+        if x == value {
+            n = n + 1
+        }
     }
-  }
-  return n
+    return n
 }
 
 # Truncate a (possibly fractional) number toward zero -> integer.
@@ -63,22 +63,22 @@ fn count(list, value) {
 # instead render the number as text and drop everything from the '.' onward.
 # "-4.5" -> "-4",  "18" -> "18".
 fn trunc_int(x) {
-  s = "" + x
-  dot = find(s, ".")
-  if dot == -1 {
-    return x
-  }
-  return num(slice(s, 0, dot))
+    s = "" + x
+    dot = find(s, ".")
+    if dot == -1 {
+        return x
+    }
+    return num(slice(s, 0, dot))
 }
 
 # Integer average (division truncated toward zero). Empty list -> 0.
 fn average_int(list) {
-  n = len(list)
-  if n == 0 {
-    return 0
-  }
-  total = sum(list)
-  return trunc_int(total / n)
+    n = len(list)
+    if n == 0 {
+        return 0
+    }
+    total = sum(list)
+    return trunc_int(total / n)
 }
 
 # ---------------- self-test ----------------

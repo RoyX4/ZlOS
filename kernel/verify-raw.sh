@@ -3,7 +3,7 @@
 # shell. Proves raw_boot.asm loads the kernel, enters protected mode and hands
 # over correctly, independent of GRUB and multiboot entirely.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 command -v qemu-system-i386 >/dev/null || { echo "skip: no qemu"; exit 0; }
 command -v nasm >/dev/null || { echo "skip: no nasm"; exit 0; }

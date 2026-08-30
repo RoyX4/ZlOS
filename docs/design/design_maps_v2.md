@@ -1,6 +1,6 @@
 # Design: Maps / Dictionaries for zl — revision 2
 
-**Status:** proposal, supersedes `docs/design/design_maps.md` · **Wave:** W2 (syntax
+**Status:** proposal, supersedes `docs/archive/superseded/design_maps.md` · **Wave:** W2 (syntax
 and surface) · **Date:** 2026-08-02
 **Scope:** one new value type, one literal form, six built-ins. No code is
 changed by this document.

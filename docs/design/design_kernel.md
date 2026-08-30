@@ -11,7 +11,7 @@ privileged-instruction intrinsics, and a separate verification harness
 
 ## 0. TL;DR — and the ordering, stated honestly up front
 
-`OVERNIGHT_CAMPAIGN.md` says of W6: *"Freestanding + no-libc + structs + raw
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` says of W6: *"Freestanding + no-libc + structs + raw
 memory make this possible, not before."* That sentence is correct and this
 document does not soften it.
 

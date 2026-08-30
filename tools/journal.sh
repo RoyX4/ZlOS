@@ -13,7 +13,7 @@
 # here boots an emulator.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 REV="${1:-HEAD}"
 OUT=docs/JOURNAL.md

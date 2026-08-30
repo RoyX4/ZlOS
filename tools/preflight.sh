@@ -14,7 +14,7 @@
 # what let a dead 64-bit build sit behind three green gates.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 MODE="${1:-}"
 declare -a NAMES=() RESULTS=()

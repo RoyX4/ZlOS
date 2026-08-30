@@ -33,7 +33,7 @@
 # documented subset rather than a disagreement.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 EXPECTED="tools/engine-parity-expected.txt"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT

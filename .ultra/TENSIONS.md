@@ -25,8 +25,8 @@ Corroboration that this is not new: `da34635` on `desktop/overnight-compositor`
 is titled *"ship the xhci pointer and idt mouse code the tree already calls"*
 and its message says the tree "did not build from a clean checkout".
 
-**The plan was wrong.** `docs/INTEGRATION-PLAN.md` and the synthesised runbook
-both asserted L1 would gate green on its own. It cannot.
+**The plan was wrong.** `docs/archive/superseded/INTEGRATION-PLAN.md` and the
+synthesised runbook both asserted L1 would gate green on its own. It cannot.
 
 **Fix:** cherry-picked `da34635` onto `main` (411 lines, `kernel/xhci.c` +
 `kernel/idt.c`, clean). All 11 symbols verified defined.
@@ -87,7 +87,7 @@ Copied into `zl-main` to unblock the gate; **not yet committed anywhere**.
 Others in the same class, from the session sweep, all preserved in `refs/wip/*`
 and the `~/zlos-freeze-*` tars but in no commit: `kernel/crypto.c` +
 `hosttest/cryptotest.c`, `zlfmt.c` + `verify_fmt.sh`,
-`kernel/docs/OVERNIGHT-PROMPT.md` (the brief that produced 19 of the
+`kernel/docs/archive/prompts/OVERNIGHT-PROMPT.md` (the brief that produced 19 of the
 compositor's commits), `editors/vscode-zl/*`, `docs/LEARNING.md` + `learn/`,
 ~12 `kernel/docs/*.md`, 7 `probe-*.py`, and the `.ultra/` files in `zl-system`,
 `zl-exec` and `zl-apps` (matched by `~/.gitignore_global`).
@@ -113,7 +113,7 @@ Git cannot see this class at all; it unions both and nothing warns.
 `wm_frame_us` is the lucky one — same name, so it fails at link. The rest fail
 silently or ship twice.
 
-**Close by:** the symbol table in `docs/MERGE-EVIDENCE.md` §3, run before each
+**Close by:** the symbol table in `docs/evidence/MERGE-EVIDENCE.md` §3, run before each
 landing, with a decision recorded per row.
 
 ---

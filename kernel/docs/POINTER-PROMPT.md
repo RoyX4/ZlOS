@@ -12,7 +12,7 @@ Two phases, strictly in order. **Do not start phase 2 until phase 1 is
 confirmed by a human looking at a live VM**, not by a gate going green.
 
 Written 2026-08-19, immediately after eleven parallel tracks were merged into
-`main` (see `docs/MERGE-EVIDENCE.md`). The pointer is the first thing a person
+`main` (see `docs/evidence/MERGE-EVIDENCE.md`). The pointer is the first thing a person
 touched afterwards and it is visibly wrong: moving the mouse in `./try.sh`
 produces jumpy, laggy, unpredictable motion.
 
@@ -295,7 +295,7 @@ on screen. Both are useful; "looks fine to me" is not.
 Only after phase 1 is confirmed.
 
 Eleven branches were merged in one night. The merge found and fixed a great deal
-(see `docs/MERGE-EVIDENCE.md` §Outcome), but the failure modes it kept hitting
+(see `docs/evidence/MERGE-EVIDENCE.md` §Outcome), but the failure modes it kept hitting
 are the ones a clean merge cannot show, and there is no reason to believe they
 are all found. Audit for these specifically, in this order:
 
@@ -363,5 +363,5 @@ never gone red has not been tested.
   has 8 cores and QEMU is under TCG.
 - Every landing is revertable at its `premerge/*` tag. Nothing has been
   force-pushed and nothing should be.
-- Write findings into `docs/MERGE-EVIDENCE.md` or a sibling, not into a chat
+- Write findings into `docs/evidence/MERGE-EVIDENCE.md` or a sibling, not into a chat
   reply. The chat is gone next session; the repo is not.

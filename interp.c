@@ -58,7 +58,7 @@
  * THE KILL PATH - how a program that misbehaves is stopped
  *
  * zlOS is about to run scripts it was not compiled with, in ring 0, with no
- * memory protection (kernel/docs/EXEC-PROMPT.md, Item 2). Two of that item's
+ * memory protection (kernel/docs/archive/prompts/EXEC-PROMPT.md, Item 2). Two of that item's
  * three non-negotiables live here, and the brief is emphatic that they are
  * decided BEFORE the loop is written rather than bolted on after:
  *

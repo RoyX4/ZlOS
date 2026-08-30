@@ -30,7 +30,7 @@
 # -----------------------------------------------------------------
 # It is a text check. A driver that computes a device address some entirely new
 # way - a helper that returns one, an address stored in a struct and written out
-# later - is invisible to rule 2. docs/dma-sites.md carries the argument for why
+# later - is invisible to rule 2. kernel/docs/dma-sites.md carries the argument for why
 # the inventory is closed TODAY; this script keeps the known shape from
 # regressing, it does not re-derive the inventory. If you add a driver, add it
 # to DMA_FILES below and to that document, and neither of those is automatic.
@@ -38,11 +38,11 @@
 # Static: greps source. No build, no QEMU, so it cannot fail because the host is
 # busy.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 [ -f dma.h ] || { echo "FAIL: no dma.h - the seam is gone"; exit 1; }
 
-# The drivers that hand addresses to hardware. From docs/dma-sites.md, which
+# The drivers that hand addresses to hardware. From kernel/docs/dma-sites.md, which
 # carries the reasoning; this is the list, not the argument.
 DMA_FILES="virtio_gpu.c virtio_net.c xhci.c nvme.c"
 
@@ -57,7 +57,7 @@ echo "  the DMA seam is dma.h:dma_addr()"
 for f in $DMA_FILES; do
     if [ ! -f "$f" ]; then
         echo "FAIL: $f is in the DMA set and does not exist"
-        echo "      Either it was renamed - update DMA_FILES and docs/dma-sites.md -"
+        echo "      Either it was renamed - update DMA_FILES and kernel/docs/dma-sites.md -"
         echo "      or the check is now watching nothing."
         fail=1
         continue
@@ -181,7 +181,7 @@ done
 if grep -q 'dma_addr' intel.c 2>/dev/null; then
     echo "FAIL: intel.c uses dma_addr() - the GGTT is a second translation layer"
     echo "      and needs a true physical address regardless of CPU paging."
-    echo "      See docs/dma-sites.md, section (c)."
+    echo "      See kernel/docs/dma-sites.md, section (c)."
     fail=1
 fi
 

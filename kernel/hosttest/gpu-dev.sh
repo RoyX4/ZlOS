@@ -22,7 +22,7 @@
 # It also blanks the display, so run it from SSH or expect a dark screen until
 # `attach`. This is a test machine; that is the trade being made deliberately.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 DEV=0000:00:02.0
 SYS=/sys/bus/pci/devices/$DEV
@@ -39,7 +39,7 @@ probe)
 dump)
     ./build.sh >/dev/null
     out="${2:-regs-$(date +%H%M%S).txt}"
-    sudo ./intel_probe --dump > "$out"
+    sudo ./intel_probe --dump | tee "$out" >/dev/null
     echo "wrote $out ($(wc -l < "$out") registers)"
     ;;
 
@@ -55,11 +55,11 @@ diff)
 watch)
     ./build.sh >/dev/null
     a=$(mktemp); b=$(mktemp)
-    sudo ./intel_probe --dump > "$a"
+    sudo ./intel_probe --dump | tee "$a" >/dev/null
     echo "snapshot taken. change something (plug a monitor, change resolution,"
     echo "dim the backlight...) then press enter."
     read -r _
-    sudo ./intel_probe --dump > "$b"
+    sudo ./intel_probe --dump | tee "$b" >/dev/null
     echo
     echo "registers that changed:"
     diff <(sort "$a") <(sort "$b") | grep -E '^[<>]' | sort -k2 || echo "  (none)"

@@ -2,7 +2,7 @@
 
 The running record for `desktop/feel-and-control`, the way
 [`desktop-look.md`](desktop-look.md) is for the look track. The brief is
-[`FEEL-PROMPT.md`](FEEL-PROMPT.md); this is what came back.
+[`FEEL-PROMPT.md`](archive/prompts/FEEL-PROMPT.md); this is what came back.
 
 Every entry states the gate **and its output**, or a number that was
 **measured**. "It looks right" is not in here.
@@ -81,7 +81,7 @@ are anti-aliased, and the partial coverage where `fill` fades lets the edge
 colour through as a soft rim.
 
 It rides in `cursor.inc` inside `fb.c` rather than becoming `cursor.c`.
-FEEL-PROMPT §2 offers `kernel/cursor.c`, but §1.4 is the stronger constraint:
+FEEL-PROMPT §2 offers a new cursor translation unit, but §1.4 is the stronger constraint:
 four build scripts carry four separate source lists and adding a `.c` to only
 some of them broke two builds twice in one day. §1.4 explicitly blesses the
 alternative — "ride inside an existing translation unit like `font_prop.inc`

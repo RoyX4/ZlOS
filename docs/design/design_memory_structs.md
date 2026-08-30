@@ -63,7 +63,7 @@ today, so it grows both.
 
 ### 1.1 What W5 actually asks for
 
-`OVERNIGHT_CAMPAIGN.md` W5, lines 83–84:
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` W5, lines 83–84:
 
 > - raw memory: `alloc(n)`, `free(p)`, `peek(p)`, `poke(p,v)`, `peek8/poke8`, pointer arithmetic
 > - structs / records with a fixed memory layout, and fixed-size typed arrays

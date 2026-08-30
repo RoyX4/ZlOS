@@ -448,8 +448,8 @@ while t_i < 31 {
             t_d = 0
             while t_d < 3 {
                 if t_done == 0 { if ho_top(t_s) != 0 { if ho_can(t_s, t_d) == 1 {
-                    ho_move(t_s, t_d)
-                    t_done = 1
+                            ho_move(t_s, t_d)
+                            t_done = 1
                 }}}
                 t_d = t_d + 1
             }

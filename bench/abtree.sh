@@ -13,7 +13,7 @@
 # Usage:  ./abtree.sh <rootA> <rootB> [runs]
 #         ./abtree.sh ~/Documents/repos/zl-linux ~/Documents/repos/zl-value16 7
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 BENCH=$PWD
 
 A=$(cd "${1:?usage: abtree.sh <rootA> <rootB> [runs]}" && pwd)

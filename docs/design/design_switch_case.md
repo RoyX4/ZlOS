@@ -4,7 +4,7 @@
 **Scope:** one new statement form. No code is changed by this document.
 
 `MASTER_PLAN.md` §3.2 lists `switch` in the W2 row, and
-`docs/OVERNIGHT_CAMPAIGN.md:57` spells it out as *"`switch`/`match` with
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md:57` spells it out as *"`switch`/`match` with
 fallthrough rules"*. This is the design pass for it.
 
 ---
@@ -279,7 +279,7 @@ The secondary reasons:
   overwhelmingly used for *"these three labels, one body"* — written here as
   `"+", "-", "*" { ... }`, which is clearer and cannot be reached by accident.
 
-`docs/OVERNIGHT_CAMPAIGN.md:57` asks for *"fallthrough rules"*. This is the
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md:57` asks for *"fallthrough rules"*. This is the
 rule: there is no fallthrough, because `break` is already spoken for.
 
 ---

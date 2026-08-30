@@ -161,10 +161,10 @@ fn tt_line(a, b, c) {
     va = tt_at(a)
     if va == 0 { return 0 }
     if va == tt_at(b) { if va == tt_at(c) {
-        tt_wa = a
-        tt_wb = b
-        tt_wc = c
-        return va
+            tt_wa = a
+            tt_wb = b
+            tt_wc = c
+            return va
     }}
     return 0
 }
@@ -882,10 +882,10 @@ fn c4_draw(ax, ay, aw, ah) {
                 # same two colours and no marker is a board you have to
                 # re-read from scratch every turn.
                 if ri == c4_lastr { if ci == c4_lastc {
-                    fill_rgb(cx + 3 * u, cy + 3 * u, cell - 6 * u, 2 * u, theme(TH_TEXT_HI))
-                    fill_rgb(cx + 3 * u, cy + cell - 5 * u, cell - 6 * u, 2 * u, theme(TH_TEXT_HI))
-                    fill_rgb(cx + 3 * u, cy + 3 * u, 2 * u, cell - 6 * u, theme(TH_TEXT_HI))
-                    fill_rgb(cx + cell - 5 * u, cy + 3 * u, 2 * u, cell - 6 * u, theme(TH_TEXT_HI))
+                        fill_rgb(cx + 3 * u, cy + 3 * u, cell - 6 * u, 2 * u, theme(TH_TEXT_HI))
+                        fill_rgb(cx + 3 * u, cy + cell - 5 * u, cell - 6 * u, 2 * u, theme(TH_TEXT_HI))
+                        fill_rgb(cx + 3 * u, cy + 3 * u, 2 * u, cell - 6 * u, theme(TH_TEXT_HI))
+                        fill_rgb(cx + cell - 5 * u, cy + 3 * u, 2 * u, cell - 6 * u, theme(TH_TEXT_HI))
                 }}
             }
             ci = ci + 1

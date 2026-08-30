@@ -214,7 +214,7 @@ list loops** (zl has no lists) and **105 flex declarations** (zlOS positions
 everything by hand). Corrected in `desktop-northstar-feasibility.md`.
 *Lesson: judging a stack by its most finished layer.*
 
-**27. `GRAPHICS_PLAN.md` is stale for zlOS** — it is the **Windows-hosted** plan
+**27. `docs/archive/superseded/GRAPHICS_PLAN.md` is stale for zlOS** — it is the **Windows-hosted** plan
 and says the GPU is reached via `opengl32.dll` FFI. Annotated in place. zlOS
 reached its layer 3 by *deleting* the OS underneath, not by calling into one.
 

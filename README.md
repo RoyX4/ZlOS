@@ -11,13 +11,11 @@ x86-64 with nothing underneath it — its own bootloader, its own UEFI
 application, real PCI enumeration, Intel Gen9 modesetting, xHCI/USB HID input,
 NVMe, a filesystem, and a windowed compositor.
 
-> **Where the project actually is:** [`docs/STATE-OF-THE-PROJECT.md`](docs/STATE-OF-THE-PROJECT.md).
-> It replaced twenty-one planning documents (~392 KB) that were audited item by
-> item against the merged tree, and every claim in it carries the command or the
-> file:line that establishes it. Read that before picking up any task list — the
-> older planning docs predate the eleven-track merge and are stale by construction.
-> Its open-item list now also predates merge round 2: the heap, Files app,
-> browser-next landing and first 32-bit Ring-3 boundary are in `main`.
+> **Where the project actually is:** [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md).
+> It separates the pushed integration state, the complete implementation plan,
+> the raw other-repository research, and what remains unimplemented or physical.
+> The older [`STATE-OF-THE-PROJECT.md`](docs/STATE-OF-THE-PROJECT.md) remains a
+> detailed dated audit, not the final post-integration status.
 
 > **Current execution order:** [`docs/EXECUTION-ROADMAP.md`](docs/EXECUTION-ROADMAP.md).
 > Speed is the primary product goal. The dependency spine is bare-metal proof,
@@ -30,21 +28,18 @@ NVMe, a filesystem, and a windowed compositor.
 > execution roadmap selects the current slice; it does not replace or narrow
 > the complete program.
 
-> **Where the project stands against "is this a 10":**
-> [`docs/ROAD-TO-TEN.md`](docs/ROAD-TO-TEN.md). Scores the tree discriminator by
-> discriminator against an external assessment, corrects the two places that
-> assessment guessed wrong, and ranks what actually moves the number. Short
-> version: nothing in the hard parts is ported, and the two things holding the
-> score down are a bare-metal boot that has never happened and a finished branch
-> that has never landed.
+> **Historical scorecard:**
+> [`docs/archive/superseded/ROAD-TO-TEN.md`](docs/archive/superseded/ROAD-TO-TEN.md).
+> It is retained for its measurements, but its ranking was superseded by the
+> execution roadmap and later integration work.
 
-Two more orientation docs worth knowing about:
+Three more orientation docs worth knowing about:
 
-- [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — where the code really is, and which of
-  the files a build leaves behind are generated rather than written. The directory
-  names mislead: there is no `apps/` or `desktop/`, and the desktop plus all eight
-  apps are one file (`kernel/kernel.zl`, 4,289 lines). Stale from its "The browser"
-  heading onward; §11 of `STATE-OF-THE-PROJECT.md` has the corrections.
+- [`docs/README.md`](docs/README.md) — the documentation truth-state map: current,
+  partial, evidence, and archive.
+- [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — where source and documentation live.
+- [`docs/REPOSITORY-STRUCTURE.md`](docs/REPOSITORY-STRUCTURE.md) — why the layout
+  looks this way and which source moves are intentionally deferred.
 - [`docs/GUARDS-THAT-DID-NOT-GUARD.md`](docs/GUARDS-THAT-DID-NOT-GUARD.md) — five
   checks in this tree that reported green while checking nothing. Read it before
   trusting any green result here, and before writing a new gate.
@@ -272,6 +267,6 @@ Linux equivalent here.
 
 ## Comparison
 
-[`docs/COMPARE-BOREDOS.md`](docs/COMPARE-BOREDOS.md) measures zlOS against
+[`docs/evidence/COMPARE-BOREDOS.md`](docs/evidence/COMPARE-BOREDOS.md) measures zlOS against
 [BoredOS](https://boredos.dev) — same target, opposite strategy — and is blunt
 about where BoredOS is ahead.

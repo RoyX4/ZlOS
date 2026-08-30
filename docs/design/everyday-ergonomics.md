@@ -25,15 +25,15 @@ exactly those files.
 The QEMU gates answer "does it still boot". They are the wrong tool for "does
 this button land in the right place", and they cost 600 times more.
 
-### 1.1 `tools/watch.sh` — save the file, see the result
+### 1.1 Watch loop — save the file, see the result
 
 `entr` is already installed. Roughly:
 
 ```bash
-ls kernel/*.c kernel/*.h | entr -c tools/fastloop.sh
+ls kernel/*.c kernel/*.h | entr -c ./future-fastloop
 ```
 
-where `fastloop.sh` rebuilds the hosttest binaries, runs `wmtest`, and re-renders
+where the future fast loop rebuilds the hosttest binaries, runs `wmtest`, and re-renders
 `wmshot` to a PNG. Sub-second, on every save.
 
 Point an image viewer at that PNG and it refreshes as you type. That is a live

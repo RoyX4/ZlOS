@@ -2,7 +2,7 @@
 
 **Status:** proposal
 **Author:** language/systems design pass, 2026-07-31
-**Scope:** `OVERNIGHT_CAMPAIGN.md` W8. Consumes W5 (raw memory + FFI), W3/W4 (speed),
+**Scope:** `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` W8. Consumes W5 (raw memory + FFI), W3/W4 (speed),
 and the existing stdlib (`bmp.zl`, `noise.zl`, `easing.zl`, `vec.zl`, `geometry.zl`).
 No code is changed by this document.
 
@@ -968,5 +968,5 @@ Explicitly **not** blockers, each with the reason:
    alongside the new builtins (`alloc`/`free`/`peek*`/`poke*`/`fill32`/`copy32`/`blit32`/
    `mark`/`release`/`read_bytes`/`load_file`), and the module count corrected — it drifts
    every wave.
-8. `OVERNIGHT_CAMPAIGN.md`'s W8 row records what shipped, and the arena finding (§2.10) is
+8. `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md`'s W8 row records what shipped, and the arena finding (§2.10) is
    written back into `design_native_runtime.md` §7, which currently says the opposite.

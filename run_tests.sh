@@ -9,7 +9,7 @@
 # 4. Checks the self-hosting fixpoint (./verify_selfhost.sh) - compiler.zl
 #    compiled by the interpreter must compile itself to byte-identical output.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 fail=0
 tmp=$(mktemp -d)

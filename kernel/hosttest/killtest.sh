@@ -27,7 +27,7 @@
 #
 #   ./killtest.sh
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 ROOT=$(cd ../.. && pwd)
 INTERP="$ROOT/interp"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT

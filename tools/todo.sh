@@ -13,7 +13,7 @@
 # it is derived and will be overwritten.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 OUT=TODO.md
 BEGIN_HOLD="<!-- BEGIN HAND-WRITTEN -->"

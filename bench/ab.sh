@@ -16,7 +16,7 @@
 # Usage:  ./ab.sh <runtime_A.c> <runtime_B.c> [runs]
 #         ./ab.sh /tmp/runtime-HEAD.c ../runtime.c 7
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 ROOT=$(cd .. && pwd)
 
 A=${1:?usage: ab.sh <runtime_A.c> <runtime_B.c> [runs]}

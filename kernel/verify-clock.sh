@@ -19,7 +19,7 @@
 #   2000-02-29 12:00:00  a leap day in a century year - the one date a naive
 #                        "divisible by 4" calendar gets wrong
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 CEILING=${CEILING:-240}
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT

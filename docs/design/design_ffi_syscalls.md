@@ -49,7 +49,7 @@ already is.
 
 ### 1.1 What "as good as C" actually requires
 
-`OVERNIGHT_CAMPAIGN.md` W5 lists six systems capabilities. Three of them — raw memory,
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` W5 lists six systems capabilities. Three of them — raw memory,
 structs, fixed-layout records — are the companion agent's half. The other three are
 this document:
 

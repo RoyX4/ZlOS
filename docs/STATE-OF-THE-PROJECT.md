@@ -12,7 +12,7 @@
 > `gates.yml`; `DISK_SCRATCH` is at `0x02040000` (the checker still does not
 > name it). Still first: `key()` at `kernel.zl:1517` (§5.1), boot the ThinkPad,
 > land `desktop/browser-next` (21 commits), Ring 3. Ranked plan for score, not
-> bugs: [`docs/ROAD-TO-TEN.md`](ROAD-TO-TEN.md).
+> bugs: [`docs/archive/superseded/ROAD-TO-TEN.md`](archive/superseded/ROAD-TO-TEN.md).
 
 > **Repair pass, 2026-08-19.** Four adversarial reviewers attacked the first
 > draft and raised 44 defects. Every one was re-verified against the tree by a
@@ -30,7 +30,7 @@
 This file replaces twenty-one planning documents totalling ~392 KB. Nineteen of
 them were audited item by item against the merged tree (870 items), plus three
 cross-check lenses; two more — `kernel/docs/POINTER-PROMPT.md`, which is live
-work rather than history, and `docs/INTEGRATION-PLAN.md`, which is superseded —
+work rather than history, and `docs/archive/superseded/INTEGRATION-PLAN.md`, which is superseded —
 are represented here without being re-audited. Almost every one of those
 documents predates the eleven-track merge of 2026-08-19 and is therefore stale
 by construction: reading one tells you what somebody wanted, never what is true.
@@ -274,7 +274,7 @@ anywhere in the repository**. It forks at `c064742`, ~98 commits behind `main`,
 so this is a real merge, not a fast-forward. This converts every gate in this
 repo from "a human remembered" to "a push failed."
 
-Two documents say 9 commits (`docs/DOCS-RECONCILE-PROMPT.md:131`,
+Two documents say 9 commits (`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md:131`,
 `kernel/docs/POINTER-PROMPT.md:208`). The number is 11.
 
 *Source: xcheck-unowned lens.*
@@ -1566,8 +1566,8 @@ $ grep -n 'LINE_BUF  =\|DISK_SCRATCH =' kernel/kernel.zl
 848:LINE_BUF  = 0x02030000
 1253:DISK_SCRATCH = 0x02030000
 $ git grep -n '0x02040000'
-docs/MERGE-EVIDENCE.md:93   (the §2.1 prescription)
-docs/MERGE-EVIDENCE.md:318  (the Outcome claim)
+docs/evidence/MERGE-EVIDENCE.md:93   (the §2.1 prescription)
+docs/evidence/MERGE-EVIDENCE.md:318  (the Outcome claim)
     — no source file, on any branch
 $ git log --oneline -S'DISK_SCRATCH = 0x0204' -- kernel/kernel.zl
 (no output)
@@ -1791,7 +1791,7 @@ them; they are listed here by pointer so the class is visible as a class. §10.1
 
 ### 10.1 Fifty-five files exist only in `refs/wip/*` and on no branch
 
-`docs/DOCS-RECONCILE-PROMPT.md:133` says 49. The number is 55, measured by
+`docs/archive/prompts/DOCS-RECONCILE-PROMPT.md:133` says 49. The number is 55, measured by
 diffing the union of all six local `refs/wip/*` trees against `main`'s tracked
 set. All six refs are already local; no fetch is needed. The composition matters
 more than the count, because three of the groups are different kinds of problem:
@@ -1836,8 +1836,8 @@ exist in the dangling WIP commit `5557f4a`, which is on no branch.
 **Recommendation that removes the whole class:** "a doc cites a file that
 `git ls-files` does not have" is one grep, costs nothing, and belongs in
 `land-gate.sh`. It would have caught all five — and it would have caught this
-document's own first draft, which cited `docs/desktop-platform-run.md` for a file
-that lives at `kernel/docs/desktop-platform-run.md` (§13.3, now fixed).
+document's own first draft, which cited the root-level desktop-platform run doc
+for a file that lives at `kernel/docs/evidence/desktop-platform-run.md` (§13.3, now fixed).
 
 **The grep catches the file-level class and misses a second one that is live
 now.** Four kernel docs defer a hazard by saying it is "tracked as `T-EXEC-n` in
@@ -1871,7 +1871,7 @@ $ git tag | grep -c '^prelanding/'
 15
 $ git tag | grep -c '^premerge/'
 16
-$ sed -n '359p' docs/MERGE-EVIDENCE.md
+$ sed -n '359p' docs/evidence/MERGE-EVIDENCE.md
 - The eight `prelanding/*` tags are the rollback points and are pushed. Three
 ```
 
@@ -1905,7 +1905,7 @@ every row the tree is the referee.
 | Is the frame time on screen? | `desktop-TODO.md`: done | `PLATFORM-PROMPT.md`: partial | **Both, of different destinations** — tray yes, System Monitor no (§4.9) |
 | How big is zlOS? | `11,374` lines, cited in 8 places incl. on-screen text at `wmshot.c:128` | three readers gave 41,970 / ~27,982+3,995 / 38,176+74,569 | **All four are unusable, and so was the cross-check's own replacement.** The spread is entirely explained by undeclared denominators — a fifth attempt while writing this file produced 84,933 from a differently-quoted pathspec. See the boxed measurement below; use that, with its command attached |
 | Does this box have 4 cores? | `CLAUDE.md:57` and six planning docs: 4 | `nproc`: 8 | **8.** Flag but do not change `land-gate.sh:37`'s `loadavg > 4.0` guard (`:36` is the tail of the comment above it) — whether 4.0 is still right on 8 cores is a judgment call, and a conservative guard is not a defect |
-| Was `GRAPHICS_PLAN.md` annotated? | `HANDOFF.md:590` and `DECISIONS.md:193`: yes, in place | `git log`: one commit, the add | **No annotation exists.** `grep -ci 'supersed\|stale\|annotat\|zlOS'` over it returns 0. A reader following HANDOFF's pointer opens 136 lines of user32/gdi32/opengl32 FFI with no warning attached |
+| Was `docs/archive/superseded/GRAPHICS_PLAN.md` annotated? | `HANDOFF.md:590` and `DECISIONS.md:193`: yes, in place | `git log`: one commit, the add | **No annotation exists.** `grep -ci 'supersed\|stale\|annotat\|zlOS'` over it returns 0. A reader following HANDOFF's pointer opens 136 lines of user32/gdi32/opengl32 FFI with no warning attached |
 
 **The size of zlOS, measured here, with the command that measured it.** Six
 different numbers have been asserted for this; the corrective for an unmeasured
@@ -2023,14 +2023,14 @@ which is the entry's own point.)
 Every demo is an app in a window now: no `while` loop, no "press any key". Typing
 `snake`, `paint`, `cube`, `anim`, `mouse` or `edit` opens one, and
 `probe-apps.py` boots five at once. The full account is
-`kernel/docs/desktop-platform-run.md` (the first draft of this file cited
-`docs/desktop-platform-run.md`, which does not exist — §10.2's own recommended
+`kernel/docs/evidence/desktop-platform-run.md` (the first draft of this file cited a
+root-level desktop-platform run doc that does not exist — §10.2's own recommended
 gate would have caught it, and now says so). Any document describing a demo that
 takes over the screen is describing the previous design.
 
-### 13.4 `docs/INTEGRATION-PLAN.md`
+### 13.4 `docs/archive/superseded/INTEGRATION-PLAN.md`
 
-**Superseded by `docs/MERGE-EVIDENCE.md`.** It was written against the wrong base
+**Superseded by `docs/evidence/MERGE-EVIDENCE.md`.** It was written against the wrong base
 and its headline figure is wrong — it says 332 commits were at risk; the whole
 repo is 186 (219 at `ff27d57`), and the document's own later section says 69. It
 carries no superseded banner of any kind, so a reader who opens it gets a

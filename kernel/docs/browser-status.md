@@ -194,7 +194,7 @@ margin collapsing, hanging list markers, and reflow on resize.
 from inline `data:` URIs), **flexbox**, **CSS grid**, a real box model
 (width/min/max, `box-sizing`, padding that insets, borders, block backgrounds,
 `margin: 0 auto` centring, `overflow: hidden`), **floats** and **positioning**.
-See [`browser-render-run.md`](browser-render-run.md) for the measurements.
+See [`browser-render-run.md`](evidence/browser-render-run.md) for the measurements.
 
 **Refuses, and says so on screen rather than in a comment:**
 
@@ -553,7 +553,7 @@ separate track with its own review. **Nothing here depends on it yet.**
   longer **this code's** arrays. `html.c`, `css.c`, `layout.c` and `png.c` are
   handed their storage by the caller, which is why the caps could move at all:
   they were 1.95 MB of a kernel BSS with 126 KB of link headroom left. See
-  [`browser-storage-run.md`](browser-storage-run.md). Overflow still
+  [`browser-storage-run.md`](evidence/browser-storage-run.md). Overflow still
   **truncates and says so on screen**; it does not scribble.
 - Baselines are approximated by bottom-aligning the glyph cell. Correct only
   because every glyph comes from one atlas; wrong the moment a second face with
@@ -561,4 +561,4 @@ separate track with its own review. **Nothing here depends on it yet.**
 
 ---
 
-Brief: [`BROWSER-PROMPT.md`](BROWSER-PROMPT.md) · Contract: [`../ui.h`](../ui.h)
+Brief: [`BROWSER-PROMPT.md`](archive/prompts/BROWSER-PROMPT.md) · Contract: [`../ui.h`](../ui.h)

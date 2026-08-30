@@ -9,7 +9,7 @@
 #
 # Kept out of run_tests.sh on purpose: it costs ~40s and needs OVMF.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 OVMF_CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
 OVMF_VARS=/usr/share/OVMF/OVMF_VARS_4M.fd

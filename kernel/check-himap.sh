@@ -33,7 +33,7 @@
 # Static: parses source, no build, no QEMU, no timing. Cannot fail because the
 # host is busy.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 MAP=memmap.h
 [ -f "$MAP" ] || { echo "FAIL: no $MAP"; exit 1; }

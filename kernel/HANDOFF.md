@@ -14,7 +14,7 @@ exit audit contract and physical read-back procedure are
 [`docs/automatic-system-audit.md`](docs/automatic-system-audit.md).
 The complete performance/storage/process/network implementation receipt,
 including every local gate and every still-open physical gate, is
-[`docs/performance-architecture-implementation-2026-08-22.md`](docs/performance-architecture-implementation-2026-08-22.md).
+[`docs/evidence/performance-architecture-implementation-2026-08-22.md`](docs/evidence/performance-architecture-implementation-2026-08-22.md).
 
 > **Latest physical boot boundary (2026-08-22):** USB ZLLOG recovered 719/719
 > valid records with zero drops. Network discovery returned (210 -> 211), then
@@ -117,6 +117,17 @@ Read this first in a new session. Everything below is verified, not remembered.
 > that shapes the per-app oracle: **serial bytes are routed to the focus
 > window**, so on a workspace with no windows the serial console is dead and
 > you cannot switch to an empty workspace and then type a command to fill it.
+
+> **Display state, measured 2026-08-25:**
+> [`docs/display-state-2026-08-25.md`](docs/display-state-2026-08-25.md) — a
+> read-only pass over both halves of the display. It closes the "nothing arms
+> `lt_armed`" claim this file still makes in three places (the chain is
+> `kernel.zl:2063` -> `panel_up` -> `intel.c:4417`, gated behind the `P` shell
+> command and nothing else), records that `STATE-OF-THE-PROJECT.md` §5.1's
+> kernel-halting `key()` is fixed, and measures the real frontier: **59 of 305
+> `intel_*` functions have no caller anywhere in the shipping tree, 40 of them
+> being roadmap phases 0.3-7.** Read it before believing any phase marked
+> "done" in `display-roadmap.md`'s STATUS table.
 
 > **Visual system status:** [`docs/visual-speed-northstar.md`](docs/visual-speed-northstar.md)
 > records the isolated 2026-08-19 implementation pass, its host/QEMU evidence,
@@ -789,7 +800,7 @@ zlOS itself still cannot light the panel — the driver can, and is proven to, b
 the kernel has no caller. That is now the single thing between this and zlOS
 booting on the ThinkPad with its own display.
 
-## Finishing the display: `docs/display-roadmap.md`
+## Finishing the display: `kernel/docs/display-roadmap.md`
 
 The decision (2026-08-17): **complete the display subsystem entirely before any
 GPU work.** No ring buffers, no blitter, no execution engine until every item in
@@ -933,7 +944,7 @@ runs unchanged and its transcript is still byte-identical to `golden.txt`.
 Every demo is an app in a window: no `while` loop, no "press any key". Typing
 `snake`, `paint`, `cube`, `anim`, `mouse` or `edit` opens one. The full account
 of that run, including four things it found that no task list predicted, is
-`docs/desktop-platform-run.md`.
+`kernel/docs/evidence/desktop-platform-run.md`.
 
 ## Everything else in the kernel
 
@@ -1046,7 +1057,7 @@ inverts that. Designed 2026-08-17:
   (2026-08-19) settle the kernel against `docs/design/zlOS-design-northstar.html`
   item by item** — the blur is gone and the reason is that it was disabling the
   wallpaper cache on the ThinkPad's 2560x1440 panel, not that it looked wrong.
-- **`docs/NEXT-PROMPT.md` — WHICH ONE TO DO NEXT, ranked, with the measurement
+- **`docs/archive/prompts/NEXT-PROMPT.md` — historical ranked queue, with the measurement
   that ranks it.** Start a new session here. It also carries the standing
   hazard nothing else states plainly: three to five agent sessions share this
   one checkout, and on 2026-08-19 that produced two simultaneous land gates,
@@ -1114,7 +1125,7 @@ inverts that. Designed 2026-08-17:
   choice as `desktop-plan.md`). TempleOS was 640×480/16 colours; **zlOS is
   already well past it**. Do not write a 3D driver — the *display* driver alone
   has cost a 13-conflict plan and an 86-defect audit.
-  **Note:** `docs/design/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
+  **Note:** `docs/archive/superseded/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
   via `opengl32.dll` FFI. That is the **Windows-hosted** plan and does not apply
   here — it has been annotated. On zlOS, 3D means a software rasterizer, and
   `fb3d.c` is its first step.

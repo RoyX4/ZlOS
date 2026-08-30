@@ -132,7 +132,7 @@ done.
 
 ## `intel.c` orphans: the number is **101**, not 63 — and there is no encapsulation at all
 
-`docs/display-roadmap.md`'s audit banner says *"63 of 301 exported `intel_*` functions
+`kernel/docs/display-roadmap.md`'s audit banner says *"63 of 301 exported `intel_*` functions
 have no call site."* Re-measured by hand on the current tree, the figure is **101 of 303**.
 
 Method, so it can be re-run:

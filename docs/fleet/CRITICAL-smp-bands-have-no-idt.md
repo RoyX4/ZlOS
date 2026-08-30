@@ -5,7 +5,7 @@
 Found by fleet driver agent `smp-bands`. Re-derived here. **Confirmed.**
 
 This is the most decision-relevant finding of the run, because
-[`.ultra/STATE.md`](../../.ultra/STATE.md) §4 currently ranks turning SMP bands on as
+`.ultra/STATE.md` §4 in that 2026-08-19 worktree ranked turning SMP bands on as
 **"the best win-to-risk on the board"** and `kernel/docs/gpu-next.md` calls its risk
 *"real but bounded."*
 

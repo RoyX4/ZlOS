@@ -19,7 +19,7 @@
  * question.
  *
  * IT REQUIRES i915 TO BE UNBOUND. Two owners of one ring is the exact bug class
- * that broke the pointer for a week (docs/POINTER-EVIDENCE.md - two things
+ * that broke the pointer for a week (docs/evidence/POINTER-EVIDENCE.md - two things
  * draining one xHCI event ring). Do not run --ring with i915 loaded; it checks
  * and refuses.
  *

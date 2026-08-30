@@ -36,6 +36,19 @@ typedef unsigned long long zl_uptr;
 typedef unsigned int       zl_uptr;
 #endif
 
+/* Panic logging is opportunistic in every freestanding target. The real kernel
+ * links zllog.c; the standalone libc-free proof does not, so these must remain
+ * weak and checked before use. */
+#ifndef ZL_KERNEL_SERIAL
+extern void zllog_event(unsigned, unsigned, unsigned,
+                        unsigned, unsigned, unsigned) __attribute__((weak));
+extern void zllog_event_irq(unsigned, unsigned, unsigned,
+                            unsigned, unsigned, unsigned) __attribute__((weak));
+extern int zllog_ready(void) __attribute__((weak));
+extern int zllog_io_active(void) __attribute__((weak));
+extern int zllog_flush(void) __attribute__((weak));
+#endif
+
 /* ---------------------------------------------------------------- seam */
 #ifdef ZL_KERNEL_SERIAL
 /* In a kernel: COM1, polled. §7.1's registers. outb is the intrinsic the
