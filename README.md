@@ -2,15 +2,15 @@
 
 Two things live here.
 
-> **Complete 2026-08-24 zl-linux integration:**
-> [`docs/evidence/integration/MERGE-ALL-2026-08-24.md`](docs/evidence/integration/MERGE-ALL-2026-08-24.md) records the
-> exact remote branch, local branch, registered-worktree and standalone-clone
-> closure. The post-push audit found one extra divergent local Product Wave
-> branch and merged it too. After that pass, every audited zl-linux branch and
-> worktree head is an ancestor of the integration head and every audited
-> worktree/clone is clean. The old directories and branch names still exist;
-> they contain no unique unmerged work. The separate `RoyX4/zl` repository is
-> deliberately out of scope.
+> **Complete 2026-08-30 zl-linux topology closure:**
+> [`docs/evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md`](docs/evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md)
+> records the whole-home branch, worktree, clone, dirty-file and deletion audit.
+> Every discovered tip is retained in `main` ancestry, including the recovered
+> uncommitted reference-app prototype. The 40 old GitHub branches, 42 obsolete
+> local branches, 15 redundant registered worktrees and eight standalone clones
+> were then removed or moved to Trash. The separate `RoyX4/zl` repository is
+> deliberately out of scope. This is repository-history closure, not product or
+> physical-hardware completion.
 
 **`zl`** is a self-hosting systems language with five independent ways to run a
 program, fully ported from Windows to Linux. No Wine, no emulation, and no C
@@ -279,6 +279,10 @@ about where BoredOS is ahead.
 
 ## Repository preservation audit
 
+[`docs/evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md`](docs/evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md)
+is the current authority: it records the exhaustive topology search, the final
+ancestry closure, and removal of the old branches and checkouts.
+
 [`docs/evidence/integration/GIT-WORKTREE-AUDIT-2026-08-24.md`](docs/evidence/integration/GIT-WORKTREE-AUDIT-2026-08-24.md)
-records the exhaustive ZL-only worktree audit, the preservation branches pushed
-to GitHub, the evidence archives, and the verification boundary for each branch.
+is the older retained receipt for the branches and worktrees that existed at
+that time.

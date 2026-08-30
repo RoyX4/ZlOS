@@ -27,6 +27,7 @@ Receipts for branch, worktree, clone, and publication integration.
 
 - `GIT-WORKTREE-AUDIT-2026-08-24.md`
 - `MERGE-ALL-2026-08-24.md`
+- `WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../CODE-MAP.md)
 for repository-wide ownership.

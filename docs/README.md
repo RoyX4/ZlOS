@@ -39,6 +39,7 @@ These are useful, but not a done list:
 | `evidence/MERGE-EVIDENCE.md` | Round-1 merge evidence and measured conflict classes. |
 | `evidence/MERGE-ROUND-2.md` | Round-2 worktree evidence and integration state at that time. |
 | `evidence/integration/` | Completed worktree and all-branch integration receipts. |
+| `evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md` | Current whole-home branch, worktree, standalone-clone, dirty-file and deletion closure. |
 | `evidence/status-audits/` | Dated whole-project status audits; evidence-rich, but not the current queue. |
 | `evidence/POINTER-EVIDENCE.md` | Pointer fix measurements; explicitly not full human/live-VM closure. |
 | `evidence/COMPARE-BOREDOS.md` | Measured comparison against a peer hobby OS. |
