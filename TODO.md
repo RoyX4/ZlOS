@@ -32,6 +32,10 @@ The unboxed backends sit on the far side of the scoping decision in
 
 _none open._
 
+## Open pull requests
+
+- [ ] #8 fix: consolidate zlOS work and complete PRESSWORK round twelve  `codex/consolidate-all-2026-08-30`
+
 ---
 
 <!-- BEGIN HAND-WRITTEN -->
