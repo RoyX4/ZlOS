@@ -66,8 +66,8 @@ history closure must not reintroduce stale files merely to create a tree delta.
 - Deleted all 40 historical GitHub branches. `git ls-remote --heads` then
   returned only `main`.
 - Removed 15 redundant registered worktrees, leaving the canonical checkout
-  and the temporary publication checkout. The publication checkout is removed
-  after this closure reaches `main`, leaving one registered worktree.
+  and the temporary publication checkout. The publication checkout was then
+  removed after the closure reached `main`, leaving one registered worktree.
 - Deleted 42 obsolete local branch refs after their tips became ancestors of
   the closure merge.
 - Moved all eight standalone clone directories to the desktop Trash rather
@@ -76,16 +76,32 @@ history closure must not reintroduce stale files merely to create a tree delta.
 - Reset the canonical checkout to the live GitHub `main`; no old snapshot
   branch remains checked out.
 
+## Post-closure nightly correction
+
+A manual `nightly` run against final `main` (`33315571180`) exposed one CI
+configuration gap that the merge checks did not: `run_tests.sh` invokes the
+native-EFI receipt gate, but `nightly.yml` had not prepared current-runner host
+evidence first. The dedicated EFI job already performed that setup and was
+green; the nightly was incorrectly trying to join Ubuntu QEMU evidence to
+checked-in Kali host receipts.
+
+The nightly now installs the same required `curl`, multilib, emulator, and
+image tools as the dedicated boot workflow, verifies and installs the pinned
+AX201 firmware fixture, regenerates the build identity and test inventory, and
+runs the host inventory before its language and EFI gates. A fresh successful
+GitHub nightly run is the closure proof for this correction; an old red run is
+historical evidence, not a ref or an unmerged tree.
+
 ## Verification boundary
 
 The earlier consolidation and Presswork landing passed the host, build, BIOS,
 raw, ISO, EFI, QEMU, dead-state, and GitHub Actions gates recorded in their own
-receipts. This topology pass changed no product files: `61814bf` uses the
-`ours` strategy, and the remaining changes are documentation. The repository's
-pre-push hook was allowed to run once during branch deletion, but it ran from
-the old canonical snapshot checkout and did not send the delete request. The
-delete-only retry used `--no-verify` after exact ancestry checks; no source ref
-was pushed by that command. Publication of this receipt remains subject to the
-normal current-branch checks.
+receipts. The ancestry closure itself changed no product files: `61814bf` uses
+the `ours` strategy. The later nightly correction changes CI provisioning only,
+not the kernel or language. The repository's pre-push hook was allowed to run
+once during branch deletion, but it ran from the old canonical snapshot
+checkout and did not send the delete request. The delete-only retry used
+`--no-verify` after exact ancestry checks; no source ref was pushed by that
+command. Publication remains subject to the normal current-branch checks.
 
 No physical ThinkPad boot or hardware validation was run in this topology pass.
