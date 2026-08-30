@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — chore: TODO and JOURNAL follow the EFI fix (d7b2ece)
+
+`design/presswork` · 2 files changed, 23 insertions(+), 10 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>2 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-30 — fix: my str_has native broke the EFI build, and my build loop could not see it (bc1e59b)
 
 `design/presswork` · 7 files changed, 79 insertions(+), 11 deletions(-)

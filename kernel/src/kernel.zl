@@ -10629,8 +10629,22 @@ fn app_event(id, win, ety, ecode, ex, ey) {
         # wm.c routes an extended keycode there with no EV_CHAR beside it, so
         # the arrows, Home, End and the page keys never reached browser_key at
         # all - a bound native with, from this arm, no caller.
+        # KEYCODES ONLY. input.c BACKFILLS a letter's EV_KEY_DOWN with its
+        # character when sc_special() has no keycode for it - `if (!key && ch)
+        # key = ch;` - so a printable key arrives TWICE with the same code, once
+        # as EV_KEY_DOWN and once as EV_CHAR. Taking both fed every letter to
+        # the browser twice: typing 'l' opened the URL bar with an 'l' already
+        # in it.
+        #
+        # This is the identical fault the desk-key path had, found a week ago
+        # and fixed there by splitting on CODE SPACE rather than event type.
+        # Keycodes are >= 0x100 and reach us only as EV_KEY_DOWN; characters are
+        # below it and are authoritative on EV_CHAR. I had the answer written
+        # down in wm.c and did not apply it here.
         if ety == 1 {
-            if br_key(ecode) == 1 { wm_dmg(win) }
+            if ecode >= 0x100 {
+                if br_key(ecode) == 1 { wm_dmg(win) }
+            }
             return 1
         }
         if ety == 5 {
@@ -11298,6 +11312,13 @@ fn ov_pal_run(k) {
         wm_damage_theme()
         return 1
     }
+    if i == 13 {
+        ov_close_overlay()
+        ui_over(1 - ui_over_on())
+        if ui_over_on() == 1 { note_say2("occlusion edge on", "a plate over another gets the lighter ring", 800) } else { note_say2("occlusion edge off", "every plate takes the plain ZD_CUT ring", 800) }
+        wm_damage_theme()
+        return 1
+    }
     if i == 14 {
         ov_close_overlay()
         desk_grid_on = 1 - desk_grid_on
@@ -11358,7 +11379,13 @@ fn ov_draw_palette(u) {
     # broken rather than as the query having found nothing. The row list IS the
     # answer here, so an empty list needs a sentence.
     if pvis < 1 {
-        ui_txt(sx + 38 * u, sy + 66 * u, "no command matches", theme(TH_TEXT_DIM), PW_SM, 0)
+        # label(), not ui_txt(). Every other string on this sheet is drawn with
+        # label/ui_caps, which are ungated; ui_txt checks ui_mode_get() and
+        # draws nothing while the toolkit is left in hit-test mode - which
+        # menu_event does on any start-menu click and never restores. This one
+        # line would have vanished for the rest of the session after one such
+        # click, and only this one, which is the hardest kind of missing.
+        label(sx + 38 * u, sy + 66 * u, "no command matches", theme(TH_TEXT_DIM), T_BODY, W_REG)
     }
     while pk < pvis {
         pi = ov_pal_nth(pk)
@@ -11390,7 +11417,11 @@ fn ov_draw_palette(u) {
         pk = pk + 1
     }
     # the footer, the prototype's three key hints
-    fy = sy + 62 * u + OV_PAL_N * rowh + 6 * u
+    # THE FOOTER FOLLOWS THE SHEET. This was placed at a fixed sixteen rows,
+    # which was right when the list was always sixteen; with the filter it
+    # floated on the scrim below a shrunken sheet - up to three hundred dp away
+    # from the plate it belongs to.
+    fy = sy + ov_pal_sheet_h() - 18 * u
     fill_rgb(sx, fy, sw, 1, theme(TH_CUT))
     ui_caps(sx + 13 * u, fy + 7 * u, "ENTER", theme(TH_TEXT_2), T_CAPTION)
     label(sx + 58 * u, fy + 7 * u, "run", theme(TH_TEXT_DIM), T_CAPTION, W_REG)

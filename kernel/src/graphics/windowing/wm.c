@@ -1292,11 +1292,22 @@ static unsigned blend_rgb(unsigned a, unsigned b, int p)
 
 static int anim_progress(int win, int kind)
 {
-    /* MOTION OFF means every transition completes on the frame it starts. Not
-     * "no animation runs" - the animation still runs, it is just already
-     * finished, so every reader that asks for progress gets the settled value
-     * and nothing has to learn a second code path. */
-    if (!ui_motion_get()) return 1000;
+    /* MOTION OFF means every RUNNING transition is already finished. It does
+     * NOT mean every query answers "finished".
+     *
+     * The first version returned 1000 unconditionally, and -1 is how this
+     * function says "no such animation" - so with motion off every caller was
+     * told every animation was complete, including ones that had never started.
+     * chrome_header gates on `focused || fp >= 0`, so the focus fill ran for
+     * UNFOCUSED windows and erased the struck top run on all of them.
+     *
+     * The shortcut still has to answer the existence question; it only skips
+     * the easing. */
+    if (!ui_motion_get()) {
+        for (int i = 0; i < ANIM_MAX; i++)
+            if (anims[i].kind == kind && anims[i].win == win) return 1000;
+        return -1;
+    }
     for (int i = 0; i < ANIM_MAX; i++)
         if (anims[i].kind == kind && anims[i].win == win) {
             unsigned elapsed = idt_ticks() - anims[i].start;
@@ -3476,7 +3487,20 @@ static unsigned int shell_state_key(int win, int focused)
      *
      * Missing either is the quiet kind of bug: the screen looks nearly right
      * and only disagrees with itself after a particular sequence of moves. */
-    key ^= (unsigned int)(win_over_below(win) ? 1 : 0) << 25;
+    /* THE SWITCH IS PART OF THE STATE, not just the predicate. chrome_seat is
+     * handed `ui_over_get() && win_over_below(win)`, and this keyed on the
+     * predicate alone - so turning the occlusion edge off changed the argument
+     * and not the key, the retained shell surface was reused unchanged, and the
+     * new Settings switch appeared to do nothing at all.
+     *
+     * Key on what the drawing function is actually given. A cache key that
+     * omits an input is a cache that serves the wrong picture, and it looks
+     * exactly like a dead control - which is what this was reported as. */
+    key ^= (unsigned int)((ui_over_get() && win_over_below(win)) ? 1 : 0) << 25;
+    /* ...and the other two switches, for the same reason: both change how every
+     * plate is composited and neither was in the key. */
+    key ^= (unsigned int)(ui_motion_get() ? 1 : 0) << 26;
+    key ^= (unsigned int)(ui_track_get()  ? 1 : 0) << 27;
     key ^= (unsigned int)(win_lifted(win) ? 1 : 0) << 26;
     /* NOTHING THE FOOT BAND OR THE TITLE LINE PRINTS IS IN THIS KEY, and that
      * is a decision rather than an omission. This key is an ENUMERATION of
