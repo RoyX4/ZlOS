@@ -7,6 +7,17 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-31 — Merge pull request #11 from RoyX4/codex/fix-nightly-efi-evidence-2026-08-31 (a3cdaf1)
+
+`main` · 13 files changed, 248 insertions(+), 169 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
 ## 2026-08-31 — chore: refresh nightly gate evidence (48db4ec)
 
 `codex/fix-nightly-efi-evidence-2026-08-31` · 10 files changed, 159 insertions(+), 159 deletions(-)
