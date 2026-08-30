@@ -7,6 +7,29 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: a lock you could click away, and a toggle whose only reader was its own label (08ce7a1)
+
+`design/presswork` · 7 files changed, 66 insertions(+), 11 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>7 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-30 — feat: Activities tiles pick their window - an overview that could not pick one (74e5e26)
 
 `design/presswork` · 6 files changed, 114 insertions(+), 9 deletions(-)
