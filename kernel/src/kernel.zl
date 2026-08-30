@@ -12808,7 +12808,21 @@ fn ov_draw_activities(u) {
         onm = theme(TH_TEXT_2)
         if wm_focus() == ow2 {
             fill_rgb(tx, ty, tw, OV_ACT_TH * u, theme(TH_KNOCK))
-            fill_rgb(tx, ty + OV_ACT_TH * u, focus_bar(), th - OV_ACT_TH * u, theme(TH_KO_EDGE))
+            # VERMILION, AND THE REASONING THAT SAID OTHERWISE WAS ABOUT A
+            # DIFFERENT SURFACE.
+            #
+            # proto:869 is `.thumb.on::after { top: calc(20px * var(--ui));
+            # background: var(--zd-verm) }` under proto:864-866, "the knocked
+            # out header and the vermilion focus bar". The defence here argued
+            # vermilion on the knockout computes 1.3989:1 - true, and this bar
+            # starts at ty + OV_ACT_TH, BELOW the header, on ZD_BASE, where
+            # ZD_VERM is 4.6319:1. That argument is correct for the palette's
+            # selected row and was carried to a case it does not cover.
+            #
+            # ZD_KO_EDGE is 0x6F6864 - the same value as ZD_LIT - so the
+            # focused tile was marked with a grey line where the whole design
+            # spends its one accent.
+            fill_rgb(tx, ty + OV_ACT_TH * u, focus_bar(), th - OV_ACT_TH * u, theme(TH_ACCENT))
             onum = theme(TH_KNOCK_INK2)
             onm = theme(TH_KNOCK_INK)
         }

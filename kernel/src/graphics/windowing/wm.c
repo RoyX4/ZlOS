@@ -3132,7 +3132,17 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
         r[0] = (char)('0' + W->reg / 10);
         r[1] = (char)('0' + W->reg % 10);
         r[2] = 0;
-        if (draw && x + 2 * cw <= stop) fb_text_aa(x, cy_mono, r, ink_dim);
+        /* WITH THE KNOCKOUT OFF, THIS NUMBER IS THE ONLY ACCENT LEFT.
+         *
+         * proto:684 is `body.nokock .win.focus .hdr .reg { color:
+         * var(--zd-verm) }`, and it is the one nokock rule that does NOT send
+         * its element to ZD_TEXT_3. ui.c remaps knock_ink2 to text_3 under
+         * knock-off, which is right for .sub (proto:686) and .crd (proto:687)
+         * and wrong here: once the header is a wash rather than an ink plate,
+         * the register mark is the whole of the focus signal that remains. */
+        unsigned ink_reg = ink_dim;
+        if (focused && !ui_knockout_get()) ink_reg = t->accent;
+        if (draw && x + 2 * cw <= stop) fb_text_aa(x, cy_mono, r, ink_reg);
         x += 2 * cw + gut;
     }
 
@@ -3492,7 +3502,15 @@ static void chrome_shell(int win, int focused)
          * plate - so both switch to the knockout's own secondary at 4.6965:1,
          * which is what the prototype's .win.focus .hdr .cbtn rule does. */
         unsigned ink  = focused ? t->knock_ink2 : t->text_dim;
-        unsigned rule = focused ? t->knock_ink2 : t->border;
+        /* THE RULE HALF DOES NOT SURVIVE THE REMAP, AND THE INK HALF DOES.
+         *
+         * proto:688 sends `border-left-color` back to var(--zd-cut) under
+         * body.nokock; only the COLOR goes to text_3. Left as it was, a
+         * knock_ink2 rule remapped to ZD_TEXT_3 computes 6.68:1 on ZD_BASE
+         * where the authority asks for a 1.47:1 groove - three bright bars
+         * across the quietest band on the plate, which is the opposite of what
+         * proto:693-694 spends that band on. */
+        unsigned rule = (focused && ui_knockout_get()) ? t->knock_ink2 : t->border;
         if (over) {
             /* HOVER FILLS, AND THE CLOSE BOX CANNOT BE RED ON THE KNOCKOUT.
              * On the plate, close takes the overprint with theme.ink_on over

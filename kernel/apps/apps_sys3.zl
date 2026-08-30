@@ -623,7 +623,16 @@ fn s3du_draw(ax, ay, aw, ah) {
                 # colour as what it sits on, so it is invisible IN THE
                 # REFERENCE. Kept, because this is a clone - do not "fix" it
                 # to TH_BORDER without changing the reference first.
-                fill_rgb(x, ry + 22 * u, w, u, theme(TH_PANEL))
+                # A RULE THE COLOUR OF ITS GROUND IS NOT A RULE. This drew
+                # TH_PANEL on TH_PANEL, defended as a faithful clone of ds 419
+                # - the superseded document. proto:787 is
+                # `td { border-bottom: 1px solid var(--zd-cut) }`, and the
+                # contradiction was inside one window: s3du_leg gets the
+                # visible groove from pw_row_rule at 462.
+                #
+                # The COLOUR is the defect; the position is this row's own 23dp
+                # pitch and pw_row_rule would have moved it to pw_rowh()'s.
+                fill_rgb(x, ry + 22 * u, w, u, theme(TH_CUT))
             }
             r = r + 1
         }
@@ -831,10 +840,16 @@ fn s3sv_units(ax, ay, aw, ah) {
         if ry < ay + ah {
             st = s3sv_state(i)
             col = s3sv_state_col(st)
-            if s3sv_sel == i {
-                blend(ax, ry, aw, S3SV_ROW * u, theme(TH_ACCENT), 18)
-                fill_rgb(ax, ry, 2 * u, S3SV_ROW * u, theme(TH_ACCENT))
-            }
+            # SELECTION IS THE KNOCKOUT. This washed the full client width -
+            # 46 units tall - in vermilion and added a solid 2 dp vermilion
+            # edge. proto:793 is `tr.sel td { background: var(--zd-knock) }`,
+            # and the overprint budget at proto:129-131 - which this very file
+            # cites by line at 1662-1677, and which the Settings PRESS tab
+            # prints on screen - forbids vermilion filling anything wider than
+            # the focus bar. The Network sidebar in this same file was already
+            # corrected; its comment names the two panes still breaking it and
+            # this was one of them.
+            if s3sv_sel == i { fill_rgb(ax, ry, aw, S3SV_ROW * u, theme(TH_KNOCK)) }
             glow = 0
             if st == 0 { glow = 1 }
             ui_dot(ax + 12 * u, ry + 20 * u, col, glow)
