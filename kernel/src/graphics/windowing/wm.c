@@ -3311,7 +3311,12 @@ static void chrome_band(const struct win *W, int focused, int bh)
     int gap = UI_DP(t, ZD_STATUS_GAP);
     int x = ix;
     int stop = ix + iw;
-    int grip = W->x + W->w - 1 - UI_S3(t);
+    /* ZD_GRIP, NOT UI_S3, and for the same reason chrome_shell already uses it:
+     * the grip is DRAWN 15 dp square and this clamped the band's run against
+     * 12, so the run stopped six pixels INSIDE the mark it exists to avoid.
+     * Walked at ui 1 with r = 9, the drawn grip spans W->x+W->w-19..-5 over
+     * rows W->y+W->h-19..-5 and the band occupies rows -27..-8; they overlap. */
+    int grip = W->x + W->w - 1 - UI_DP(t, ZD_GRIP);
     if (stop > grip) stop = grip;
     if (stop <= x) return;
 
@@ -3353,9 +3358,28 @@ static void chrome_band(const struct win *W, int focused, int bh)
      * meant to be the untracked caption this drew. The note that used to sit
      * here deferred the tracking "for the reason chrome_title gives", and
      * chrome_title tracks now, so there is no reason left. */
-    int lw = ui_caps_w("APP US", UI_SM);
+    /* THE THREE RUNGS THE AUTHORITY ATTACHES TO THIS BAND.
+     *
+     * proto:724 is `body.nous .sband .us { display: none }` and proto:717-719
+     * gives `repaint_pixels` as the second rung. This drew band_us
+     * unconditionally, and wm.c physically could not see the mode - ui.c
+     * exported the knockout, the occlusion edge, motion and tracking, and not
+     * this. So the switch moved and two of its three positions did nothing
+     * here.
+     *
+     * `repaint` is the client area in kilopixels, which is what the register
+     * rail and the System Monitor both mean by it. */
+    int mode = ui_us_get();
+    if (mode == 2) return;
+    const char *cap = mode ? "REPAINT" : "APP US";
+    int lw = ui_caps_w(cap, UI_SM);
     char v[16];
     unsigned u = W->band_us;
+    if (mode == 1) {
+        int cw2, ch2, cx2, cy2;
+        client_of(W->x, W->y, W->w, W->h, W->flags, &cx2, &cy2, &cw2, &ch2);
+        u = (unsigned)(cw2 * ch2 / 1000);
+    }
     if (u > 999999u) u = 999999u;
     int n = 0;
     char rev[8];
@@ -3363,10 +3387,13 @@ static void chrome_band(const struct win *W, int focused, int bh)
     while (u && n < 6) { rev[n++] = (char)('0' + (int)(u % 10u)); u /= 10u; }
     int k = 0;
     while (n > 0) v[k++] = rev[--n];
-    v[k++] = ' '; v[k++] = 'u'; v[k++] = 's'; v[k] = 0;
+    v[k++] = ' ';
+    if (mode == 1) { v[k++] = 'k'; v[k++] = 'p'; v[k++] = 'x'; }
+    else           { v[k++] = 'u'; v[k++] = 's'; }
+    v[k] = 0;
     int vw = k * cw;
     if (x + lw + UI_S1(t) + vw > stop) return;
-    ui_caps(x, by + (bhh - ui_text_h(UI_SM)) / 2, "APP US", t->text_dim, UI_SM);
+    ui_caps(x, by + (bhh - ui_text_h(UI_SM)) / 2, cap, t->text_dim, UI_SM);
     fb_text_aa(x + lw + UI_S1(t), cy, v, t->text_hi);
 }
 
@@ -4219,11 +4246,26 @@ static int in_resize_grip(int win, int x, int y)
        corner-square in_grip() this replaced, which had the guard where the
        edge-band version did not */
     if (wins[win].flags & WF_NOCHROME) return 0;
-    int e = RESIZE_EDGE(t);
+    /* A CORNER, NOT TWO EDGES - which is what this function's own neighbour
+     * at :4290 already says, and what the drawn mark has always been.
+     *
+     * It returned `(x >= rx - e) || (y >= by - e)` with e = RESIZE_EDGE = 8 dp,
+     * so an 8 dp column down the WHOLE right edge and an 8 dp strip along the
+     * WHOLE bottom never reached the client - 16 px each at ui 2, crossing any
+     * scrollbar gutter and the entire status band. The authority has no edge
+     * hit test at all: `.grip` is a 15 dp corner square (proto:725-726) and
+     * proto:2851-2852 is the only resize entry point.
+     *
+     * The file contradicted itself about this - :4205 said edges, :4290 says
+     * "A corner, not an edge" - and the DRAWN grip matches :4290. The hit test
+     * is now the drawn square, so what you can grab is what you can see.
+     *
+     * ZD_GRIP, not RESIZE_EDGE: the same token chrome_shell draws with, so the
+     * two cannot drift. */
+    int g = UI_DP(t, ZD_GRIP);
     int rx = wins[win].x + wins[win].w, by = wins[win].y + wins[win].h;
-    /* inside the window, within `e` of the right OR bottom edge */
     if (x < wins[win].x || y < wins[win].y || x >= rx || y >= by) return 0;
-    return (x >= rx - e) || (y >= by - e);
+    return (x >= rx - g) && (y >= by - g);
 }
 
 /* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,

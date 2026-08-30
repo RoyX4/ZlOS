@@ -7,6 +7,54 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: round twelve, the compositor three - resize, the band, and one mode in two places (1bc3645)
+
+`design/presswork` · 10 files changed, 116 insertions(+), 29 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>10 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/ui.c`
+- `kernel/src/graphics/ui/ui.h`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, first eleven - and the audit caught a rescaled instrument (3eb0224)
+
+`design/presswork` · 6 files changed, 23 insertions(+), 9 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/probes/README.md`
+
+</details>
+
 ## 2026-08-30 — chore: preserve nightly consolidation checkpoint (6fdc71e)
 
 `codex/full-program` · 1 file changed, 4 insertions(+), 1 deletion(-)
