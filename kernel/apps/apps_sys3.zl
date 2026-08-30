@@ -728,6 +728,26 @@ fn s3sv_action(x, y, s, act) {
     return w
 }
 
+# WHICH ACTION PILL THE POINTER IS OVER, or -1. The x edges repeat the draw's
+# accumulation in the same order: `stop` flush right, `restart` seven units left
+# of it, `start` alone when the unit is not active. cx is client-relative here,
+# the way the row test above it is.
+#
+# It does not need the ROW: every row lays its pills out at the same x, and the
+# widths come from the same s3sv_action_w the draw uses.
+fn s3sv_pill_at(aw, cx) {
+    spu = ui()
+    spw2 = s3sv_action_w("stop")
+    spw1 = s3sv_action_w("restart")
+    spws = s3sv_action_w("start")
+    # active: stop, then restart to its left
+    if cx >= aw - 12 * spu - spw2 { if cx < aw - 12 * spu { return 2 } }
+    if cx >= aw - 12 * spu - spw2 - 7 * spu - spw1 { if cx < aw - 12 * spu - spw2 - 7 * spu { return 1 } }
+    # inactive: a lone start, in the same flush-right slot
+    if cx >= aw - 12 * spu - spws { if cx < aw - 12 * spu { return 0 } }
+    return 0 - 1
+}
+
 fn s3sv_tab_w(ti) {
     s = "Units"
     if ti == 1 { s = "Syscalls" }
@@ -934,6 +954,21 @@ fn s3sv_event(win, ety, ecode, ex, ey) {
                     wm_dmg(win)
                     return 1
         }}}
+    }
+    # ...AND THE OTHER EIGHTEEN PILLS SAY WHY THEY CANNOT. They were drawn
+    # pressable and a click on one silently selected the row, which is
+    # indistinguishable from a button that did nothing because it is broken.
+    # The refusal above is right - zlOS cannot restart a driver it never
+    # stopped - but a refusal nobody is told about is not a refusal, it is a
+    # dead control with a good excuse.
+    #
+    # Every row here is a LEVEL PROBE of hardware presence, not a managed unit,
+    # and the toast says so with the probe's own name in it.
+    if s3sv_pill_at(aw, cx) >= 0 {
+        note_say2("this unit is a probe, not a service", "the row reads a driver's live state - there is no service manager to start or stop it", 900)
+        s3sv_sel = row
+        wm_dmg(win)
+        return 1
     }
     s3sv_sel = row
     wm_dmg(win)

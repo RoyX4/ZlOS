@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — test: probe-lock - the sheet is modal, and Escape is still the way out (95a41ae)
+
+`design/presswork` · 4 files changed, 101 insertions(+), 4 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>4 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/build-identity.json`
+- `kernel/tools/probes/probe-lock.py`
+
+</details>
+
 ## 2026-08-30 — fix: a lock you could click away, and a toggle whose only reader was its own label (08ce7a1)
 
 `design/presswork` · 7 files changed, 66 insertions(+), 11 deletions(-)
