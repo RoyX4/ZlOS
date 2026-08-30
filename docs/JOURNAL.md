@@ -7,6 +7,34 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — chore: refresh consolidated evidence receipts (d9059ba)
+
+`codex/consolidate-all-2026-08-30` · 12 files changed, 171 insertions(+), 169 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>12 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json`
+- `kernel/docs/receipts/physical-page-allocator-native-uefi64-qemu-2026-08-30.json`
+- `kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json`
+- `kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json`
+- `kernel/metadata/boot-media-ids.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/test-inventory.json`
+- `kernel/tests/host/test-inventory.json`
+- `kernel/tests/host/test-run-receipt.json`
+
+</details>
+
 ## 2026-08-30 — chore: record presswork round twelve closure (1cc71f7)
 
 `codex/consolidate-all-2026-08-30` · 2 files changed, 30 insertions(+)
