@@ -54,6 +54,43 @@ Three facts that bound the fix:
 Recorded rather than done, because the honest version needs the authority
 turned into a region map first and that is its own task.
 
+## #35 AND #36 - WHAT LANDED AND WHAT DID NOT
+
+**#36 is done.** `set_segbar` was a segmented control that could only ever draw
+the tab strip: it looped `SET_TABS`, called `set_tabname(i)` and compared
+against the global `set_tab`. There are no arrays or string lists in this
+kernel subset, so a list is now a KIND plus a name function - the idiom the
+rest of the file uses - and `seg_draw` / `seg_at` / `seg_pick` take one.
+`set_segbar` and `set_tab_at` survive as wrappers on kind 0, so nothing that
+drew a tab strip had to move.
+
+**#35 is half done, and the half that is missing is arithmetic rather than
+effort.**
+
+- `seg('surface ladder', ['presswork','raking'])` (proto:2036) is drawn and
+  live on the LADDER tab. Its second rung reports that there is no raking
+  ladder to switch to, because `design.h:54-59` puts a second light ladder
+  deliberately out of scope and the only raking values in the tree are four
+  REFERENCE constants, not six switchable rungs. A control that says the thing
+  does not exist is a smaller claim than a missing control, which says nothing.
+- `slider('ui scale', 80, 140, ' %')` (proto:2037) is **not** drawn. Every
+  measurement in `kernel.zl` is `N * ui()` and `ui()` returns an INTEGER from
+  `fb.c`. A percentage cannot be expressed against an integer scale without
+  moving the whole layout onto the q8 value `fb.c` already keeps in
+  `ui_scale_q8` - which is a change to every `* ui()` in the tree, not a
+  control. `fb.c` also has no setter at all: `ui_scale_q8` is derived from
+  panel width in `fb_setup` and nothing writes it afterwards.
+
+  The bounded version, if it is wanted: a SEGMENT of the integer scales the
+  layout already supports rather than a percentage slider, plus a setter that
+  invalidates the per-window chrome caches - `shell_state_key` does not include
+  the scale, so a scale change today would serve stale cached chrome.
+
+**`seg('raster clock', ['composite','frame'])` (proto:2187) is deliberately
+still absent.** The widget exists for it now; the readings do not. This kernel
+counts composites, and drawing a rung for a clock nothing counts would be the
+dead control this whole round has been removing.
+
 | # | severity | status | gate | finding |
 |---|---|---|---|---|
 | 1 | invented-figure | **DONE** `fe0ce88` | — | The Files detail block prints an unconditional green OK verdict swatch for every selected file — nothing is checked |

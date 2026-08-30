@@ -6381,8 +6381,17 @@ fn sm_win_head(hx, hy, hw) {
     hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
     ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), hy2, "z", theme(TH_TEXT_DIM), PW_SM)
     ui_caps(pw_colx(hx, hw, 12) + pw_cellpx(), hy2, "window", theme(TH_TEXT_DIM), PW_SM)
-    ui_caps(pw_right(pw_colx(hx, hw, 56), pw_colw(hw, 22), ui_capsw("app us", PW_SM)), hy2, "app us", theme(TH_TEXT_DIM), PW_SM)
-    ui_caps(pw_right(pw_colx(hx, hw, 78), pw_colw(hw, 22), ui_capsw("kpx", PW_SM)), hy2, "kpx", theme(TH_TEXT_DIM), PW_SM)
+    # THE COLUMN THE `per window timing` SEGMENT SELECTS. usOf at proto:1606-1610
+    # offers app-microseconds OR kilopixels-repainted OR nothing, and both
+    # readings were already drawn here side by side with no way to choose. The
+    # head follows the choice so a column cannot be headed one thing and filled
+    # with another.
+    if set_us == 0 {
+        ui_caps(pw_right(pw_colx(hx, hw, 78), pw_colw(hw, 22), ui_capsw("app us", PW_SM)), hy2, "app us", theme(TH_TEXT_DIM), PW_SM)
+    }
+    if set_us == 1 {
+        ui_caps(pw_right(pw_colx(hx, hw, 78), pw_colw(hw, 22), ui_capsw("kpx", PW_SM)), hy2, "kpx", theme(TH_TEXT_DIM), PW_SM)
+    }
     fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
     return hy + pw_headh()
 }
@@ -6396,9 +6405,13 @@ fn sm_win_row(rx, ry, rw, zi) {
     cy = pw_celly(ry)
     num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, zi, theme(TH_TEXT_DIM))
     ui_txt(pw_colx(rx, rw, 12) + pw_cellpx(), cy, app_name(wm_app(w)), theme(TH_TEXT_2), PW_SM, 0)
-    num_aa(pw_right(pw_colx(rx, rw, 56), pw_colw(rw, 22), s3_numw(wm_appus(w))), cy, wm_appus(w), theme(TH_TEXT_2))
-    kpx = wm_cw(w) * wm_ch(w) / 1000
-    num_aa(pw_right(pw_colx(rx, rw, 78), pw_colw(rw, 22), s3_numw(kpx)), cy, kpx, theme(TH_TEXT_2))
+    if set_us == 0 {
+        num_aa(pw_right(pw_colx(rx, rw, 78), pw_colw(rw, 22), s3_numw(wm_appus(w))), cy, wm_appus(w), theme(TH_TEXT_2))
+    }
+    if set_us == 1 {
+        kpx = wm_cw(w) * wm_ch(w) / 1000
+        num_aa(pw_right(pw_colx(rx, rw, 78), pw_colw(rw, 22), s3_numw(kpx)), cy, kpx, theme(TH_TEXT_2))
+    }
     pw_row_rule(rx, ry, rw)
     return ry + pw_rowh()
 }
@@ -9740,6 +9753,17 @@ fn set_press_ctl(x, y, w) {
     # would need a second ladder and a mode change respectively.
     set_tog_row(x, y, w, 4, ui_motion_on(), "motion", "RISE 90 / TRAVEL 160 / SETTLE 240, one curve")
     set_tog_row(x, y, w, 5, ui_track_on(), "label tracking", "ZD_TR_LAB 1.4 and ZD_TR_BIG 2.6")
+    # `per window timing` IS ONE OF THE TWO THIS PANE HAD NO WIDGET FOR, and it
+    # has one now - see the SEG_* block. It is the one of the pair whose data
+    # this machine already measures: usOf at proto:1606-1610 switches between
+    # `w.us + ' us'` and `(w.px / 1000) + ' kpx'`, and the System Monitor's
+    # window table already draws both columns from wm_appus and wm_cw*wm_ch.
+    #
+    # `raster clock` is still absent and that is deliberate rather than
+    # forgotten: the authority's two rungs are composite and frame, and this
+    # kernel counts composites. Drawing a rung for a clock nothing counts would
+    # be the dead control this whole round has been removing.
+    set_seg_row(x, y, w, 6, SEG_US, "per window timing", "app us, or the client area it repaints")
     return 6 * set_rowh()
 }
 fn set_trk_x(x)  { return x + SET_LABW * ui() }
@@ -10143,6 +10167,15 @@ fn set_step_row(x, y, w, nm, a, b) {
     }
     return set_trow(x, y, w)
 }
+# WHERE THE LADDER TAB'S ONE CONTROL SITS, named once.
+#
+# It is inside the SCROLLING body, after the head and the nine-line well, so
+# its y moves with set_scroll - and this file has found the same class of split
+# four times already (Settings, the browser, the catalogue, the Files list):
+# a draw that computes a position inline and a hit test that recomputes it is
+# two answers to "where is this control", and the one you can see loses.
+fn set_ladder_seg_y(y) { return y + set_headh() + set_wellh(9) + SET_STACK * ui() }
+
 fn set_ladder_body(x, y, w) {
     setlb_x = x
     setlb_y = y
@@ -10167,6 +10200,33 @@ fn set_ladder_body(x, y, w) {
         set_wlc(setfb_x, setfb_y, 8, 0, "ZD_BASE ITSELF IS UNTOUCHED - the ground never moved.")
     }
     setlb_y = setlb_y + set_wellh(9) + SET_STACK * setlb_u
+
+    # THE LADDER TAB HAD NO CONTROLS AT ALL. The authority puts two here,
+    # immediately after this first well: `seg('surface ladder', 'ladder',
+    # ['presswork','raking'])` at proto:2036 and `slider('ui scale', 'ui', 80,
+    # 140, ' %')` at :2037. set_ladder_body called set_tog_row, set_slider and
+    # seg zero times.
+    #
+    # THE TWO ARE DIFFERENT PROBLEMS AND ARE NOT TREATED AS ONE.
+    #
+    # The surface ladder is a capability this machine does NOT have -
+    # design.h:54-59 puts a second light/raking ladder deliberately out of
+    # scope, and the only raking values in the tree are four REFERENCE
+    # constants, not six switchable rungs. So the control is drawn, it is live,
+    # and its second rung reports that the rung is not built. That is a
+    # smaller claim than a missing control makes, because a control that is
+    # absent says nothing about whether the thing exists.
+    #
+    # The ui-scale slider is NOT here, and the reason is arithmetic rather than
+    # effort: the authority's range is 80..140 %, and every measurement in this
+    # file is `N * ui()` where ui() is an INTEGER from fb.c. A percentage
+    # cannot be expressed against an integer scale without moving the whole
+    # layout onto the q8 value fb.c already keeps - which is a change to every
+    # `* ui()` in the tree, not a control. Recorded in
+    # docs/design/PRESSWORK-BACKLOG.md rather than faked with two rungs the
+    # authority does not have.
+    set_seg_row(setlb_x, set_ladder_seg_y(y), setlb_w, 0, SEG_LADDER, "surface ladder", "the one this system resolves")
+    setlb_y = setlb_y + set_rowh() + SET_STACK * setlb_u
 
     setlb_y = set_head(setlb_x, setlb_y, "THE LADDER, AS RESOLVED RIGHT NOW")
     if set_vis(setlb_y, set_thh()) == 1 {
@@ -10691,6 +10751,27 @@ fn settings_event(win, ety, ecode, ex, ey) {
                 ui_track(1 - ui_track_on())
                 if ui_track_on() == 1 { note_say2("label tracking on", "ZD_TR_LAB 1.4 and ZD_TR_BIG 2.6", 800) } else { note_say2("label tracking off", "the letter-spacing goes, the faces stay", 800) }
                 wm_damage_theme()
+                return 1
+            }
+            # THE SEGMENT IS HIT-TESTED ON THE BAR, NOT ON THE ROW. A toggle
+            # occupies its whole row so set_hit_row is right for one; a
+            # segmented control has three targets inside its bar and a row-wide
+            # test could only ever pick one of them. set_seg_row_at asks the
+            # same two functions set_seg_row drew with.
+            setev_g = set_seg_row_at(setev_x, set_ctl_y(setev_ay), setev_w, 6, SEG_US, ex, ey)
+            if setev_g >= 0 {
+                seg_pick(SEG_US, setev_g)
+                wm_damage(0, 0, px_w(), px_h())
+                return 1
+            }
+        }
+        # AND THE LADDER TAB HAS ONE TOO, from the same shared helper the draw
+        # used - set_ladder_seg_y, not a second copy of head + well + stack.
+        if set_tab == SET_LADDER {
+            setev_l = set_seg_row_at(setev_x, set_ladder_seg_y(set_body_y(setev_ay)), setev_w, 0, SEG_LADDER, ex, ey)
+            if setev_l >= 0 {
+                seg_pick(SEG_LADDER, setev_l)
+                wm_dmg(win)
                 return 1
             }
         }

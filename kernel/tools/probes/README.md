@@ -38,6 +38,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-edit-viewport.py`
 - `probe-edit.py`
 - `probe-escape.py`
+- `probe-field.py`
 - `probe-files-click.py`
 - `probe-files.py`
 - `probe-frame.py`
