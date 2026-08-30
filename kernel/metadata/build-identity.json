@@ -3,9 +3,9 @@
   "git": {
     "branch": "design/presswork",
     "dirty": true,
-    "head": "f0ff8ff3d8c978fc4a137b2c65fa9265b5415ebb"
+    "head": "0adaf2bb1792f30c65fc524cf64993edd4e69cb4"
   },
-  "identity_sha256": "ddcf608407ab66fffa8690f0731babb8be184f596977e2a608be9fd2024798ff",
+  "identity_sha256": "262b4e40d59b0d9e5ab5d912b5fc817d382977210c4e97bcd3061c295feb1d2f",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
