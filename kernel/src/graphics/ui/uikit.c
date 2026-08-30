@@ -546,21 +546,27 @@ static void seat_sunken(int x, int y, int w, int h, int r, unsigned face)
  * what makes it read as a blur rather than as a stack of borders: a linear
  * ramp puts equal ink in every band and the outermost band is the widest, so
  * linear reads as a halo. ZD_LIFT_A is the alpha at the object's own edge,
- * ZD_LIFT_BLUR is how far it reaches, ZD_LIFT_DY is how far the lamp pushes
- * it down.
+ * ZD_OFFPLANE_BLUR is how far it reaches, ZD_OFFPLANE_DY is how far the
+ * lamp pushes it down.
  *
  * BANDS, NOT PIXELS, AND THE REASON IS THE MACHINE. One band per pixel of
- * blur would be ZD_LIFT_BLUR full-area blends per overlay per frame - 26 of
- * them at ui scale 2 - on a CPU that draws every pixel itself with no GPU
+ * blur would be ZD_OFFPLANE_BLUR full-area blends per overlay per frame - 28
+ * of them at ui scale 2 - on a CPU that draws every pixel itself with no GPU
  * behind it. LIFT_BANDS is fixed, so the cost of a menu's shadow does not
  * change when the user changes the UI scale; only the spacing of the bands
  * does. Eight is where the banding stops being visible against a 55% alpha at
  * this radius, and it is the whole knob if it ever needs to move. */
 #define LIFT_BANDS 8
 
+/* ITS THREE CALLERS ARE THE THREE OFF-PLANE OBJECTS AND NOTHING ELSE -
+ * ui_popover (the menu, proto:942), ui_modal (the palette sheet, proto:897)
+ * and ui_toast_draw (proto:965). All three carry 6dp/14dp in the authority.
+ * This read ZD_LIFT_DY/ZD_LIFT_BLUR, which is the DRAGGED PLATE's 5dp/13dp
+ * from proto:643 - a rule for an object none of these three is. The name is
+ * kept because the mechanism below is the lift's; only the figures move. */
 static void lift_shadow(int x, int y, int w, int h, int r)
 {
-    int blur = DP(ZD_LIFT_BLUR), dy = DP(ZD_LIFT_DY);
+    int blur = DP(ZD_OFFPLANE_BLUR), dy = DP(ZD_OFFPLANE_DY);
     if (ui_mode_get() != UI_DRAW || blur < 1) return;
     for (int b = LIFT_BANDS; b >= 1; b--) {
         int i = blur * b / LIFT_BANDS;          /* how far out this band is */

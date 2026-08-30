@@ -861,9 +861,30 @@
 #define ZD_BLUR_GLOW_A  0
 #define ZD_BLUR_GLOW_B  0
 
-/* The one shadow, in the shape wm.c already asks for. */
-#define ZD_SHADOW_DY    ZD_LIFT_DY
-#define ZD_SHADOW_BLUR  ZD_LIFT_BLUR
+/* THERE ARE TWO SHADOWS IN THE AUTHORITY, NOT ONE.
+ *
+ * ZD_LIFT_DY/ZD_LIFT_BLUR above (5/13) belong to the DRAGGED PLATE and to
+ * nothing else - `.win.drag { box-shadow: 0 calc(5px * var(--ui))
+ * calc(13px * var(--ui)) var(--zd-lift) }` at proto:643, one selector, one
+ * rule.
+ *
+ * The three OFF-PLANE objects carry a different pair, and all three carry the
+ * same one: `box-shadow: 0 calc(6px * var(--ui)) calc(14px * var(--ui))
+ * var(--zd-lift)` - the palette sheet (proto:897), the menu (proto:942) and
+ * the toast (proto:965). Six and fourteen, written three times.
+ *
+ * This block used to alias ZD_SHADOW_* to the dragged pair and export nothing
+ * for the off-plane one, so every off-plane site in the tree either used the
+ * plate's 5/13 (uikit.c's popover, modal and toast; wm.c's notify toast) or
+ * invented a multiplier to get away from it - wm.c's chrome_shadow scaled the
+ * plate pair by 3/2 and drew a modal at 7/19. Seven and nineteen appear
+ * NOWHERE in the authority. The aliases had no readers at all, so a name that
+ * would have been read was never offered.
+ *
+ * Both pairs are now named after what wears them, which is the only way a
+ * reader can tell they were meant to differ. */
+#define ZD_OFFPLANE_DY    6   /* design px - proto:897, :942, :965 */
+#define ZD_OFFPLANE_BLUR 14   /* design px - the same three */
 #define ZD_SHADOW_ALPHA 55      /* percent - ZD_LIFT_A as a percentage */
 
 #endif /* ZL_DESIGN_H */

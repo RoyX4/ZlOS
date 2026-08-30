@@ -988,6 +988,13 @@ void wm_damage(int x, int y, int w, int h)
  * fb.c is the vocabulary and is deliberately not edited. */
 #define SHADOW_OFF(t)   (UI_DP((t), ZD_LIFT_DY))
 #define SHADOW_SOFT(t)  (UI_DP((t), ZD_LIFT_BLUR))
+/* THE OFF-PLANE PAIR IS A DIFFERENT PAIR, NOT A MULTIPLE OF THIS ONE. The
+ * palette sheet, the menu and the toast all carry 6dp/14dp in the authority
+ * (proto:897, :942, :965); the dragged plate carries 5dp/13dp (proto:643).
+ * The two sites below used `off * 3 / 2` on the plate pair, which is 7/19 -
+ * a figure that is in no document. See design.h's ZD_OFFPLANE_* block. */
+#define OFFPLANE_OFF(t)  (UI_DP((t), ZD_OFFPLANE_DY))
+#define OFFPLANE_SOFT(t) (UI_DP((t), ZD_OFFPLANE_BLUR))
 
 /* ELEVATION MAKES THE SHADOW A VARIABLE, AND THAT IS A TRAP.
  *
@@ -1017,7 +1024,7 @@ static int shadow_reach(int win)
 {
     const struct ui_theme *t = ui_theme();
     int off = SHADOW_OFF(t), soft = SHADOW_SOFT(t);
-    if (wins[win].flags & WF_MODAL) { off = off * 3 / 2; soft = soft * 3 / 2; }
+    if (wins[win].flags & WF_MODAL) { off = OFFPLANE_OFF(t); soft = OFFPLANE_SOFT(t); }
     return off + soft;          /* the LIFTED size; at rest there is none */
 }
 
@@ -2775,7 +2782,11 @@ static void chrome_shadow(int win, int focused)
     if (!modal && !win_lifted(win)) return;
     anim_rect(win, &W->x, &W->y, &W->w, &W->h);
     int off  = SHADOW_OFF(t), soft = SHADOW_SOFT(t);
-    if (modal) { off = off * 3 / 2; soft = soft * 3 / 2; }
+    /* A MODAL IS OFF-PLANE; A DRAGGED PLATE IS NOT. Both cast, and the
+     * authority gives them different pairs - not the same pair times a
+     * number. `off * 3 / 2` read as a deliberate elevation and was arithmetic
+     * on a figure that belongs to the other object. */
+    if (modal) { off = OFFPLANE_OFF(t); soft = OFFPLANE_SOFT(t); }
 
     fb_shadow(W->x, W->y, W->w, W->h, off, soft);
 }
@@ -3651,7 +3662,7 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     if (!isect(x, y, x + w, y + h, rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
         /* the shadow reaches outside the panel, exactly as a window's does */
         const struct ui_theme *ts = ui_theme();
-        int reach = SHADOW_OFF(ts) + SHADOW_SOFT(ts);
+        int reach = OFFPLANE_OFF(ts) + OFFPLANE_SOFT(ts);
         if (!isect(x - reach, y - reach, x + w + reach, y + h + reach,
                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) return;
     }
@@ -3666,7 +3677,9 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     fb_clip(cx, cy, cw, ch);
 
     const struct ui_theme *t = ui_theme();
-    fb_shadow(x, y, w, h, SHADOW_OFF(t), SHADOW_SOFT(t));
+    /* THE TOAST IS THE THIRD OFF-PLANE OBJECT (proto:965), so it wears the
+     * off-plane pair like the other two - not the dragged plate's. */
+    fb_shadow(x, y, w, h, OFFPLANE_OFF(t), OFFPLANE_SOFT(t));
     fb_rrect(x, y, w, h, t->radius, t->border);
     fb_rrect(x + 1, y + 1, w - 2, h - 2, t->radius - 1, t->panel_hi);
     /* THE BAR IS --zd-focus-bar WIDE, WHICH IS THE FOCUS BAR'S OWN WIDTH.
@@ -4802,7 +4815,7 @@ void wm_frame(void)
         int tx, ty, tw, th;
         toast_rect(&tx, &ty, &tw, &th);
         const struct ui_theme *t = ui_theme();
-        int reach = SHADOW_OFF(t) + SHADOW_SOFT(t);
+        int reach = OFFPLANE_OFF(t) + OFFPLANE_SOFT(t);
         /* The rectangle has to cover the RISE as well as the panel: ztoast
          * starts ten design pixels low, so a toast damaged at its settled
          * height leaves its first frames' bottom edge on the wallpaper. */
