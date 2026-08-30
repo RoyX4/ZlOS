@@ -1,0 +1,83 @@
+# dead-state-baseline.txt - module-level names whose only mention is their own
+# declaration, AS OF the first run of check-dead-state.py.
+#
+# This is a TRIAGE LIST, not an amnesty. Every line here is a name nothing
+# reads. They are listed rather than deleted because a 28-name sweep is not a
+# reviewable change and because at least three of them are findings rather than
+# clutter - see the notes. Anything NOT on this list fails the check, because a
+# name that died today is one somebody can still explain.
+#
+# To retire a line: delete the name from the source, then delete it here. The
+# check FAILS on a stale entry too - a baseline describing a tree that no longer
+# exists is the same defect as a stale golden.txt.
+
+# ---- a reserved PAGE with no consumer -------------------------------------
+# FILES_BUF is in kernel.zl's memmap block at 0x02213000, commented
+# "apps_system.zl: Files, one entry's bytes". Nothing reads it. That is a whole
+# 4 KiB page reserved for a consumer that does not exist, and check-memmap.sh's
+# sized list does not cover it either - it appears in that script's "fixed
+# addresses with no size check here" note. Decide whether Files wants it or
+# whether the page goes back.
+FILES_BUF
+
+# ---- the ui_metric selectors nothing asks for ------------------------------
+# UM_RADIUS and UM_SCALE_Q8 are selector indices for ui_metric(). Every other
+# UM_* has a caller. If the C side answers these two and no zl code asks, that
+# is a reading the desktop is not taking; if it does not answer them, they are
+# two indices into nothing.
+UM_RADIUS
+UM_SCALE_Q8
+
+# ---- the Kernel Log's column metrics ---------------------------------------
+# Six constants naming the log table's four columns - the time column's width
+# and the three text roles. If the table lays its columns out with literals
+# instead, that is the one-fact-many-copies shape this repo has removed four
+# times already.
+KL_M_NUM
+KL_M_MONO
+KL_M_LVL
+KL_C_TIME
+KL_C_SUB
+KL_C_LVL
+
+# ---- theme slots with no reader --------------------------------------------
+# Indices into the C theme table. The gradient pairs (WALL_TOP/BOT,
+# BAR_TOP/BOT/HI) are from the pre-PRESSWORK wallpaper and title bar, which the
+# knockout replaced; TITLE_OFF_BOT is the unfocused header's second stop, and
+# under PRESSWORK title_off IS the plate, so there is no second stop.
+TH_WALL_TOP
+TH_WALL_BOT
+TH_BAR_TOP
+TH_BAR_BOT
+TH_BAR_HI
+TH_TITLE_OFF_BOT
+
+# ---- console colours nobody prints in --------------------------------------
+# Members of a coherent 16-colour table whose other entries are used. Harmless
+# on their own; listed so the count is honest rather than filtered.
+C_BLACK
+C_BLUE
+C_DGREY
+C_LBLUE
+
+# ---- weight constants, one per module --------------------------------------
+# Each module defines its own BOLD alongside a REG that is used. Same shape as
+# the colours: a family with an unused member.
+AU_BOLD
+S2_BOLD
+PW_BOLD
+
+# ---- the rest ---------------------------------------------------------------
+# CLOCK_W: a width for the clock pane, superseded by a measured one.
+CLOCK_W
+# SET_REF_WASH_RAKING: one of design.h's four raking REFERENCE constants
+# mirrored into zl. The Settings LADDER tab quotes three of them; this is the
+# fourth and it is quoted nowhere.
+SET_REF_WASH_RAKING
+# TY_SANS: a type-family selector from before the roles were fixed at four.
+TY_SANS
+# fl_len / fl_hover / fl_pressed: state for a flow-layout control in
+# apps_games4.zl's neighbourhood that no draw or event function reads.
+fl_len
+fl_hover
+fl_pressed
