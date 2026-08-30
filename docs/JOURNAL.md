@@ -7,6 +7,17 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — Merge pull request #9 from RoyX4/codex/final-topology-cleanup-2026-08-30 (43a81ec)
+
+`main` · 6 files changed, 146 insertions(+), 39 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
 ## 2026-08-30 — docs: record whole topology closure (fcb3e0f)
 
 `codex/final-topology-cleanup-2026-08-30` · 5 files changed, 125 insertions(+), 39 deletions(-)
