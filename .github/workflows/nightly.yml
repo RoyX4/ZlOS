@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            gcc clang nasm llvm lld \
+            curl gcc gcc-multilib clang nasm llvm lld \
             qemu-system-x86 ovmf \
             mtools dosfstools gdisk parted \
             xorriso grub-pc-bin grub-efi-amd64-bin
@@ -44,6 +44,25 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - run: ./build.sh
+
+      # run_tests.sh includes the native-EFI gate, whose receipts are bound to
+      # the current runner's build identity and host-test inventory. Keep this
+      # setup aligned with the dedicated EFI job in boot.yml; checked-in Kali
+      # receipts cannot honestly stand in for an Ubuntu nightly run.
+      - name: build current-runner host evidence required by EFI receipts
+        run: |
+          ax201_fixture="$RUNNER_TEMP/iwlwifi-QuZ-a0-hr-b0-77.ucode"
+          curl -fsSL \
+            'https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20260519/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode' \
+            -o "$ax201_fixture"
+          echo '69ca0913ccca609dedff5e30b1d478482487fa14ad6b7be079f8cc856ac26cac  '"$ax201_fixture" \
+            | sha256sum -c -
+          sudo install -Dm0644 "$ax201_fixture" \
+            /lib/firmware/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode
+          python3 kernel/tools/generators/gen-build-identity.py --write --selftest
+          kernel/tests/host/build.sh
+          python3 kernel/tools/generators/gen-test-inventory.py --write --selftest
+          python3 kernel/tools/run/run-host-tests.py --run --selftest
 
       - name: language, formatter, parity, hazards
         run: |
