@@ -26,6 +26,7 @@ zlfs filesystem implementation.
 ## Direct tracked contents
 
 - `fs.c`
+- `tar.c`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../docs/CODE-MAP.md)
 for repository-wide ownership.

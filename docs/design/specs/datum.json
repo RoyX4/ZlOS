@@ -1,0 +1,333 @@
+{
+ "direction": "Datum",
+ "one_line_pitch": "The desktop is an engineering drawing on warm paper, ruled from a single left datum edge, and the only dark material on screen is the machine itself \u2014 a full-height ink rail and a full-width raster strip that carry the five numbers zlOS alone can measure.",
+ "why_not_default": "Three things a generic prompt will not produce. (1) It is LIGHT. \"Dark desktop UI\" is the default attractor and near-black+lime is the exact centre of it; a warm-paper desktop is the opposite pole, and the reason is technical rather than contrarian \u2014 zlOS's best-in-class asset is gamma-correct linear-light subpixel blending, and dark-ink-on-light is precisely where naive blenders visibly fail and where correct ones visibly win. Light showcases the one thing the renderer does better than most shipping software. Lime-on-black hides it. (2) It commits to a MATERIAL LAW, not a palette: paper is the user's, ink is the machine's. Menus, modals, the rail and the strip are ink-inverted because they are the machine speaking about itself, which simultaneously removes every drop shadow (an ink object on paper separates by 14.26:1 luminance alone) and gives instrumentation a physical home instead of scattering readouts into a status bar. No default generator invents a substance rule. (3) The radius answer runs backwards from expectation: the fix for \"design.h measured 15 radii and ui.c collapsed them to 1\" is not to use 15, it is to have THREE with a stated reason \u2014 0 for anything that is the machine's frame, 3dp for every container, h/2 for anything you press. Containers near-square against fully-round controls IS the shape system.",
+ "palette": {
+  "mode": "inverted-per-surface \u2014 warm paper is the ground for all user content; cool ink is a second material reserved for the machine's own surfaces (rail, raster strip, menus, modals, drawer). Never a light-mode/dark-mode toggle: both are on screen at once, by law.",
+  "tokens": [
+   {
+    "name": "ZD_PAPER_0",
+    "hex": "#E4E1DA",
+    "role": "desktop ground / wallpaper base \u2014 the darkest paper; the 1dp gutter around every plate"
+   },
+   {
+    "name": "ZD_PAPER_1",
+    "hex": "#F5F3EE",
+    "role": "plate body \u2014 window interior, the content ground"
+   },
+   {
+    "name": "ZD_PAPER_2",
+    "hex": "#ECE9E3",
+    "role": "raised on paper \u2014 title band, toolbar, status band, card face"
+   },
+   {
+    "name": "ZD_PAPER_3",
+    "hex": "#DBD7CF",
+    "role": "sunken on paper \u2014 input wells, meter tracks, segmented tracks"
+   },
+   {
+    "name": "ZD_RULE",
+    "hex": "#C3BEB4",
+    "role": "the hairline. Every adjacency inside a plate. Always exactly 1 DEVICE pixel, never scaled by UI_DP"
+   },
+   {
+    "name": "ZD_RULE_HI",
+    "hex": "#847E73",
+    "role": "the datum rule and every plate outline \u2014 the boundary that separates an object from the ground. 3.63:1 on paper, clears WCAG 1.4.11's 3:1 for non-text UI boundaries"
+   },
+   {
+    "name": "ZD_INK_0",
+    "hex": "#101317",
+    "role": "the machine's material \u2014 rail, raster strip, drawer, menu, modal body. Cool-neutral so it reads as a different substance from warm paper, not as 'dark mode'"
+   },
+   {
+    "name": "ZD_INK_1",
+    "hex": "#191D22",
+    "role": "raised on ink \u2014 rail cell hover, menu item hover"
+   },
+   {
+    "name": "ZD_INK_2",
+    "hex": "#2A2F36",
+    "role": "hairline on ink"
+   },
+   {
+    "name": "ZD_INK_TRACK",
+    "hex": "#383E47",
+    "role": "empty gauge track and the raster strip's budget line. Non-information-bearing container: the fill carries the reading at 10.60:1"
+   },
+   {
+    "name": "ZD_T_0",
+    "hex": "#14130F",
+    "role": "emphasis ink on paper \u2014 focused window title, stat values"
+   },
+   {
+    "name": "ZD_T_1",
+    "hex": "#232019",
+    "role": "BODY \u2014 the root ink of the desktop"
+   },
+   {
+    "name": "ZD_T_2",
+    "hex": "#4E4A41",
+    "role": "secondary \u2014 unfocused titles, captions, column heads, inactive window-control glyphs"
+   },
+   {
+    "name": "ZD_T_3",
+    "hex": "#635E54",
+    "role": "tertiary \u2014 mono measured values in the plate status band, units, hints"
+   },
+   {
+    "name": "ZD_IT_0",
+    "hex": "#F0EEE8",
+    "role": "emphasis on ink \u2014 clock, menu item labels, focused rail label"
+   },
+   {
+    "name": "ZD_IT_1",
+    "hex": "#B9B4AA",
+    "role": "body on ink \u2014 rail icons, menu body"
+   },
+   {
+    "name": "ZD_IT_2",
+    "hex": "#8E8980",
+    "role": "tertiary on ink \u2014 strip readouts, below-budget histogram columns"
+   },
+   {
+    "name": "ZD_MARK",
+    "hex": "#0B5E78",
+    "role": "THE ACCENT on paper. One hue. The focused plate's 2px head rule, selection bar, links, active segment. Deep instrument blue \u2014 not lime, not indigo, not a gradient"
+   },
+   {
+    "name": "ZD_MARK_HI",
+    "hex": "#5CD2F2",
+    "role": "THE SAME ACCENT on ink. Rail focus tick, gauge fill, at-budget histogram columns, launcher key. Same hue family, lifted for the ink material \u2014 one accent, two materials, not two accents"
+   },
+   {
+    "name": "ZD_OK",
+    "hex": "#1E6B34",
+    "role": "state on paper: healthy/pass. Wired to state, never to the accent setting"
+   },
+   {
+    "name": "ZD_WARN",
+    "hex": "#7A4E04",
+    "role": "state on paper: warning"
+   },
+   {
+    "name": "ZD_BAD",
+    "hex": "#A32112",
+    "role": "state on paper: failure, and the close-glyph hover ink"
+   },
+   {
+    "name": "ZD_OK_I",
+    "hex": "#56C97C",
+    "role": "state on ink"
+   },
+   {
+    "name": "ZD_WARN_I",
+    "hex": "#E6A83A",
+    "role": "state on ink \u2014 gauge over-threshold"
+   },
+   {
+    "name": "ZD_BAD_I",
+    "hex": "#FF7B62",
+    "role": "state on ink \u2014 histogram columns above 2x budget"
+   }
+  ],
+  "contrast": [
+   {
+    "fg": "#232019",
+    "bg": "#F5F3EE",
+    "ratio": 14.66
+   },
+   {
+    "fg": "#232019",
+    "bg": "#ECE9E3",
+    "ratio": 13.41
+   },
+   {
+    "fg": "#232019",
+    "bg": "#E4E1DA",
+    "ratio": 12.45
+   },
+   {
+    "fg": "#232019",
+    "bg": "#DBD7CF",
+    "ratio": 11.33
+   },
+   {
+    "fg": "#14130F",
+    "bg": "#F5F3EE",
+    "ratio": 16.76
+   },
+   {
+    "fg": "#4E4A41",
+    "bg": "#F5F3EE",
+    "ratio": 7.96
+   },
+   {
+    "fg": "#4E4A41",
+    "bg": "#ECE9E3",
+    "ratio": 7.28
+   },
+   {
+    "fg": "#635E54",
+    "bg": "#F5F3EE",
+    "ratio": 5.81
+   },
+   {
+    "fg": "#635E54",
+    "bg": "#ECE9E3",
+    "ratio": 5.32
+   },
+   {
+    "fg": "#0B5E78",
+    "bg": "#F5F3EE",
+    "ratio": 6.56
+   },
+   {
+    "fg": "#0B5E78",
+    "bg": "#ECE9E3",
+    "ratio": 6
+   },
+   {
+    "fg": "#0B5E78",
+    "bg": "#E4E1DA",
+    "ratio": 5.57
+   },
+   {
+    "fg": "#1E6B34",
+    "bg": "#F5F3EE",
+    "ratio": 5.9
+   },
+   {
+    "fg": "#7A4E04",
+    "bg": "#F5F3EE",
+    "ratio": 6.49
+   },
+   {
+    "fg": "#A32112",
+    "bg": "#F5F3EE",
+    "ratio": 6.8
+   },
+   {
+    "fg": "#F0EEE8",
+    "bg": "#101317",
+    "ratio": 16.05
+   },
+   {
+    "fg": "#B9B4AA",
+    "bg": "#101317",
+    "ratio": 9.02
+   },
+   {
+    "fg": "#B9B4AA",
+    "bg": "#191D22",
+    "ratio": 8.2
+   },
+   {
+    "fg": "#8E8980",
+    "bg": "#101317",
+    "ratio": 5.36
+   },
+   {
+    "fg": "#5CD2F2",
+    "bg": "#101317",
+    "ratio": 10.6
+   },
+   {
+    "fg": "#5CD2F2",
+    "bg": "#191D22",
+    "ratio": 9.64
+   },
+   {
+    "fg": "#56C97C",
+    "bg": "#101317",
+    "ratio": 8.91
+   },
+   {
+    "fg": "#E6A83A",
+    "bg": "#101317",
+    "ratio": 8.89
+   },
+   {
+    "fg": "#FF7B62",
+    "bg": "#101317",
+    "ratio": 7.33
+   },
+   {
+    "fg": "#847E73",
+    "bg": "#F5F3EE",
+    "ratio": 3.63
+   },
+   {
+    "fg": "#847E73",
+    "bg": "#E4E1DA",
+    "ratio": 3.08
+   },
+   {
+    "fg": "#847E73",
+    "bg": "#ECE9E3",
+    "ratio": 3.32
+   },
+   {
+    "fg": "#C3BEB4",
+    "bg": "#F5F3EE",
+    "ratio": 1.67
+   },
+   {
+    "fg": "#383E47",
+    "bg": "#101317",
+    "ratio": 1.73
+   },
+   {
+    "fg": "#101317",
+    "bg": "#E4E1DA",
+    "ratio": 14.26
+   },
+   {
+    "fg": "#F5F3EE",
+    "bg": "#E4E1DA",
+    "ratio": 1.18
+   },
+   {
+    "fg": "#ECE9E3",
+    "bg": "#F5F3EE",
+    "ratio": 1.09
+   },
+   {
+    "fg": "#DBD7CF",
+    "bg": "#F5F3EE",
+    "ratio": 1.29
+   }
+  ]
+ },
+ "structure": "THE LAW: paper is the user's material, ink is the machine's. Every surface is one or the other and nothing is in between.\n\nDELETED OUTRIGHT: the top bar, the top island, the bottom dock, the seven dock tiles, the wallpaper vignette and technical grid, the 7s zsweep. Those five together are the GNOME/macOS arrangement and the whole macro-identity problem.\n\n1. THE RAIL \u2014 left screen edge, flush, 56dp wide, full height, ZD_INK_0, radius 0 on all four corners, no shadow. Its right edge is a 1-device-pixel ZD_RULE_HI line: THE DATUM. Every x-coordinate on the desktop is measured from it. Contents top to bottom:\n   - 0..56dp: the KEY (launcher). A 24dp geometric mark in ZD_MARK_HI, centred. Opens the drawer.\n   - 1px ZD_INK_2 rule.\n   - THE WINDOW COLUMN: one 40dp cell per open window, vertical list, variable count \u2014 explicitly not a fixed row of equal tiles. Cell = 24dp icon in ZD_IT_1. Focus is a 2dp x 16dp tick on the cell's LEFT edge in ZD_MARK_HI; open-but-unfocused is the same tick in ZD_INK_TRACK; the cell face is ZD_INK_0 (ZD_INK_1 on hover). A 1px ZD_INK_2 rule separates the running group from the pinned group \u2014 the only grouping device.\n   - bottom 96dp: THE GAUGE STACK (below).\n2. THE RASTER STRIP \u2014 full width minus the rail, 20dp tall, flush to the top edge, ZD_INK_0, radius 0. This is not a menu bar; it holds no menus. Layout left to right from the datum: [histogram, 60% of the strip width] 1px ZD_INK_2 rule [focused window title, 12.5px prop, ZD_IT_0] ... right-aligned [three mono 9.5px readouts, ZD_IT_2] [clock, 12.5px, ZD_IT_0, 16dp from the right edge]. A 1px ZD_RULE_HI line under the strip closes it against the paper.\n3. THE CONTENT FIELD \u2014 everything right of the datum and below the strip. Ground is ZD_PAPER_0. Windows are PLATES: ZD_PAPER_1 body, 3dp radius, 1px ZD_RULE_HI outline, no shadow, separated from the ground by that outline plus the luminance step (1.18:1) plus a mandatory 1dp gutter. Plates snap to an 8dp grid whose origin is the datum, not the screen edge.\n4. THE PLATE, top to bottom: a 26dp TITLE BAND (ZD_PAPER_2, 1px ZD_RULE beneath); the app content on ZD_PAPER_1; a 20dp STATUS BAND (ZD_PAPER_2, 1px ZD_RULE above) whose leftmost 44dp is that window's own app_us for this frame, mono 9.5px ZD_T_3.\n5. THE DRAWER replaces the start menu \u2014 320dp wide, full height, hinged to the datum, ZD_INK_0, radius 0 (it is flush top and bottom). Search input at top, then a single-column list of rows. It slides in x only; it never floats.\n6. MENUS AND MODALS are ink. A menu is ZD_INK_0, 3dp radius, 1px ZD_INK_2 rule, no shadow \u2014 14.26:1 against paper is more separation than any shadow gives. A modal darkens nothing: the plate behind it gets a 1px ZD_RULE_HI outline and its title goes ZD_T_2, which is the same \"not focused\" language used everywhere else.",
+ "chrome": "TITLE BAND: 26dp, not 36. ZD_PAPER_2 on a focused plate and on an unfocused one \u2014 the band colour carries NO focus information, deliberately. Title text 12.5px proportional, left-aligned at plate_x + 12dp; subtitle mono 9.5px ZD_T_3 after a 12dp gutter. A 1px ZD_RULE closes the band.\n\nFOCUS IS THE HEAD RULE. The focused plate's outline top edge thickens from 1px ZD_RULE_HI to 2dp ZD_MARK, running the full plate width, corner to corner, radius-following. Its title ink goes ZD_T_0 (16.76:1). Unfocused: outline stays 1px ZD_RULE_HI all round, title ink ZD_T_2 (7.96:1). That is the entire signal \u2014 no ring, no glow, no coloured bar, no shadow change, and no second signal. It is also legible from the rail tick and the strip title simultaneously, so focus is stated in three places that never disagree.\n\nWINDOW CONTROLS: three glyphs at the right, no button faces, no 26x26 chips. Each occupies a 22dp x 26dp hit target with 10dp of ink centred in it: minimise = a 10x2dp bar on the baseline; maximise = a 10x10dp square outline, 2dp stroke; close = a 10x10dp diagonal cross, 2dp stroke, square-cut terminals. Ink ZD_T_2 at rest, ZD_T_0 on hover, ZD_BAD on close-hover. No hover fill, no rounded plate behind them \u2014 the hover state is ink only, which is the cheapest possible repaint and matches the drawing-on-paper metaphor.\n\nSHADOW: none, anywhere in the chrome. fb_shadow survives in the codebase and is called in exactly one place \u2014 under the drag ghost while a window is in motion, because motion is the one case where an object genuinely leaves the plane.",
+ "type_scale": "RATIO 1.2 from a 12.5px root. Six sizes, and only six: 9.0 / 10.5 / 12.5 / 15.0 / 18.0 / 21.5. Stored x2 as integers per the existing convention: ZD_T_9 18, ZD_T_10_5 21, ZD_T_12_5 25 (ROOT), ZD_T_15 30 (NEW), ZD_T_18 36 (NEW), ZD_T_21_5 43 (NEW). The other eight tokens in design.h (9.5, 10, 11, 11.5, 12) are retired from the system; 9.5 and 11.5 survive as the MONO ladder only.\n\nTHE FACE RULE, which is the type-level statement of the material law: every number the machine measured is set in DejaVu Sans Mono. Everything the user reads or wrote is set in DejaVu Sans proportional. So frame times, \u00b5s, Hz, core counts, byte counts, addresses and percentages look categorically different from words, everywhere, with no colour spent on the distinction. Both atlases already exist (font_aa.c mono, the prop atlas from gen_prop_font.py) \u2014 this costs nothing new.\n\nHIERARCHY IS SIZE + CASE + FACE, NEVER WEIGHT. The atlas ships one cut; a synthesised bold on a hand-built rasteriser is the fastest way to make good glyphs look cheap. Micro labels (9.0px) are UPPERCASE with +0.08em tracking, applied as an extra integer pixel of advance per glyph in fb_text_role \u2014 that is the only weight-substitute in the system. 21.5px display is reserved for the drawer's section heads and nothing else.\n\nText on paper is ZD_T_1 by default. Body sizes 12.5 and up sit at 14.66:1. The smallest thing on screen, the 9.5px mono readout in ZD_T_3, still computes 5.81:1 \u2014 above the 4.5 body threshold, not merely above the 3.0 large-text one.",
+ "radius_system": "ONE system, three values, and the rule is: radius encodes an object's relationship to the machine's frame.\n\nr = 0  ZD_R_FLUSH. Anything that IS the frame or is flush to a screen edge: the rail (all four corners), the raster strip, the drawer, full-width rules, the plate's title and status bands where they meet the plate outline. A screen edge has no corner, so neither does anything welded to it.\n\nr = 3dp  ZD_R_PLATE. Every rectangular CONTAINER: windows, menus, modals, popovers, toasts, cards, the drawer's inner sections, stat cells, list-row selection. At UI scale 2 that is 6 device pixels \u2014 enough to not read as a hard corner, far too little to read as a \"card\". Nested inner rrects stay exactly 1 device pixel tighter, preserving the existing rule so the hairline follows the outer curve.\n\nr = h/2  ZD_R_PILL, expressed as the sentinel -1 and resolved by the widget from its own height. Anything whose job is to be pressed or dragged: buttons, chips, segmented items, tabs, toggle track and knob, slider thumb, meter and progress tracks, badges. A 26dp control resolves to 13, a 20dp chip to 10. One rule, not a scale, and it is why deleting eleven of the fifteen measured radii is a simplification rather than a loss.\n\nWHY THEY DIFFER: containers are near-square and controls are fully round, so shape alone tells you what you can touch. That contrast is the shape system. ZD_R_XS/SM/6/7/8/9/10/11/12/13/14/15/16/17/20 are all deleted from design.h; every widget in uikit.c resolves to one of the three above.",
+ "depth": "Separation is achieved by four devices, in strict order of preference. A designer reaching for the next one must have exhausted the previous.\n\n1. A 1-DEVICE-PIXEL RULE. Every adjacency inside a plate gets one: ZD_RULE (1.67:1) between rows and bands, ZD_INK_2 on ink. Rules are never multiplied by UI_DP \u2014 a hairline is one physical pixel at every scale, because a 2px \"hairline\" is a border.\n2. A SURFACE STEP, exactly one, never skipped. PAPER_0 -> PAPER_1 -> PAPER_2 is the raise ladder; PAPER_1 -> PAPER_3 is the sink. The steps are small on purpose (1.09-1.29:1) \u2014 on paper the rule does the separating and the step only confirms it.\n3. A 1dp GUTTER of ZD_PAPER_0 around every plate and between every stat cell. The darker ground showing through IS the seam.\n4. MATERIAL INVERSION. An ink object on paper separates at 14.26:1 with no border, no shadow and no blur. This is reserved for the machine's own surfaces and for transient overlays (menu, modal, drawer, toast), which is exactly the set of things that used to need a shadow.\n\nNO DROP SHADOWS. ZD_SHADOW_DY/BLUR/ALPHA and all five ZD_BLUR_* tokens are deleted from design.h. fb_shadow and fb_blur_paint stay in fb.c \u2014 fb_shadow is called once, under the drag ghost. The blur arena's 22ms-per-damage-rect cost recorded in fb.c:803 simply stops being paid.\n\nOUTLINE CONTRAST: the plate outline ZD_RULE_HI computes 3.08:1 against the desktop ground and 3.63:1 against the plate body, so the boundary of an interactive container clears WCAG 1.4.11 on both sides. That was the reason for darkening it from an initial #9A948A, which measured 2.30:1 on the ground and would have failed.",
+ "icons": "ORTHOGRAPHIC. gen_icons.py keeps drawing geometry at 96x96 and box-filtering, and the atlas is REGENERATED AT 48x48 output \u2014 this is required, not optional: fb.c:929's `ic[y/sc][x/sc]` is nearest-neighbour and doubles every icon into 2x2 blocks on any panel >=1400px, which desktop-look.md names as the single most visible source of blockiness in the desktop. Shipping this design without that regeneration ships chunky squares on top of a light background, where they are more visible, not less.\n\nTHE CONSTRUCTION SET, and nothing outside it: axis-aligned rectangles, 45-degree diagonals, full circles, and 90-degree circular arcs. No arbitrary bezier, no S-curves, no organic shapes. Every icon is a drafted part.\n\nSTROKE: one weight, 6px at 96x96 (= 1.5dp at 24dp, 3 device px at scale 2). All terminals square-cut. No rounded caps, no tapers, no two-weight mixing. Corners inside a stroke are mitred, not rounded.\n\nGRID: 8x8 cells of 12px at 96x96. Every vertex lands on a cell corner or a cell midpoint. Optical centre, not geometric \u2014 a circular glyph is drawn 2 cells oversize per the usual overshoot rule.\n\nTHE ONE CATEGORY DISTINCTION, carried by fill rather than colour: an icon naming a PLACE (Files, Home, Disk, a window) is an OUTLINE. An icon naming an ACTION (Run, Close, Send, Delete) is SOLID. Two categories, one visual difference, zero colour spent \u2014 which matters because icons render in ZD_IT_1 on ink and ZD_T_2 on paper and must read in both.\n\nThe launcher key is the only icon with its own colour (ZD_MARK_HI) and it is a solid: a 24dp square rotated 45 degrees with a 6dp square notch removed from its lower-left face \u2014 a datum symbol.",
+ "motion": "THREE DURATIONS, chosen against the panel's MEASURED rate rather than a stylesheet's. This machine knows its own pixel clock: 241,690 kHz giving 59.998 Hz, so one frame is 16,667 \u00b5s and any duration is quantised to frames whether it admits it or not. Picking near-integer frame counts is the only honest way to choose.\n\nZD_MS_APPEAR 90   \u2014 5.4 frames. Menus, chips, toasts, the drawer, rail cell hover. Ease-out.\nZD_MS_WIN    160  \u2014 9.6 frames. Window open, close, snap. Keeps the existing zwin curve (200,850,300,1000 scaled x1000) and the existing integer easing evaluator; only the duration changes from 200.\n0                 \u2014 focus change, press, and every hover on paper. Instant. A focus change that animates is a focus change you have to wait to believe.\n\nDELETED: ZD_MS_PULSE (1000) and ZD_MS_PULSE_SLOW (2600) and ZD_MS_SWEEP (7000). An infinitely pulsing element means the damage list is never empty on a compositor whose entire architecture is damage-driven repaint \u2014 those three tokens are a standing tax on the one thing this kernel does well. ZD_MS_POP_FAST/POP/POP_SLOW/PRESS/OV/TOAST collapse into ZD_MS_APPEAR.\n\nTHE RULE: nothing on this desktop animates while the user is not acting \u2014 with exactly one exception, and the exception is the point. The raster strip advances one 1-pixel column per frame, forever. That is the machine's heartbeat, it costs three fb_fill_px calls of 1px width per frame, and it is the only self-moving thing on screen.\n\nTRANSFORMS: ZD_WIN_FROM_SCALE 965 and ZD_WIN_FROM_DY 10 are kept. ZD_POP_FROM_DY -6 is kept for the appear curve. ZD_OV_FROM_SCALE 1030 (an overlay starting above 1 and settling) is deleted \u2014 ink overlays do not need a scale gesture to be found.",
+ "preserves": [
+  "Subpixel LCD text rendering \u2014 font_sub.c and fb.c:243 blend_sub, the 5-tap (1,2,3,2,1)/9 FIR. Untouched. Dark-ink-on-paper is where this pipeline is most visibly correct.",
+  "Gamma-correct blending in LINEAR LIGHT \u2014 fb.c:195-273, the two boot-built LUTs, no floats. Untouched, and load-bearing: a light theme with a naive blender produces visibly thin text, which is exactly the failure this code already avoids.",
+  "Dithered gradients \u2014 fb.c:459-512, ordered 4x4 threshold. Untouched. Still used by the wallpaper's single vertical gradient.",
+  "Anti-aliased rounded corners \u2014 fb.c:620 fb_rrect, 4x4 supersampled coverage per corner pixel. Untouched, and now doing more work at 3dp than it did at 16dp, because a small radius shows aliasing sooner.",
+  "Soft shadows \u2014 fb.c:574 fb_shadow, chebyshev falloff. Kept in the codebase, called in exactly one place (the drag ghost).",
+  "Icons as GEOMETRY drawn at 96x96 and box-filtered \u2014 gen_icons.py. Kept and extended; output size changes 24 -> 48 to kill the nearest-neighbour upscale.",
+  "Real TrueType glyphs, DejaVu Sans Mono in font_aa.c plus the proportional cut from gen_prop_font.py with its 12 and 20 distinct advances. Both atlases stay; the mono/prop split becomes a semantic rule rather than a rendering detail.",
+  "The metric scale 4/8/12/16/24 and UI_DP()'s q8 continuous scaling. Untouched. pad 12, gap 8, row_h 28 keep their values; radius 16 -> 3 and title_h 36 -> 26.",
+  "The three-layer token architecture: primitives in design.h, semantic roles in ui.c's ui_theme, ui_color(role) at every call site. A colour literal may appear in design.h and nowhere else \u2014 and this design FIXES the current violations rather than adding to them: kernel.zl:590 dock_fill() rgb(18,21,24) and kernel.zl:427 island_fill() rgb(12,14,16) both vanish with the dock and island; kernel.zl:1600-1606 paint_col() and the snake/starfield literals become theme roles.",
+  "Immediate mode, no heap, no widget tree, no allocation. Nothing in this proposal needs retained state beyond one fixed ring buffer of unsigned shorts.",
+  "Integer math only. Every value above is an integer or a q8 fraction; pill radius is h/2, gauge fills are pct*h/100, histogram columns are total_us*strip_h/33334.",
+  "OK/WARN/BAD wired to STATE, never to the accent setting \u2014 the existing rule, kept, and now doubled (a paper form and an ink form) so the law does not force a semantic colour onto a surface it fails against."
+ ],
+ "new_primitives": [],
+ "risks": [
+  "A light desktop can collapse into Motif/Windows-3.1 if anyone adds a bevel. The guard is explicit: there is no light edge and no dark edge on any control \u2014 depth is rule, step, gutter, inversion, in that order, and nothing else. If a review sees a two-tone border, the design has been broken.",
+  "Ink menus on paper is the most contestable call in the proposal. It is the load-bearing move (it is what deletes every shadow) so it cannot be softened, but it will look wrong for the first hour and should be judged on a wmshot render, not from description.",
+  "The 20dp raster strip is 1.7% of a 1200px screen, permanently. If the histogram is boring \u2014 and on a healthy machine it will be a flat band \u2014 it has bought that space for nothing. The mitigation is that the strip also carries the focused window title and the clock, so its floor value is a bar that has to exist anyway; the histogram is what fills space that would otherwise be empty.",
+  "Per-window app_us in the status band requires wm.c to attribute time per app_draw call. wm.c already measures app_us in aggregate (zllog_frame_observe takes it) but not per window. If per-window attribution turns out to cost more than it reports, the band shows the window's repaint_pixels this frame instead \u2014 same slot, same face, no layout change.",
+  "Retiring eleven radius tokens and eight type tokens touches every widget in uikit.c (roughly 60 call sites by the grep above). It is mechanical but it is not small, and a half-migration is worse than either endpoint \u2014 the palette gate in hosttest/palette.c should be extended to fail on any radius that is not 0, 3dp, or h/2.",
+  "The wallpaper memory-map ruler is decoration that happens to be true. I am not claiming it as instrumentation. If it reads as a gimmick on the first render, it should be reduced to the plain vertical gradient rather than defended.",
+  "ZD_RULE at 1.67:1 is deliberately below any WCAG threshold. It is legal because it is never the sole indicator of anything \u2014 the load-bearing boundary is always ZD_RULE_HI at 3.08:1 or better. If a widget ever uses ZD_RULE as its only outline, that is a bug."
+ ]
+}

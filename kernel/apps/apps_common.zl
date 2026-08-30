@@ -19,8 +19,14 @@
 fn ac_cell_idx(ax, ay, cell, gw, gh, ex, ey) {
     if ex < ax { return 0 - 1 }
     if ey < ay { return 0 - 1 }
-    cc = (ex - ax) / cell
-    cr = (ey - ay) / cell
+    # THE CLAIM THAT WAS HERE WAS WRONG. It said `/` is float division and that
+    # this hit test therefore selected nothing - a failure I never observed and
+    # inferred from the operator. `/` truncates in the compiled kernel (see the
+    # idiv note at the top of kernel.zl), so this function was already returning
+    # an integer cell index. idiv stays because it is not worse; the diagnosis
+    # does not, because it was not true.
+    cc = idiv(ex - ax, cell)
+    cr = idiv(ey - ay, cell)
     if cc >= gw { return 0 - 1 }
     if cr >= gh { return 0 - 1 }
     return cr * gw + cc
@@ -46,20 +52,116 @@ fn ac_board_bg(ax, ay, cell, gw, gh, bgcol, linecol) {
 # The three category colours, used by the catalog tiles AND by anything else
 # that wants to show "this is a game / a utility / a system app" at a glance.
 # 0 = system, 1 = utility, 2 = game - matches reg_cat() in apps_registry.zl.
+# THREE MORE RAW LITERALS FROM THE SUPERSEDED PALETTE, and they were the tile
+# stripe and the three legend swatches - the catalogue's only colour coding.
+# A pale blue, a mint and a lilac: nothing in PRESSWORK's ladder is any of
+# those, and design.h states it is the only place a colour literal may appear.
+#
+# The three roles the ladder already has for exactly this job: TH_STEEL is the
+# instrument colour, TH_OK the healthy one, TH_ACCENT the emphasis. They move
+# with the theme, which these did not.
 fn ac_cat_color(cat) {
-    if cat == 0 { return rgb(110, 170, 245) }
-    if cat == 1 { return rgb(110, 225, 200) }
-    return rgb(215, 150, 235)
+    if cat == 0 { return theme(TH_STEEL) }
+    if cat == 1 { return theme(TH_OK) }
+    return theme(TH_ACCENT)
+}
+
+# THE GAMES' PIECE COLOURS ARE A DIFFERENT QUESTION FROM THE CATALOGUE'S.
+#
+# ac_cat_color answers "what KIND of app is this" - three semantic categories.
+# The games were borrowing it to answer "give me hues nobody can confuse", and
+# those are not the same question. The moment ac_cat_color moved onto the theme
+# roles - which it had to, the raw literals were from the superseded palette -
+# its three values stopped being disjoint from the roles the games ALSO use
+# directly, and pieces started sharing colours:
+#
+#   Connect Four  red = ac_cat_color(2) = TH_ACCENT, yellow = TH_ACCENT.
+#                 Every piece one colour. The game could not be played.
+#   Tic-tac-toe   X and O both TH_ACCENT.
+#   Tetris        tet_col's own comment claims "exactly seven distinct values";
+#                 it had collapsed to five.
+#
+# One function, two callers wanting different things, is the whole fault. This
+# is the second one, and its contract is exactly "N pairwise-distinct values
+# from the ladder" - no semantics attached, so it can never be pulled toward a
+# meaning the way the other was.
+#
+# SEVEN ROLES, AND THE DISTANCES ARE MEASURED THIS TIME.
+#
+# The first version of this comment said "checked pairwise against design.h's
+# hexes" and listed them. Listing is not comparing: slot 0 was ZD_VERM #E8734F
+# and slot 6 was ZD_BAD #E8664B - thirteen apart in green, four in blue, the
+# same orange-red to any eye - and Tetris draws both. I asserted a measurement
+# instead of taking one, in a comment whose whole job was to record that I had.
+#
+# Taken now, over the weighted RGB distance (2r, 4g, 3b):
+#
+#   before   worst pair 26.9   ZD_VERM / ZD_BAD
+#   after    worst pair 88.7   ZD_STEEL / ZD_STEEL_BR  - two blues, one pale
+#
+# A 3.3x improvement, and every other pair is further apart than that.
+#
+#   0 TH_ACCENT   #E8734F vermilion   4 TH_WARN     #E3A63F amber
+#   1 TH_STEEL    #7FB2E0 blue        5 TH_TEXT_HI  #ECE6DD near-white
+#   2 TH_OK       #7FBF63 green       6 TH_KNOCK    #B6B0AB warm grey
+#   3 TH_STEEL_BR #A9CFF2 pale blue
+fn ac_play_color(i) {
+    if i == 0 { return theme(TH_ACCENT) }
+    if i == 1 { return theme(TH_STEEL) }
+    if i == 2 { return theme(TH_OK) }
+    if i == 3 { return theme(TH_STEEL_BR) }
+    if i == 4 { return theme(TH_WARN) }
+    if i == 5 { return theme(TH_TEXT_HI) }
+    return theme(TH_KNOCK)
 }
 
 # A small deterministic PRNG, independent of sn_seed (Snake's own) so two
 # games open at once never share or perturb each other's sequence. Same LCG
 # shape as sn_rand - proven already, not reinvented.
+# THE OLD GENERATOR'S LOW BITS WERE DEAD, AND EVERY GAME DREW FROM IT.
+#
+# `ac_seed = ac_seed * 1103515245 + 12345` looks like the textbook LCG, and in C
+# on a 32-bit integer it is one. Here every value is a DOUBLE: zl_binop casts to
+# long long, multiplies, and casts the result BACK to double. After two steps
+# the product passes 2^53 and the round trip silently zeroes the bottom ten bits
+# or so of the state. The line below then took bits 8..22 - whose lowest two are
+# exactly the dead ones.
+#
+# Measured by replaying zl_binop's own semantics in C, 200,000 draws each:
+#
+#   ac_rand(4)   0 = 95.3%   1 = 2.9%   2 = 0.4%   3 = 1.4%
+#   ac_rand(8)   even 95.7% of the time
+#   ac_rand(6)   0, 2, 4 = 32% each;  1, 3, 5 = 1.5% each
+#
+# Every modulus that is a multiple of two collapsed. Simon played one pad,
+# shuffles barely shuffled, and any game asking for a coin flip got the same
+# answer nineteen times in twenty.
+#
+# MINSTD instead, chosen so the arithmetic CANNOT leave the exact range of a
+# double: the largest product is 16807 * 2147483646 = 3.61e13, against 2^53 =
+# 9.01e15. Two hundred and forty times the headroom, so no rounding occurs and
+# the low bits stay alive. The shift by 64 drops the weakest of them anyway.
+#
+# Same replay, after:
+#
+#   ac_rand(4)   24.9 / 25.1 / 25.1 / 24.9
+#   ac_rand(8)   12.3 to 12.6 across all eight
+#   ac_rand(52)  min 9,827  max 10,241 over 520,000 draws (ideal 10,000)
 ac_seed = 1
-fn ac_seed_from(n) { ac_seed = n  return 0 }
+
+# 0 is a fixed point of a Lehmer generator - it would return 0 for ever - so a
+# caller seeding from a tick count that happens to be 0, or from a multiple of
+# the modulus, is corrected rather than trusted.
+fn ac_seed_from(n) {
+    ac_seed = n % 2147483647
+    if ac_seed < 0 { ac_seed = 0 - ac_seed }
+    if ac_seed == 0 { ac_seed = 1 }
+    return 0
+}
+
 fn ac_rand(n) {
-    ac_seed = ac_seed * 1103515245 + 12345
-    r = band(ac_seed / 256, 32767) % n
+    ac_seed = (ac_seed * 16807) % 2147483647
+    r = idiv(ac_seed, 64) % n
     if r < 0 { r = 0 - r }
     return r
 }

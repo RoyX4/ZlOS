@@ -185,7 +185,7 @@ fn au_field(ax, aw, y, lbl, focused) {
 
 # How many mono characters fit inside a field.
 fn au_field_cols(aw) {
-    n = (au_field_w(aw) - 2 * AU_FIELD_PX * ui()) / cell_w()
+    n = idiv(au_field_w(aw) - 2 * AU_FIELD_PX * ui(), cell_w())   # idiv: a character COUNT
     if n < 1 { n = 1 }
     return n
 }
@@ -321,7 +321,7 @@ fn au_row_x10(ax, y, k, v10, sfx, c) {
     au_key(ax, y, k)
     dw = cell_w()
     x = au_val_x(ax)
-    n = v10 / 10
+    n = idiv(v10, 10)                        # idiv: the whole part of a tenths value
     num_aa(x, y, n, c)
     w = au_digits(n) * dw
     char_aa(x + w, y, 46, c)
@@ -332,7 +332,7 @@ fn au_row_x10(ax, y, k, v10, sfx, c) {
 
 # How many mono characters fit in the value column.
 fn au_val_cols(aw) {
-    n = (aw - (2 * AU_BODY_PAD + AU_KEY_W + AU_ROW_GAP) * ui()) / cell_w()
+    n = idiv(aw - (2 * AU_BODY_PAD + AU_KEY_W + AU_ROW_GAP) * ui(), cell_w())   # idiv: a character COUNT
     if n < 1 { n = 1 }
     return n
 }
@@ -650,7 +650,39 @@ pt_ms = 0 - 1                       # where the first match starts, or -1
 pt_me = 0 - 1                       # ...and where it ends
 PT_MAX = 48
 
-fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  pt_ms = 0 - 1  pt_me = 0 - 1  return 0 }
+# THIS MATCHER CAN HANG THE MACHINE, AND THIRTEEN KEYSTROKES IS ENOUGH.
+#
+# pt_end_here is an unmemoised backtracker: the `*` arm tries every split of the
+# text between adjacent stars, so a pattern of several stars against a
+# non-matching subject is EXPONENTIAL. Replayed exactly in C against a 48-byte
+# subject of 'a' - PT_MAX, which the input field allows:
+#
+#   a*a*a*b          (7 chars)  ->         292,824 calls
+#   a*a*a*a*b        (9 chars)  ->       3,162,509
+#   a*a*a*a*a*b     (11 chars)  ->      28,989,674
+#   a*a*a*a*a*a*b   (13 chars)  ->     231,917,399
+#   a*a*a*a*a*a*a*b (15 chars)  ->   1,652,411,474
+#
+# Every call is a zl frame doing peek8 and boxed arithmetic. And it ran inside
+# app_draw, on the compositor's synchronous repaint path, where nothing can
+# interrupt it: no timer, no way to close the window, no way back. The machine
+# has to be reset.
+#
+# kernel.zl already states the rule this broke - expensive work is "ruinous
+# inside app_draw, where it would run on every repaint".
+#
+# THE BUDGET IS 20000, and it is measured rather than picked. Every pattern that
+# MATCHES costs 6-64 calls, because the engine is lazy and finds hits early; the
+# most expensive legitimate NON-match measured was `a.*b` against 48 bytes at
+# 1,273. So 20000 is roughly fifteen times the worst honest case and refuses at
+# four stars, where the first proposed figure of 200,000 would not have bitten
+# until seven.
+PT_BUDGET = 20000
+pt_steps = 0                        # calls spent in the current scan
+pt_over  = 0                        # did the last scan give up
+pt_hit   = 0                        # ...and did it find anything
+
+fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  pt_ms = 0 - 1  pt_me = 0 - 1  pt_hit = 0  pt_over = 0  pt_steps = 0  return 0 }
 
 # Does pattern[pi..] match text[ti..] to the end of the pattern? Returns the
 # END index in the text on success, -1 on failure. Classic tiny-regex
@@ -661,6 +693,10 @@ fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  pt_ms = 0 - 1  pt_me = 0
 # reports the SHORTEST match at the earliest start. (The comment this replaces
 # claimed greedy; the code has always been lazy.)
 fn pt_end_here(pi, ti) {
+    # The budget is checked on ENTRY, so no path through the function can spend
+    # a call without paying for it - including the two early returns below.
+    pt_steps = pt_steps + 1
+    if pt_steps > PT_BUDGET { return 0 - 1 }
     if pi >= pt_plen { return ti }
     pc = peek8(PT_PATTERN + pi)
     if pi + 1 < pt_plen {
@@ -690,6 +726,8 @@ fn pt_end_here(pi, ti) {
 fn pt_scan() {
     pt_ms = 0 - 1
     pt_me = 0 - 1
+    pt_steps = 0
+    pt_over = 0
     if pt_plen == 0 { return 0 }
     p0 = 0
     anchored = 0
@@ -698,9 +736,17 @@ fn pt_scan() {
     while t0 <= pt_tlen {
         e = pt_end_here(p0, t0)
         if e >= 0 { pt_ms = t0  pt_me = e  return 1 }
+        # THE BUDGET IS TESTED BEFORE THE ANCHORED RETURN. It was after, so a
+        # `^`-anchored pathological pattern - which tries exactly one start
+        # position and can still spend the whole budget there - returned 0 with
+        # pt_over clear, and the pane printed "matches 0" for a search that had
+        # given up. The work was still bounded; only the report was wrong, which
+        # is the invented-figure fault rather than the hang.
+        if pt_steps > PT_BUDGET { pt_over = 1  return 0 }
         if anchored == 1 { return 0 }
         t0 = t0 + 1
     }
+    if pt_steps > PT_BUDGET { pt_over = 1 }
     return 0
 }
 
@@ -717,7 +763,11 @@ fn pt_draw(ax, ay, aw, ah) {
     au_field_text(ax, aw, y0, PT_PATTERN, pt_plen, 1 - pt_field)
     au_field_text(ax, aw, y1, PT_TEXT, pt_tlen, pt_field)
 
-    hit = pt_scan()
+    # THE SCAN DOES NOT RUN HERE ANY MORE. It ran on the draw path, so it
+    # re-ran on every repaint of this window - and a repaint is not under the
+    # user's control. pt_event runs it once per edit instead and stores the
+    # answer; this reads it.
+    hit = pt_hit
     y = au_body_y(ay, bh)
     adv = au_row_adv()
     if hit == 1 {
@@ -729,10 +779,24 @@ fn pt_draw(ax, ay, aw, ah) {
         au_val_bytes(ax, aw, y, PT_TEXT, pt_ms, pt_me - pt_ms, theme(TH_ACCENT))
         y = y + adv
     } else {
-        au_rown(ax, y, "matches", 0, theme(TH_TEXT_6))
-        y = y + adv
-        au_row(ax, y, "at", "-", theme(TH_TEXT_6))
-        y = y + adv
+        # A REFUSAL IS NOT A RESULT, and printing "matches 0" for a search that
+        # gave up would be the invented-figure fault in its purest form: a
+        # measured-looking zero standing in for a question never answered.
+        #
+        # This engine is a backtracker with no memoisation, so a pattern with
+        # several stars is exponential and there are patterns it genuinely
+        # cannot finish. Saying so is the honest surface.
+        if pt_over == 1 {
+            au_row(ax, y, "matches", "gave up - too many steps", theme(TH_WARN))
+            y = y + adv
+            au_row(ax, y, "why", "backtracker, no memo - stars multiply", theme(TH_TEXT_6))
+            y = y + adv
+        } else {
+            au_rown(ax, y, "matches", 0, theme(TH_TEXT_6))
+            y = y + adv
+            au_row(ax, y, "at", "-", theme(TH_TEXT_6))
+            y = y + adv
+        }
     }
     au_rown_sfx(ax, y, "pattern", pt_plen, " B", theme(TH_TEXT))
     y = y + adv
@@ -744,12 +808,24 @@ fn pt_draw(ax, ay, aw, ah) {
     return 0
 }
 
+# THE SCAN RUNS HERE, ONCE PER EDIT - not on the draw path.
+#
+# A keystroke is a thing the user did; a repaint is not. Running the matcher
+# from pt_draw meant an exponential search could be triggered by another window
+# moving, and re-triggered for as long as anything overlapped this one. Once per
+# edit is both cheaper and the only cadence the user can reason about.
+fn pt_run() {
+    pt_hit = pt_scan()
+    return 0
+}
+
 fn pt_event(win, ety, ecode) {
     if ety != 3 { return 0 }
     if ecode == 9 { pt_field = 1 - pt_field  wm_dmg(win)  return 1 }
     if ecode == 8 {
         if pt_field == 0 { if pt_plen > 0 { pt_plen = pt_plen - 1 } }
         if pt_field == 1 { if pt_tlen > 0 { pt_tlen = pt_tlen - 1 } }
+        pt_run()
         wm_dmg(win)
         return 1
     }
@@ -757,6 +833,7 @@ fn pt_event(win, ety, ecode) {
     if ecode > 126 { return 0 }
     if pt_field == 0 { if pt_plen < PT_MAX { poke8(PT_PATTERN + pt_plen, ecode)  pt_plen = pt_plen + 1 } }
     if pt_field == 1 { if pt_tlen < PT_MAX { poke8(PT_TEXT + pt_tlen, ecode)  pt_tlen = pt_tlen + 1 } }
+    pt_run()
     wm_dmg(win)
     return 1
 }

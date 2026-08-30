@@ -14,6 +14,7 @@ from pathlib import Path
 
 KERNEL = Path(__file__).resolve().parents[2]
 REPO = KERNEL.parent
+HARNESS = KERNEL / "tools" / "checks" / "verify-efi.sh"
 sys.path.insert(0, str(REPO / "tools"))
 import zlbootdiag  # noqa: E402
 
@@ -29,6 +30,9 @@ def main() -> int:
         return 0
     if not image.exists():
         raise AssertionError("zlOS-usb.img is missing; run mkusb.sh first")
+    assert "usb-storage,bus=xhci.0,drive=boot,removable=on" in HARNESS.read_text(), (
+        "native UEFI harness must model its USB boot disk as removable media"
+    )
 
     with tempfile.TemporaryDirectory(prefix="zlos-runtime-diag-") as directory:
         root = Path(directory)
@@ -55,7 +59,7 @@ def main() -> int:
             "-drive", f"if=pflash,format=raw,unit=1,file={vars_file}",
             "-device", "qemu-xhci,id=xhci",
             "-drive", f"format=raw,file={bad_image},if=none,id=boot",
-            "-device", "usb-storage,bus=xhci.0,drive=boot",
+            "-device", "usb-storage,bus=xhci.0,drive=boot,removable=on",
             "-device", "usb-kbd,bus=xhci.0",
             "-device", "usb-mouse,bus=xhci.0",
             "-vga", "std", "-display", "none", "-no-reboot",

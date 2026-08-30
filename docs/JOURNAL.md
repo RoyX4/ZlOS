@@ -7,6 +7,269 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — ci: provision the pinned AX201 host fixture (2d6cb8f)
+
+`codex/consolidate-all-2026-08-30` · 2 files changed, 16 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `.github/workflows/boot.yml`
+- `docs/evidence/host-test-build-identity-2026-08-28.md`
+
+</details>
+
+## 2026-08-30 — ci: install 32-bit headers for EFI host evidence (c525b82)
+
+`codex/consolidate-all-2026-08-30` · 2 files changed, 4 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `.github/workflows/boot.yml`
+- `docs/evidence/host-test-build-identity-2026-08-28.md`
+
+</details>
+
+## 2026-08-30 — ci: bind EFI receipts to the current runner (bb31de4)
+
+`codex/consolidate-all-2026-08-30` · 2 files changed, 31 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `.github/workflows/boot.yml`
+- `docs/evidence/host-test-build-identity-2026-08-28.md`
+
+</details>
+
+## 2026-08-30 — chore: refresh consolidated evidence receipts (d9059ba)
+
+`codex/consolidate-all-2026-08-30` · 12 files changed, 171 insertions(+), 169 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>12 file(s)</summary>
+
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json`
+- `kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json`
+- `kernel/docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json`
+- `kernel/docs/receipts/physical-page-allocator-native-uefi64-qemu-2026-08-30.json`
+- `kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json`
+- `kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json`
+- `kernel/metadata/boot-media-ids.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/metadata/test-inventory.json`
+- `kernel/tests/host/test-inventory.json`
+- `kernel/tests/host/test-run-receipt.json`
+
+</details>
+
+## 2026-08-30 — chore: record presswork round twelve closure (1cc71f7)
+
+`codex/consolidate-all-2026-08-30` · 2 files changed, 30 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+
+</details>
+
+## 2026-08-30 — fix: complete presswork round twelve (8e94622)
+
+`codex/consolidate-all-2026-08-30` · 76 files changed, 1774 insertions(+), 502 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>76 file(s)</summary>
+
+- `docs/DIRECTORY-CAPSULE-INDEX.md`
+- `docs/design/PRESSWORK-ROUND-12.md`
+- `docs/design/README.md`
+- `docs/design/prototypes/AGENTS.md`
+- `docs/design/prototypes/CLAUDE.md`
+- `docs/design/prototypes/README.md`
+- `docs/design/prototypes/RULES.md`
+- `docs/design/prototypes/SOP.md`
+- `docs/design/prototypes/STATUS.md`
+- `docs/design/prototypes/TODO.md`
+- `docs/design/prototypes/VALUES.md`
+- `docs/design/prototypes/compare/AGENTS.md`
+- _…and 64 more_
+
+</details>
+
+## 2026-08-30 — chore: journal ride-along for 1134543 (86c2d4b)
+
+`design/presswork` · 1 file changed, 27 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, section E - eleven measurements that disagreed with the authority (1134543)
+
+`design/presswork` · 11 files changed, 134 insertions(+), 33 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/apps/apps_system.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/design.h`
+- `kernel/src/graphics/ui/uikit.c`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, section D - seven places colour said the wrong thing (4403fa7)
+
+`design/presswork` · 9 files changed, 100 insertions(+), 24 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, the compositor three - resize, the band, and one mode in two places (1bc3645)
+
+`design/presswork` · 10 files changed, 116 insertions(+), 29 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>10 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/ui.c`
+- `kernel/src/graphics/ui/ui.h`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, first eleven - and the audit caught a rescaled instrument (3eb0224)
+
+`design/presswork` · 6 files changed, 23 insertions(+), 9 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/probes/README.md`
+
+</details>
+
+## 2026-08-30 — chore: preserve nightly consolidation checkpoint (6fdc71e)
+
+`codex/full-program` · 1 file changed, 4 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `.github/workflows/nightly.yml`
+
+</details>
+
 ## 2026-08-28 — Merge pull request #7 from RoyX4/codex/presswork-local-closure (5059663)
 
 `main` · 71 files changed, 2938 insertions(+), 1238 deletions(-)

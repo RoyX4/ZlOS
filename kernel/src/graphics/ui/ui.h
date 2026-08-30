@@ -96,6 +96,10 @@ struct ui_theme {
     unsigned steel;       /* 39  INSTRUMENTS ONLY. never a control.          */
     unsigned steel_br;    /* 40  the instrument's own highlight              */
     unsigned ink_on;      /* 41  ink that goes ON the overprint              */
+    unsigned bad_ink;     /* 42  failure TEXT on a dark row. design.h says so
+                           *     and nothing carried it: theme.danger is ZD_BAD,
+                           *     a fill at 4.2591:1, which is a different colour
+                           *     and a different job.                          */
 
     /* metrics, all already multiplied by the UI scale. These are NOT in the
      * flat colour array - ui_metric() is a switch, so appending here is free. */
@@ -143,6 +147,7 @@ enum ui_color_role {
     UI_COLOR_CUT, UI_COLOR_LIT, UI_COLOR_LITSOFT, UI_COLOR_EDGE_OVER,
     UI_COLOR_KNOCK, UI_COLOR_KNOCK_INK, UI_COLOR_KNOCK_INK2, UI_COLOR_KO_EDGE,
     UI_COLOR_GRID, UI_COLOR_STEEL, UI_COLOR_STEEL_BR, UI_COLOR_INK_ON,
+    UI_COLOR_BAD_INK,
     UI_COLOR_COUNT
 };
 enum ui_metric_role {
@@ -165,8 +170,8 @@ enum ui_metric_role {
 _Static_assert(__builtin_offsetof(struct ui_theme, cut)
                    == (unsigned)UI_COLOR_CUT * sizeof(unsigned),
                "struct ui_theme and enum ui_color_role disagree at UI_COLOR_CUT");
-_Static_assert(__builtin_offsetof(struct ui_theme, ink_on)
-                   == (unsigned)UI_COLOR_INK_ON * sizeof(unsigned),
+_Static_assert(__builtin_offsetof(struct ui_theme, bad_ink)
+                   == (unsigned)UI_COLOR_BAD_INK * sizeof(unsigned),
                "struct ui_theme and enum ui_color_role disagree at the end of "
                "the colour array; UI_COLOR_COUNT no longer describes it");
 
@@ -223,15 +228,26 @@ int ui_atlas_for_role(int role, int weight); /* which one, at this scale, now */
  * caller damages afterwards, because surfaces belong to wm.c and this layer
  * must not know about them. */
 unsigned ui_ratio_q4(unsigned a, unsigned b);
+unsigned ui_lstar_q2(unsigned rgb);       /* CIE L* x100, from live sRGB     */
 unsigned ui_ceil_dn_q4(unsigned rgb);   /* room downward: ratio to black    */
 unsigned ui_ceil_up_q4(unsigned rgb);   /* room upward:   ratio to white    */
+int ui_us_get(void);                    /* 0 measured, 1 repaint, 2 off     */
+int ui_us_set(int m);
 int ui_knockout_get(void);              /* 1 == the knockout is on          */
 int ui_knockout_set(int on);            /* returns the state it settled on  */
+int ui_over_get(void);                  /* the occlusion edge               */
+int ui_over_set(int on);
+int ui_motion_get(void);                /* animation timings                */
+int ui_motion_set(int on);
+int ui_track_get(void);                 /* letter-spacing on tracked faces  */
+int ui_track_set(int on);
 /* the focus bar's width in DESIGN px, and the prototype's own slider range. */
 #define UI_FBAR_MIN 1
 #define UI_FBAR_MAX 6
 int ui_focus_bar_dp(void);
 int ui_focus_bar_set(int n);
+int ui_focus_bar_min_dp(void);
+int ui_focus_bar_max_dp(void);
 
 /* THE COMPARISON LADDER, by index. design.h's ZD_REF_* block - the PARENT
  * designs' tokens, kept so the settings pane can COMPUTE the comparison rather
@@ -294,7 +310,26 @@ typedef void (*desk_click_fn)(int x, int y, int btn);
 /* A SYSTEM KEY - one that belongs to the desktop rather than to whichever
  * window happens to have focus. Super is the only one today. Routing it to the
  * focused app instead would mean every app had to know about the start menu. */
-typedef void (*desk_key_fn)(int code, int mods);
+/* RETURNS 1 IF THE DESKTOP CONSUMED THE KEY. It was void, and that is half
+ * of why Escape never dismissed an overlay: with no way to say "mine", the
+ * only safe thing wm.c could do with a desk key was route the one key that
+ * is unambiguously the desktop's (Super) and give the rest to the focused
+ * window. Escape belongs to whichever is true at the time - the overlay if
+ * one is up, the app otherwise - and that is a question only the desktop
+ * can answer, so it has to be able to answer it. */
+typedef int (*desk_key_fn)(int code, int mods);
+/* An app may REFUSE to be closed. Returns 0 to keep the window open. The only
+ * caller that matters today is the editor with an unsaved buffer: before this
+ * existed, the close box tore the window down and the edits went with it,
+ * silently, one frame after the footer had drawn the word UNSAVED. */
+typedef int (*can_close_fn)(int win);
+
+/* AN OVERLAY IS MODAL TO THE POINTER, and until this existed it was modal to
+ * nothing at all. The only overlay hook wm.c had was a DRAW hook, so every menu
+ * row, palette row and activities tile was unclickable and clicks fell through
+ * to whatever was painted underneath. Returns non-zero when the overlay
+ * consumed the event. */
+typedef int (*overlay_click_fn)(int x, int y, int down);
 
 /* ---- wm.c ---------------------------------------------------------------- */
 #define WM_MAX 12
@@ -312,12 +347,27 @@ void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk);
  * desktop had", and widening the signature would edit each of them to pass 0
  * and prove nothing. */
 void wm_overlay(overlay_draw_fn f);
+/* A RIGHT-PRESS OVER A WINDOW. The left button already has three destinations
+ * inside route_mouse - grab, control, app - and none of them is the shell. The
+ * window's own menu is a shell surface (it names the register row, and it is
+ * drawn on the overlay layer), so it needs its own way out, exactly as the
+ * desk's click does. Edge-triggered: holding the button must not reopen the
+ * menu on every motion event. */
+typedef void (*win_menu_fn)(int win, int x, int y);
+void wm_win_menu(win_menu_fn f);
+/* A window's retained content, box-filtered into dx,dy,dw,dh. 0 if it has
+ * never painted - the caller must not fake a preview for a window with none. */
+int  wm_thumb(int win, int dx, int dy, int dw, int dh);
 void wm_desk_click(desk_click_fn f);
 void wm_desk_key(desk_key_fn f);
+void wm_can_close(can_close_fn f);
+void wm_overlay_click(overlay_click_fn f);
 
 int  wm_open(int app, const char *title, int x, int y, int w, int h);
 void wm_close(int win);
 void wm_minimize(int win);
+void wm_max_toggle(int win);   /* maximise/restore, the same test the title control uses */
+int  wm_over_below(int win);   /* does this plate occlude another - the chrome's own test */
 int  wm_is_minimized(int win);
 void wm_raise(int win);
 void wm_focus(int win);
@@ -368,11 +418,11 @@ int wm_region_fragmentation_probe(void);
  * a decision rather than a shortcut. An animation NEVER changes what exists:
  * it draws, and the caller decides lifetime. */
 #define ANIM_NONE   0
-#define ANIM_OPEN   1   /* scale 82 -> 100, the window open        */
-#define ANIM_CLOSE  2   /* scale 100 -> 70, its mirror             */
 #define ANIM_PRESS  3   /* scale 100 -> 96 -> 100, zpress          */
 #define ANIM_PULSE  4   /* opacity 0 -> 40 -> 0, zpulse            */
-#define ANIM_FADE   5   /* opacity up, zov / zpop / ztoast         */
+#define ANIM_FADE   5   /* opacity up, zov / zpop                  */
+#define ANIM_FOCUS  6   /* RISE transition for a value flip        */
+#define ANIM_TOAST  7   /* toast rise/fade, ZD_MS_TOAST            */
 
 int  wm_anim(int win, int kind);      /* 0 = refused, every slot busy */
 int  wm_anim_running(int win);        /* the kind, or 0               */
@@ -384,18 +434,15 @@ int  wm_anim_alpha(int win);          /* 0..255, 255 when settled     */
  * because wm.c does not know where the dock is. The id must be negative or it
  * collides with a window index and wm_anim_at refuses. */
 #define WM_FX_TOAST  (-1)     /* wm.c's own: ztoast                          */
-#define WM_FX_GHOST  (-2)     /* wm.c's own: ANIM_CLOSE, the closing window  */
 #define WM_FX_USER   (-16)    /* the policy layer's, -16 and downward        */
 
 int  wm_anim_at(int id, int kind, int x, int y, int w, int h);
 int  wm_anim_scale(int id);           /* thousandths; 1000 when settled      */
 int  wm_anim_progress(int id, int kind);  /* eased 0..1000, or -1 if not run */
 
-/* zpulse and zsweep are `infinite` in the reference and so hold no slot at
- * all - an entry that never ends would take a quarter of the timeline for the
- * life of the boot. This is a pure function of the clock: opacity 0..255,
- * never below the reference's .55 floor, and 255 when animations are off. */
+/* Slot-free steps(1) clock: 255/0, steady 255 with motion off. */
 int  wm_pulse(int period_ms);
+void wm_caret_watch(int x, int y, int w, int h);
 
 /* zsweep, the wallpaper band. OFF until asked - the reference keeps it behind
  * its CRT toggle too - and gated by wm_set_anim on top of that. */
@@ -403,8 +450,8 @@ void wm_set_sweep(int on);
 int  wm_sweep_enabled(void);
 int  wm_sweep_y(void);            /* the band's quantised top edge, or 0 off */
 
-/* Close it AND shrink a ghost of it away - the gesture form of wm_close.
- * wm_close() stays instantaneous, because teardown loops and policy use it. */
+/* Gesture entry point. PRESSWORK closes immediately; no drawable after-image
+ * survives the model entry being removed. */
 void wm_close_fx(int win);
 
 void wm_damage(int x, int y, int w, int h);   /* mark a screen region dirty  */
@@ -423,6 +470,7 @@ void wm_stop(void);                           /* 'q': ask the loop to end     */
 int  wm_running(void);
 /* what the last REPAINTING frame cost, in microseconds, and the worst so far */
 int  wm_frame_us(void);
+int  wm_win_us(int win);
 int  wm_peak_us(void);
 void wm_peak_reset(void);
 int  wm_win_app(int win);                      /* the ACTIVE tab.s app        */
@@ -767,6 +815,7 @@ int  ui_search(int x, int y, int w, const char *text, const char *placeholder);
 int  ui_chip_w(const char *s);
 int  ui_chip_h(void);
 int  ui_chip(int x, int y, const char *s, int active);
+int  ui_chip_state(int x, int y, const char *s, int active, int disabled);
 
 /* ---- item lists ----------------------------------------------------------- */
 int  ui_items_count(const char *items);

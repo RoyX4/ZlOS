@@ -267,6 +267,7 @@ static u16 WITNESS_PATH[] =
     { '\\','E','F','I','\\','Z','L','O','S','\\','W','I','T','N','E','S','S','.','L','O','G',0 };
 static efi_file *witness_root;
 static u64 boot_image_base;
+static u64 boot_image_size;
 static u64 witness_info_words[64];
 static u16 ZL_DIAG_NAME[] =
     { 'Z','l','B','o','o','t','D','i','a','g',0 };
@@ -557,6 +558,7 @@ static void witness_init(efi_handle image, efi_system_table *st)
             EFI_SUCCESS || !loaded)
         return;
     boot_image_base = (u64)loaded->image_base;
+    boot_image_size = loaded->image_size;
     if (bs->handle_protocol(loaded->device_handle, &SIMPLE_FS_GUID,
                             (void **)&fs) != EFI_SUCCESS || !fs)
         return;
@@ -574,6 +576,15 @@ static void witness_init(efi_handle image, efi_system_table *st)
         witness_hex(&line, end);
         witness_append_line(&line);
     }
+}
+
+/* The native runtime cannot use ELF linker-script symbols in PE/COFF. Publish
+ * the exact relocated range supplied by EFI_LOADED_IMAGE_PROTOCOL instead. */
+u64 efi_kernel_image_start(void) { return boot_image_base; }
+u64 efi_kernel_image_end(void)
+{
+    return boot_image_size > ~boot_image_base ? ~0ULL
+                                               : boot_image_base + boot_image_size;
 }
 
 static int fixed_arena_overlap(u64 start, u64 end)

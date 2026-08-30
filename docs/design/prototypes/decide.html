@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zlOS desktop . decide per axis</title>
+<style>
+:root{
+  --bg:#0d0f11;
+  --panel:#14171a;
+  --panel2:#181c1f;
+  --rule:#23282c;
+  --rule2:#2e3438;
+  --ink:#c8cfd4;
+  --ink2:#98a1a8;
+  --dim:#6e777e;
+  --faint:#4c5459;
+  --accent:#7fb2c9;
+  --accent-dim:#3d5b68;
+  --hard:#d2685a;
+  --warn:#c39a55;
+  --ok:#79a88f;
+  --sans:ui-sans-serif, system-ui, "DejaVu Sans", sans-serif;
+  --mono:ui-monospace, "DejaVu Sans Mono", monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-dim)}
+a:hover{color:#a6cddd;border-bottom-color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:1px}
+a:active{color:#5f95ac}
+
+.mono{font-family:var(--mono)}
+.tnum{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+header{
+  border-bottom:1px solid var(--rule);
+  background:linear-gradient(0deg,var(--bg),var(--bg));
+  padding:18px 24px 14px;
+}
+.hrow{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;justify-content:space-between;max-width:1560px;margin:0 auto}
+h1{
+  font-family:var(--mono);
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  margin:0 0 4px;
+  color:#e2e8ec;
+}
+.sub{color:var(--dim);font-size:12.5px;max-width:68ch;margin:0}
+.sub b{color:var(--ink2);font-weight:600}
+
+.presets{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.plabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin-right:2px}
+
+button{
+  font-family:var(--mono);
+  font-size:11.5px;
+  letter-spacing:.06em;
+  color:var(--ink2);
+  background:var(--panel);
+  border:1px solid var(--rule2);
+  padding:7px 11px;
+  cursor:pointer;
+  border-radius:2px;
+}
+button:hover{background:var(--panel2);color:#dbe2e7;border-color:#3c4449}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:active{background:#0f1214;transform:translateY(1px)}
+button[aria-pressed="true"]{
+  color:#0e1214;background:var(--accent);border-color:var(--accent);
+}
+button[aria-pressed="true"]:hover{background:#95c3d8}
+button.ghost{background:transparent}
+
+/* ---------- layout ---------- */
+.wrap{
+  max-width:1560px;margin:0 auto;padding:22px 24px 90px;
+  display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:28px;align-items:start;
+}
+@media (max-width:1180px){ .wrap{grid-template-columns:minmax(0,1fr)} }
+
+/* ---------- axis ---------- */
+.axis{border-top:1px solid var(--rule);padding:20px 0 8px}
+.axis:first-child{border-top:0;padding-top:6px}
+.axhead{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.axnum{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.1em;padding-top:2px}
+.axname{font-family:var(--mono);font-size:13px;letter-spacing:.13em;text-transform:uppercase;color:#dfe6ea;margin:0}
+.axstate{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);border:1px solid var(--rule2);padding:1px 6px;border-radius:2px}
+.axstate.set{color:var(--ok);border-color:#2f4a3f}
+.axq{color:var(--ink2);font-size:13px;margin:6px 0 0;max-width:92ch}
+.axwhy{color:var(--dim);font-size:12px;margin:6px 0 0;max-width:92ch;border-left:2px solid var(--accent-dim);padding-left:10px}
+.axwhy b{color:var(--accent);font-weight:600}
+
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-top:14px}
+.opt{
+  display:block;position:relative;
+  background:var(--panel);
+  border:1px solid var(--rule);
+  border-left:3px solid var(--rule2);
+  padding:11px 13px 12px;
+  cursor:pointer;
+  border-radius:2px;
+}
+.opt:hover{background:var(--panel2);border-color:var(--rule2);border-left-color:#4a5359}
+.opt:has(input:focus-visible),.opt.is-focus{outline:2px solid var(--accent);outline-offset:2px}
+.opt:active{background:#0f1315}
+.opt.is-sel{background:#182024;border-color:#33474f;border-left-color:var(--accent)}
+.opt.is-sel:hover{background:#1b2429}
+.opt input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.odir{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.opt.is-sel .odir{color:var(--accent)}
+.otitle{font-size:13.5px;color:#dde4e9;font-weight:600;margin:3px 0 0;line-height:1.35}
+.obody{font-size:12.5px;color:var(--ink2);margin:5px 0 0}
+.ocost{
+  font-size:12px;color:#a9877a;margin:9px 0 0;padding-top:8px;border-top:1px dashed var(--rule2);
+}
+.ocost .k{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#8a6a5e;margin-right:6px}
+.ometer{margin-top:9px}
+.ometer svg{display:block}
+.ocap{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px;letter-spacing:.04em}
+
+.subq{margin:12px 0 0;padding:10px 12px;background:var(--panel);border:1px dashed var(--rule2);border-radius:2px}
+.subq .sqt{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.sqrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.chip{
+  display:inline-flex;gap:7px;align-items:center;position:relative;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink2);
+  background:var(--panel2);border:1px solid var(--rule2);padding:6px 10px;border-radius:2px;cursor:pointer;
+}
+.chip:hover{color:#dbe2e7;border-color:#3f484d}
+.chip:has(input:focus-visible),.chip.is-focus{outline:2px solid var(--accent);outline-offset:2px}
+.chip:active{transform:translateY(1px)}
+.chip.is-sel{color:#0e1214;background:var(--accent);border-color:var(--accent)}
+.chip input{position:absolute;opacity:0;width:1px;height:1px}
+
+.pairnote{
+  margin:20px 0 0;padding:10px 12px;border:1px solid var(--rule);border-left:3px solid var(--accent-dim);
+  background:var(--panel);color:var(--ink2);font-size:12.5px;border-radius:2px;
+}
+
+/* ---------- free riders ---------- */
+.friders{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:10px;margin-top:14px}
+.fr{
+  display:block;position:relative;background:var(--panel);border:1px solid var(--rule);
+  border-left:3px solid var(--rule2);padding:11px 13px;cursor:pointer;border-radius:2px;
+}
+.fr:hover{background:var(--panel2);border-left-color:#4a5359}
+.fr:has(input:focus-visible),.fr.is-focus{outline:2px solid var(--accent);outline-offset:2px}
+.fr:active{background:#0f1315}
+.fr.is-sel{background:#171f1c;border-color:#31463c;border-left-color:var(--ok)}
+.fr input{position:absolute;opacity:0;width:1px;height:1px}
+.frtop{display:flex;gap:9px;align-items:baseline}
+.frbox{
+  width:12px;height:12px;flex:0 0 12px;border:1px solid var(--rule2);background:#0f1214;margin-top:3px;border-radius:1px;
+}
+.fr.is-sel .frbox{background:var(--ok);border-color:var(--ok)}
+.frname{display:block;font-size:13px;color:#dde4e9;font-weight:600;line-height:1.35}
+.frdir{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:3px}
+.frwhy{font-size:12.5px;color:var(--ink2);margin:6px 0 0}
+.frwhy .k{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#55606a;margin-right:6px}
+
+/* ---------- sidebar ---------- */
+aside{position:sticky;top:14px;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 28px);overflow:auto;padding-right:2px}
+@media (max-width:1180px){ aside{position:static;max-height:none} }
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:2px}
+.cardhead{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:9px 12px;border-bottom:1px solid var(--rule);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+}
+.cardbody{padding:12px}
+
+.verdict{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid var(--rule)}
+.vdot{width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+.vtext{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.vsub{color:var(--dim);font-size:11.5px;font-family:var(--mono);margin-left:auto;letter-spacing:.06em}
+
+.finding{border-top:1px solid var(--rule);padding:11px 12px}
+.finding:first-child{border-top:0}
+.fhead{display:flex;gap:8px;align-items:flex-start}
+.ficon{flex:0 0 14px;margin-top:2px}
+.ftag{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;padding:1px 5px;border:1px solid;border-radius:2px;white-space:nowrap}
+.f-hard .ftag{color:var(--hard);border-color:#5a3128}
+.f-warn .ftag{color:var(--warn);border-color:#584526}
+.f-info .ftag{color:var(--accent);border-color:var(--accent-dim)}
+.f-ok .ftag{color:var(--ok);border-color:#2f4a3f}
+.ftitle{font-size:12.5px;color:#dde4e9;font-weight:600;line-height:1.35}
+.fmech{font-size:12.2px;color:var(--ink2);margin:6px 0 0}
+.fmech .num{font-family:var(--mono);font-variant-numeric:tabular-nums;color:#e0e7ec}
+.fnone{padding:14px 12px;color:var(--dim);font-size:12.5px}
+
+.brief{font-size:13px;color:var(--ink);line-height:1.62}
+.brief p{margin:0 0 11px}
+.brief p:last-child{margin-bottom:0}
+.brief h4{
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+  margin:16px 0 7px;font-weight:600;
+}
+.brief ul{margin:0 0 4px;padding-left:16px}
+.brief li{margin:0 0 6px;color:var(--ink2);font-size:12.5px}
+.brief .open{color:var(--warn)}
+.brief strong{color:#e6ecf0;font-weight:600}
+
+.links{display:grid;gap:6px}
+.linkrow{display:flex;gap:10px;align-items:baseline;font-size:12.5px}
+.linkrow .lk{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.08em;min-width:74px}
+.lnote{color:var(--dim);font-size:11.5px}
+.protogrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}
+.protogrid a{justify-self:start}
+
+footer{border-top:1px solid var(--rule);padding:14px 24px 40px;color:var(--faint);font-size:11.5px;font-family:var(--mono)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div>
+      <h1>Decide per axis, not per direction</h1>
+      <p class="sub">Ten independent decisions that PLATE, Folio, Datum and Raking each happen to <b>bundle</b>. Liking parts of all four means the bundles are wrong, not that the taste is unclear. Pick a position per axis; the panel on the right tells you whether the result is buildable. Axes are in <b>settling order</b>, not in listing order.</p>
+    </div>
+    <div class="presets">
+      <span class="plabel">Presets</span>
+      <button type="button" data-preset="paper">the paper blend</button>
+      <button type="button" data-preset="graphite">the graphite blend</button>
+      <button type="button" data-preset="page">the page blend</button>
+      <button type="button" class="ghost" id="btn-reset">clear all</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <main id="axes" aria-label="Design axes"></main>
+
+  <aside aria-label="Evaluation and brief">
+    <section class="card" aria-live="polite">
+      <div class="verdict" id="verdict">
+        <span class="vdot" style="background:var(--faint)"></span>
+        <span class="vtext" id="vtext">nothing chosen</span>
+        <span class="vsub" id="vsub">0 / 11 axes</span>
+      </div>
+      <div id="findings"></div>
+    </section>
+
+    <section class="card">
+      <div class="cardhead">
+        <span>The brief</span>
+        <button type="button" class="ghost" id="btn-copy" style="font-size:10.5px;padding:4px 8px">copy</button>
+      </div>
+      <div class="cardbody brief" id="brief"></div>
+    </section>
+
+    <section class="card">
+      <div class="cardhead"><span>Blends as built</span></div>
+      <div class="cardbody links">
+        <div class="linkrow"><span class="lk">paper</span><a href="proto-blendpaper.html">proto-blendpaper.html</a></div>
+        <div class="linkrow"><span class="lk">graphite</span><a href="proto-blendgraphite.html">proto-blendgraphite.html</a></div>
+        <div class="linkrow"><span class="lk">page</span><a href="proto-blendpage.html">proto-blendpage.html</a></div>
+        <p class="lnote" style="margin:6px 0 0">Each preset button above fills this form with the same combination the matching prototype was built from. Load one, then edit it.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="cardhead"><span>The ten directions</span></div>
+      <div class="cardbody">
+        <div class="protogrid">
+          <a href="proto-plate.html">PLATE</a>
+          <a href="proto-folio.html">Folio</a>
+          <a href="proto-datum.html">Datum</a>
+          <a href="proto-raking.html">Raking</a>
+          <a href="proto-apparatus.html">Apparatus</a>
+          <a href="proto-deck.html">Deck</a>
+          <a href="proto-neatline.html">Neatline</a>
+          <a href="proto-blueline.html">Blueline</a>
+          <a href="proto-spread.html">SPREAD</a>
+          <a href="proto-shelf.html">Shelf</a>
+        </div>
+        <p class="lnote" style="margin:10px 0 0">Contact sheet: <a href="index.html">index.html</a>. The written decomposition these axes come from: <a href="../deciding.md">deciding.md</a>. What each direction costs in its implementer's own words: <a href="../README.md">README.md</a>.</p>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<footer id="foot">state is in the URL hash, so any combination is one link away</footer>
+
+<script>
+"use strict";
+
+/* ============================================================
+   DATA
+   ============================================================ */
+
+const AXES = [
+  {
+    id:"ground", num:"01", name:"Ground polarity",
+    q:"Which end of the value ladder does the user's document sit on, and does a second ladder exist as a role remap?",
+    why:"<b>First, and it is not close.</b> It is the only axis that DELETES positions elsewhere rather than constraining them. Datum's material law is dead below L* 65. Folio's drag shadow loses 54% of its recession. Raking's whole depth recipe is a dark-ground idea: a 1px lighter run only reads as light when the surface is dark. Nothing downstream is decidable until this is fixed.",
+    positions:[
+      { id:"g-light", dir:"PLATE, Folio, Datum", title:"Light paper primary, one ladder only",
+        body:"L* 94 to 96. PLATE #F2EFE6 at 94.45, Folio #F4F1EA at 95.20, Datum #F5F3EE at 95.87.",
+        cost:"Full-screen warm paper on an OLED panel at 2 a.m. Every direction taking this position states it as a risk and none of them solved it." },
+      { id:"g-dark", dir:"Raking", title:"Dark stock primary, no light twin",
+        body:"Warm graphite at L* 18.15 (#322B27), six rungs inside 12 L* points.",
+        cost:"Deletes the material law outright and halves the drag shadow. Also scored 4/10 on identity: dark-warm-with-blue is the most crowded space in desktop UI." },
+      { id:"g-dual", dir:"PLATE, Folio and Datum all shipped one", title:"Dual ladder, both real",
+        body:"Two :root blocks, identical token names, values re-derived per mode rather than inverted. Then answer the second question below: which ladder is load-bearing.",
+        cost:"A token existing in one mode only is a defect, so every future token costs two picks. PLATE proved the price in screened areas: a large tonal fill holds at 5.60:1 in dark (#A7A191 on #2E2921) instead of the solid 9.00:1 (#D5CBBC), so meter fills, sliders and plot bars read softer." }
+    ],
+    sub:{ id:"loadbearing", when:"g-dual", label:"Which ladder is load-bearing", opts:[
+      {id:"light", label:"light is primary"},
+      {id:"dark", label:"dark is primary"} ] }
+  },
+
+  {
+    id:"arrangement", num:"02", name:"Arrangement",
+    q:"How do windows get placed, and does overlap exist by default?",
+    why:"Second, because it sets the floor on the window boundary. Free floating requires a boundary at 3:1 or better, which kills two of the four boundary positions outright, and it flips Apparatus's cut edge from inert to the strongest answer in the set.",
+    positions:[
+      { id:"a-tile", dir:"PLATE", title:"Tile onto a drawn 12x8 module grid", overlap:"none",
+        body:"Integer division only. At 1920x1200 / ui=2 columns 1 to 4 are 116px and 5 to 12 are 115px, rows exactly 121. Overlap exists only as an explicit DETACHED state.",
+        cost:"There is no reflow story at all. An app authored to fill 7x8 overflows its own frame at 7x4, and four separate prototype defects were that one failure wearing different hats. Buys a hard prerequisite: a sheetRows()-style gate IN THE SHELL, not sprinkled through app renderers." },
+      { id:"a-snap", dir:"Folio", title:"Column snapping, floating underneath", overlap:"rare",
+        body:"12 columns of 48dp with 16dp gutters, exact at 1920x1200 (752dp = 12x48 + 11x16), remainder split into the outer margins.",
+        cost:"Snapping is a default, not a law, so the ambiguous-overlap case still exists. It just happens rarely, on whatever the boundary token is." },
+      { id:"a-datum", dir:"Datum", title:"8dp grid whose origin is the datum", overlap:"rare",
+        body:"The grid starts at the rail's right edge, not the screen edge, plus a mandatory 1dp gutter of ground between any two surfaces.",
+        cost:"The gutter IS the seam, so a window flush against another shows 1 device px of ground and nothing else." },
+      { id:"a-float", dir:"Raking", title:"Free floating, wm.c mechanically unchanged", overlap:"free",
+        body:"Z-ordered, draggable, resizable, per-window fb_surface cache retained. No new window-manager work at all.",
+        cost:"Every overlap lands on whatever the boundary token is, with nothing else helping. Also: the rail must never be covered and wm.c does not know that, so a window dragged over it hides the clock, the launcher and every running app at once." }
+    ]
+  },
+
+  {
+    id:"focus", num:"03", name:"Focus signal",
+    q:"How does the focused window announce itself, and how many of its own pixels does that change?",
+    why:"Third, because it consumes the largest single block of contrast in whichever ladder you picked, and it is the axis the four disagree on hardest: 0.42% of a window's pixels against 12.17%, same window, same job. If the ground came out dark, the knockout is already off the table unless you accept that the ladder stops doing any work.",
+    positions:[
+      { id:"f-knockout", dir:"PLATE", title:"Knockout: the header inverts to solid ink", area:12.17, chroma:false,
+        body:"Title knocked out of a filled band. 16.27:1 between states, and 12.17% of a 445x460 window's pixels change (445 x 56 = 24,920 px). Impossible to miss across a room.",
+        cost:"Requires a fillable header band, which is exactly what Folio's running head refuses to be. Overwhelms any low-contrast ladder: on Raking it is 6.0x the whole achromatic budget." },
+      { id:"f-rule", dir:"Folio", title:"A rule doubles and goes black", quiet:true, chroma:false,
+        body:"1dp #C2BAA8 to 2dp #17150F under the running head (1.71:1 to 16.18:1), plus title regular to bold and #5E5648 to #17150F, plus the table-of-contents row's 3dp marginal bar.",
+        cost:"Three cues move together, which is right, but all three are thin. The eye has to find a 2px line on a busy screen." },
+      { id:"f-accent", dir:"Datum", title:"The head rule goes accent", quiet:true, chroma:true,
+        body:"Outline top edge 1px #847E73 to 2dp #0B5E78 (6.56:1), title to ink #14130F, stated simultaneously in the plate, the rail tick and the strip title.",
+        cost:"Spends the one accent on focus, so the accent can never mean anything else. In dark it must be re-picked (#3E9FC6, 4.76:1) because the deep blue is a 2.36:1 smudge." },
+      { id:"f-light", dir:"Raking", title:"The light swings toward the window", area:0.42, quiet:true, chroma:true,
+        body:"The focused plate's top and left runs go #5F5854 to #7FB2E0 (1.99:1 to 6.19:1) and the title #BDB5A7 to #F2EDE4 (6.84:1 to 11.92:1), on 0.42% of the window's pixels (865 of 204,700).",
+        cost:"Its own implementer's stated weakest link: one blue pixel on the top edge, near the floor of obvious-at-a-glance. And SETTLE 240ms means the weakest signal in the set also takes a quarter second to arrive." },
+      { id:"f-spread", dir:"SPREAD, round two", title:"Hoist it off the window entirely", area:0, chroma:false,
+        body:"The knockout becomes one screen-wide running head shared by the whole screen. One head, one baseline, one page. Zero pixels of the window itself change.",
+        cost:"Undrawable for any window that cannot own a disjoint horizontal span. SPREAD was told to define that fallback before drawing a single head segment." }
+    ]
+  },
+
+  {
+    id:"boundary", num:"04", name:"Window boundary",
+    q:"What physically draws the edge of a window?",
+    why:"Boundary and depth rank are the same token in all four directions. Settle them together: deciding them separately produces a system with two edge tokens and no rank. The arrangement axis already put a hard floor here.",
+    pairTop:true,
+    positions:[
+      { id:"b-plate", dir:"PLATE", title:"2px ink frame, all four sides", ovr:16.27,
+        body:"#14120E, 16.27:1 on the sheet and 16.27:1 on another sheet.",
+        cost:"Two abutting windows show a 4px black bar. It survives overlap trivially, which is a strength PLATE then does not use, because it tiles." },
+      { id:"b-folio", dir:"Folio", title:"Two-tone mount, outer plus inner", ovr:1.71,
+        body:"Outer 1px #C2BAA8 (1.71:1) plus inner 1px #FBFAF6. Two fb_box calls. A print mounted on board.",
+        cost:"1.71:1 is below every threshold. It works only because Folio also snaps to columns. The moment two unfocused sheets overlap by a few pixels, stack order is unreadable." },
+      { id:"b-datum", dir:"Datum", title:"1px outline at 3:1 or better on BOTH sides", ovr:3.63,
+        body:"#847E73: 3.08:1 against the ground and 3.63:1 against the plate body, clearing WCAG 1.4.11 in both directions.",
+        cost:"Deliberately loud. The only boundary in the set that survives free overlap on its own merits, and it looks like a boundary rather than like paper." },
+      { id:"b-raking", dir:"Raking", title:"Directional 1px runs, lit and cut", ovr:1.33, needsDark:true,
+        body:"Lit top #5F5854 (1.99:1), grazed left #4A433F, cut bottom and right #19120E (1.33:1). One implied light source, upper left, everywhere.",
+        cost:"Fails silently. Surrounding steps are 1.07 to 1.13:1, so a clipped or omitted edge does not look slightly wrong, the widget vanishes into its parent. And the bottom-right edge, the one that lands on top of another window, is the weak one at 1.33:1." },
+      { id:"b-apparatus", dir:"Apparatus, round two", title:"Cut edge: the occluder draws the border", ovr:16.20, needsOverlap:true,
+        body:"The border you can see is drawn by the occluder, never by the occluded. All four edges at 16.20:1 when a top sheet lies entirely inside a lower one. Needs no new primitive.",
+        cost:"Zero value under a tiling arrangement, because nothing overlaps and nothing else draws an edge. It is conditional, not unconditional." }
+    ]
+  },
+
+  {
+    id:"depth", num:"04", name:"Depth rank",
+    q:"How do you read which of two things is on top?",
+    positions:[
+      { id:"d-plate", dir:"PLATE", title:"Rule weight, two values",
+        body:"1px #5C574C between rows and cells, 2px #14120E between regions. Nesting a surface does NOT change its value.",
+        cost:"Only two ranks exist. A popover on a menu on a window has nowhere to go. PLATE avoids the problem by having exactly one modal in the whole system." },
+      { id:"d-folio", dir:"Folio", title:"Keyline rank, three values", shadow:true,
+        body:"Ground to sheet 1.71:1, sheet to popover 2.48:1, popover to modal 16.18:1 plus a 24% flat scrim. One shadow exists in the whole system: the drag lift.",
+        cost:"The ranks are not perceptually even. 1.71 to 2.48 is a whisper, 2.48 to 16.18 is a cliff. Ranks 1 and 2 are hard to separate at arm's length." },
+      { id:"d-datum", dir:"Datum", title:"Material: anything transient is ink",
+        body:"14.26:1 against the ground, with no border, no shadow and no blur anywhere in the system.",
+        cost:"Dies with the ground: 1.18:1 in its own dark mode. Also the most contestable single call in the set, by its author's own admission." },
+      { id:"d-raking", dir:"Raking", title:"Light direction, one source upper left", needsDark:true,
+        body:"Raised = lit top plus grazed left. Sunken = the same four runs with the sign flipped. Nesting halves the radius so concentric objects stay legible.",
+        cost:"The entire separation budget is 1px wide. The loudest achromatic element in the system is 1.99:1." }
+    ]
+  },
+
+  {
+    id:"material", num:"05", name:"Material law",
+    q:"Is any large surface drawn at the opposite end of the ladder, and does that carry meaning?",
+    why:"Fifth, because it only becomes decidable now. It is the intersection of what ground polarity left alive and how much of the focus budget is already spent.",
+    positions:[
+      { id:"m-datum", dir:"Datum", title:"Two materials by law: paper is the user's, ink is the machine's", needsLight:true,
+        body:"Rail, raster strip, drawer, menus and modals all #101317, 14.26:1 against the ground #E4E1DA. No border, no shadow, no blur anywhere.",
+        cost:"Requires a ground at L* 89.6 or higher to hold 14.26:1. It is a luminance idea, and any dark ground takes the luminance away (measured 1.18:1 in its own dark mode)." },
+      { id:"m-plate", dir:"PLATE", title:"One material, inversion as a STATE",
+        body:"Ink appears only as the rail, a focused header, a terminal ground and a pressed control, at 16.27:1. It is a state a surface enters, not a second substance.",
+        cost:"The rail is a 296-device-px black column at ui=2 explained by nothing except that it is chrome. No second material means no way to say 'this readout is the machine talking'." },
+      { id:"m-folio", dir:"Folio", title:"One material, no inversion anywhere", runningHead:true,
+        body:"The rail is the same #F4F1EA sheet as a window, separated from the ground by one 1.71:1 hairline. The running head is deliberately NOT a filled strip, so the window is one sheet rather than a panel with a label nailed across it.",
+        cost:"The whole screen is one value. Two overlapping unfocused sheets are told apart only by a 1.71:1 hairline, and Folio names this as its own residual weakness." },
+      { id:"m-raking", dir:"Raking", title:"One material, light as the substance", lowLadder:true,
+        body:"Every surface within 12 L* points. Nothing inverts. The four steps measure 1.073, 1.126, 1.089 and 1.077 to 1.",
+        cost:"This is precisely what makes a knockout impossible: a knockout header computes 11.92:1 against ZD_BASE, 6.0x the system's entire achromatic budget." }
+    ]
+  },
+
+  {
+    id:"colour", num:"06", name:"Colour policy",
+    q:"How many inks are there besides the text ramp, and what are they allowed to mean?",
+    why:"Cheapest to settle late: all four directions already spell the state word beside the state colour, so no direction uses colour as a sole carrier. Changing the policy repaints things without breaking any of them.",
+    positions:[
+      { id:"c-folio", dir:"Folio", title:"Zero. Colour never distinguishes anything", zero:true,
+        body:"One chromatic ink #A3301B meaning attention only (6.21:1). Hierarchy is case, weight, scale, rule weight and whitespace. The one primary action per view is an ink block #17150F at 16.18:1.",
+        cost:"Everything must be carried by type, so a bad atlas or a wrong tracking value stops being a blemish and becomes a functional bug." },
+      { id:"c-plate", dir:"PLATE", title:"One structural ink with four jobs",
+        body:"Vermilion #C4341C as focus or run mark, the one primary action, the register mark, and the crop marks. Never status, never text, never an icon.",
+        cost:"4.74:1 on paper, 3.54:1 on a well, 3.43:1 on the ink plate. It can never carry text anywhere in the system, so it is a fill or a mark and nothing else. Adopting Folio's law instead deletes 1 of these 4 jobs; deleting 3 was tried in round two and killed as GALLEY." },
+      { id:"c-instrument", dir:"Datum and Raking", title:"One instrument accent plus a knockout twin",
+        body:"Datum #0B5E78 with #5CD2F2. Raking #7FB2E0 with #A9CFF2. The twin exists so the accent survives being drawn on the inverted material.",
+        cost:"Blue is the most common accent hue in software. Raking's whole differentiation is 43% saturation on a warm ground: raise it, or add a second cold hue, and the system collapses into generic dark-UI-with-blue. Saturation is a locked value, not a taste knob." },
+      { id:"c-neatline", dir:"Neatline, round two", title:"Five lexical inks with a written contract on screen",
+        body:"Water = I/O, wood = user data, contour = level, road = routes and actions. All forbidden as text, none carrying state.",
+        cost:"The contract has to be visible, which costs a permanent KEY panel in the margin." }
+    ]
+  },
+
+  {
+    id:"type", num:"07", name:"Type hierarchy carrier",
+    q:"Three baked atlases and no runtime rasteriser. How many do you use, and what carries hierarchy instead of size?",
+    why:"This is the axis where the prototypes flatter the target hardest: CSS gives letter-spacing free and fb_text_role cannot track text without a new primitive. Any position leaning on tracking is carrying an unpriced item.",
+    positions:[
+      { id:"t-plate", dir:"PLATE", title:"Two sizes. Case, weight, tracking and rule weight carry hierarchy", track:true,
+        body:"Four exhaustive styles: DATA (mono, one size forever), LABEL (bold caps, +2px tracked), BODY (prose only), PLATE (one per view).",
+        cost:"Needs UI_F_TRACK and UI_F_CAPS on the existing flag word, and measure and draw MUST share the helper. uikit.c already documents that a measure/draw disagreement is a clipped label." },
+      { id:"t-folio", dir:"Folio", title:"Three sizes landing exactly on the three atlases", ui1:true,
+        body:"At ui=2: R1 8dp/16px, R2 12dp/24px, R3 the same size bold, R4 16dp/32px. Zero resampling anywhere.",
+        cost:"At ui()==1 prop_cell() floors at 12px and R1/R2 merge. Hierarchy there rests on weight, case and whitespace alone, which still works, but it was read out of fb.c rather than assumed." },
+      { id:"t-datum", dir:"Datum", title:"Six sizes on a 1.2 ratio, plus a face law", upscale:true,
+        body:"9.0 / 10.5 / 12.5 / 15.0 / 18.0 / 21.5. Every number the machine measured is mono, everything the user wrote is proportional.",
+        cost:"Six sizes against three atlases means real upscaling. This is why Datum scored 3/10 on buildability. The face law is separable and cheap; the six sizes are the expensive half." },
+      { id:"t-raking", dir:"Raking", title:"Three sizes with the ink ramp doing the levelling",
+        body:"SM 11 / MD 13 / LG 21, with ZD_TEXT_0..3 carrying level. LG at 1.615x is deliberately off any smooth ramp so it cannot be used as a heading.",
+        cost:"Loses tracking entirely. A tracking parameter on fb_text_role would be a new primitive and Raking judged it not worth one." }
+    ]
+  },
+
+  {
+    id:"instr", num:"08", name:"Instrumentation",
+    q:"How much does the machine say about itself, permanently, without being asked?",
+    why:"Most of it is genuinely free, being mono text in bands that already exist. One position on it is a perpetual animation on a damage-driven compositor, and one requires wm.c work that does not exist yet.",
+    positions:[
+      { id:"i-plate", dir:"PLATE", title:"A printer's slug", wideRail:true,
+        body:"One mono line: zlOS 0.3 . 1920x1200 . 4 CPU . LOAD 0.31 . 14:32:07, plus a legend stating the grid AS MEASURED at the current resolution.",
+        cost:"28dp of permanent vertical space for text that rarely changes." },
+      { id:"i-folio", dir:"Folio", title:"Marginalia at the foot of the rail",
+        body:"Four caption lines, labels left, values right-flush in mono.",
+        cost:"Almost nothing. It is the cheapest position on this axis, and tabular figures in the margin are the strongest 'this is a set page' signal available." },
+      { id:"i-datum", dir:"Datum", title:"Full instrumentation, including a live raster strip", perpetual:true,
+        body:"Per-window app_us in every status band, a full-width raster strip with a live histogram against the measured 16,667us budget, and a memory-map ruler along the bottom edge.",
+        cost:"Per-window us does not exist: wm.c measures app_us in aggregate only. And the strip is a perpetual animation: 215,993 composite wakeups per hour on an idle machine at 59.998 Hz, against 0 for the other three at rest." },
+      { id:"i-raking", dir:"Raking", title:"Status column only",
+        body:"Network, volume and power icons, recoloured by state.",
+        cost:"The least the machine can say about itself. Wastes the one advantage a hand-written OS has: it knows its own pixel clock." }
+    ]
+  },
+
+  {
+    id:"motion", num:"09", name:"Motion",
+    q:"What moves, for how long, and does anything move while nobody is acting?",
+    why:"The compositor's whole architecture is damage-driven repaint, so 'does anything self-animate' is an architecture question, not a taste one. Three of the four answer no.",
+    positions:[
+      { id:"mo-plate", dir:"PLATE", title:"CUT. 0ms default", still:true,
+        body:"One animation survives: SLIDE 100ms LINEAR, only along the grid. Distance is always a whole number of modules plus gutters, so intermediate frames land on integer pixels with no rounding drift.",
+        cost:"Nothing eases, so nothing feels like it has mass. Deliberate, and some people read it as broken." },
+      { id:"mo-folio", dir:"Folio", title:"Page motion, five tokens",
+        body:"FADE 120 / POP 80 / PRESS 100 / SNAP 140 / GRID 100.",
+        cost:"SNAP keeps the cubic easing, so the float-shaped thing (four ints x1000) stays in the motion path." },
+      { id:"mo-datum", dir:"Datum", title:"Three durations quantised to the measured refresh", perpetual:true,
+        body:"APPEAR 90 (5.4 frames), WIN 160 (9.6 frames), focus 0, all against the measured 59.998 Hz. Plus one perpetual: the raster strip advances one column per frame, forever.",
+        cost:"The strip is the same standing tax Datum deleted ZD_MS_PULSE for, by its own stated reasoning. 3 fb_fill_px calls per frame is small, but it is a floor of at least 1 damage rect at 60 Hz, not a peak." },
+      { id:"mo-raking", dir:"Raking", title:"Three durations keyed to distance travelled", slowFocus:true,
+        body:"RISE 90 / TRAVEL 160 / SETTLE 240, one curve. The focus transition is the signature: two 1px runs lerping between two colours.",
+        cost:"SETTLE 240ms on a focus change means whatever focus signal you picked arrives a quarter of a second late." }
+    ]
+  },
+
+  {
+    id:"radius", num:"10", name:"Radius system",
+    q:"How round is anything, and does nesting change it?",
+    why:"Last and near-free. Every one of these resolves through the existing fb_rrect with no new primitive, and fb_rrect(r=0) already degrades correctly to three fb_fill_px calls.",
+    positions:[
+      { id:"r-plate", dir:"PLATE", title:"0 and 2", body:"Square by default; 2px only on the smallest pressed controls.",
+        cost:"None beyond the look. Two values is the smallest system that still has a soft state." },
+      { id:"r-folio", dir:"Folio", title:"0, 2, and half-height", body:"Square sheets, 2px controls, fully rounded pills where a control is a token.",
+        cost:"None. Half-height pills need concentric care only if they nest, which Folio does not do." },
+      { id:"r-datum", dir:"Datum", title:"0, 3dp, and half-height", body:"Square plates, 3dp on inputs, pills on toggles.",
+        cost:"None beyond the look." },
+      { id:"r-raking", dir:"Raking", title:"0, 10, 5, 3, half-height. Nesting halves it", nested:true,
+        body:"Radius encodes how much an object can move, and a nested object gets half its parent's radius.",
+        cost:"Halving on nest needs concentric rrects, which Raking's own depth recipe draws anyway. Free in that combination, an extra rule in any other." }
+    ]
+  }
+];
+
+const FREE = [
+  { id:"fr-appus", dir:"Datum", name:"Per-window app_us in the status band",
+    why:"Mono text in a band every one of the four already draws. Touches no surface value, no boundary token, no radius, no focus signal and no colour.",
+    cost:"Costs exactly one real thing, and it is not visual: wm.c measures app_us in AGGREGATE only, so per-window attribution is new work. Datum's own stated fallback is the window's repaint_pixels in the same slot, same face, no layout change." },
+  { id:"fr-word", dir:"PLATE, and all four independently", name:"The state word beside the state colour",
+    why:"Four characters of text next to the dot. It touches nothing but the label string, and it works under every colour policy including Folio's zero-ink law.",
+    cost:"None. This is precisely why the colour axis can be settled last without breaking anything upstream of it." },
+  { id:"fr-tab", dir:"Folio marginalia, Datum face law", name:"Tabular mono for figures that must align",
+    why:"Uses the mono atlas that already exists, at one size, with no new primitive. The distinction is carried by FACE, not colour, so it survives Folio's law intact.",
+    cost:"None. It is the cheap half of Datum's face law, separable from the six-size 1.2 ratio that made Datum unbuildable at 3/10." },
+  { id:"fr-reg", dir:"PLATE", name:"The numbered register: 01 SHELL, 02 FILES, Alt+NN",
+    why:"Text and two digits. It makes the launcher, the tasklist and the keymap one list without touching a surface, a colour, a radius or a boundary.",
+    cost:"None. It combines with Folio's table of contents directly: Folio already sets a folio numeral in exactly that gutter, in the mono face, for exactly that reason." },
+  { id:"fr-legend", dir:"PLATE", name:"The measured grid legend",
+    why:"One mono line stating the grid AS COMPUTED at the current resolution: MODULE 12 x 8 . 116/115 x 121 px . GUTTER 16. It is instrumentation ABOUT the layout, not part of it, so it changes no geometry.",
+    cost:"None. It doubles as a live check on the integer-division remainder distribution." },
+  { id:"fr-clock", dir:"Raking", name:"The stacked rail clock, hours above minutes",
+    why:"Free with respect to every axis: no surface, no colour, no boundary.",
+    cost:"Its only dependency is geometric and worth naming: it exists because a 56dp rail cannot hold 23:41 on one line at display size." }
+];
+
+/* Apparatus's cut edge is listed in the source as a free rider, but it is
+   conditional on overlap existing, so it lives on the boundary axis here where
+   the arrangement rule can actually see it. */
+
+const PRESETS = {
+  paper:{
+    label:"the paper blend",
+    sel:{ground:"g-dual",loadbearing:"light",arrangement:"a-float",focus:"f-accent",boundary:"b-datum",
+          depth:"d-datum",material:"m-datum",colour:"c-instrument",type:"t-folio",instr:"i-folio",
+          motion:"mo-folio",radius:"r-datum"},
+    fr:["fr-appus","fr-word","fr-tab","fr-reg"]
+  },
+  graphite:{
+    label:"the graphite blend",
+    sel:{ground:"g-dark",arrangement:"a-float",focus:"f-accent",boundary:"b-apparatus",
+          depth:"d-raking",material:"m-raking",colour:"c-instrument",type:"t-raking",instr:"i-plate",
+          motion:"mo-raking",radius:"r-raking"},
+    fr:["fr-clock","fr-word","fr-tab","fr-appus"]
+  },
+  page:{
+    label:"the page blend",
+    sel:{ground:"g-dual",loadbearing:"light",arrangement:"a-tile",focus:"f-rule",boundary:"b-folio",
+          depth:"d-folio",material:"m-folio",colour:"c-folio",type:"t-folio",instr:"i-folio",
+          motion:"mo-folio",radius:"r-folio"},
+    fr:["fr-reg","fr-legend","fr-word","fr-tab"]
+  }
+};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+
+const sel = {};      /* axisId -> positionId, plus loadbearing */
+const fr  = {};      /* freeRiderId -> bool */
+FREE.forEach(f => fr[f.id] = false);
+
+function pos(axisId){
+  const ax = AXES.find(a => a.id === axisId);
+  if(!ax) return null;
+  return ax.positions.find(p => p.id === sel[axisId]) || null;
+}
+function groundPrimary(){
+  if(sel.ground === "g-light") return "light";
+  if(sel.ground === "g-dark")  return "dark";
+  if(sel.ground === "g-dual")  return sel.loadbearing || null;
+  return null;
+}
+function hasDual(){ return sel.ground === "g-dual"; }
+
+/* ============================================================
+   RULES
+   Each returns null, or {kind, title, mech}.
+   kind: hard | warn | info | ok
+   ============================================================ */
+
+const RULES = [
+
+/* --- ground polarity consequences --------------------------------- */
+() => {
+  if(sel.ground !== "g-light") return null;
+  return {kind:"warn", title:"Light primary with no dark ladder at all",
+    mech:"Every direction that took the light ground named the same unsolved risk: full-screen warm paper on an OLED panel at 2 a.m. Three of the four shipped a second ladder rather than leave it open, and proved it is cheap: same token names, values re-derived. Leaving it single-ladder is a decision, not an omission, and it should be written down as one."};
+},
+() => {
+  if(!hasDual() || sel.loadbearing) return null;
+  return {kind:"warn", title:"Dual ladder chosen, load-bearing ladder not chosen",
+    mech:"Ground polarity is two questions. Which ladder is load-bearing decides whether the material law, the depth recipe and the drag shadow are alive or dead, and the rules below cannot be evaluated until it is answered."};
+},
+
+/* --- REQUIRES: Datum material law needs a light ground ------------- */
+() => {
+  const m = pos("material"); const g = groundPrimary();
+  if(!m || !m.needsLight) return null;
+  if(g === "dark"){
+    return {kind:"hard", title:"Datum's two-material law is dead on this ground",
+      mech:"Holding 14.26:1 against ink #101317 (Y = 0.00637) needs a ground at Y >= 0.7539, that is <span class='num'>L* >= 89.6</span>. Every dark ground in the set falls far below it: Raking's LIGHTEST surface ZD_FLOAT is L* 23.21, which the law would render at <span class='num'>1.57:1</span>; Datum's own dark paper is L* 17.10 at 1.30:1; Folio's dark sheet L* 11.84 at 1.13:1. Datum's own dark mode measures <span class='num'>1.18:1</span>. The law is not worse in dark, it is dead below L* 65. The rail is still 56dp of 'the machine's material' and at 1.18:1 it is no longer a different material: its meaning evaporates while its screen area does not."};
+  }
+  if(g === "light"){
+    return {kind:"ok", title:"Material law satisfied, and it deletes every shadow",
+      mech:"At L* 89.6 or higher the law holds at <span class='num'>14.26:1</span> against ink #101317. That is what buys the rest: rail, raster strip, drawer, menus and modals need no border, no shadow and no blur, because the material itself separates them. If you ship a dark ladder too, this law does not travel with it, so budget hue plus the datum rule at 3.55:1 as the dark-mode replacement."};
+  }
+  return {kind:"info", title:"Material law is waiting on ground polarity",
+    mech:"Datum's law needs a ground at L* >= 89.6 to hold 14.26:1. Settle axis 01 before trusting anything below."};
+},
+
+/* --- REQUIRES: free floating needs a boundary at >= 3:1 ------------ */
+() => {
+  const a = pos("arrangement"); const b = pos("boundary");
+  if(!a || !b || b.ovr === undefined) return null;
+  if(a.overlap === "free" && b.ovr < 3){
+    return {kind:"hard", title:"Free floating with a boundary below the 3:1 floor",
+      mech:"Under overlap the boundary doing the work is the bottom-right edge of the upper window sitting on the lower window's body. This one measures <span class='num'>" + b.ovr.toFixed(2) + ":1</span>. Datum's outline clears at 3.63:1 and PLATE's frame at 16.27:1; Folio's mount at 1.71:1 and Raking's cut run at 1.33:1 do not. Both of those directions name this as their own residual weakness and both mitigate with ARRANGEMENT rather than with the boundary. Pick a different boundary, or give up free floating."};
+  }
+  if(a.overlap === "rare" && b.ovr < 3){
+    return {kind:"warn", title:"Snapping is a default, not a law, and this boundary is below 3:1",
+      mech:"Column snapping makes the ambiguous-overlap case rare rather than impossible. When it happens, stack order rests on <span class='num'>" + b.ovr.toFixed(2) + ":1</span>. Folio ships exactly this combination and calls it its residual weakness. Acceptable, but write down that arrangement is carrying the boundary."};
+  }
+  if(a.overlap === "free" && b.ovr >= 3){
+    return {kind:"ok", title:"Free floating clears its boundary floor",
+      mech:"<span class='num'>" + b.ovr.toFixed(2) + ":1</span> where the upper window's edge lands on the lower window's body. Free floating also means wm.c is mechanically unchanged, which is the cheapest arrangement in the set."};
+  }
+  return null;
+},
+
+/* --- REQUIRES: Apparatus's cut edge needs overlap to exist --------- */
+() => {
+  const a = pos("arrangement"); const b = pos("boundary");
+  if(!b || !b.needsOverlap || !a) return null;
+  if(a.overlap === "none"){
+    return {kind:"hard", title:"The cut edge is inert under tiling, and nothing else draws an edge",
+      mech:"Apparatus's rule is that the border you can see is drawn by the occluder, never by the occluded. Under a tiling arrangement nothing overlaps, so nothing occludes, so no edge is ever drawn at all. Its value here is zero, and it is the only boundary you selected. Pick an unconditional boundary, or pick an arrangement where windows overlap."};
+  }
+  return {kind:"ok", title:"The cut edge is live, and this is its strongest case",
+    mech:"With overlap present, a top sheet lying entirely inside a lower one has all four edges drawn at <span class='num'>16.20:1</span>. That is the mechanism's loudest case, not its silent one. The genuinely silent case is a fully covered lower sheet, which has nothing to disambiguate anyway."};
+},
+
+/* --- REQUIRES: Raking's depth recipe needs a dark ground ----------- */
+() => {
+  const d = pos("depth"); const b = pos("boundary"); const g = groundPrimary();
+  const usesRaking = (d && d.needsDark) || (b && b.needsDark);
+  if(!usesRaking || g !== "light") return null;
+  return {kind:"hard", title:"A 1px lighter run only reads as light when the surface is dark",
+    mech:"Raking's whole depth recipe is a dark-ground idea. On a light surface the sign inverts: ZD_LIT #5F5854, which IS the struck top edge, computes <span class='num'>5.98:1 DARK</span> against a light plate, and ZD_CUT #19120E computes <span class='num'>15.88:1</span>. The recipe says raised; the pixels say cut, and the groove becomes the loudest line on screen. This is not a tuning problem, it is the premise."};
+},
+
+/* --- DEGRADES: knockout against a low-contrast ladder -------------- */
+() => {
+  const f = pos("focus"); const m = pos("material"); const d = pos("depth");
+  if(!f || f.id !== "f-knockout") return null;
+  if((m && m.lowLadder) || (d && d.needsDark)){
+    return {kind:"warn", title:"The knockout fixes Raking's weakest link and deletes its premise in the same act",
+      mech:"Raking's four surface steps measure 1.073 / 1.126 / 1.089 / 1.077 to 1. Its loudest achromatic element is ZD_LIT on ZD_BASE at 1.99:1; loudest of any kind is ZD_STEEL at 6.19:1. A knockout header computes <span class='num'>11.92:1</span> against ZD_BASE and <span class='num'>13.42:1</span> against the field, that is <span class='num'>6.0x</span> the achromatic budget and 1.9x the accent. Two measurable failures follow. First, the light inverts sign on that one object: on a knocked-out header ZD_LIT reads as a groove at 5.98:1 dark while ZD_CUT becomes the loudest line at 15.88:1. Second, the 1.07 to 1.13 steps, already below perceptual threshold, stop being read at all next to a full inversion."};
+  }
+  return null;
+},
+
+/* --- EXCLUSIVE: knockout vs Folio's running head ------------------- */
+() => {
+  const f = pos("focus"); const m = pos("material");
+  if(!f || f.id !== "f-knockout" || !m || !m.runningHead) return null;
+  return {kind:"hard", title:"The knockout needs a fillable band; Folio's running head is defined as not being one",
+    mech:"Folio's running head is deliberately NOT a filled strip. It is the same #F4F1EA as the body, so the window is one sheet rather than a panel with a label nailed across it. PLATE's knockout requires a fillable header band. It is the same 16:1 value flip at two very different areas: Folio's 2dp rule covers <span class='num'>2 x window_width</span> px, PLATE's knockout covers <span class='num'>56 x window_width</span>, which is <span class='num'>28x</span> the area for the same flip. There is no middle position on the window itself. SPREAD already took the only third position, hoisting the head off the window entirely, and immediately inherited the constraint that it is undrawable for any window without a disjoint horizontal span."};
+},
+
+/* --- EXCLUSIVE: Folio's zero-colour law vs a chromatic focus ------- */
+() => {
+  const c = pos("colour"); const f = pos("focus");
+  if(!c || !c.zero || !f || !f.chroma) return null;
+  return {kind:"hard", title:"Zero-colour law selected, and the focus signal distinguishes with colour",
+    mech:"Folio's law is not 'few colours', it is that colour never distinguishes anything: hierarchy is case, weight, scale, rule weight and whitespace, and the one chromatic ink means attention only. The focus signal you picked (" + f.title.toLowerCase() + ") carries state in hue, which is the one thing the law forbids. Either take an achromatic focus signal (PLATE's knockout at 16.27:1, or Folio's own rule doubling to 2dp #17150F at 16.18:1), or drop the zero law. There is no partial position on this axis."};
+},
+
+/* --- REQUIRES: SPREAD needs a disjoint horizontal span ------------- */
+() => {
+  const f = pos("focus"); const a = pos("arrangement");
+  if(!f || f.id !== "f-spread" || !a) return null;
+  if(a.overlap === "free"){
+    return {kind:"hard", title:"A screen-wide running head is undrawable under free floating",
+      mech:"SPREAD's head is one horizontal band shared by the whole screen, segmented per window. It is undrawable for any window that cannot own a disjoint horizontal span, and free floating means two windows routinely occupy the same columns at different depths. SPREAD was told to define that fallback before drawing a single head segment; you have to define it here too, or pick an arrangement that guarantees disjoint spans."};
+  }
+  return {kind:"ok", title:"The arrangement guarantees the spans the running head needs",
+    mech:"Tiling and column snapping both give every window a horizontal span it can own, which is the precondition SPREAD could not satisfy on its own. Note that focus now changes <span class='num'>0%</span> of the window's own pixels, so the head is the entire signal: it has to be legible from anywhere on screen."};
+},
+
+/* --- DEGRADES: raster strip vs damage-driven repaint --------------- */
+() => {
+  const i = pos("instr"); const mo = pos("motion");
+  const perpetual = (i && i.perpetual) || (mo && mo.perpetual);
+  if(!perpetual) return null;
+  if(mo && mo.still && i && i.perpetual){
+    return {kind:"hard", title:"Motion says nothing self-moves; instrumentation ships a perpetual animation",
+      mech:"CUT is 0ms default with exactly one surviving animation, SLIDE 100ms along the grid. The raster strip advances one 1px column every frame, forever. At the measured 59.998 Hz that is <span class='num'>215,993</span> composite wakeups per hour on a machine nobody is touching, against <span class='num'>0</span> for this motion position at rest. The two positions state opposite things about the same compositor. Pick one."};
+  }
+  return {kind:"warn", title:"A perpetual animation on a damage-driven compositor",
+    mech:"Datum deletes ZD_MS_PULSE, ZD_MS_PULSE_SLOW and ZD_MS_SWEEP with an explicit reason, that an infinitely pulsing element means the damage list is never empty, and then makes exactly one exception with exactly that property. By its own accounting the strip costs 3 fb_fill_px calls of 1px width per frame, which is small, but it is a FLOOR and not a peak: <span class='num'>215,993</span> composite wakeups per hour idle, against <span class='num'>0</span> for PLATE, Folio and Raking at rest. Datum's own prototype strip reports damage 09 rects and blend 1.45 Mpx per frame. Not fatal. A standing tax on the one thing this kernel does well, to be paid knowingly."};
+},
+
+/* --- DEGRADES: Folio's one shadow on a dark ground ----------------- */
+() => {
+  const d = pos("depth"); const g = groundPrimary();
+  if(!d || !d.shadow || g !== "dark") return null;
+  return {kind:"warn", title:"The one shadow mostly stops working, so budget a replacement drag cue",
+    mech:"On a light ground the scrim buys <span class='num'>18.9 dL*</span> of recession; on the dark stock it buys <span class='num'>8.7 dL*</span>, which is 46% of light-mode strength. The mechanism, from Folio's own dark block: on paper a shadow falls across desk and printed line together and the line survives, because both terms scale. On ink the veil is the lamp going down, and a light mark fading toward a black ground has nothing left. The colophon measured 1.27:1 in Overview and the inactive workspace numerals, a CONTROL, went with it. No alpha fixes it: matching light's ratio loss needs 0.30, which buys 1.5 dL* and stops being a scrim. Folio compensates by strengthening the pre-drop column highlight to 6.4 dL* against light's 2.5."};
+},
+
+/* --- EXCLUSIVE: two rules claiming the same 1px ring --------------- */
+() => {
+  const b = pos("boundary"); const d = pos("depth");
+  if(!b || !d) return null;
+  const clash = (b.id === "b-folio" && d.id === "d-raking") || (b.id === "b-raking" && d.id === "d-folio");
+  if(clash){
+    return {kind:"hard", title:"Two rules claiming the 1px ring around every raised object",
+      mech:"Folio's ring is symmetric: outer #C2BAA8 at 1.71:1 plus inner #FBFAF6, two fb_box calls. Raking's is asymmetric: top #5F5854 at 1.99:1, left #4A433F, bottom and right #19120E at 1.33:1. That ring can carry only one rule. Drawing both means a 2px edge on all four sides, which breaks Folio's rank contract directly: rank 1 (ground to sheet) and rank 2 (sheet to popover) are BOTH 1px and are told apart only by value, 1.71 against 2.48:1. Make rank 1 two pixels and the two ranks collapse into one another."};
+  }
+  if(b.dir !== d.dir){
+    return {kind:"info", title:"Boundary and depth rank are coming from different directions",
+      mech:"In all four directions these are the same token. Splitting them is allowed but it is a decision: write down which rule wins where they meet. The common workable split is a conditional boundary over an unconditional rank, for example the cut edge drawn by an occluder sitting on top of the underlying rank rule, so the ring has one owner at every pixel."};
+  }
+  return null;
+},
+
+/* --- Folio one-value screen under any overlap --------------------- */
+() => {
+  const m = pos("material"); const b = pos("boundary"); const a = pos("arrangement");
+  if(!m || m.id !== "m-folio" || !b || b.id !== "b-folio" || !a || a.overlap === "none") return null;
+  return {kind:"warn", title:"One material, one value, and a 1.71:1 hairline doing all the separating",
+    mech:"No inversion anywhere means the whole screen is one value. Two overlapping unfocused sheets are then told apart only by the outer mount at <span class='num'>1.71:1</span>. Folio names this as its own residual weakness and mitigates it with column snapping rather than with the boundary."};
+},
+
+/* --- Free floating and the rail ----------------------------------- */
+() => {
+  const a = pos("arrangement");
+  if(!a || a.overlap !== "free") return null;
+  return {kind:"warn", title:"Free floating and wm.c does not know the rail exists",
+    mech:"The rail must never be covered, and nothing in the window manager enforces that today. A window dragged over it hides the clock, the launcher and every running app at once. This is one shell-level constraint, not a redesign, but it is real work that free floating does not otherwise cost."};
+},
+
+/* --- tiling requires a reflow gate -------------------------------- */
+() => {
+  const a = pos("arrangement");
+  if(!a || a.id !== "a-tile") return null;
+  return {kind:"info", title:"Tiling requires a reflow gate in the shell before any app is drawn",
+    mech:"PLATE has no reflow story at all: an app authored to fill a 7x8 tile overflows its own frame at 7x4, and four separate prototype defects were that one failure wearing different hats. The fix is a sheetRows()-style gate, and it must live IN THE SHELL rather than being sprinkled through app renderers. Build that first; it is a prerequisite, not a polish item."};
+},
+
+/* --- type axis costs ---------------------------------------------- */
+() => {
+  const t = pos("type");
+  if(!t || !t.track) return null;
+  return {kind:"info", title:"Tracking is an unpriced item until a primitive exists",
+    mech:"CSS gives letter-spacing free; fb_text_role cannot track text without a new primitive. This position needs UI_F_TRACK and UI_F_CAPS on the existing flag word, and measure and draw MUST share the helper. uikit.c already documents that a measure/draw disagreement is a clipped label, so this is the known failure mode, not a hypothetical one."};
+},
+() => {
+  const t = pos("type");
+  if(!t || !t.upscale) return null;
+  return {kind:"warn", title:"Six sizes against three baked atlases means real upscaling",
+    mech:"There is no runtime glyph rasteriser. The three atlases are 8x16, 16x32 and 24x48. A 1.2 ratio producing 9.0 / 10.5 / 12.5 / 15.0 / 18.0 / 21.5 lands most of its steps between atlases, and this is the single reason Datum scored <span class='num'>3/10</span> on buildability. The face law (machine numbers mono, user text proportional) is the cheap half and is separable: take it as a free rider instead."};
+},
+() => {
+  const t = pos("type");
+  if(!t || !t.ui1) return null;
+  return {kind:"info", title:"At ui()==1 two of the three sizes merge",
+    mech:"prop_cell() floors at 12px, so R1 and R2 collapse into one. Hierarchy at that scale rests on weight, case and whitespace alone. It still works, and it was read out of fb.c rather than assumed, but it means the type system has a different shape on a low-DPI panel and the layout must not depend on the two being distinct."};
+},
+
+/* --- accent must be re-picked per ladder -------------------------- */
+() => {
+  const f = pos("focus"); const c = pos("colour");
+  const chromatic = (f && f.chroma) || (c && (c.id === "c-instrument" || c.id === "c-plate"));
+  if(!chromatic || !hasDual()) return null;
+  return {kind:"info", title:"The accent is a per-ladder value, not a shared one",
+    mech:"A dual ladder re-derives values rather than inverting them, and the accent is the clearest case. Datum's deep blue #0B5E78 is a <span class='num'>2.36:1</span> smudge on the dark ground and has to be re-picked as #3E9FC6 at <span class='num'>4.76:1</span>. Same token name, two values. Budget one pick per mode for every chromatic ink in the system."};
+},
+() => {
+  const c = pos("colour");
+  if(!c || c.id !== "c-plate") return null;
+  return {kind:"info", title:"This accent can never carry text anywhere in the system",
+    mech:"Vermilion #C4341C measures <span class='num'>4.74:1</span> on paper, <span class='num'>3.54:1</span> on a well and <span class='num'>3.43:1</span> on the ink plate. So it is a fill or a mark and nothing else, across all four of its jobs: focus mark, the one primary action, the register mark and the crop marks. Note that the primary action is the control that most needs contrast, and Folio's zero-colour law fills that same slot with an ink block at 16.18:1, which is 3.4x better on exactly that control."};
+},
+() => {
+  const c = pos("colour");
+  if(!c || c.id !== "c-neatline") return null;
+  return {kind:"info", title:"A five-ink lexicon requires the contract to be visible",
+    mech:"Water = I/O, wood = user data, contour = level, road = routes and actions. None of them may carry text and none of them may carry state. The contract only works if it is on screen, which costs a permanent KEY panel in the margin. That is the whole price, and it is a layout price rather than a token price."};
+},
+
+/* --- motion vs focus ---------------------------------------------- */
+() => {
+  const mo = pos("motion"); const f = pos("focus");
+  if(!mo || !mo.slowFocus || !f) return null;
+  if(f.quiet){
+    return {kind:"warn", title:"A quiet focus signal that also arrives last",
+      mech:"SETTLE 240ms on a focus change, on a signal that moves a 1px to 2px run rather than a filled band. Raking's own implementer named exactly this combination as the weakest link: one blue pixel on the top edge, near the floor of obvious-at-a-glance, and then a quarter of a second late. Its own measured case is <span class='num'>0.42%</span> of the window's pixels, 865 of 204,700. If you keep both, test it on a real panel rather than a PNG before committing."};
+  }
+  return {kind:"info", title:"Focus takes 240ms to arrive",
+    mech:"SETTLE 240ms is keyed to distance travelled and the focus transition is its signature. Against a loud focus signal that is fine. Against a quiet one it compounds."};
+},
+
+/* --- material law positive / plate rail --------------------------- */
+() => {
+  const m = pos("material"); const g = groundPrimary();
+  if(!m || m.id !== "m-plate" || g !== "dark") return null;
+  return {kind:"info", title:"Inversion as a state, on a ground that is already inverted",
+    mech:"PLATE's ink appears as the rail, a focused header, a terminal ground and a pressed control. On a dark load-bearing ladder those surfaces have to be re-derived as the ortho-lith equivalent (amber base, Dmax rail, and the knockout clears rather than inverts) or the rail simply disappears into the ground. PLATE shipped exactly that re-derivation; the point is that it is a second design, not a negative of the first."};
+},
+
+/* --- free rider dependencies -------------------------------------- */
+() => {
+  if(!fr["fr-appus"]) return null;
+  const i = pos("instr");
+  if(i && i.perpetual) return null; /* already stated by the instrumentation position */
+  return {kind:"info", title:"Per-window app_us does not exist yet in wm.c",
+    mech:"wm.c measures app_us in AGGREGATE only, so per-window attribution is new work. It is free with respect to every visual axis (mono text in a band that is drawn regardless), and its stated fallback is the window's repaint_pixels in the same slot, same face, no layout change. Decide which of the two you are shipping before the band is designed around a number that may not arrive."};
+},
+() => {
+  if(!fr["fr-clock"]) return null;
+  const i = pos("instr");
+  if(!i || !i.wideRail) return null;
+  return {kind:"info", title:"The stacked clock solves a problem this rail does not have",
+    mech:"Hours above minutes exists because a 56dp rail cannot hold 23:41 on one line at display size. PLATE's rail is 148dp. Keeping the stack here is a look, not a fix, which is fine as long as it is chosen for that reason."};
+},
+() => {
+  if(!fr["fr-legend"]) return null;
+  const a = pos("arrangement");
+  if(!a || a.id === "a-tile") return null;
+  return {kind:"info", title:"The grid legend still works, it just describes a softer grid",
+    mech:"MODULE 12 x 8 . 116/115 x 121 px . GUTTER 16 is instrumentation ABOUT the layout and changes no geometry, so it is free under any arrangement. Its best trick, a live check on the integer-division remainder distribution, only pays where the grid is drawn and integer-divided."};
+},
+() => {
+  const c = pos("colour");
+  if(!c || !fr["fr-word"]) return null;
+  if(!c.zero) return null;
+  return {kind:"ok", title:"The state word is what makes the zero-colour law safe",
+    mech:"OK / WARN / FAIL spelled beside the dot means no state is carried by hue alone, under any policy. It is four characters of text touching nothing but the label string, and it is exactly why the colour axis can be settled last without breaking anything upstream of it."};
+}
+];
+
+/* ============================================================
+   RENDER: axes
+   ============================================================ */
+
+function meterSVG(kind, value){
+  if(kind === "ratio"){
+    const w = 132, h = 7;
+    const lo = 1, hi = 21;
+    const f = v => (Math.log(Math.max(lo, Math.min(hi, v))) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
+    const x = Math.max(2, f(value) * w);
+    const tx = f(3) * w;
+    const col = value >= 3 ? "var(--ok)" : "var(--hard)";
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true">' +
+      '<rect x="0" y="2" width="' + w + '" height="3" fill="#20262a"></rect>' +
+      '<rect x="0" y="2" width="' + x.toFixed(1) + '" height="3" fill="' + col + '"></rect>' +
+      '<rect x="' + tx.toFixed(1) + '" y="0" width="1" height="' + h + '" fill="#7a848a"></rect>' +
+      '</svg>';
+  }
+  if(kind === "area"){
+    const w = 132, h = 7;
+    const x = Math.max(1.5, (value / 13) * w);
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true">' +
+      '<rect x="0" y="2" width="' + w + '" height="3" fill="#20262a"></rect>' +
+      '<rect x="0" y="2" width="' + x.toFixed(1) + '" height="3" fill="var(--accent)"></rect>' +
+      '</svg>';
+  }
+  return "";
+}
+
+function optionHTML(ax, p){
+  let meter = "";
+  if(p.ovr !== undefined){
+    meter = '<div class="ometer">' + meterSVG("ratio", p.ovr) +
+      '<div class="ocap">' + p.ovr.toFixed(2) + ':1 under overlap . tick is the 3:1 floor</div></div>';
+  } else if(p.area !== undefined){
+    meter = '<div class="ometer">' + meterSVG("area", p.area) +
+      '<div class="ocap">' + p.area + '% of the window\'s own pixels change</div></div>';
+  }
+  return '<label class="opt" data-axis="' + ax.id + '" data-pos="' + p.id + '">' +
+    '<input type="radio" name="' + ax.id + '" value="' + p.id + '">' +
+    '<div class="odir">' + p.dir + '</div>' +
+    '<div class="otitle">' + p.title + '</div>' +
+    '<div class="obody">' + p.body + '</div>' +
+    meter +
+    '<div class="ocost"><span class="k">cost</span>' + p.cost + '</div>' +
+    '</label>';
+}
+
+function axisHTML(ax){
+  let h = '<section class="axis" id="axis-' + ax.id + '">';
+  if(ax.pairTop){
+    h += '<div class="pairnote"><b>04 settles as one decision.</b> ' + ax.why + '</div>';
+  }
+  h += '<div class="axhead">' +
+       '<span class="axnum">' + ax.num + '</span>' +
+       '<h2 class="axname">' + ax.name + '</h2>' +
+       '<span class="axstate" id="st-' + ax.id + '">open</span>' +
+       '</div>';
+  h += '<p class="axq">' + ax.q + '</p>';
+  if(ax.why && !ax.pairTop) h += '<p class="axwhy">' + ax.why + '</p>';
+  h += '<div class="opts">' + ax.positions.map(p => optionHTML(ax, p)).join("") + '</div>';
+  if(ax.sub){
+    h += '<div class="subq" id="sub-' + ax.id + '" hidden><div class="sqt">' + ax.sub.label + '</div><div class="sqrow">' +
+      ax.sub.opts.map(o =>
+        '<label class="chip" data-sub="' + ax.sub.id + '" data-val="' + o.id + '">' +
+        '<input type="radio" name="' + ax.sub.id + '" value="' + o.id + '">' + o.label + '</label>').join("") +
+      '</div></div>';
+  }
+  h += '</section>';
+  return h;
+}
+
+function freeHTML(){
+  let h = '<section class="axis" id="axis-free">';
+  h += '<div class="axhead"><span class="axnum">FR</span><h2 class="axname">Free riders</h2>' +
+       '<span class="axstate" id="st-free">0 on</span></div>';
+  h += '<p class="axq">Features that combine with anything on any axis. They are independent toggles because nothing above constrains them, and they are here so the good parts of a direction you did not pick are not lost with it.</p>';
+  h += '<div class="friders">' + FREE.map(f =>
+    '<label class="fr" data-fr="' + f.id + '"><input type="checkbox" value="' + f.id + '">' +
+    '<div class="frtop"><span class="frbox"></span><span><span class="frname">' + f.name + '</span>' +
+    '<span class="frdir">' + f.dir + '</span></span></div>' +
+    '<div class="frwhy"><span class="k">free because</span>' + f.why + '</div>' +
+    '<div class="ocost"><span class="k">cost</span>' + f.cost + '</div></label>').join("") + '</div>';
+  h += '<p class="axq" style="margin-top:14px;color:var(--dim)">Apparatus\'s cut edge is often listed as a free rider too. It is not, quite: its value is conditional on overlap existing, so it lives on the window boundary axis above where the arrangement rule can see it. Under tiling it is worth exactly zero.</p>';
+  h += '</section>';
+  return h;
+}
+
+document.getElementById("axes").innerHTML = AXES.map(axisHTML).join("") + freeHTML();
+
+/* ============================================================
+   RENDER: evaluation + brief
+   ============================================================ */
+
+const ICONS = {
+  hard:'<svg class="ficon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3 L11 11 M11 3 L3 11" stroke="var(--hard)" stroke-width="1.6" fill="none"/></svg>',
+  warn:'<svg class="ficon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2 L13 12 H1 Z" stroke="var(--warn)" stroke-width="1.2" fill="none"/><path d="M7 6 V9" stroke="var(--warn)" stroke-width="1.4"/></svg>',
+  info:'<svg class="ficon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.4" stroke="var(--accent)" stroke-width="1.2" fill="none"/><path d="M7 6 V10 M7 4 V4.6" stroke="var(--accent)" stroke-width="1.4"/></svg>',
+  ok:'<svg class="ficon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.5 L5.5 11 L12 3.5" stroke="var(--ok)" stroke-width="1.6" fill="none"/></svg>'
+};
+const TAG = {hard:"hard conflict", warn:"degrades", info:"requires", ok:"holds"};
+const ORDER = {hard:0, warn:1, info:2, ok:3};
+
+function evaluate(){
+  const out = [];
+  RULES.forEach(r => { const f = r(); if(f) out.push(f); });
+  out.sort((a,b) => ORDER[a.kind] - ORDER[b.kind]);
+  return out;
+}
+
+function briefHTML(){
+  const g = pos("ground"), a = pos("arrangement"), f = pos("focus"), b = pos("boundary"),
+        d = pos("depth"), m = pos("material"), c = pos("colour"), t = pos("type"),
+        i = pos("instr"), mo = pos("motion"), r = pos("radius");
+  const gp = groundPrimary();
+  const open = AXES.filter(ax => !sel[ax.id]).map(ax => ax.name);
+  let h = "";
+
+  if(!g && !a && !f && !b && !d && !m && !c && !t && !i && !mo && !r && !FREE.some(x => fr[x.id])){
+    return '<p style="color:var(--dim)">Nothing chosen yet. Start at axis 01, or load one of the three blends and edit it.</p>';
+  }
+
+  const bits = [];
+  if(g){
+    if(g.id === "g-dual") bits.push("The ground is a <strong>dual ladder</strong>, two :root blocks with identical token names and values re-derived per mode" + (gp ? ", with the <strong>" + gp + "</strong> ladder load-bearing" : ", load-bearing ladder still open") + ".");
+    else if(g.id === "g-light") bits.push("The ground is <strong>light paper</strong> at L* 94 to 96, single ladder, no dark twin.");
+    else bits.push("The ground is <strong>dark warm graphite</strong> at L* 18.15, six rungs inside 12 L* points, with no light twin.");
+  }
+  if(a) bits.push("Windows are placed by <strong>" + a.title.toLowerCase() + "</strong>, so overlap is " +
+        (a.overlap === "none" ? "an explicit exception" : a.overlap === "rare" ? "possible but rare" : "the normal case") + ".");
+  if(m) bits.push("Surfaces follow <strong>" + m.title.toLowerCase() + "</strong>.");
+  if(b) bits.push("A window's edge is drawn by <strong>" + b.title.toLowerCase() + "</strong>" + (b.ovr !== undefined ? " (" + b.ovr.toFixed(2) + ":1 where it lands on another window)" : "") + ".");
+  if(d) bits.push("Which of two things is on top is read from <strong>" + d.title.toLowerCase() + "</strong>.");
+  if(f) bits.push("The focused window announces itself by <strong>" + f.title.toLowerCase() + "</strong>" + (f.area !== undefined ? ", changing " + f.area + "% of its own pixels" : "") + ".");
+  if(c) bits.push("Colour policy: <strong>" + c.title.toLowerCase() + "</strong>.");
+  if(t) bits.push("Type: <strong>" + t.title.toLowerCase() + "</strong>. There is no runtime glyph rasteriser, so that is the whole hierarchy budget.");
+  if(i) bits.push("The machine reports itself through <strong>" + i.title.toLowerCase() + "</strong>.");
+  if(mo) bits.push("Motion is <strong>" + mo.title.toLowerCase() + "</strong>.");
+  if(r) bits.push("Radius: <strong>" + r.title.toLowerCase() + "</strong>, all of it through the existing fb_rrect.");
+
+  h += "<p>" + bits.join(" ") + "</p>";
+
+  const on = FREE.filter(x => fr[x.id]);
+  if(on.length){
+    h += "<h4>Carried across from directions not chosen</h4><ul>" +
+      on.map(x => "<li>" + x.name + " <span style='color:var(--faint)'>(" + x.dir + ")</span></li>").join("") + "</ul>";
+  }
+
+  const costs = [g,a,f,b,d,m,c,t,i,mo,r].filter(Boolean);
+  if(costs.length){
+    h += "<h4>Costs accepted by these choices</h4><ul>" +
+      costs.map(p => "<li><strong>" + p.title + ":</strong> " + p.cost + "</li>").join("") + "</ul>";
+  }
+
+  if(open.length){
+    h += "<h4>Still open</h4><p class='open'>" + open.join(", ") + ".</p>";
+  }
+  return h;
+}
+
+function matchesPreset(p){
+  const keys = Object.keys(p.sel);
+  for(const k of keys){ if(sel[k] !== p.sel[k]) return false; }
+  for(const k of Object.keys(sel)){ if(p.sel[k] === undefined) return false; }
+  for(const f of FREE){ if(!!fr[f.id] !== (p.fr.indexOf(f.id) !== -1)) return false; }
+  return true;
+}
+function syncPresets(){
+  document.querySelectorAll("[data-preset]").forEach(b => {
+    b.setAttribute("aria-pressed", matchesPreset(PRESETS[b.dataset.preset]) ? "true" : "false");
+  });
+}
+
+function render(){
+  /* option selected states */
+  document.querySelectorAll(".opt").forEach(el => {
+    const on = sel[el.dataset.axis] === el.dataset.pos;
+    el.classList.toggle("is-sel", on);
+    el.querySelector("input").checked = on;
+  });
+  document.querySelectorAll(".chip").forEach(el => {
+    const on = sel[el.dataset.sub] === el.dataset.val;
+    el.classList.toggle("is-sel", on);
+    el.querySelector("input").checked = on;
+  });
+  document.querySelectorAll(".fr").forEach(el => {
+    const on = !!fr[el.dataset.fr];
+    el.classList.toggle("is-sel", on);
+    el.querySelector("input").checked = on;
+  });
+  AXES.forEach(ax => {
+    const st = document.getElementById("st-" + ax.id);
+    if(sel[ax.id]){ st.textContent = "set"; st.classList.add("set"); }
+    else { st.textContent = "open"; st.classList.remove("set"); }
+    if(ax.sub){
+      const sub = document.getElementById("sub-" + ax.id);
+      sub.hidden = sel[ax.id] !== ax.sub.when;
+    }
+  });
+  const frOn = FREE.filter(x => fr[x.id]).length;
+  document.getElementById("st-free").textContent = frOn + " on";
+
+  /* findings */
+  const found = evaluate();
+  const hard = found.filter(x => x.kind === "hard").length;
+  const warn = found.filter(x => x.kind === "warn").length;
+  const chosen = AXES.filter(ax => sel[ax.id]).length;
+
+  const vd = document.querySelector("#verdict .vdot");
+  const vt = document.getElementById("vtext");
+  const vs = document.getElementById("vsub");
+  if(chosen === 0){
+    vd.style.background = "var(--faint)"; vt.textContent = "nothing chosen"; vt.style.color = "var(--dim)";
+  } else if(hard){
+    vd.style.background = "var(--hard)"; vt.textContent = hard + (hard === 1 ? " hard conflict" : " hard conflicts"); vt.style.color = "var(--hard)";
+  } else if(warn){
+    vd.style.background = "var(--warn)"; vt.textContent = warn + (warn === 1 ? " degradation" : " degradations"); vt.style.color = "var(--warn)";
+  } else {
+    vd.style.background = "var(--ok)"; vt.textContent = chosen === AXES.length ? "coherent, all axes set" : "coherent so far"; vt.style.color = "var(--ok)";
+  }
+  vs.textContent = chosen + " / " + AXES.length + " axes";
+
+  const fEl = document.getElementById("findings");
+  if(!found.length){
+    fEl.innerHTML = '<div class="fnone">No conflict fires on this combination yet. That is not the same as coherent: axes left open cannot conflict with anything.</div>';
+  } else {
+    fEl.innerHTML = found.map(x =>
+      '<div class="finding f-' + x.kind + '">' +
+      '<div class="fhead">' + ICONS[x.kind] + '<span class="ftag">' + TAG[x.kind] + '</span>' +
+      '<span class="ftitle">' + x.title + '</span></div>' +
+      '<div class="fmech">' + x.mech + '</div></div>').join("");
+  }
+
+  syncPresets();
+  document.getElementById("brief").innerHTML = briefHTML();
+  writeHash();
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+
+document.getElementById("axes").addEventListener("change", e => {
+  const t = e.target;
+  const opt = t.closest(".opt");
+  if(opt){ sel[opt.dataset.axis] = opt.dataset.pos; if(opt.dataset.axis === "ground" && opt.dataset.pos !== "g-dual") delete sel.loadbearing; render(); return; }
+  const chip = t.closest(".chip");
+  if(chip){ sel[chip.dataset.sub] = chip.dataset.val; render(); return; }
+  const frl = t.closest(".fr");
+  if(frl){ fr[frl.dataset.fr] = t.checked; render(); }
+});
+
+/* keyboard focus ring fallback for browsers without :has() */
+document.getElementById("axes").addEventListener("focusin", e => {
+  const box = e.target.closest(".opt, .chip, .fr");
+  if(box && e.target.matches(":focus-visible")) box.classList.add("is-focus");
+});
+document.getElementById("axes").addEventListener("focusout", e => {
+  const box = e.target.closest(".opt, .chip, .fr");
+  if(box) box.classList.remove("is-focus");
+});
+
+document.querySelectorAll("[data-preset]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const p = PRESETS[btn.dataset.preset];
+    Object.keys(sel).forEach(k => delete sel[k]);
+    Object.assign(sel, p.sel);
+    FREE.forEach(f => fr[f.id] = p.fr.indexOf(f.id) !== -1);
+    document.querySelectorAll("[data-preset]").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+    render();
+    window.scrollTo({top:0, behavior:"instant"});
+  });
+});
+
+document.getElementById("btn-reset").addEventListener("click", () => {
+  Object.keys(sel).forEach(k => delete sel[k]);
+  FREE.forEach(f => fr[f.id] = false);
+  document.querySelectorAll("[data-preset]").forEach(b => b.setAttribute("aria-pressed","false"));
+  render();
+});
+
+document.getElementById("btn-copy").addEventListener("click", async () => {
+  const el = document.getElementById("brief");
+  const txt = el.innerText;
+  const btn = document.getElementById("btn-copy");
+  try { await navigator.clipboard.writeText(txt); btn.textContent = "copied"; }
+  catch(err){
+    const ta = document.createElement("textarea");
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); btn.textContent = "copied"; } catch(e2){ btn.textContent = "select and copy"; }
+    ta.remove();
+  }
+  setTimeout(() => { btn.textContent = "copy"; }, 1400);
+});
+
+/* ---------- hash state ---------- */
+function writeHash(){
+  const parts = [];
+  AXES.forEach(ax => { if(sel[ax.id]) parts.push(ax.id + ":" + sel[ax.id]); });
+  if(sel.loadbearing) parts.push("lb:" + sel.loadbearing);
+  const on = FREE.filter(x => fr[x.id]).map(x => x.id.replace("fr-",""));
+  if(on.length) parts.push("fr:" + on.join("+"));
+  const h = parts.join(",");
+  try { history.replaceState(null, "", h ? "#" + h : location.pathname + location.search); }
+  catch(err){ if(h) location.hash = h; }
+}
+function readHash(){
+  const h = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if(!h) return false;
+  let any = false;
+  h.split(",").forEach(part => {
+    const ix = part.indexOf(":");
+    if(ix < 0) return;
+    const k = part.slice(0, ix), v = part.slice(ix + 1);
+    if(k === "fr"){ v.split("+").forEach(x => { if(fr.hasOwnProperty("fr-" + x)) { fr["fr-" + x] = true; any = true; } }); return; }
+    if(k === "lb"){ sel.loadbearing = v; any = true; return; }
+    const ax = AXES.find(a => a.id === k);
+    if(ax && ax.positions.some(p => p.id === v)){ sel[k] = v; any = true; }
+  });
+  return any;
+}
+window.addEventListener("hashchange", () => { if(readHash()) render(); });
+
+readHash();
+render();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@
 > redistribution authority exists. These are source-bound change candidates,
 > not promises that every listed feature is shipped or runtime-complete.
 
-Build identity: `54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d`.
+Build identity: `eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08`.
 
 ## Change candidates
 
@@ -55,11 +55,11 @@ Start a complete landing gate only through gates/run-land-gate-contained.sh on a
 
 | Issue | Severity | Summary | Current facts |
 |---|---|---|---|
-| ISSUE-001 | RELEASE_BLOCKER | Public redistribution authority is absent. | public_release_blocked=true, inputs_without_established_grant=149 |
+| ISSUE-001 | RELEASE_BLOCKER | Public redistribution authority is absent. | public_release_blocked=true, inputs_without_established_grant=160 |
 | ISSUE-002 | RELEASE_BLOCKER | No current artifact hash has exact physical-hardware proof. | artifacts_without_physical_exact_hash_proof=9 |
 | ISSUE-003 | OPEN_GAP | Host inventory retains hardware skips and non-runs. | hardware_skips=3, not_run=12 |
-| ISSUE-004 | OPEN_REGRESSION | Some frame metrics exceed budget and no native-target distribution exists. | over_budget=2, native_target_measurements=0 |
-| ISSUE-005 | OPEN_GAP | Visual assets are not bound to the current build. | assets=41, current_build_bound=0, variant_dimensions_open=6 |
+| ISSUE-004 | OPEN_REGRESSION | Some frame metrics exceed budget and no native-target distribution exists. | over_budget=1, native_target_measurements=0 |
+| ISSUE-005 | OPEN_GAP | Current-build visual coverage is incomplete. | assets=45, current_build_bound=4, variant_dimensions_open=6 |
 | ISSUE-006 | OPEN_GAP | Accessibility capabilities and complete target workflows remain missing. | missing_capabilities=9, complete_target_workflows=0 |
 | ISSUE-007 | SECURITY_BLOCKER | Security evidence is incomplete and no claim is production-complete. | missing_claims=11, production_complete=0 |
 | ISSUE-008 | OPEN_GAP | Durable crash/audit records and booted structured-event emitters are absent. | missing_observability_capabilities=5, durable_crash_receipts=0, target_event_emitters=0 |

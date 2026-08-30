@@ -19,6 +19,7 @@ HOST = os.path.join(KERNEL_ROOT, "tests", "host")
 BUILD = os.path.join(HOST, "build.sh")
 POLICY = os.path.join(HOST, "test-policy.json")
 OUTPUT = os.path.join(METADATA, "test-inventory.json")
+COMPATIBILITY_OUTPUT = os.path.join(HOST, "test-inventory.json")
 KINDS = {"gate", "hardware-gate", "instrument", "manual-hardware",
          "optional-instrument", "builder"}
 AUTO_KINDS = {"gate", "hardware-gate"}
@@ -232,6 +233,13 @@ def serialized(value):
     return json.dumps(value, indent=2, sort_keys=True) + "\n"
 
 
+def write_atomic(path, value):
+    temporary = path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        handle.write(serialized(value))
+    os.replace(temporary, path)
+
+
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("--write", action="store_true")
@@ -244,14 +252,13 @@ def main(argv):
         policy = load(POLICY)
         value = generate(policy)
         if args.write:
-            temporary = OUTPUT + ".tmp"
-            with open(temporary, "w", encoding="utf-8") as handle:
-                handle.write(serialized(value))
-            os.replace(temporary, OUTPUT)
+            write_atomic(OUTPUT, value)
+            write_atomic(COMPATIBILITY_OUTPUT, value)
         else:
-            actual = load(OUTPUT)
-            if actual != value:
-                fail("test-inventory.json is stale; run --write")
+            for path in (OUTPUT, COMPATIBILITY_OUTPUT):
+                actual = load(path)
+                if actual != value:
+                    fail(f"{os.path.relpath(path, KERNEL_ROOT)} is stale; run --write")
         if args.selftest:
             selftest(policy)
         counts = value["counts"]

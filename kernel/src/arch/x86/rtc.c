@@ -125,6 +125,20 @@ static int same(const struct rtc_raw *a, const struct rtc_raw *b)
 }
 
 static int bcd(u8 v) { return (v & 0x0F) + ((v >> 4) * 10); }
+static int bcd_valid(u8 v) { return (v & 0x0F) <= 9 && (v >> 4) <= 9; }
+
+static int leap_year(int year)
+{
+    return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+}
+
+static int month_days(int year, int month)
+{
+    static const u8 days[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    if (month < 1 || month > 12) return 0;
+    if (month == 2 && leap_year(year)) return 29;
+    return days[month - 1];
+}
 
 /* ---- read it ------------------------------------------------------------- */
 int rtc_read(void)
@@ -147,6 +161,14 @@ decode:;
     int binary = (sb & B_BINARY) != 0;
     int h24    = (sb & B_24HOUR) != 0;
 
+    if (!binary && (!bcd_valid(a.s) || !bcd_valid(a.mi) ||
+        !bcd_valid((u8)(a.h & 0x7F)) || !bcd_valid(a.d) ||
+        !bcd_valid(a.mo) || !bcd_valid(a.y) ||
+        (a.cent != 0xFF && !bcd_valid(a.cent)))) {
+        rtc_last_fail = 3;
+        return 0;
+    }
+
     int sec = binary ? a.s  : bcd(a.s);
     int min = binary ? a.mi : bcd(a.mi);
     int day = binary ? a.d  : bcd(a.d);
@@ -159,6 +181,7 @@ decode:;
     int pm  = (!h24 && (a.h & 0x80)) ? 1 : 0;
     int hr  = binary ? (a.h & 0x7F) : bcd((u8)(a.h & 0x7F));
     if (!h24) {
+        if (hr < 1 || hr > 12) { rtc_last_fail = 3; return 0; }
         /* 12 AM is midnight (0) and 12 PM is noon (12) - the one case where
          * the obvious `hr + 12` is wrong in both directions. */
         if (hr == 12) hr = 0;
@@ -181,13 +204,15 @@ decode:;
 
     /* A clock reading 47:00 or month 0 is a clock that is not there. Better a
      * refusal than a header confidently drawing nonsense. */
-    if (l_month < 1 || l_month > 12 || l_day < 1 || l_day > 31 ||
-        l_hour > 23 || l_min > 59 || l_sec > 60) {
+    if (l_month < 1 || l_month > 12 || l_day < 1 ||
+        l_day > month_days(l_year, l_month) || l_hour > 23 ||
+        l_min > 59 || l_sec > 59) {
         rtc_last_fail = 3;
         return 0;
     }
 
     rtc_ok = 1;
+    rtc_last_fail = 0;
     return 1;
 }
 

@@ -23,11 +23,18 @@ The unboxed backends sit on the far side of the scoping decision in
 
 ## Documented but not in git
 
-_none — every file the docs describe is tracked._
+- [ ] `kernel/_gen.c`
+- [ ] `kernel/_gen64.c`
+- [ ] `kernel/_genefi.c`
+- [ ] `kernel/out.c`
 
 ## Open tensions (.ultra/TENSIONS.md)
 
 _none open._
+
+## Open pull requests
+
+- [ ] #8 fix: consolidate zlOS work and complete PRESSWORK round twelve  `codex/consolidate-all-2026-08-30`
 
 ---
 

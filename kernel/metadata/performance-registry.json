@@ -1,0 +1,270 @@
+{
+  "schema": "zlos.performance-registry.v1",
+  "result": "OPEN_REGRESSIONS_AND_GAPS",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "inputs": {
+    "benchmark_receipt": {
+      "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+      "sha256": "f73849fb06acdb985efe12409f85caf8b3c1fae0548949a845cc0e7db3582230"
+    },
+    "host_test_receipt": {
+      "path": "kernel/tests/host/test-run-receipt.json",
+      "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467"
+    },
+    "test_inventory": {
+      "path": "kernel/metadata/test-inventory.json",
+      "sha256": "13635150f95bb3d73c229fbe649352e38d515f0cedb84d73a054917a67167adf",
+      "targets": 79
+    },
+    "build_benchmark_receipt": {
+      "path": "kernel/docs/receipts/build-benchmark-host-2026-08-29.json",
+      "sha256": "036f35792c0d88562338e6629348cba6da046ce57d49f6a771080836e79787fe"
+    }
+  },
+  "method": {
+    "frame": "current benchmark p95 distributions",
+    "subsystems": "single current host-gate process wall times, grouped by category",
+    "budget_scope": "regression/runaway guard for this host gate only; not product latency"
+  },
+  "categories": [
+    {
+      "category": "frame",
+      "status": "HOST_DISTRIBUTION_FAILED",
+      "metric": "p95 frame time from seven independent host process samples",
+      "observed_us": 20949.0,
+      "budget_us": 16667.0,
+      "within_budget": false,
+      "metrics": [
+        {
+          "name": "wm-drag-full",
+          "route": "host shipping compositor logic",
+          "sample_count": 7,
+          "p50_us": 3280.15,
+          "p95_us": 3458.8,
+          "peak_us": 3458.8,
+          "budget_us": 16667.0,
+          "within_budget": true
+        },
+        {
+          "name": "fb-desktop-1920x1200-serial",
+          "route": "host shipping serial framebuffer path",
+          "sample_count": 7,
+          "p50_us": 5441.0,
+          "p95_us": 6496.0,
+          "peak_us": 6496.0,
+          "budget_us": 16667.0,
+          "within_budget": true
+        },
+        {
+          "name": "fb-desktop-1920x1200-four-band",
+          "route": "host parallel-band experiment; not the native zlOS route",
+          "sample_count": 7,
+          "p50_us": 3143.0,
+          "p95_us": 3827.0,
+          "peak_us": 3827.0,
+          "budget_us": 16667.0,
+          "within_budget": true
+        },
+        {
+          "name": "fb-desktop-2560x1440-serial",
+          "route": "host shipping serial framebuffer path",
+          "sample_count": 7,
+          "p50_us": 7489.0,
+          "p95_us": 12283.0,
+          "peak_us": 12283.0,
+          "budget_us": 16667.0,
+          "within_budget": true
+        },
+        {
+          "name": "fb-desktop-2560x1440-four-band",
+          "route": "host parallel-band experiment; not the native zlOS route",
+          "sample_count": 7,
+          "p50_us": 3980.0,
+          "p95_us": 4587.0,
+          "peak_us": 4587.0,
+          "budget_us": 16667.0,
+          "within_budget": true
+        },
+        {
+          "name": "fb-desktop-3840x2160-serial",
+          "route": "host shipping serial framebuffer path",
+          "sample_count": 7,
+          "p50_us": 15297.0,
+          "p95_us": 20949.0,
+          "peak_us": 20949.0,
+          "budget_us": 16667.0,
+          "within_budget": false
+        },
+        {
+          "name": "fb-desktop-3840x2160-four-band",
+          "route": "host parallel-band experiment; not the native zlOS route",
+          "sample_count": 7,
+          "p50_us": 6675.0,
+          "p95_us": 9310.0,
+          "peak_us": 9310.0,
+          "budget_us": 16667.0,
+          "within_budget": true
+        }
+      ],
+      "product_latency_claim": false
+    },
+    {
+      "category": "input",
+      "status": "HOST_GATE_BUDGET_PASSED",
+      "metric": "sum of current host-gate process wall times",
+      "observed_us": 596.752,
+      "budget_us": 10000.0,
+      "within_budget": true,
+      "targets": [
+        {
+          "target_id": "HT-036",
+          "target": "inputtest",
+          "elapsed_us": 596.752,
+          "executable_sha256": "fc630736aa808546436a8a99ae2758f2687e595cdc73304f8973ec404be86abb",
+          "output_sha256": [
+            "05806a38fdaecc57af1f96a48679bd0292a32e30b5bb2bfb6034410bab96dc60"
+          ]
+        }
+      ],
+      "product_latency_claim": false
+    },
+    {
+      "category": "io",
+      "status": "HOST_GATE_BUDGET_PASSED",
+      "metric": "sum of current host-gate process wall times",
+      "observed_us": 56177.055,
+      "budget_us": 250000.0,
+      "within_budget": true,
+      "targets": [
+        {
+          "target_id": "HT-003",
+          "target": "blocktest",
+          "elapsed_us": 1350.959,
+          "executable_sha256": "12e1144686af067455fb160d4607b65e951273c5dafcb8f280d4f807e8c467de",
+          "output_sha256": [
+            "ebcd428d2e5658227c41812f9f65453cd000d80177d8658429069c6540715167"
+          ]
+        },
+        {
+          "target_id": "HT-021",
+          "target": "fstest",
+          "elapsed_us": 54826.096,
+          "executable_sha256": "b24b6bc4fffd38e5383c1229ec1b04940ada6285681878fa7bbf537f0636a602",
+          "output_sha256": [
+            "d199f44665f79a306cef15dcaae313aacebb34990c136916df048e656d803379"
+          ]
+        }
+      ],
+      "product_latency_claim": false
+    },
+    {
+      "category": "network",
+      "status": "HOST_GATE_BUDGET_PASSED",
+      "metric": "sum of current host-gate process wall times",
+      "observed_us": 6628.35,
+      "budget_us": 100000.0,
+      "within_budget": true,
+      "targets": [
+        {
+          "target_id": "HT-051",
+          "target": "nettest",
+          "elapsed_us": 5762.399,
+          "executable_sha256": "ccc387eaa6af2fc1f663a378b035cc69256920d96ae1e557b7cc4a45830a5668",
+          "output_sha256": [
+            "b64da3b01dfa4d82c73fae1bf96904579a63e80ac1a1b656e68e0b89638102c9"
+          ]
+        },
+        {
+          "target_id": "HT-064",
+          "target": "tcptest",
+          "elapsed_us": 865.951,
+          "executable_sha256": "6c82365e24c213f6ee6adc303f2dcdf3765429d4242c484d874ae5eba19df9aa",
+          "output_sha256": [
+            "8b94670f81eae97bd6fceca8d4a6ba9f1fa48fa2347be7ac07ff43e437a3ff3f"
+          ]
+        }
+      ],
+      "product_latency_claim": false
+    },
+    {
+      "category": "launch",
+      "status": "HOST_GATE_BUDGET_PASSED",
+      "metric": "sum of current host-gate process wall times",
+      "observed_us": 991.219,
+      "budget_us": 10000.0,
+      "within_budget": true,
+      "targets": [
+        {
+          "target_id": "HT-018",
+          "target": "exectest",
+          "elapsed_us": 991.219,
+          "executable_sha256": "6b9b8546bf100e4a8a90a0fea683ea79c74fe6074a5f86cfd3345448a056115b",
+          "output_sha256": [
+            "159cb4e34041b9a6a494c03e09aa64fd109fce61a5a8368c1d2c493b4de087f6"
+          ]
+        }
+      ],
+      "product_latency_claim": false
+    },
+    {
+      "category": "memory",
+      "status": "HOST_GATE_BUDGET_PASSED",
+      "metric": "sum of current host-gate process wall times",
+      "observed_us": 8879.998,
+      "budget_us": 100000.0,
+      "within_budget": true,
+      "targets": [
+        {
+          "target_id": "HT-031",
+          "target": "heaptest",
+          "elapsed_us": 8879.998,
+          "executable_sha256": "7e0b06a341b5bade07c966cd6d1ba67d0d8b9da019b227cbc2384337008d653f",
+          "output_sha256": [
+            "db6e8ecbbeb540922edc8b5567dc4635bad8fbb2668a187c4cae6b3e4ca14b6e"
+          ]
+        }
+      ],
+      "product_latency_claim": false
+    },
+    {
+      "category": "build",
+      "status": "HOST_BUILD_DISTRIBUTION_FAILED",
+      "metric": "p95 wall time for seven full host-test-suite builds",
+      "observed_us": 169464051.125,
+      "budget_us": 60000000.0,
+      "within_budget": false,
+      "sample_count": 7,
+      "p50_us": 143988984.199,
+      "p95_us": 169464051.125,
+      "peak_us": 169464051.125,
+      "verified_executables": 67,
+      "receipt_sha256": "036f35792c0d88562338e6629348cba6da046ce57d49f6a771080836e79787fe",
+      "product_latency_claim": false,
+      "product_build_claim": false
+    }
+  ],
+  "counts": {
+    "categories": 7,
+    "host_budget_passed": 5,
+    "host_budget_failed": 2,
+    "missing": 0,
+    "native_target_categories": 0,
+    "physical_categories": 0
+  },
+  "open_regressions": [
+    "frame",
+    "build"
+  ],
+  "open_gaps": [
+    "product-build",
+    "product-latency",
+    "native-target",
+    "physical"
+  ],
+  "evidence_ceiling": "current host frame and host-test build distributions plus single-run gate wall-time guards for five categories; no product-build, product-latency, QEMU or physical promotion",
+  "weakest_link": "current host regressions: frame, build; product build and target latency remain unmeasured",
+  "generator": {
+    "path": "kernel/tools/generators/gen-performance-registry.py",
+    "sha256": "f92aa2e76c049a8256f63bc7b6b87d2993c1fa6824d290a8bb389ef471e9dfc9"
+  }
+}

@@ -17,12 +17,16 @@ HERE = Path(__file__).resolve().parent
 KERNEL_ROOT = HERE.parents[1]
 METADATA = KERNEL_ROOT / "metadata"
 OUTPUT = METADATA / "visual-registry.json"
+RECEIPT = KERNEL_ROOT / "docs/receipts/visual-qemu-2026-08-29.json"
+ARTIFACT_REGISTRY = METADATA / "artifact-registry.json"
+GOLDEN_REGISTRY = METADATA / "visual-golden-registry.json"
 PATTERNS = (
     "docs/evidence/virtio-gpu-proof.png",
     "shots/*.png",
     "docs/evidence/exercises/2026-08-24/bios/*.ppm",
     "docs/evidence/exercises/2026-08-24/uefi/*.ppm",
     "tests/host/*.ppm",
+    "docs/evidence/current-visuals-2026-08-29/*.png",
 )
 REQUIRED_VARIANTS = ("scale", "theme", "locale", "accessibility", "ui-state", "backend")
 
@@ -59,7 +63,9 @@ def dimensions(path: Path) -> tuple[int, int, str]:
     raise ValueError(f"unsupported or malformed visual artifact: {path}")
 
 
-def classification(relative: str) -> tuple[str, str]:
+def classification(relative: str, current: dict[str, dict]) -> tuple[str, str]:
+    if relative in current:
+        return "CURRENT_QEMU_SCREENSHOT", "exact current artifact/build/route/state receipt"
     if relative.startswith("tests/host/"):
         return "HOST_RENDER_UNBOUND", "host renderer output; no scenario/build sidecar"
     return "PRIOR_QEMU_SCREENSHOT_UNBOUND", "image name suggests prior QEMU evidence; no current build sidecar"
@@ -75,15 +81,19 @@ def discover() -> list[Path]:
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.visual-evidence-registry.v1":
         raise ValueError("wrong visual registry schema")
-    if value.get("result") != "INVENTORY_WITH_OPEN_GAPS":
-        raise ValueError("visual registry overpromoted unbound assets")
+    if value.get("result") != "PARTIAL_CURRENT_VISUAL_EVIDENCE":
+        raise ValueError("visual registry result drift")
     assets = value.get("assets", [])
     expected_paths = [path.relative_to(KERNEL_ROOT).as_posix() for path in discover()]
     if [row.get("path") for row in assets] != expected_paths:
         raise ValueError("visual asset set/order drift")
     for row in assets:
-        if row.get("current_build_bound") is not False:
-            raise ValueError(f"{row.get('path')}: unearned current-build binding")
+        current = row.get("evidence_class") == "CURRENT_QEMU_SCREENSHOT"
+        if row.get("current_build_bound") is not current:
+            raise ValueError(f"{row.get('path')}: current-build binding drift")
+        if current and (not row.get("route") or not row.get("state")
+                        or row.get("build_identity") != value.get("build_identity")):
+            raise ValueError(f"{row.get('path')}: current visual metadata incomplete")
         if len(row.get("sha256", "")) != 64 or row.get("width", 0) <= 0 or row.get("height", 0) <= 0:
             raise ValueError(f"{row.get('path')}: missing artifact identity/dimensions")
     counts = value.get("counts")
@@ -92,6 +102,11 @@ def validate(value: dict) -> None:
         "prior_qemu_unbound": sum(row.get("evidence_class") == "PRIOR_QEMU_SCREENSHOT_UNBOUND" for row in assets),
         "host_render_unbound": sum(row.get("evidence_class") == "HOST_RENDER_UNBOUND" for row in assets),
         "current_build_bound": sum(bool(row.get("current_build_bound")) for row in assets),
+        "current_qemu": sum(row.get("evidence_class") == "CURRENT_QEMU_SCREENSHOT" for row in assets),
+        "current_routes": len({row.get("route") for row in assets if row.get("current_build_bound")}),
+        "current_states": len({row.get("state") for row in assets if row.get("current_build_bound")}),
+        "strict_current_goldens": 4,
+        "declared_dynamic_masks": 4,
         "bios_uefi_pairs": len(value.get("bios_uefi_pairs", [])),
         "variant_dimensions_complete": 0,
         "variant_dimensions_open": 6,
@@ -109,11 +124,56 @@ def validate(value: dict) -> None:
 
 def build() -> dict:
     identity = json.loads((METADATA / "build-identity.json").read_text())["identity_sha256"]
+    receipt = json.loads(RECEIPT.read_text())
+    artifact_registry = json.loads(ARTIFACT_REGISTRY.read_text())
+    golden_registry = json.loads(GOLDEN_REGISTRY.read_text())
+    if receipt.get("schema") != "zlos.visual-qemu-receipt.v1" \
+            or receipt.get("result") != "PASS_CURRENT_ARTIFACT_SCREENSHOTS" \
+            or receipt.get("build_identity") != identity \
+            or receipt.get("artifact_registry", {}).get("sha256") != sha256(ARTIFACT_REGISTRY) \
+            or receipt.get("counts") != {
+                "routes": 2, "captures": 4, "states": 2, "blank_captures": 0,
+            }:
+        raise ValueError("current visual receipt is absent, failed or foreign")
+    if golden_registry.get("schema") != "zlos.visual-golden-registry.v1" \
+            or golden_registry.get("result") != "PASS_CURRENT_STRICT_GOLDENS_WITH_OPEN_MATRIX" \
+            or golden_registry.get("build_identity") != identity \
+            or golden_registry.get("visual_receipt", {}).get("sha256") != sha256(RECEIPT) \
+            or golden_registry.get("counts", {}).get("goldens") != 4 \
+            or golden_registry.get("counts", {}).get("dynamic_masks") != 4:
+        raise ValueError("current visual golden registry is absent, failed or foreign")
+    current = {}
+    for route in receipt.get("routes", []):
+        artifact = artifact_registry.get("artifacts", {}).get(
+            route.get("artifact", {}).get("name"), {})
+        if route.get("artifact", {}).get("sha256") != artifact.get("sha256"):
+            raise ValueError(f"{route.get('route')}: current visual artifact mismatch")
+        for capture in route.get("captures", []):
+            relative = capture.get("path", "")
+            prefix = "kernel/"
+            if not relative.startswith(prefix):
+                raise ValueError("current visual path is outside kernel")
+            relative = relative[len(prefix):]
+            if relative in current:
+                raise ValueError(f"duplicate current visual capture: {relative}")
+            current[relative] = {
+                **capture,
+                "route": route["route"],
+                "artifact": route["artifact"],
+            }
+    if len(current) != 4:
+        raise ValueError("current visual receipt does not bind four captures")
     assets = []
     for path in discover():
         relative = path.relative_to(KERNEL_ROOT).as_posix()
         width, height, image_format = dimensions(path)
-        evidence_class, reason = classification(relative)
+        evidence_class, reason = classification(relative, current)
+        binding = current.get(relative)
+        if binding and (binding.get("sha256") != sha256(path)
+                        or binding.get("bytes") != path.stat().st_size
+                        or binding.get("width") != width
+                        or binding.get("height") != height):
+            raise ValueError(f"{relative}: visual receipt identity mismatch")
         assets.append({
             "path": relative,
             "sha256": sha256(path),
@@ -122,9 +182,12 @@ def build() -> dict:
             "width": width,
             "height": height,
             "evidence_class": evidence_class,
-            "current_build_bound": False,
-            "build_identity": None,
-            "route": "bios" if "/bios/" in relative else ("uefi" if "/uefi/" in relative else None),
+            "current_build_bound": binding is not None,
+            "build_identity": identity if binding else None,
+            "route": (binding["route"] if binding else
+                      ("bios" if "/bios/" in relative else ("uefi" if "/uefi/" in relative else None))),
+            "state": binding.get("state") if binding else None,
+            "artifact": binding.get("artifact") if binding else None,
             "reason": reason,
         })
     by_path = {row["path"]: row for row in assets}
@@ -145,30 +208,44 @@ def build() -> dict:
         })
     value = {
         "schema": "zlos.visual-evidence-registry.v1",
-        "result": "INVENTORY_WITH_OPEN_GAPS",
+        "result": "PARTIAL_CURRENT_VISUAL_EVIDENCE",
         "build_identity": identity,
+        "current_receipt": {
+            "path": "kernel/docs/receipts/visual-qemu-2026-08-29.json",
+            "sha256": sha256(RECEIPT),
+        },
+        "current_golden_registry": {
+            "path": "kernel/metadata/visual-golden-registry.json",
+            "sha256": sha256(GOLDEN_REGISTRY),
+            "comparison": golden_registry["comparison_policy"],
+        },
         "assets": assets,
         "bios_uefi_pairs": pairs,
         "variant_coverage": {
-            "scale": {"status": "MISSING_METADATA", "required": "1x/2x/fractional and multiple modes"},
-            "theme": {"status": "MISSING_METADATA", "required": "light/dark/high-contrast and custom tokens"},
-            "locale": {"status": "MISSING_METADATA", "required": "long strings, RTL and non-Latin"},
-            "accessibility": {"status": "MISSING_METADATA", "required": "focus, semantics, magnification and reduced motion"},
-            "ui-state": {"status": "MISSING_METADATA", "required": "empty/loading/error/disabled/focus/hover/pressed"},
-            "backend": {"status": "PARTIAL_UNBOUND", "required": "exact artifact-bound BIOS/UEFI/GPU/fallback pairs"},
+            "scale": {"status": "PARTIAL_CURRENT", "observed": ["1920x1200 automatic scale"], "required": "1x/2x/fractional and multiple modes"},
+            "theme": {"status": "PARTIAL_CURRENT", "observed": ["current default"], "required": "light/dark/high-contrast and custom tokens"},
+            "locale": {"status": "PARTIAL_CURRENT", "observed": ["built-in English"], "required": "long strings, RTL and non-Latin"},
+            "accessibility": {"status": "PARTIAL_CURRENT", "observed": ["default motion and contrast"], "required": "focus, semantics, magnification and reduced motion"},
+            "ui-state": {"status": "PARTIAL_CURRENT", "observed": ["desktop-ready", "paint-open"], "required": "empty/loading/error/disabled/focus/hover/pressed"},
+            "backend": {"status": "PARTIAL_CURRENT", "observed": ["grub-bios32", "native-uefi64"], "required": "exact artifact-bound BIOS/UEFI/GPU/fallback pairs"},
         },
         "counts": {
             "assets": len(assets),
             "prior_qemu_unbound": sum(row["evidence_class"] == "PRIOR_QEMU_SCREENSHOT_UNBOUND" for row in assets),
             "host_render_unbound": sum(row["evidence_class"] == "HOST_RENDER_UNBOUND" for row in assets),
             "current_build_bound": sum(row["current_build_bound"] for row in assets),
+            "current_qemu": sum(row["evidence_class"] == "CURRENT_QEMU_SCREENSHOT" for row in assets),
+            "current_routes": len({row["route"] for row in assets if row["current_build_bound"]}),
+            "current_states": len({row["state"] for row in assets if row["current_build_bound"]}),
+            "strict_current_goldens": golden_registry["counts"]["goldens"],
+            "declared_dynamic_masks": golden_registry["counts"]["dynamic_masks"],
             "bios_uefi_pairs": len(pairs),
             "variant_dimensions_complete": 0,
             "variant_dimensions_open": len(REQUIRED_VARIANTS),
         },
         "open_gaps": list(REQUIRED_VARIANTS),
-        "evidence_ceiling": "asset inventory and unbound BIOS/UEFI pairing only; no current visual-regression promotion",
-        "weakest_link": f"none of {len(assets)} images names the current build identity; all six required variant dimensions remain open",
+        "evidence_ceiling": "four current-artifact QEMU screenshots and strict stable-region goldens plus historical asset inventory; no video, complete variant matrix, physical display or design approval",
+        "weakest_link": f"only 4 of {len(assets)} images are current and all six required variant dimensions remain incomplete",
         "generator": {"path": "kernel/tools/generators/gen-visual-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
     validate(value)
@@ -181,7 +258,7 @@ def selftest(value: dict) -> None:
     missing["assets"].pop()
     mutations["missing-asset"] = missing
     promoted = copy.deepcopy(value)
-    promoted["assets"][0]["current_build_bound"] = True
+    promoted["assets"][0]["current_build_bound"] = not promoted["assets"][0]["current_build_bound"]
     mutations["invented-build-binding"] = promoted
     dimensions_mutation = copy.deepcopy(value)
     dimensions_mutation["assets"][0]["width"] = 0
@@ -192,6 +269,9 @@ def selftest(value: dict) -> None:
     complete = copy.deepcopy(value)
     complete["variant_coverage"]["theme"]["status"] = "COMPLETE"
     mutations["unearned-variant-promotion"] = complete
+    golden = copy.deepcopy(value)
+    golden["counts"]["strict_current_goldens"] = 0
+    mutations["hidden-current-golden"] = golden
     caught = []
     for name, mutated in mutations.items():
         try:
@@ -228,7 +308,7 @@ def main() -> int:
         if args.check and (not OUTPUT.is_file() or json.loads(OUTPUT.read_text()) != value):
             raise ValueError("visual-registry.json is missing or stale")
         print(
-            "visual-registry: INVENTORY_WITH_OPEN_GAPS: "
+            "visual-registry: PARTIAL_CURRENT_VISUAL_EVIDENCE: "
             f"{value['counts']['assets']} assets, {value['counts']['bios_uefi_pairs']} route pairs, "
             f"{value['counts']['current_build_bound']} current-build-bound"
         )

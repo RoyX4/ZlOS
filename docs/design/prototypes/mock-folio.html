@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio - zlOS desktop mockup</title>
+<style>
+:root{
+  /* ---- FOLIO PALETTE. Token names are design.h names, lowercased. ---- */
+  --zd-paper-0:      #E9E4DB;   /* ground / desk, top stop of the one gradient */
+  --zd-paper-0b:     #E2DCD1;   /* ground, bottom stop */
+  --zd-paper-1:      #F4F1EA;   /* the sheet: window, rail, card, toolbar */
+  --zd-paper-2:      #FBFAF6;   /* the well: input, mono/terminal panel, code */
+  --zd-paper-3:      #DED8CB;   /* the band: selected row, hover, meter track */
+  --zd-ink-0:        #17150F;   /* display + emphasis ink, primary block, 2dp focus rule */
+  --zd-ink-1:        #2E2A22;   /* body ink, meter fill */
+  --zd-ink-2:        #4A4438;   /* secondary ink, control border on PAPER_0/PAPER_3 */
+  --zd-ink-3:        #5E5648;   /* captions, column heads, marginalia, unfocused title */
+  --zd-ink-mute:     #8E8674;   /* NON-TEXT + disabled labels only */
+  --zd-rule-hair:    #C2BAA8;   /* rank 1 keyline, table rules, the column grid */
+  --zd-rule-ctrl:    #8A8270;   /* boundary of an interactive control on PAPER_1/2 */
+  --zd-rule-mid:     #A29A87;   /* rank 2 keyline, popover */
+  --zd-red:          #A3301B;   /* THE only chromatic ink: caret, unsaved, failure */
+  --zd-green:        #2E6A38;   /* state: healthy / running / pass */
+  --zd-ochre:        #7E5305;   /* state: warning / read-only / drift */
+
+  /* derived, still declared here so no rule carries a literal */
+  --zd-rule-hair-45: rgba(194,186,168,0.45);  /* RULE_HAIR at 45% = the drawn grid */
+
+  /* not a zlOS token. The surround this mockup is pinned to. */
+  --zd-page-bg:      #2a2a2a;
+
+  /* ---- RADIUS SYSTEM: three values, chosen by what the element IS ---- */
+  --zd-r-page:  0px;      /* it is paper */
+  --zd-r-set:   2px;      /* it is cut into the paper */
+  --zd-r-round: 999px;    /* it moves, or it is a point (sentinel h/2) */
+
+  /* ---- TYPE: ratio 1.5, three sizes, two weights, four registers ---- */
+  --zd-sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --zd-mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+  --zd-r1: 8px;    /* FOLIO  - uppercase, +8% tracking */
+  --zd-r2: 12px;   /* BODY   - regular */
+  --zd-r3: 12px;   /* STRONG - bold */
+  --zd-r4: 16px;   /* LEAD   - bold */
+  --zd-r1-track: 0.64px;
+
+  /* ---- SPACE ---- */
+  --zd-rail-w: 160px;
+  --zd-margin: 24px;
+  --zd-pad: 20px;
+  --zd-gap: 8px;
+  --zd-row-h: 28px;
+  --zd-head-h: 32px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--zd-page-bg);}
+body{
+  font-family:var(--zd-sans);
+  -webkit-font-smoothing:antialiased;
+  padding:32px 24px 48px;
+  display:flex;flex-direction:column;align-items:center;
+}
+
+/* ---------- page furniture (outside the design) ---------- */
+.plate{width:1280px;max-width:100%;}
+.masthead{margin-bottom:16px;}
+.masthead h1{
+  font-size:var(--zd-r4);font-weight:700;color:var(--zd-paper-1);
+  letter-spacing:0.2px;line-height:1.2;
+}
+.masthead p{
+  font-size:var(--zd-r2);font-weight:400;color:var(--zd-rule-mid);
+  line-height:1.5;max-width:96ch;margin-top:6px;
+}
+.masthead .kicker{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-mute);display:block;margin-bottom:6px;
+}
+
+/* ---------- the desktop ---------- */
+.desk{
+  position:relative;width:1280px;height:720px;
+  outline:1px solid var(--zd-rule-mid);
+  overflow:hidden;
+}
+
+/* ================= THE RAIL ================= */
+.rail{
+  position:absolute;left:0;top:0;width:var(--zd-rail-w);height:100%;
+  background:var(--zd-paper-1);
+  border-right:1px solid var(--zd-rule-hair);
+  border-radius:var(--zd-r-page);
+  z-index:40;
+}
+.rail-col{position:absolute;left:20px;right:20px;} /* the 20dp text column */
+
+.mast{top:24px;}
+.mast .word{font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-0);line-height:20px;}
+.mast .ver{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-3);line-height:12px;margin-top:2px;
+}
+.mast .rule2{height:2px;background:var(--zd-ink-0);margin-top:8px;}
+
+.r1head{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-3);line-height:12px;
+}
+.hair{height:1px;background:var(--zd-rule-hair);}
+
+/* table of contents: numbered, typeset, no icons, no tiles */
+.toc{position:absolute;left:0;right:0;}
+.toc-row{
+  position:relative;height:var(--zd-row-h);display:flex;align-items:center;
+  padding-left:20px;padding-right:4px;
+  border-radius:var(--zd-r-page);
+}
+.toc-num{
+  width:20px;text-align:right;flex:none;
+  font-family:var(--zd-mono);font-size:var(--zd-r1);
+  color:var(--zd-ink-3);letter-spacing:0;
+}
+.toc-title{
+  margin-left:8px;font-size:var(--zd-r2);font-weight:400;color:var(--zd-ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:clip;
+}
+/* FOCUS, cue 3 of 3: the marginal mark + bold ink title */
+.toc-row.is-focused .toc-title{font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0);}
+.toc-row.is-focused .toc-num{color:var(--zd-ink-0);}
+.toc-mark{
+  position:absolute;left:0;top:0;width:3px;height:var(--zd-row-h);
+  background:var(--zd-ink-0);
+}
+
+.launch-row{
+  height:var(--zd-row-h);display:flex;align-items:center;padding-left:48px;
+  font-size:var(--zd-r2);color:var(--zd-ink-2);
+}
+.launch-row.index{color:var(--zd-ink-2);}
+
+/* marginalia: label flush left, tabular figures right-flush in the mono face */
+.marg{position:absolute;left:0;right:0;bottom:0;}
+.marg-line{
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:0 20px;height:16px;
+}
+.marg-k{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-3);
+}
+.marg-v{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);}
+
+/* ================= THE TYPE AREA ================= */
+.type-area{
+  position:absolute;left:var(--zd-rail-w);top:0;right:0;bottom:0;
+  background:linear-gradient(180deg,var(--zd-paper-0) 0%,var(--zd-paper-0b) 100%);
+  z-index:0;
+}
+/* the wallpaper IS the WM's 17-column grid: col 48dp, gutter 16dp, module 64dp */
+.grid-v{
+  position:absolute;left:24px;top:0;width:1073px;height:100%;
+  background-image:repeating-linear-gradient(to right,
+    var(--zd-rule-hair-45) 0px, var(--zd-rule-hair-45) 1px,
+    transparent 1px, transparent 48px,
+    var(--zd-rule-hair-45) 48px, var(--zd-rule-hair-45) 49px,
+    transparent 49px, transparent 64px);
+}
+.grid-h{position:absolute;left:24px;width:1073px;height:1px;background:var(--zd-rule-hair-45);}
+.grid-h.top{top:24px;}
+.grid-h.bot{top:695px;}
+
+.colophon{
+  position:absolute;left:24px;bottom:12px;
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-3);
+}
+.folio{
+  position:absolute;right:24px;bottom:8px;
+  font-family:var(--zd-mono);font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-3);
+}
+
+/* ================= A WINDOW IS A SHEET ================= */
+.win{
+  position:absolute;
+  border-radius:var(--zd-r-page);
+  border:1px solid var(--zd-rule-hair);   /* THE MOUNT, outer */
+  background:var(--zd-paper-1);
+}
+.win-in{
+  height:100%;
+  border:1px solid var(--zd-paper-2);     /* THE MOUNT, inner */
+  background:var(--zd-paper-1);
+  position:relative;overflow:hidden;
+}
+.head{
+  height:var(--zd-head-h);display:flex;align-items:center;
+  padding:0 var(--zd-pad);
+}
+.head .t{font-size:var(--zd-r2);font-weight:400;color:var(--zd-ink-3);white-space:nowrap;}
+.head .s{
+  margin-left:12px;font-size:var(--zd-r1);text-transform:uppercase;
+  letter-spacing:var(--zd-r1-track);color:var(--zd-ink-mute);white-space:nowrap;
+}
+/* FOCUS, cue 2 of 3: title steps INK_3 -> INK_0 and regular -> bold */
+.win.is-focused .head .t{font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0);}
+.win.is-focused .head .s{color:var(--zd-ink-3);}
+
+.ctrls{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.ctrl{
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  border-radius:var(--zd-r-page);
+}
+.ctrl svg{display:block;}
+.ctrl svg *{stroke:var(--zd-ink-1);stroke-width:1;fill:none;}
+
+/* FOCUS, cue 1 of 3 and the whole signal: the rule doubles and goes black */
+.focus-rule{height:1px;background:var(--zd-rule-hair);}
+.win.is-focused .focus-rule{height:2px;background:var(--zd-ink-0);}
+
+.body{padding:var(--zd-pad);}
+
+/* ---- terminal ---- */
+.term{
+  background:var(--zd-paper-2);
+  border:1px solid var(--zd-rule-hair);
+  border-radius:var(--zd-r-set);        /* cut into the paper */
+  padding:12px;
+  font-family:var(--zd-mono);font-size:var(--zd-r2);line-height:15px;
+  color:var(--zd-ink-1);white-space:pre;
+}
+.tk{color:var(--zd-ink-2);}
+.ok{color:var(--zd-green);}
+.info{color:var(--zd-ochre);}
+.caret{
+  display:inline-block;width:2px;height:11px;background:var(--zd-red);
+  vertical-align:-1px;margin-left:2px;
+}
+.btnrow{display:flex;gap:var(--zd-gap);margin-top:16px;}
+.btn{
+  height:24px;display:inline-flex;align-items:center;padding:0 12px;
+  font-size:var(--zd-r3);font-weight:700;
+  border-radius:var(--zd-r-page);
+  border:1px solid var(--zd-rule-ctrl);
+  background:var(--zd-paper-1);color:var(--zd-ink-0);
+}
+.btn.primary{background:var(--zd-ink-0);border-color:var(--zd-ink-0);color:var(--zd-paper-1);}
+.btn.tall{height:28px;padding:0 16px;}
+
+/* ---- files ---- */
+.toolbar{
+  height:var(--zd-row-h);display:flex;align-items:center;gap:8px;
+  padding:0 var(--zd-pad);
+}
+.toolbar .k{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-3);
+}
+.toolbar .v{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);}
+.toolbar .r{margin-left:auto;font-size:var(--zd-r1);text-transform:uppercase;
+  letter-spacing:var(--zd-r1-track);color:var(--zd-ink-3);}
+
+.flist{position:relative;}
+.frow{
+  position:relative;height:var(--zd-row-h);display:flex;align-items:center;
+  padding:0 var(--zd-pad);border-radius:var(--zd-r-page);
+}
+.frow .nm{font-size:var(--zd-r2);color:var(--zd-ink-1);margin-left:8px;}
+.frow svg *{stroke:var(--zd-ink-1);stroke-width:1;fill:none;}
+.frow.sel{background:var(--zd-paper-3);}
+.frow.sel .nm{font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0);}
+.frow.sel svg *{stroke:var(--zd-ink-0);}
+.frow .mark{position:absolute;left:0;top:0;width:3px;height:var(--zd-row-h);background:var(--zd-ink-0);}
+.scroll{
+  position:absolute;right:8px;width:4px;border-radius:var(--zd-r-round);
+  background:var(--zd-ink-mute);
+}
+
+/* ---- system monitor ---- */
+.stats{display:flex;gap:24px;}
+.stat{width:140px;flex:none;}
+.stat .k{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-3);line-height:12px;
+}
+.stat .v{
+  font-family:var(--zd-mono);font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-0);
+  line-height:20px;margin-top:2px;
+}
+.meter{height:4px;background:var(--zd-paper-3);border-radius:var(--zd-r-page);margin-top:6px;}
+.meter i{display:block;height:4px;background:var(--zd-ink-1);border-radius:var(--zd-r-page);}
+
+.ctl-row{display:flex;align-items:center;height:24px;margin-top:20px;}
+.ctl-row .lbl{font-size:var(--zd-r2);color:var(--zd-ink-1);width:80px;flex:none;}
+.ctl-row .st{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-1);margin-left:10px;
+}
+.ctl-row .num{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);}
+.toggle{width:28px;height:14px;border-radius:var(--zd-r-round);background:var(--zd-ink-0);position:relative;}
+.toggle b{
+  position:absolute;top:2px;left:16px;width:10px;height:10px;
+  border-radius:var(--zd-r-round);background:var(--zd-paper-1);
+}
+.slider{position:relative;width:200px;flex:none;height:4px;background:var(--zd-paper-3);border-radius:var(--zd-r-page);margin-right:12px;}
+.slider i{display:block;height:4px;background:var(--zd-ink-1);border-radius:var(--zd-r-page);}
+.slider b{
+  position:absolute;top:-4px;width:12px;height:12px;border-radius:var(--zd-r-round);
+  background:var(--zd-ink-0);
+}
+
+/* ---- about ---- */
+.tabs{display:flex;padding:0 var(--zd-pad);height:var(--zd-row-h);align-items:flex-end;}
+.tab{
+  height:var(--zd-row-h);display:flex;align-items:center;padding:0 12px;
+  font-size:var(--zd-r2);color:var(--zd-ink-2);border-radius:var(--zd-r-page);
+  border-bottom:1px solid var(--zd-rule-hair);
+}
+.tab:first-child{padding-left:0;}
+.tab.on{font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0);
+  border-bottom:2px solid var(--zd-ink-0);}
+.tabs .fill{flex:1;border-bottom:1px solid var(--zd-rule-hair);height:var(--zd-row-h);}
+.lead{font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-0);line-height:20px;}
+.claim{font-size:var(--zd-r2);color:var(--zd-ink-1);margin-top:12px;white-space:pre;}
+.lines{font-size:var(--zd-r2);color:var(--zd-ink-2);margin-top:6px;}
+.lines span{font-family:var(--zd-mono);}
+.dlg-actions{position:absolute;right:var(--zd-pad);bottom:var(--zd-pad);display:flex;gap:var(--zd-gap);}
+
+/* ================= SPECIMEN ================= */
+.spec{width:1280px;max-width:100%;margin-top:28px;color:var(--zd-rule-mid);}
+.spec h2{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);
+  color:var(--zd-ink-mute);margin-bottom:8px;font-weight:400;
+}
+.spec .cols{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap;}
+.sw-grid{display:flex;flex-wrap:wrap;gap:0 16px;max-width:720px;}
+.sw{width:112px;margin-bottom:10px;}
+.sw i{display:block;height:20px;border:1px solid var(--zd-ink-2);border-radius:var(--zd-r-page);}
+.sw em{
+  display:block;font-style:normal;font-size:var(--zd-r1);text-transform:uppercase;
+  letter-spacing:var(--zd-r1-track);color:var(--zd-rule-mid);margin-top:4px;
+}
+.sw small{display:block;font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-mute);}
+.scale div{color:var(--zd-paper-3);margin-bottom:7px;line-height:1.1;}
+.scale span{
+  font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-mute);
+  margin-left:8px;letter-spacing:0;text-transform:none;font-weight:400;
+}
+.rad div{
+  font-size:var(--zd-r2);color:var(--zd-paper-3);margin-bottom:8px;
+  display:flex;align-items:center;gap:8px;
+}
+.rad i{display:block;width:22px;height:14px;border:1px solid var(--zd-rule-mid);}
+.rad em{font-style:normal;font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-mute);}
+</style>
+</head>
+<body>
+
+<div class="plate">
+  <div class="masthead">
+    <span class="kicker">zlOS desktop - direction 2 of 4</span>
+    <h1>Folio</h1>
+    <p>The desktop is a printed page: a warm paper ground with a real type area, a left margin rail carrying the running table of contents, windows as square-cornered sheets snapped to a 12-column grid, and every distinction made with weight, case, scale, rule-thickness and whitespace, never with colour.</p>
+  </div>
+
+  <div class="desk">
+
+    <!-- ===================== TYPE AREA ===================== -->
+    <div class="type-area">
+      <div class="grid-v"></div>
+      <div class="grid-h top"></div>
+      <div class="grid-h bot"></div>
+      <div class="colophon">ZLOS &middot; 0.3 &middot; NO LIBC &middot; NO HEAP &middot; NO FLOAT</div>
+      <div class="folio">1</div>
+    </div>
+
+    <!-- ===================== WINDOW 1 : zl shell (back) ===================== -->
+    <div class="win" style="left:184px;top:80px;width:496px;height:252px;z-index:10;">
+      <div class="win-in">
+        <div class="head">
+          <span class="t">zl shell</span>
+          <span class="s">TTY0</span>
+          <span class="ctrls">
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5 13.5 H15"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5.5 5.5 H14.5 V14.5 H5.5 Z"/><path d="M10 5.5 V14.5"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M5.5 5.5 L14.5 14.5"/><path d="M14.5 5.5 L5.5 14.5"/></svg></span>
+          </span>
+        </div>
+        <div class="focus-rule"></div>
+        <div class="body">
+          <div class="term">zlOS 0.3   a desktop written in zl
+<span class="tk">[ </span><span class="ok">OK</span><span class="tk"> ]</span> framebuffer console, 120x37
+<span class="tk">[ </span><span class="ok">OK</span><span class="tk"> ]</span> APIC: IRQs via I/O APIC, 4 CPU(s)
+<span class="tk">[ </span><span class="ok">OK</span><span class="tk"> ]</span> zl runtime, kernel subset
+<span class="tk">[ </span><span class="info">INFO</span><span class="tk"> ]</span> no heap, zlfs mounts on demand, no scheduler
+ready.<span class="caret"></span></div>
+          <div class="btnrow">
+            <span class="btn">help</span>
+            <span class="btn">snake</span>
+            <span class="btn">3D cube</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== WINDOW 2 : Files ===================== -->
+    <div class="win" style="left:696px;top:192px;width:432px;height:252px;z-index:11;">
+      <div class="win-in">
+        <div class="head">
+          <span class="t">Files</span>
+          <span class="s">KERNEL/</span>
+          <span class="ctrls">
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5 13.5 H15"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5.5 5.5 H14.5 V14.5 H5.5 Z"/><path d="M10 5.5 V14.5"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M5.5 5.5 L14.5 14.5"/><path d="M14.5 5.5 L5.5 14.5"/></svg></span>
+          </span>
+        </div>
+        <div class="focus-rule"></div>
+        <div style="height:12px;"></div>
+        <div class="toolbar">
+          <span class="k">Path</span>
+          <span class="v">kernel/</span>
+          <span class="r">5 items</span>
+        </div>
+        <div class="hair"></div>
+        <div class="flist" style="margin-top:8px;">
+          <div class="frow">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5 H7.5 L9.5 3.5 V10.5 H2.5 Z"/><path d="M7.5 1.5 V3.5 H9.5"/></svg>
+            <span class="nm">kernel.zl</span>
+          </div>
+          <div class="frow sel">
+            <span class="mark"></span>
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5 H7.5 L9.5 3.5 V10.5 H2.5 Z"/><path d="M7.5 1.5 V3.5 H9.5"/></svg>
+            <span class="nm">fb.c</span>
+          </div>
+          <div class="frow">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5 H7.5 L9.5 3.5 V10.5 H2.5 Z"/><path d="M7.5 1.5 V3.5 H9.5"/></svg>
+            <span class="nm">intel.c</span>
+          </div>
+          <div class="frow">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5 H7.5 L9.5 3.5 V10.5 H2.5 Z"/><path d="M7.5 1.5 V3.5 H9.5"/></svg>
+            <span class="nm">wm.c</span>
+          </div>
+          <div class="frow">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 1.5 H7.5 L9.5 3.5 V10.5 H2.5 Z"/><path d="M7.5 1.5 V3.5 H9.5"/></svg>
+            <span class="nm">design.h</span>
+          </div>
+          <span class="scroll" style="top:8px;height:64px;"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== WINDOW 3 : System Monitor ===================== -->
+    <div class="win" style="left:184px;top:360px;width:432px;height:224px;z-index:12;">
+      <div class="win-in">
+        <div class="head">
+          <span class="t">System Monitor</span>
+          <span class="s">LIVE</span>
+          <span class="ctrls">
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5 13.5 H15"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5.5 5.5 H14.5 V14.5 H5.5 Z"/><path d="M10 5.5 V14.5"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M5.5 5.5 L14.5 14.5"/><path d="M14.5 5.5 L5.5 14.5"/></svg></span>
+          </span>
+        </div>
+        <div class="focus-rule"></div>
+        <div class="body">
+          <div class="stats">
+            <div class="stat">
+              <div class="k">CPU</div>
+              <div class="v">34</div>
+              <div class="meter"><i style="width:34%"></i></div>
+            </div>
+            <div class="stat">
+              <div class="k">MEM</div>
+              <div class="v">62</div>
+              <div class="meter"><i style="width:62%"></i></div>
+            </div>
+          </div>
+          <div class="ctl-row">
+            <span class="lbl">subpixel</span>
+            <span class="toggle"><b></b></span>
+            <span class="st">On</span>
+          </div>
+          <div class="ctl-row">
+            <span class="lbl">volume</span>
+            <span class="slider"><i style="width:70%"></i><b style="left:calc(70% - 6px)"></b></span>
+            <span class="num">70</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== WINDOW 4 : About  (FOCUSED, front) ===================== -->
+    <div class="win is-focused" style="left:568px;top:416px;width:496px;height:252px;z-index:20;">
+      <div class="win-in">
+        <div class="head">
+          <span class="t">About</span>
+          <span class="s">zlOS 0.3</span>
+          <span class="ctrls">
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5 13.5 H15"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="M5.5 5.5 H14.5 V14.5 H5.5 Z"/><path d="M10 5.5 V14.5"/></svg></span>
+            <span class="ctrl"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M5.5 5.5 L14.5 14.5"/><path d="M14.5 5.5 L5.5 14.5"/></svg></span>
+          </span>
+        </div>
+        <div class="focus-rule"></div>
+        <div style="height:20px;"></div>
+        <div class="tabs">
+          <span class="tab on">About</span>
+          <span class="tab">Stats</span>
+          <span class="tab">Files</span>
+          <span class="fill"></span>
+        </div>
+        <div style="padding:24px 20px 0 20px;">
+          <div class="lead">zlOS 0.3</div>
+          <div class="claim">no OS   no libc   no GNU</div>
+          <div class="lines"><span>11,374</span> lines, hand written</div>
+        </div>
+        <div class="dlg-actions">
+          <span class="btn tall">Details</span>
+          <span class="btn tall primary">Close</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== THE RAIL (over the type area) ===================== -->
+    <div class="rail">
+      <div class="rail-col mast">
+        <div class="word">zlOS</div>
+        <div class="ver">0.3</div>
+        <div class="rule2"></div>
+      </div>
+
+      <div class="rail-col" style="top:96px;">
+        <div class="r1head">Open</div>
+        <div class="hair" style="margin-top:4px;"></div>
+      </div>
+      <div class="toc" style="top:116px;">
+        <div class="toc-row"><span class="toc-num">1</span><span class="toc-title">zl shell</span></div>
+        <div class="toc-row"><span class="toc-num">2</span><span class="toc-title">Files</span></div>
+        <div class="toc-row"><span class="toc-num">3</span><span class="toc-title">System Monitor</span></div>
+        <div class="toc-row is-focused"><span class="toc-mark"></span><span class="toc-num">4</span><span class="toc-title">About</span></div>
+      </div>
+
+      <div class="rail-col" style="top:252px;">
+        <div class="r1head">Launch</div>
+        <div class="hair" style="margin-top:4px;"></div>
+      </div>
+      <div class="toc" style="top:272px;">
+        <div class="launch-row">Editor</div>
+        <div class="launch-row">Terminal</div>
+        <div class="launch-row">Notes</div>
+        <div class="launch-row">Monitor</div>
+        <div class="launch-row">Snake</div>
+        <div class="launch-row">Settings</div>
+        <div class="launch-row index">INDEX...</div>
+      </div>
+
+      <div class="marg">
+        <div class="hair" style="margin:0 20px;"></div>
+        <div style="height:12px;"></div>
+        <div class="marg-line"><span class="marg-k">Time</span><span class="marg-v">14:32</span></div>
+        <div class="marg-line"><span class="marg-k">CPU</span><span class="marg-v">34%</span></div>
+        <div class="marg-line"><span class="marg-k">Mem</span><span class="marg-v">62%</span></div>
+        <div class="marg-line"><span class="marg-k">Cores</span><span class="marg-v">4</span></div>
+        <div style="height:20px;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== SPECIMEN ===================== -->
+<div class="spec">
+  <h2>Folio specimen &middot; design.h tokens</h2>
+  <div class="sw-grid">
+    <div class="sw"><i style="background:var(--zd-paper-0)"></i><em>ZD_PAPER_0</em><small>#E9E4DB</small></div>
+    <div class="sw"><i style="background:var(--zd-paper-0b)"></i><em>ZD_PAPER_0B</em><small>#E2DCD1</small></div>
+    <div class="sw"><i style="background:var(--zd-paper-1)"></i><em>ZD_PAPER_1</em><small>#F4F1EA</small></div>
+    <div class="sw"><i style="background:var(--zd-paper-2)"></i><em>ZD_PAPER_2</em><small>#FBFAF6</small></div>
+    <div class="sw"><i style="background:var(--zd-paper-3)"></i><em>ZD_PAPER_3</em><small>#DED8CB</small></div>
+    <div class="sw"><i style="background:var(--zd-ink-0)"></i><em>ZD_INK_0</em><small>#17150F</small></div>
+    <div class="sw"><i style="background:var(--zd-ink-1)"></i><em>ZD_INK_1</em><small>#2E2A22</small></div>
+    <div class="sw"><i style="background:var(--zd-ink-2)"></i><em>ZD_INK_2</em><small>#4A4438</small></div>
+    <div class="sw"><i style="background:var(--zd-ink-3)"></i><em>ZD_INK_3</em><small>#5E5648</small></div>
+    <div class="sw"><i style="background:var(--zd-ink-mute)"></i><em>ZD_INK_MUTE</em><small>#8E8674</small></div>
+    <div class="sw"><i style="background:var(--zd-rule-hair)"></i><em>ZD_RULE_HAIR</em><small>#C2BAA8</small></div>
+    <div class="sw"><i style="background:var(--zd-rule-mid)"></i><em>ZD_RULE_MID</em><small>#A29A87</small></div>
+    <div class="sw"><i style="background:var(--zd-rule-ctrl)"></i><em>ZD_RULE_CTRL</em><small>#8A8270</small></div>
+    <div class="sw"><i style="background:var(--zd-red)"></i><em>ZD_RED</em><small>#A3301B</small></div>
+    <div class="sw"><i style="background:var(--zd-green)"></i><em>ZD_GREEN</em><small>#2E6A38</small></div>
+    <div class="sw"><i style="background:var(--zd-ochre)"></i><em>ZD_OCHRE</em><small>#7E5305</small></div>
+  </div>
+
+  <div class="cols" style="margin-top:16px;">
+    <div>
+      <h2>Type scale &middot; ratio 1.5, three sizes, two weights</h2>
+      <div class="scale">
+        <div style="font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-r1-track);">R1 folio uppercase tracked <span>8dp / 16 device / +8%</span></div>
+        <div style="font-size:var(--zd-r2);">R2 body regular <span>12dp / 24 device</span></div>
+        <div style="font-size:var(--zd-r3);font-weight:700;">R3 strong bold <span>12dp / 24 device</span></div>
+        <div style="font-size:var(--zd-r4);font-weight:700;">R4 lead bold <span>16dp / 32 device</span></div>
+        <div style="font-family:var(--zd-mono);font-size:var(--zd-r2);">mono reserved 0123456789 <span>tabular figures + machine text</span></div>
+      </div>
+    </div>
+    <div class="rad">
+      <h2>Radius &middot; classify, then apply</h2>
+      <div><i style="border-radius:var(--zd-r-page)"></i>ZD_R_PAGE <em>0 - it is paper</em></div>
+      <div><i style="border-radius:var(--zd-r-set)"></i>ZD_R_SET <em>2 - cut into the paper</em></div>
+      <div><i style="border-radius:var(--zd-r-round)"></i>ZD_R_ROUND <em>h/2 - it moves</em></div>
+    </div>
+    <div class="rad">
+      <h2>Keyline rank &middot; there is no shadow</h2>
+      <div><i style="border-color:var(--zd-rule-hair)"></i>rank 1 <em>ground to sheet, 1px HAIR</em></div>
+      <div><i style="border-color:var(--zd-rule-mid)"></i>rank 2 <em>sheet to popover, 1px MID</em></div>
+      <div><i style="border:2px solid var(--zd-ink-0);width:22px;height:14px;"></i>rank 3 <em>popover to modal, 2px INK_0</em></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

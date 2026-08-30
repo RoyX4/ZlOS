@@ -3,29 +3,27 @@
   "result": "PASS_WITH_OPEN_GAPS",
   "source_catalogue_sha256": "d549b87987531e449eb3e76c4f87e3d81ef979bd51df6c26b29b13475d9208ee",
   "feature_map_sha256": "2e9aeb57899da20a073a0bb07f04bfa544013c37b047b3ea77390901a21289bf",
-  "implementation_evidence_registry_sha256": "2120bc5f83a624ea552546b84a729f684393f70385f934f702068d811c84aca3",
-  "decision_ledger_sha256": "8ce28e80a3449ff6afeffce581040a1ecbb86c53b50d6939934ce28a1e31beb0",
-  "release_notes_sha256": "587babc898c5877b2f80cecc613f0288600d9a25489d904097069b7f362286eb",
-  "provenance_viewer_sha256": "1a1579755d5fa432bbebed7938d7e7b9dd1fe04eb4ba50803c752d8f994a02e8",
-  "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+  "implementation_evidence_registry_sha256": "a7c6ee1ab8659fe7a81a41b21520de94c552522a0e3f9bcaac7d34d854cc2f4f",
+  "decision_ledger_sha256": "220c1419d958f282705510968d1c7d99049fe9b3f7d7f9f00d8c1d8c0ea9fe9a",
+  "release_notes_sha256": "0d9e6e0ecdeeb365ec94052fd36d7888d018d2957ecb770ea36b56cedc1d134f",
+  "provenance_viewer_sha256": "3424f4e05e55c31d2c6e788cdbcda28b46da2bc136ca47dbe7541b296d6b5bd5",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
   "implementation_tree": {
     "path": ".",
-    "build_identity": "70ae1620a596a81f0e9fdd011e28bff11c730387378bc8aa2e2412a6689fc1de",
+    "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
     "generation_git_context": {
-      "branch": "codex/presswork-close",
-      "dirty": false,
+      "branch": "codex/906-feature-program",
+      "dirty": true,
       "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-      "head": "ba5a344742dad707b4b47800b6160468728deb0b"
+      "head": "3777678c0247862177eceb1c4f35e2402839d029"
     },
     "evidence_ceiling": "build-input generation context, not current checkout or artifact commit attestation"
   },
   "counts": {
     "total": 906,
-    "HISTORICAL_ONLY": 1,
-    "PARTIAL_CURRENT": 17,
-    "PARTIAL_HISTORICAL": 5,
-    "PLANNED_UNPROVED": 877,
-    "PROVED_CURRENT": 6
+    "PARTIAL_CURRENT": 51,
+    "PLANNED_UNPROVED": 847,
+    "PROVED_CURRENT": 8
   },
   "global_blockers": {
     "public_release_blocked": true,
@@ -36,14 +34,19 @@
     "signed_toolchain_attestation_missing": true,
     "toolchain_source_archive_missing": true,
     "dependency_offline_rebuild_missing": true,
-    "dependency_source_archives_missing": 145,
+    "dependency_source_archives_missing": 0,
     "per_object_provenance_receipts_missing": true,
-    "build_graph_scope_only_inputs": 9,
+    "build_graph_scope_only_inputs": 11,
     "future_build_graph_outputs_missing": false,
+    "address_low_shared_internal_manifest_missing": true,
+    "address_dynamic_user_base_runtime_only": true,
+    "address_page_table_transaction_coverage_incomplete": true,
+    "address_physical_execution_missing": true,
     "physical_exact_hash_artifacts": 9,
     "failure_injection_open_families": 7,
-    "hostile_corpus_open_families": 4,
+    "hostile_corpus_open_families": 2,
     "performance_over_budget": 2,
+    "performance_product_build_missing": true,
     "visual_unbound_assets": 41,
     "accessibility_missing_capabilities": 9,
     "security_open_claims": 17,
@@ -57,7 +60,7 @@
     "release_migration_inventory_incomplete": true,
     "release_previous_rollback_missing": true,
     "provenance_runtime_route_missing": true,
-    "provenance_current_screenshot_missing": true,
+    "provenance_current_screenshot_missing": false,
     "provenance_permissions_missing": true,
     "provenance_signatures_missing": true,
     "provenance_live_health_missing": true,
@@ -67,7 +70,7 @@
     "observability_open_capabilities": 12,
     "current_artifact_snapshot_missing": false,
     "current_qemu_evidence_missing": false,
-    "current_host_test_receipt_missing": true,
+    "current_host_test_receipt_missing": false,
     "current_host_benchmark_missing": false
   },
   "features": [
@@ -132,7 +135,7 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-          "sha256": "297335e0160ac161b72962a0d538b96efe76c1a8a8a8cf7dc45e950c02973c8f",
+          "sha256": "2c7ad3cf4fd77bbb8bfdb3792c4b29baa1a44605cee6c5842ac76b33df1c4699",
           "schema": "zlos.source-snapshot-receipt.v1",
           "result": "PASS_WITH_OPEN_CUSTODY_GAP"
         }
@@ -145,7 +148,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 149 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
+      "weakest_evidence": "all 160 exact build inputs are reconstructable, but the archive remains unsigned in the same worktree"
     },
     {
       "id": "EV-003",
@@ -170,14 +173,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/license-registry.json",
-          "sha256": "17ea97cba4cfb33bf0063365548f22de6d85f0a36851a915f5d10d90c2d5c985",
+          "sha256": "0df8c013274e2c53f5e63719bb1678aaf149c1be7ed56ab88b99380dc099eac4",
           "schema": "zlos.license-provenance-registry.v1",
           "result": "PASS_WITH_RELEASE_BLOCK"
         }
       ],
       "known_gaps": [
         "0 license files",
-        "149 inputs lack an established redistribution grant"
+        "160 inputs lack an established redistribution grant"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
@@ -191,38 +194,50 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_CURRENT",
+      "maturity": "PROVED_CURRENT",
       "acceptance_contract": "all direct/transitive source and binary inputs are immutable and verified",
       "routes": [
-        "python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest"
+        "python3 kernel/tools/generators/gen-dependency-lock.py --check --selftest",
+        "python3 kernel/tools/checks/verify-dependency-archives.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/metadata/dependency-lock.json"
+        "kernel/metadata/dependency-lock.json",
+        "kernel/docs/receipts/dependency-archives-host-2026-08-29.json"
       ],
       "tests": [
         "binary drift",
         "missing firmware identity",
         "missing package",
         "unresolved package dependency",
-        "invented source-archive custody"
+        "missing source relationship",
+        "archive byte drift",
+        "invented offline resolution"
       ],
       "evidence": [
         {
           "root": "implementation",
           "path": "kernel/metadata/dependency-lock.json",
-          "sha256": "4c8a6e5bb0c961222ceda49d37f7a04bcecc159db37f296b757e8eb10adee109",
-          "schema": "zlos.host-dependency-lock.v2",
+          "sha256": "a394ae73386983afaabbca4788ab653b8a9544f2aefe707d0353171fb1a3c3e2",
+          "schema": "zlos.host-dependency-lock.v3",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/dependency-archives-host-2026-08-29.json",
+          "sha256": "4f931ac96637f2e4cf2bd25ebb0da95e0eb736f403af86acda08d2671f67d03b",
+          "schema": "zlos.dependency-archive-receipt.v1",
+          "result": "PASS_LOCAL_OFFLINE_ARCHIVE"
         }
       ],
       "known_gaps": [
-        "145 package source archives absent",
-        "offline rebuild not proved"
+        "archive cache is retained only on the current host",
+        "one stale Linux binary/source pair is outside the current signed rolling index",
+        "off-host custody and hermetic rebuild remain EV-002/EV-005 work"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "15 commands, 2 firmware blobs, 91 runtime files and 145 recursively installed packages are exact; source archives and offline reconstruction remain absent"
+      "weakest_evidence": "20 commands, 2 firmware blobs, 101 runtime files, 160 binary archives and 104 source-package sets are exact and resolve offline with zero undeclared dependency edges"
     },
     {
       "id": "EV-005",
@@ -251,15 +266,15 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/toolchain-manifest.json",
-          "sha256": "e192dbdc1ad28d0ba338837a99044f15435e96ae1640228c37c5b9f62b112c4c",
+          "sha256": "17debf69ee8932071f0ecccc9d9a4751f0579f830ccf5a6c052ad6f2fef3b8fc",
           "schema": "zlos.toolchain-manifest.v1",
           "result": "PASS_WITH_OPEN_PORTABILITY_GAPS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/dependency-lock.json",
-          "sha256": "4c8a6e5bb0c961222ceda49d37f7a04bcecc159db37f296b757e8eb10adee109",
-          "schema": "zlos.host-dependency-lock.v2",
+          "sha256": "a394ae73386983afaabbca4788ab653b8a9544f2aefe707d0353171fb1a3c3e2",
+          "schema": "zlos.host-dependency-lock.v3",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
       ],
@@ -297,7 +312,7 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/reproducible-build-2026-08-22.json",
-          "sha256": "a69887b6397e3f5790dae08c492c640a18449ecfb0c28f724247b40e1e25f627",
+          "sha256": "05e9e8e319b71ec707ad59e4963ca51847606cbdadb1f5e88ff165e6484be45f",
           "schema": "zlos.reproducible-build-receipt.v1",
           "result": "PASS"
         }
@@ -334,27 +349,27 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/build-graph.json",
-          "sha256": "203a806d0c866b460eb24649a657762a377717aa83365e782320817d476feb8f",
+          "sha256": "fb0da821865b871e07363e066384d5ebe46d76dc9d4a9b998da61bb094a4753c",
           "schema": "zlos.build-graph.v1",
           "result": "PASS_CURRENT_ARTIFACTS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/artifact-registry.json",
-          "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
       ],
       "known_gaps": [
-        "8 conservative scope-only inputs",
+        "11 conservative scope-only inputs",
         "no per-object binary receipts",
         "future package/service outputs absent"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all 149 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"
+      "weakest_evidence": "all 160 inputs have recipe positions across 4 lanes and the nine exact artifacts are current-build bound"
     },
     {
       "id": "EV-008",
@@ -388,14 +403,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/wrapper-registry.json",
-          "sha256": "d2b07fb1524e04db73313458eac7f679e550a0fb0d4a200323413a0662cf7c16",
+          "sha256": "7a3864341924054020633c50d6eeae920bc3563b30d5bff35f54030db1e7acaf",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -404,7 +419,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "79 mandatory landing seams are guarded, not every repository command path"
+      "weakest_evidence": "108 mandatory landing seams are guarded, not every repository command path"
     },
     {
       "id": "EV-009",
@@ -430,14 +445,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/artifact-registry.json",
-          "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/app-evidence.json",
-          "sha256": "08343b13de5a819a0fd8e23a3184a1a276aaf2aad6b3aa7f6f32550e5ba7ddbb",
+          "sha256": "ada05d7a525967265592c65bd507a7a5932991151e059fcd22f1ff1e96bb4daf",
           "schema": "zlos.application-evidence-registry.v1",
           "result": null
         }
@@ -479,7 +494,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/evidence-registry.json",
-          "sha256": "2120bc5f83a624ea552546b84a729f684393f70385f934f702068d811c84aca3",
+          "sha256": "a7c6ee1ab8659fe7a81a41b21520de94c552522a0e3f9bcaac7d34d854cc2f4f",
           "schema": "zlos.evidence-registry.v1",
           "result": "PASS_CURRENT_INDEX_WITH_MIXED_EXECUTION_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -531,13 +546,13 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "HISTORICAL_ONLY",
+      "maturity": "PROVED_CURRENT",
       "acceptance_contract": "declared, compiled, registered, executed, skipped, failed, and shipped test sets compare automatically",
       "routes": [
         "python3 kernel/tools/run/run-host-tests.py --selftest"
       ],
       "artifacts": [
-        "kernel/tests/host/test-inventory.json",
+        "kernel/metadata/test-inventory.json",
         "kernel/tests/host/test-run-receipt.json"
       ],
       "tests": [
@@ -548,15 +563,15 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/tests/host/test-inventory.json",
-          "sha256": "ee7812d65ac0124342761b9d5ecaa954bbabcebdf4dcfe2f5e707fc905aac865",
+          "path": "kernel/metadata/test-inventory.json",
+          "sha256": "13635150f95bb3d73c229fbe649352e38d515f0cedb84d73a054917a67167adf",
           "schema": "zlos.host-test-inventory.v1",
           "result": null
         },
         {
           "root": "implementation",
           "path": "kernel/tests/host/test-run-receipt.json",
-          "sha256": "458c92fdaed915584432a1ab9d6a107ad226b61f39a0436e2b777b2647edb4f8",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
           "schema": "zlos.host-test-run-receipt.v1",
           "result": "PASS"
         }
@@ -565,7 +580,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the dated 73-target receipt records 59 passes, 3 hardware skips and 11 manual/instrument non-runs; it is not build-identity bound"
+      "weakest_evidence": "the current-build-bound 79-target receipt records 64 passes, 3 hardware skips and 12 explicit manual/instrument non-runs"
     },
     {
       "id": "EV-013",
@@ -583,13 +598,13 @@
         "kernel/metadata/adversarial-registry.json"
       ],
       "tests": [
-        "19 planted verifier mutations"
+        "23 planted verifier mutations"
       ],
       "evidence": [
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -600,7 +615,7 @@
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "19 current verifier canaries proved red; four hostile-corpus families and all exhaustive failure-family claims remain open"
+      "weakest_evidence": "23 current verifier canaries proved red; two hostile-corpus families and all globally exhaustive failure-family claims remain open"
     },
     {
       "id": "EV-014",
@@ -609,7 +624,7 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_HISTORICAL",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "workload, clock, samples, percentile, peak, machine, backend, artifact, and regression budget recorded",
       "routes": [
         "python3 kernel/tools/run/run-benchmarks.py --check --selftest"
@@ -618,27 +633,37 @@
         "kernel/docs/receipts/benchmark-host-2026-08-23.json"
       ],
       "tests": [
-        "hidden regression",
-        "invented percentile",
+        "hidden regressions",
+        "distribution summary drift",
+        "raw output drift",
+        "missing executable identity",
         "target overclaim"
       ],
       "evidence": [
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-          "sha256": "e215ddc1a198c6c52fde0ff9ceba108ac514b21ac51a953829e0e7f09708ce18",
+          "sha256": "f73849fb06acdb985efe12409f85caf8b3c1fae0548949a845cc0e7db3582230",
           "schema": "zlos.host-benchmark-receipt.v2",
           "result": "PASS_WITH_OPEN_REGRESSIONS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/run/run-benchmarks.py",
+          "sha256": "d11b49d15ef07a3214377c93086b0e3b056fc54be7cb107dff85d69140526b9b",
+          "schema": null,
+          "result": "SOURCE"
         }
       ],
       "known_gaps": [
-        "4 frame metrics over budget",
-        "no percentiles/peaks/native-target distribution"
+        "0 native-target measurements",
+        "host timings were collected on one contended desktop",
+        "no QEMU or physical performance distribution"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "host frame receipt exists, but it is not a complete performance qualification"
+      "weakest_evidence": "all 7 current host frame metrics retain raw samples and p50/p95/peak values; 1 exceed the 60 Hz budget (fb-desktop-3840x2160-serial), and target performance remains unmeasured"
     },
     {
       "id": "EV-015",
@@ -647,33 +672,67 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_HISTORICAL",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "exact device/firmware/topology, first use, reuse, reset, teardown, recovery, and raw evidence",
       "routes": [
+        "python3 kernel/tools/generators/gen-hardware-receipt-plan.py --check --selftest",
         "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
       ],
       "artifacts": [
+        "kernel/metadata/hardware-receipt-plan.json",
         "kernel/metadata/artifact-registry.json"
       ],
       "tests": [
-        "physical overclaim"
+        "wrong artifact",
+        "missing firmware",
+        "missing topology",
+        "missing raw evidence",
+        "missing lifecycle",
+        "invented physical pass",
+        "foreign build",
+        "bad media readback",
+        "evidence path escape",
+        "content digest drift",
+        "zero-receipt overclaim"
       ],
       "evidence": [
         {
           "root": "implementation",
+          "path": "kernel/metadata/hardware-receipt-plan.json",
+          "sha256": "48a3a64c015a8bf9a8f8c396a132e0bb7a850dddf5e362629b380aa0c2009423",
+          "schema": "zlos.hardware-receipt-plan.v1",
+          "result": "READY_FOR_PHYSICAL_EXECUTION_WITHOUT_RECEIPTS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/hardware-receipt-template.json",
+          "sha256": "a2e61bbdcd397d6c8fc66787ec43b91651ba1a674ba1607547a0d486cfcf911e",
+          "schema": "zlos.hardware-receipt-template.v1",
+          "result": "NOT_RUN"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/generators/gen-hardware-receipt-plan.py",
+          "sha256": "a3337fc277a210c4113c4e48dd28fd4840ebb08323f2cfb6872409539acceba1",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/artifact-registry.json",
-          "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
       ],
       "known_gaps": [
-        "0 of 9 exact artifact hashes have native physical proof"
+        "0 of 6 physical route cases have validated receipts",
+        "0 exact executable or boot-medium artifact hashes have native physical proof"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "hardware evidence is explicitly unpromoted; complete physical receipts remain open"
+      "weakest_evidence": "six exact-hash route plans, seven lifecycle scenarios and ten raw-evidence classes are current and mutation-checked; no physical run is claimed"
     },
     {
       "id": "EV-016",
@@ -685,32 +744,57 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "asset names artifact, mode, scale, theme, locale, scenario, time, and evidence ceiling",
       "routes": [
+        "python3 kernel/tools/run/run-visual-receipt.py --check --selftest",
         "python3 kernel/tools/generators/gen-visual-registry.py --check --selftest"
       ],
       "artifacts": [
+        "kernel/docs/receipts/visual-qemu-2026-08-29.json",
         "kernel/metadata/visual-registry.json"
       ],
       "tests": [
-        "invented build binding",
+        "missing route",
+        "foreign build",
+        "wrong artifact",
+        "missing state",
+        "image byte drift",
+        "pixel drift",
+        "blank capture",
+        "missing serial identity",
+        "dimension drift",
         "hidden variant gap"
       ],
       "evidence": [
         {
           "root": "implementation",
+          "path": "kernel/tools/run/run-visual-receipt.py",
+          "sha256": "57420584d19711bf70d6dbc5a2637938296ea496f689ec12a42e15be7c366cda",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/visual-qemu-2026-08-29.json",
+          "sha256": "36679572d19ee731f330da71db12da337b823e49afe1a183b64c64a9d879808c",
+          "schema": "zlos.visual-qemu-receipt.v1",
+          "result": "PASS_CURRENT_ARTIFACT_SCREENSHOTS"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/visual-registry.json",
-          "sha256": "ba7778d588677a54645ce6c32432bef972016be8220494e8618ebde31468a2c3",
+          "sha256": "731f185709ac4c42523c6a560135585ce97ea1e7b4503c07531f7aabc1add93f",
           "schema": "zlos.visual-evidence-registry.v1",
-          "result": "INVENTORY_WITH_OPEN_GAPS"
+          "result": "PARTIAL_CURRENT_VISUAL_EVIDENCE"
         }
       ],
       "known_gaps": [
-        "41 visual assets are unbound to the current build",
-        "6 variant dimensions are open"
+        "41 historical visual assets remain unbound",
+        "scale/theme/locale/accessibility/ui-state/backend matrices remain incomplete",
+        "no current video or physical-display receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "assets are hashed and measured, but none is a current screenshot/video receipt"
+      "weakest_evidence": "four nonblank current-artifact screenshots bind BIOS and native UEFI desktop/Paint states to exact images, serial logs, routes, QEMU binaries and build identity"
     },
     {
       "id": "EV-017",
@@ -722,34 +806,101 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "independent minimal recorder preserves symbols, input, state, and artifact identity",
       "routes": [
-        "python3 kernel/tools/generators/gen-observability-registry.py --check --selftest"
+        "python3 kernel/tools/checks/verify-crash.py --check --route bios32 --fault ud2 --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --check --route native-uefi64 --fault ud2 --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --check --route native-uefi64 --fault gp --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --check --route native-uefi64 --fault double-fault --selftest",
+        "python3 kernel/tools/generators/gen-observability-registry.py --check --selftest",
+        "kernel/tests/host/crashtest"
       ],
       "artifacts": [
-        "kernel/metadata/observability-registry.json"
+        "kernel/kernel.elf",
+        "kernel/zlOS.iso",
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
+        "kernel/docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json",
+        "kernel/docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json",
+        "kernel/docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json"
       ],
       "tests": [
-        "overpromoted fault frame",
-        "invented general registers",
-        "invented raw log",
+        "wrong vector",
+        "wrong checksum",
+        "wrong symbol",
+        "missing registers",
+        "wrong register",
+        "invented upper register",
+        "stale artifact",
+        "guest not halted",
+        "escaped emergency stack",
         "hidden crash gap"
       ],
       "evidence": [
         {
           "root": "implementation",
+          "path": "kernel/src/core/crash.c",
+          "sha256": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
+          "sha256": "eafc015f54e270c89e50d56de994541db18401759444f43504e2a4830393ac9f",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8f2f2afc2748d8fb4681d140d66a1c4c8aa597d05a9c5f88e3bd120bcd2badf8",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "46c3d9372f2bf3092169828e833bceba6a4146484f86696178aa885b749c69de",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8ed2512650b7ae2ff7881384310eafa376b2adf2d1a09f92345f30c68b53492d",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/observability-registry.json",
-          "sha256": "71c531f1229055d766793503d1a3d9e0c333fd7e9c09b7e4a8c474480742dc1d",
+          "sha256": "6a4013202866a524be88b11a75b5944ab5d71c95dea90b3da707c25b1f8b3f46",
           "schema": "zlos.observability-registry.v1",
           "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "known_gaps": [
         "0 durable crash receipts",
-        "no general-register frame, symbols, persistence or recovery"
+        "broader exception-vector and spurious-interrupt coverage remains absent",
+        "no emergency-stack guard page, stack symbols, persistence or recovery service"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "dated QEMU receipts prove a bounded control frame and invalid-opcode IP for older builds; current-build runtime and durable recovery remain absent"
+      "weakest_evidence": "four exact current QEMU receipts prove versioned 240-byte crash records: BIOS32/native-UEFI64 UD2, native-UEFI64 error-code GP, and an IST1-contained double fault with independently observed halted RSP; broader vectors and durable recovery remain open"
     },
     {
       "id": "EV-018",
@@ -796,14 +947,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/event-schema.json",
-          "sha256": "cf50a46a4955c51f4783f5ca93096af96f9e3858f440b8b87ceba33be058e36e",
+          "sha256": "787bc6bedd6ab0a9e792086eff8331973ba8547a7fd37e725d4baf5552f46800",
           "schema": "zlos.event-schema-registry.v1",
           "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/observability-registry.json",
-          "sha256": "71c531f1229055d766793503d1a3d9e0c333fd7e9c09b7e4a8c474480742dc1d",
+          "sha256": "6a4013202866a524be88b11a75b5944ab5d71c95dea90b3da707c25b1f8b3f46",
           "schema": "zlos.observability-registry.v1",
           "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -826,33 +977,56 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_HISTORICAL",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "every allocation, queue, I/O, provider, service, package, and lifecycle seam has forced failures",
       "routes": [
-        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest",
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest",
+        "python3 kernel/tools/checks/write-page-table-receipt.py --check --selftest"
       ],
       "artifacts": [
-        "kernel/metadata/adversarial-registry.json"
+        "kernel/metadata/adversarial-registry.json",
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json"
       ],
       "tests": [
+        "lost allocation sweep",
+        "page-table failure drift",
         "hidden failure gap"
       ],
       "evidence": [
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/heaptest.c",
+          "sha256": "d7650b4cff66938243dc7c3020a5a1cfa196d82affd1e0bc70a6725f809fe45b",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/page_table_txn.c",
+          "sha256": "95232c2f9d38f532d5b0923d3658622819356b412ace2f54ba175155752014e5",
+          "schema": null,
+          "result": "SOURCE"
         }
       ],
       "known_gaps": [
-        "all 7 failure families remain non-exhaustive"
+        "all 7 failure families remain non-exhaustive",
+        "provider, service and package injection are absent",
+        "queue, I/O and lifecycle seams remain bounded subsets",
+        "no physical-hardware failure-injection receipt exists"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "allocation/queue/I/O/lifecycle are partial; provider/service/package injection is absent"
+      "weakest_evidence": "current host proof covers all 32 positions in a bounded heap transaction and all 512 page-table writes with exact rollback; no broad family is complete"
     },
     {
       "id": "EV-020",
@@ -861,34 +1035,40 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_HISTORICAL",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "malformed ELF/archive/fs/network/font/image/web/IPC inputs are durable and minimized",
       "routes": [
-        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest"
+        "python3 kernel/tools/generators/gen-adversarial-registry.py --check --selftest",
+        "python3 kernel/tools/checks/check-elf-permissions.py --selftest",
+        "python3 kernel/tools/checks/verify-dependency-archives.py --receipt-check --selftest"
       ],
       "artifacts": [
-        "kernel/metadata/adversarial-registry.json"
+        "kernel/metadata/adversarial-registry.json",
+        "kernel/docs/receipts/dependency-archives-host-2026-08-29.json"
       ],
       "tests": [
-        "unearned ELF promotion",
+        "lost ELF proof",
+        "archive evidence drift",
+        "unearned font promotion",
         "hidden hostile gap"
       ],
       "evidence": [
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
       ],
       "known_gaps": [
-        "ELF/archive/font/IPC absent"
+        "no font parser/corpus exists",
+        "no typed IPC envelope parser/corpus exists"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "5 of 9 hostile families have executed host proof; PNG is now sanitizer-gated"
+      "weakest_evidence": "7 of 9 hostile families have current executed host proof; minimized ELF and archive cases now join the sanitizer-backed PNG/network/web/certificate/filesystem evidence"
     },
     {
       "id": "EV-021",
@@ -897,33 +1077,53 @@
       "primary_phase": "MP-00",
       "phase_dependencies": [],
       "owner": "Evidence, provenance and product truth",
-      "maturity": "PARTIAL_HISTORICAL",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "frame, input, I/O, network, launch, memory, and build budgets are machine checked",
       "routes": [
-        "python3 kernel/tools/run/run-benchmarks.py --check --selftest"
+        "python3 kernel/tools/generators/gen-performance-registry.py --check --selftest",
+        "python3 kernel/tools/run/run-benchmarks.py --check --selftest",
+        "python3 kernel/tools/run/run-build-benchmark.py --check --selftest",
+        "python3 kernel/tools/run/run-host-tests.py --selftest"
       ],
       "artifacts": [
-        "kernel/docs/receipts/benchmark-host-2026-08-23.json"
+        "kernel/metadata/performance-registry.json",
+        "kernel/docs/receipts/benchmark-host-2026-08-23.json",
+        "kernel/docs/receipts/build-benchmark-host-2026-08-29.json",
+        "kernel/tests/host/test-run-receipt.json"
       ],
       "tests": [
-        "hidden performance regression"
+        "hidden product-build gap",
+        "hidden regression",
+        "frame summary drift",
+        "invented product latency",
+        "invented target proof"
       ],
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-          "sha256": "e215ddc1a198c6c52fde0ff9ceba108ac514b21ac51a953829e0e7f09708ce18",
-          "schema": "zlos.host-benchmark-receipt.v2",
-          "result": "PASS_WITH_OPEN_REGRESSIONS"
+          "path": "kernel/metadata/performance-registry.json",
+          "sha256": "8ed025c4155561c929b8e04aa9598d2744f052bc4979c1ab55c57f5c90ee180b",
+          "schema": "zlos.performance-registry.v1",
+          "result": "OPEN_REGRESSIONS_AND_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/generators/gen-performance-registry.py",
+          "sha256": "f92aa2e76c049a8256f63bc7b6b87d2993c1fa6824d290a8bb389ef471e9dfc9",
+          "schema": null,
+          "result": "SOURCE"
         }
       ],
       "known_gaps": [
-        "input/I/O/network/launch/memory/build budgets are not joined"
+        "any current host category outside its declared guard remains an open regression",
+        "the product artifact build has no current timed distribution",
+        "input/I/O/network/launch/memory values are host-gate runtimes, not product latency",
+        "0 native-target and 0 physical categories"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "frame budget is partly machine-checked; the complete performance registry is not"
+      "weakest_evidence": "all seven categories are measured on the current host; 5 pass and 2 fail (frame, build), including host-build p95 169.464 seconds against a 60-second guard; product/target latency remains unmeasured"
     },
     {
       "id": "EV-022",
@@ -935,32 +1135,53 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "goldens cover scale, theme, locale, a11y, empty/error/loading, and backend variants",
       "routes": [
+        "python3 kernel/tools/checks/check-visual-goldens.py --check --selftest",
         "python3 kernel/tools/generators/gen-visual-registry.py --check --selftest"
       ],
       "artifacts": [
+        "kernel/metadata/visual-golden-registry.json",
         "kernel/metadata/visual-registry.json"
       ],
       "tests": [
-        "missing asset",
+        "missing golden",
+        "hidden variant gap",
+        "stable region defect",
+        "declared live region noise",
+        "dimension drift",
         "unearned variant promotion"
       ],
       "evidence": [
         {
           "root": "implementation",
+          "path": "kernel/tools/checks/check-visual-goldens.py",
+          "sha256": "11a2c422039e1182e55ad2d5048010025ff64c1059101966eace2896a3943266",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/visual-golden-registry.json",
+          "sha256": "70be92b9e8ba80cb42e5160ac035f453c4ad6ae42ea52d98043f324ab07efb8f",
+          "schema": "zlos.visual-golden-registry.v1",
+          "result": "PASS_CURRENT_STRICT_GOLDENS_WITH_OPEN_MATRIX"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/visual-registry.json",
-          "sha256": "ba7778d588677a54645ce6c32432bef972016be8220494e8618ebde31468a2c3",
+          "sha256": "731f185709ac4c42523c6a560135585ce97ea1e7b4503c07531f7aabc1add93f",
           "schema": "zlos.visual-evidence-registry.v1",
-          "result": "INVENTORY_WITH_OPEN_GAPS"
+          "result": "PARTIAL_CURRENT_VISUAL_EVIDENCE"
         }
       ],
       "known_gaps": [
-        "no current build-bound golden",
-        "scale/theme/locale/a11y/state/backend matrix incomplete"
+        "goldens cover only 2 routes and 2 states",
+        "scale/theme/locale/accessibility/ui-state/backend matrix incomplete",
+        "no physical display comparison"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "visual assets and BIOS/UEFI pairs are inventoried, not promoted as regression goldens"
+      "weakest_evidence": "four current strict RGB goldens reject every stable-region pixel change while four named live-telemetry masks prevent timing noise"
     },
     {
       "id": "EV-023",
@@ -986,7 +1207,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/accessibility-registry.json",
-          "sha256": "8cba6a38e098f5e7bf05363efd8b658aaa103341489dfc88be6cb9801edbc269",
+          "sha256": "8799d3f3e46da9325f2db1e325d606403f8347e9ddfcaf3e5a3d27b53570f859",
           "schema": "zlos.accessibility-proof-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -1024,7 +1245,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/security-registry.json",
-          "sha256": "65ae9e2493e868cdf04b062a41a33a5c52920d17d18799a5c606f5c0b12cdfae",
+          "sha256": "90e1ead4e95576e08ae73287ea4085007a2f9db0c5a3d5c88614f0af9e60ff40",
           "schema": "zlos.security-claim-registry.v1",
           "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -1103,7 +1324,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/decision-ledger.json",
-          "sha256": "8ce28e80a3449ff6afeffce581040a1ecbb86c53b50d6939934ce28a1e31beb0",
+          "sha256": "220c1419d958f282705510968d1c7d99049fe9b3f7d7f9f00d8c1d8c0ea9fe9a",
           "schema": "zlos.decision-ledger.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         },
@@ -1155,7 +1376,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/release-notes.json",
-          "sha256": "587babc898c5877b2f80cecc613f0288600d9a25489d904097069b7f362286eb",
+          "sha256": "0d9e6e0ecdeeb365ec94052fd36d7888d018d2957ecb770ea36b56cedc1d134f",
           "schema": "zlos.release-notes.v1",
           "result": "PASS_UNRELEASED_WITH_BLOCKERS"
         },
@@ -1210,7 +1431,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/provenance-viewer.json",
-          "sha256": "1a1579755d5fa432bbebed7938d7e7b9dd1fe04eb4ba50803c752d8f994a02e8",
+          "sha256": "3424f4e05e55c31d2c6e788cdbcda28b46da2bc136ca47dbe7541b296d6b5bd5",
           "schema": "zlos.provenance-viewer.v1",
           "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS"
         },
@@ -1244,19 +1465,40 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "bounded, identity-checked boot from supported raw/disk/optical layouts",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-raw.sh",
+        "kernel/tools/checks/verify-iso.sh",
+        "kernel/tools/checks/verify-64.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS.img",
+        "kernel/zlOS.iso",
+        "kernel/zlOS64.iso"
+      ],
+      "tests": [
+        "missing ready marker",
+        "wrong build identity",
+        "wrong app manifest"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no current physical BIOS artifact receipt",
+        "network and recovery boot layouts are absent"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current-build QEMU proves raw BIOS plus GRUB BIOS with 32-bit and 64-bit payloads; physical BIOS and the complete supported-layout contract remain open"
     },
     {
       "id": "BT-002",
@@ -1268,19 +1510,42 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "disciplined memory-map exit, GOP, exact image identity, and fallback",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh",
+        "kernel/tools/checks/verify-iso.sh",
+        "kernel/tools/checks/verify-64.sh"
+      ],
+      "artifacts": [
+        "kernel/BOOTX64.EFI",
+        "kernel/zlOS-usb.img",
+        "kernel/zlOS.iso",
+        "kernel/zlOS64.iso"
+      ],
+      "tests": [
+        "firmware exit failure",
+        "missing ready marker",
+        "wrong build identity",
+        "wrong app manifest"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no current physical UEFI/GOP receipt",
+        "firmware fallback and hostile memory-map coverage are incomplete"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "native UEFI64 and GRUB UEFI with 32-bit and 64-bit payloads are current-build QEMU routes; physical firmware and the complete fallback contract remain open"
     },
     {
       "id": "BT-003",
@@ -1292,19 +1557,37 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "versioned bounded layout with capacity/range validation and recovery",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-raw.sh"
+      ],
+      "artifacts": [
+        "kernel/kernel_raw.elf",
+        "kernel/zlOS.img"
+      ],
+      "tests": [
+        "oversized payload",
+        "missing marker",
+        "wrong build identity"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no versioned recovery layout",
+        "no current physical raw-media receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the exact raw-loader payload and disk image are reproducible and boot current-build QEMU; versioned recovery and physical-media proof remain open"
     },
     {
       "id": "BT-004",
@@ -1316,19 +1599,49 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "exact protocol version, modules, framebuffer, map, and malformed-handover tests",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-iso.sh",
+        "kernel/tools/checks/verify-64.sh",
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/kernel.elf",
+        "kernel/kernel64.elf",
+        "kernel/zlOS.iso",
+        "kernel/zlOS64.iso"
+      ],
+      "tests": [
+        "hostile Multiboot geometry",
+        "unknown handover flag",
+        "missing marker",
+        "wrong build identity"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "module-list admission is incomplete",
+        "no current physical Multiboot receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "four current-build GRUB BIOS/UEFI routes and the 288-check handover gate cover the retained Multiboot paths; complete module admission and physical proof remain open"
     },
     {
       "id": "BT-005",
@@ -1364,19 +1677,38 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "BIOS/UEFI \u00d7 raw/ISO/disk/partition/filesystem/config combinations have assertion payloads",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
+      ],
+      "artifacts": [
+        "kernel/metadata/artifact-registry.json"
+      ],
+      "tests": [
+        "missing route",
+        "wrong route artifact",
+        "wrong build identity",
+        "physical overclaim"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "network boot is absent",
+        "partition/filesystem/config combinations are incomplete",
+        "all nine exact artifacts lack current physical proof"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "six retained BIOS/UEFI and raw/GRUB/native routes are current-build QEMU evidence; the complete media/configuration cross-product and physical lane remain open"
     },
     {
       "id": "BT-007",
@@ -1412,19 +1744,67 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "versioned length-delimited ranges, modules, framebuffer, ACPI/FDT, entropy, and origin",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest",
+        "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/core/boot/boot_handover.c",
+        "kernel/src/core/boot/boot_handover.h",
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/metadata/artifact-registry.json"
+      ],
+      "tests": [
+        "mutation after seal",
+        "unknown flag",
+        "non-zero reserved byte",
+        "framebuffer overflow",
+        "hostile Multiboot geometry",
+        "empty exact-identity claim",
+        "entry-route validation failure"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/boot/boot_handover.c",
+          "sha256": "a47127daa8a60037bf4b2bdb6ea9103c44058e81e1ac0462d5a3738824081a10",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/architecture/boot/typed-boot-handover.md",
+          "sha256": "f69342c9683b7db7d799d3cb7ea7cf49ca81ca011b4b812fa4b11de66089d499",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "shipping loaders do not populate exact origin or kernel identity",
+        "no entropy field",
+        "foreign memory-map formats are not normalized",
+        "no physical ThinkPad receipt for the current artifacts"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "all entry families construct and validate one sealed 256-byte record, the current host gate passes 288 checks, and six current-build QEMU routes reach ready; exact identities, entropy, normalized maps and physical proof remain open"
     },
     {
       "id": "BT-009",
@@ -1628,19 +2008,48 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "cycle detection, readiness, deadlines, criticality, rollback, reverse teardown, receipts",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/generators/gen-init-registry.py --check --selftest",
+        "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
+      ],
+      "artifacts": [
+        "kernel/metadata/init-registry.json"
+      ],
+      "tests": [
+        "missing stage",
+        "unknown dependency",
+        "dependency cycle",
+        "route omission",
+        "wrong build identity"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/init-registry.json",
+          "sha256": "791e90076a9ebd2da2c9bd6516a73e13e27127b5d510a521e40f9e9d97e07d19",
+          "schema": "zlos.init-registry.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no general deadline engine",
+        "no reverse teardown execution",
+        "provider rollback remains stage-specific",
+        "no physical route receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the current registry binds 18 ordered stages and their dependencies, criticality and failure behavior to all six QEMU routes; general deadlines, rollback and reverse teardown remain open"
     },
     {
       "id": "BT-018",
@@ -1916,19 +2325,60 @@
         "MP-01"
       ],
       "owner": "Boot, firmware and architecture",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "validated hardware time separated from deadlines; timezone/locale in user service",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest",
+        "kernel/tools/checks/verify-clock.sh"
+      ],
+      "artifacts": [
+        "kernel/src/arch/x86/rtc.c",
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/docs/receipts/rtc-clock-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "BCD and binary decoding",
+        "12/24-hour conversion",
+        "torn-read refusal",
+        "bounded UIP wait",
+        "calendar admission",
+        "Unix epoch conversion",
+        "controlled QEMU clock bases"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/rtc.c",
+          "sha256": "03ebec78424f83a56717153b62484d76f1a1529bc7afdf5755989f0e88678b7a",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/rtc-clock-qemu-2026-08-29.json",
+          "sha256": "f7982dd7db96918b2cf4996f08e2233d957c2aa841ba1ce3e2965b91036d3eef",
+          "schema": "zlos.rtc-clock-qemu-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "hardware clock timezone policy is absent",
+        "no synchronization service",
+        "no drift/accuracy or suspend-resume contract",
+        "no current physical RTC receipt",
+        "locale presentation remains in-process"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "50 current-build host assertions and three exact-kernel controlled QEMU bases prove bounded RTC decoding and admission; timezone, synchronization, drift, suspend and physical accuracy remain open"
     },
     {
       "id": "BT-030",
@@ -1964,19 +2414,135 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "typed ownership, reserved-map proof, exhaustion, zero/reuse, and double-free detection",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest",
+        "kernel/verify.sh",
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/kernel.elf",
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/physical-page-allocator-native-uefi64-qemu-2026-08-30.json"
+      ],
+      "tests": [
+        "firmware usable-range admission",
+        "fixed 0..320 MiB reservation",
+        "typed owner release",
+        "reserved and foreign-owner refusal",
+        "double-free and unaligned-free refusal",
+        "deterministic exhaustion",
+        "zero-on-allocation and reuse",
+        "UEFI and Multiboot map parsing",
+        "failure-atomic process-frame lifecycle",
+        "bounded anonymous-frame zero/rollback/reclaim"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/pmm.h",
+          "sha256": "2a433acd02e8fab3fa28b0adbf80f7b4e18bcbd5b2121f2804bfb17570a90661",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/pmm.c",
+          "sha256": "ee557109e2e842db7bac3803300cddf3eb37d78b8b7253a2e68f84e850623182",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/process_memory.h",
+          "sha256": "427295bb63ee6e893c8166148eec6980c1f77ab705b5a7dce85d9e83870e4832",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/process_memory.c",
+          "sha256": "b9a874c4139b613224ee74546e2b63c8ff6a2ac3faeca108f13986c49f0a2b63",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "freestanding/runtime_kernel.c",
+          "sha256": "44a98e4017ae78b9ec6d759548b56a63faf1eb22054d5027bcca8b7c91145e80",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/kernel.zl",
+          "sha256": "c69681f274758145bd3b96de96c1486d44f141a32b09d50cc2932ed4f30aa9c8",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/verify.sh",
+          "sha256": "dd49681f9a66f249d72c47f37e5313d26906068aa486889e0821c431b80ee297",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/fixtures/golden.txt",
+          "sha256": "b9775cf133a33fa9a004a78853adcd13615eadb7b661c2fbe4da4cf4e8ac32eb",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/pmmtest.c",
+          "sha256": "8d11ae2b3bafb1b28c308b641465b55ae050b5636d7e748fd094841b848845b0",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/processmemorytest.c",
+          "sha256": "6e538516ef96987fcec1b503768bce955fcabc34ff52bfd8722993f80483fc6b",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/physical-page-allocator-native-uefi64-qemu-2026-08-30.json",
+          "sha256": "398aa94398c69495e9ae670ae1c616159cd1013a6e10cf63c328ee6d6d68505a",
+          "schema": "zlos.physical-page-allocator-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_TYPED_ALLOCATOR_WITH_OPEN_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "bounded to the first 1 GiB and pages at or above 320 MiB",
+        "the only production consumer is the fixed two-slot UEFI64 process diagnostic and its bounded anonymous window",
+        "no concurrent or interrupt-context locking contract",
+        "Multiboot has an exact golden boot gate but no dedicated allocator receipt",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current-build host checks prove map admission plus failure-atomic process and anonymous-frame ownership; exact Multiboot and native-UEFI64 QEMU routes restore allocator baselines, and UEFI reclaims two process address spaces plus bounded anonymous pages; general consumers, SMP, memory above 1 GiB and physical proof remain open"
     },
     {
       "id": "KR-002",
@@ -1988,19 +2554,59 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "checked size/alignment, explicit OOM, tags, poisoning, and failure injection",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/core/heap.c",
+        "kernel/tests/host/heaptest.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "checked size and 16-byte alignment",
+        "explicit counted OOM",
+        "24-bit tags preserved by realloc",
+        "32-position allocation failure sweep",
+        "bounded freed-block poison",
+        "4000-operation payload/invariant stress",
+        "constant allocator step bound"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/heap.c",
+          "sha256": "2f5ede5e2fe6cfd610df93d2336b2e9423e7c44af0e8f6935c55b1b707ca2bd4",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/heaptest.c",
+          "sha256": "d7650b4cff66938243dc7c3020a5a1cfa196d82affd1e0bc70a6725f809fe45b",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "poison covers an 8-byte guard rather than every freed payload byte",
+        "tags are diagnostic integers rather than an ownership policy",
+        "failure injection covers allocation only",
+        "host execution does not prove target concurrency or interrupt safety",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the current-build host gate proves checked allocation, tags, deterministic refusal and a bounded freed-block poison guard; target concurrency, wider poisoning and physical proof remain open"
     },
     {
       "id": "KR-003",
@@ -2012,19 +2618,59 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "generated non-overlap manifest for kernel, user, devices, stacks, heaps, and shared regions",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/generators/gen-address-space-registry.py --check --selftest",
+        "kernel/tools/checks/check-memmap.sh --selftest",
+        "python3 kernel/tools/checks/check-memmap-mirror.py"
+      ],
+      "artifacts": [
+        "kernel/metadata/address-space-registry.json"
+      ],
+      "tests": [
+        "physical overlap",
+        "inverted user stack",
+        "missing address category",
+        "foreign build identity",
+        "derived-field drift",
+        "source-address drift",
+        "duplicate low buffer",
+        "memory-map mirror drift"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/address_space_contract.json",
+          "sha256": "867f608be03604404b3e5ded9db39c36ea3ada5c553a6f6663dc226f2f5839e7",
+          "schema": "zlos.address-space-contract.v1",
+          "result": null
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/generators/gen-address-space-registry.py",
+          "sha256": "d0124a6757123da454dd193fcb9ef75ebcaf6bd1c224122fc37764f1e56d1fa0",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/address-space-registry.json",
+          "sha256": "12ec6424bb0a5cf1662f3f27ff191062fcc230946d74ba8781df461f4bb42647",
+          "schema": "zlos.address-space-registry.v1",
+          "result": "PASS_CURRENT_GENERATED_NON_OVERLAP_WITH_DYNAMIC_USER_TEMPLATE"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "the zl-low shared reservation is an envelope rather than an internal-size manifest",
+        "dynamic user virtual bases are selected at runtime",
+        "the separate KR-004 transaction receipt covers the heap window, not every mapped region",
+        "source/build evidence does not prove QEMU or physical execution"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the generated joined map proves 19 physical and 6 user-template regions do not overlap and match 24 source authorities; general virtual-area allocation and physical proof remain open"
     },
     {
       "id": "KR-004",
@@ -2036,19 +2682,77 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "reserve/validate/apply/flush/commit or exact rollback across full ranges",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest",
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "512-entry reserve without mutation",
+        "complete pre-write validation",
+        "all 512 nth-write failures",
+        "apply-flush failure",
+        "post-flush corruption",
+        "explicit rollback flush",
+        "failed rollback flush is fatal",
+        "commit finality",
+        "native UEFI heap-window alias before commit"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/page_table_txn.h",
+          "sha256": "fb61024acc4d16f1423bc3548497435e7089a98a35a5a3de1ba37035605cd608",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/page_table_txn.c",
+          "sha256": "95232c2f9d38f532d5b0923d3658622819356b412ace2f54ba175155752014e5",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/paging.c",
+          "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/pagetxntest.c",
+          "sha256": "5decfaa8d25c413df1f409fc7e9ce9c09df4933d650df0177cbec0b5cfccaacd",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "540a3b0ce1ec4d8310297b64eaf43242b93343ea323ee9b19d5ae142dab55ace",
+          "schema": "zlos.page-table-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_TRANSACTION_CORE_AND_NATIVE_HEAP_WINDOW_WITH_OPEN_GAPS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "callers must provide exclusive page-table ownership",
+        "no general page-table allocator or teardown service",
+        "fixed Ring-3 private tables are built before CR3 publication but do not use the journal",
+        "future live page-table writers must adopt the transaction core",
+        "32-bit paging remains disabled",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "a current host receipt proves exact full-range rollback under every injected write and flush failure, and native UEFI QEMU proves transactional heap-window and framebuffer-cache commits; SMP ownership, general lifecycle, other users and physical hardware remain open"
     },
     {
       "id": "KR-005",
@@ -2060,19 +2764,87 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "unique root, protected kernel half, owned mappings, teardown and switch receipts",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest",
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "two unique PML4 roots",
+        "separate user and TSS kernel stacks",
+        "AB12 context resume",
+        "supervisor mapping fault",
+        "all-or-nothing eight-frame acquisition",
+        "replacement and final reclamation"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/process_memory.h",
+          "sha256": "427295bb63ee6e893c8166148eec6980c1f77ab705b5a7dce85d9e83870e4832",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/process_memory.c",
+          "sha256": "b9a874c4139b613224ee74546e2b63c8ff6a2ac3faeca108f13986c49f0a2b63",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/processmemorytest.c",
+          "sha256": "6e538516ef96987fcec1b503768bce955fcabc34ff52bfd8722993f80483fc6b",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "fixed two-process diagnostic",
+        "teardown is not exercised under concurrent service load",
+        "no persistent process creation/reap service",
+        "no PID-reuse receipt",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current host and native-UEFI64 QEMU receipts prove failure-atomic owned frames, two disjoint address spaces, replacement and exact reclamation; persistent lifecycle services, concurrent teardown, PID reuse and physical proof remain open"
     },
     {
       "id": "KR-006",
@@ -2084,19 +2856,62 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "ring 3/EL0 plus SMEP/SMAP/PAN-like protections where present",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "iretq Ring 3 entry",
+        "int 0x80 return",
+        "CLI general-protection fault",
+        "kernel and device page faults",
+        "TSS I/O denial"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no SMEP or SMAP enablement receipt",
+        "x86-64 route only",
+        "no capability-mediated privileged-operation model",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current QEMU proves a bounded x86-64 CPL3/TSS/page-permission boundary; stronger hardware protections, architecture parity and physical proof remain open"
     },
     {
       "id": "KR-007",
@@ -2108,19 +2923,54 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "canonical, mapped, permission, full-span, bounded-string, and copyout-fault handling",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "overflow refusal",
+        "complete fixed-range admission before dereference",
+        "cross-guard pointer refusal",
+        "bounded non-NUL name copy"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/architecture/system/user-process-abi.md",
+          "sha256": "58a8abc1991790bbb4810a08b09ed67af6d197d47de24c87fcdd435634e232fe",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "fixed code/stack ranges instead of arbitrary mapping walks",
+        "no demand-fault or copyout-fault recovery",
+        "no hostile copy corpus",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "source-bound full-span checks and a current QEMU crossing-pointer refusal cover the fixed process layout; general mapped-memory copy recovery remains open"
     },
     {
       "id": "KR-008",
@@ -2132,19 +2982,56 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "no writable executable mapping; controlled authorized transition for JIT if ever supported",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh",
+        "python3 kernel/tools/generators/gen-artifact-registry.py --check --selftest"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/metadata/artifact-registry.json",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "RX user code",
+        "RW/NX user stack",
+        "supervisor-only inherited mappings",
+        "non-RWX kernel load segments"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/artifact-registry.json",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+          "schema": "zlos.artifact-boot-registry.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no authorized writable-to-executable transition protocol",
+        "no system-wide audit of every dynamic mapping",
+        "no SMEP/SMAP enablement receipt",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the current fixed user layout and shipped ELF segments are non-WX and hostile supervisor access faults in QEMU; dynamic-transition and physical proof remain open"
     },
     {
       "id": "KR-009",
@@ -2156,19 +3043,57 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "user/kernel stacks and critical arenas fault safely and kill only offender",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "absent lower-stack PTE",
+        "exact CR2 guard address",
+        "non-present user-write error 0x6",
+        "offender vector 14",
+        "sibling trace G and independent exit",
+        "kernel remains alive"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "fixed one-page lower user-stack guard is directly fault-observed",
+        "kernel-stack guards are source- and use-observed but not overflow-fault-injected",
+        "no emergency IST guard page",
+        "no general process lifecycle or recovery service",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "one current native-UEFI64 QEMU probe proves the fixed lower user-stack guard faults at its exact address and removes only the offender; fixed kernel-stack guards are separately source- and use-observed, while direct overflow injection, emergency guards and physical proof remain open"
     },
     {
       "id": "KR-010",
@@ -2180,19 +3105,93 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "reserved vs committed, zero fill, limits, reclaim, collision, and OOM semantics",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tests/host/anonmemorytest",
+        "kernel/tests/host/user-syscalls-test.sh",
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "32-page typed anonymous window",
+        "reserved versus committed state",
+        "zero-filled PMM commitment",
+        "failure-atomic OOM and PTE rollback",
+        "collision and owner refusal",
+        "mixed and holey reclaim",
+        "hardware accessed/dirty-bit admission",
+        "Ring-3 reserve/commit/release",
+        "exact reserved and released page faults",
+        "sibling survival",
+        "final PMM baseline restoration"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/anon_memory.h",
+          "sha256": "ed2c24adc62af909c535713eb35f794ff407559a855e127b023963c315db64e8",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/core/anon_memory.c",
+          "sha256": "5415297acc8c30530cd63fd13f953292c597835374ed3ac6e1b27f72b29a2c1f",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/user_syscalls.json",
+          "sha256": "b7ad9c0a9567aec99e4c9d0a4203c5eb40312e9a6cf1fef267249729a4f701f5",
+          "schema": "zlos.user-syscalls.v1",
+          "result": null
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/anonmemorytest.c",
+          "sha256": "55c3ef2d7e0adf840d40d4b1cc468456223b5bbdff60b1a519fb253d7a5dea35",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "fixed virtual window and caller-selected page indices",
+        "no virtual-area allocator or demand paging",
+        "no file-backed or shared mappings",
+        "no concurrent teardown protocol",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current host and native-UEFI64 QEMU evidence proves bounded reserve/commit/release, zero fill, failure-atomic OOM/rollback, collision/ownership checks, exact reserved/released faults and reclaim; general virtual-memory services and physical proof remain open"
     },
     {
       "id": "KR-011",
@@ -2348,19 +3347,72 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "per-thread stacks, guards, high-water evidence, safe interrupt nesting",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/generators/gen-address-space-registry.py --check --selftest",
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/metadata/address-space-registry.json",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "two private two-page supervisor RW/NX TSS stacks",
+        "one absent lower guard per fixed process stack",
+        "bounded high-water observations for both stack slots",
+        "safe kernel-stack-before-CR3 return order",
+        "syscall, timer-preemption and fault-path use"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/address_space_contract.json",
+          "sha256": "867f608be03604404b3e5ded9db39c36ea3ada5c553a6f6663dc226f2f5839e7",
+          "schema": "zlos.address-space-contract.v1",
+          "result": null
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/address-space-registry.json",
+          "sha256": "12ec6424bb0a5cf1662f3f27ff191062fcc230946d74ba8781df461f4bb42647",
+          "schema": "zlos.address-space-registry.v1",
+          "result": "PASS_CURRENT_GENERATED_NON_OVERLAP_WITH_DYNAMIC_USER_TEMPLATE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "fixed two-process diagnostic rather than general per-thread stack ownership",
+        "no direct kernel-stack overflow fault injection",
+        "no guarded emergency IST stack",
+        "no teardown or reclamation receipt",
+        "no SMP interrupt-nesting or current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current source-bound layout plus native-UEFI64 QEMU prove two guarded supervisor-only TSS stacks are selected and used with bounded high-water across syscall, preemption and fault paths; general thread lifecycle, direct overflow, IST, SMP and physical proof remain open"
     },
     {
       "id": "KR-018",
@@ -2468,19 +3520,56 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "per-CPU ownership, priorities, fairness, bounded queues, accounting, migration",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "separate PML4 and kernel stacks",
+        "cooperative AB12 resume",
+        "timer-preempted non-yielding PQ loops",
+        "faulted-process sibling survival"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "3d34aa9e8619e65318acdcd6e581c6487339b3d11c2974543a4133365b91059b",
+          "schema": "zlos.scheduler-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_TWO_PROCESS_GATE"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "the preemptive Ring-3 gate has exactly two fixed process slots",
+        "no general priority, fairness or deadline contract",
+        "no per-CPU run-queue ownership or process migration",
+        "spawn, reap, cancellation and resource reclamation are not persistent services",
+        "the separate eight-slot kernel task demo is cooperative and lacks FPU/SSE state",
+        "no current physical-hardware scheduler receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "one current native-UEFI64 QEMU route proves a bounded two-process preemption oracle; it is not a general per-CPU production scheduler"
     },
     {
       "id": "KR-023",
@@ -2684,19 +3773,53 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "malformed user state kills current process only; desktop and system continue",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "offender vector 13",
+        "sibling trace K and independent exit",
+        "kernel remains alive"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "only a bounded two-process diagnostic is covered",
+        "fault-vector and malformed-frame coverage is incomplete",
+        "no persistent desktop workload recovery receipt",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "one current QEMU probe proves a GP-faulted process does not stop its sibling or kernel; general malformed-state and desktop-continuity proof remain open"
     },
     {
       "id": "KR-032",
@@ -2711,17 +3834,24 @@
       "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "complete vector ownership, nesting, fault frames, spurious paths, and panic fallback",
       "routes": [
-        "python3 kernel/tools/checks/verify-crash.py --run --no-build --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --run --route bios32 --fault ud2 --no-build --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --run --route native-uefi64 --fault ud2 --no-build --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --run --route native-uefi64 --fault gp --no-build --selftest",
+        "python3 kernel/tools/checks/verify-crash.py --run --route native-uefi64 --fault double-fault --no-build --selftest",
         "kernel/tests/host/crashtest"
       ],
       "artifacts": [
         "kernel/kernel.elf",
-        "kernel/zlOS.iso"
+        "kernel/zlOS.iso",
+        "kernel/zlOS-usb.img"
       ],
       "tests": [
         "wrong vector",
         "wrong checksum",
         "wrong symbol",
+        "missing registers",
+        "wrong register",
+        "invented upper register",
         "stale artifact",
         "guest not halted"
       ],
@@ -2729,34 +3859,62 @@
         {
           "root": "implementation",
           "path": "kernel/src/core/crash.c",
-          "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
+          "sha256": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
           "path": "kernel/src/arch/x86/idt.c",
-          "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-          "sha256": "de64f612a17653fb070d94a364e6a5987d43ef4edf633af19a03274018e822de",
-          "schema": "zlos.cpu-fault-qemu-receipt.v1",
+          "sha256": "eafc015f54e270c89e50d56de994541db18401759444f43504e2a4830393ac9f",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8f2f2afc2748d8fb4681d140d66a1c4c8aa597d05a9c5f88e3bd120bcd2badf8",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "46c3d9372f2bf3092169828e833bceba6a4146484f86696178aa885b749c69de",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8ed2512650b7ae2ff7881384310eafa376b2adf2d1a09f92345f30c68b53492d",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
           "result": "PASS"
         }
       ],
       "known_gaps": [
-        "no general-register capture",
-        "no nested-fault recovery",
-        "no user-fault offender-only containment"
+        "no broad kernel-fatal exception-vector or spurious-interrupt QEMU matrix",
+        "double fault stops safely but has no recovery or emergency-stack guard page",
+        "offender-only user-fault containment is limited to the native-UEFI64 two-slot harness; no general process lifecycle recovery"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "all CPU exception vectors have typed entry frames and QEMU proves the vector-6 stop path; nesting, spurious-interrupt ownership and recoverable user-fault containment remain unproved"
+      "weakest_evidence": "all CPU exception vectors have typed entry frames; four current QEMU receipts prove UD2, error-code GP and IST1 double-fault stop paths, while the bounded native-UEFI64 two-slot harness proves one Ring-3 GP offender can be removed as its sibling exits; broader vectors, spurious interrupts and general recovery remain open"
     },
     {
       "id": "KR-033",
@@ -2840,19 +3998,75 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "generated table, unsigned bounds including negative/sign-bit indices, gaps, versioning",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tests/host/user-syscalls-test.sh",
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/src/arch/x86/user_syscalls_generated.h",
+        "kernel/tests/host/test-run-receipt.json",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "duplicate/unordered/gap mutation refusal",
+        "positive non-sign-bit IDs",
+        "stale generated-header refusal",
+        "zero",
+        "first gap",
+        "sign bit",
+        "all bits set",
+        "target ENOSYS result"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/user_syscalls.json",
+          "sha256": "b7ad9c0a9567aec99e4c9d0a4203c5eb40312e9a6cf1fef267249729a4f701f5",
+          "schema": "zlos.user-syscalls.v1",
+          "result": null
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/user_syscalls_generated.h",
+          "sha256": "16a8d11cb53e04cecdedd7b80c50aa6f1f2957101760153e0eac299d67ba9f6a",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/generators/gen-user-syscalls.py",
+          "sha256": "d62f5c2bbd0c0d6387ef4b0db57bc7ca040d2846921099b5cf66eeb15b6651b8",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "ABI table covers x86-64 only",
+        "dispatch bodies remain hand-written",
+        "no generated argument/type metadata",
+        "no compatibility translation layer",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "ABI version 1 generates the admitted 1..24 table and current host/QEMU gates reject unsigned unknown IDs with ENOSYS; typed arguments, compatibility and physical proof remain open"
     },
     {
       "id": "KR-037",
@@ -2864,19 +4078,57 @@
         "MP-01"
       ],
       "owner": "Kernel, memory and execution",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "calling convention, layout, errors, handles, time, signals, compatibility policy",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "kernel/tools/checks/verify-efi.sh"
+      ],
+      "artifacts": [
+        "kernel/zlOS-usb.img",
+        "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
+      ],
+      "tests": [
+        "documented x86-64 calling convention",
+        "negative errno values",
+        "eight whole-file handles",
+        "time/yield",
+        "bounded IPC and window calls",
+        "six-call Ring 3 lifecycle"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/docs/architecture/system/user-process-abi.md",
+          "sha256": "58a8abc1991790bbb4810a08b09ed67af6d197d47de24c87fcdd435634e232fe",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/usermode.c",
+          "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "0e185f9c95146054aad0b5a039d4ef4016db1b248771d7900d45ea4ff3287125",
+          "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+          "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "ABI is x86-64-only and version 1 has no translation layer",
+        "no signal contract",
+        "no compatibility or deprecation tooling",
+        "no generated argument/layout/error/handle manifest",
+        "no current physical-hardware receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the documented version-1 x86-64 ABI, generated number admission and current QEMU lifecycle are real, but signals, compatibility and physical qualification are absent"
     },
     {
       "id": "KR-038",
@@ -5297,19 +6549,48 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "sector geometry, capacity, alignment, async requests, flush, discard, errors, detach",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/drivers/storage/block.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "invalid geometry",
+        "out-of-range LBA",
+        "dirty-cache saturation",
+        "bounded service",
+        "explicit flush"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/drivers/storage/block.c",
+          "sha256": "729654179304583a89a7dafccfc395b3e8a8fb2532f0bc5ce0da9209ad072fd7",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "NVMe is the only target provider",
+        "requests are not typed or asynchronous",
+        "no discard, cancellation, detach or partial-completion contract",
+        "no current physical-device receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the current 10-assertion block host gate proves bounded read/write/cache/flush behavior over one provider; the complete provider-neutral asynchronous contract and physical proof remain open"
     },
     {
       "id": "FS-002",
@@ -5401,19 +6682,49 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "coherent ownership, dirty accounting, eviction, writeback and device-loss behavior",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/drivers/storage/block.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "read-your-write",
+        "dirty ordering",
+        "full-cache refusal",
+        "one-block writeback budget",
+        "forced drain",
+        "telemetry"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/drivers/storage/block.c",
+          "sha256": "729654179304583a89a7dafccfc395b3e8a8fb2532f0bc5ce0da9209ad072fd7",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no concurrent-owner model",
+        "no memory-pressure integration",
+        "device loss and retry/reset behavior are absent",
+        "no current QEMU fault-injection or physical receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "a current-build host receipt proves the fixed 128-page cache, oldest-sequence writeback, bounded service and refusal behavior; concurrency, pressure and device-loss semantics remain open"
     },
     {
       "id": "FS-006",
@@ -5557,19 +6868,56 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "persistent create/read/write/list/edit path with exact on-disk version",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/fs/fs.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "format and mount",
+        "named create/read/write/delete/rename",
+        "512/4096-byte geometry",
+        "separate-process cold remount",
+        "old-or-new replacement recovery"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/fs/fs.c",
+          "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/features/storage-and-files.md",
+          "sha256": "dc65afbf1a8dd30740ee501a3eec9effa4190b5a0ae621f3949d96423016cf79",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "flat 32-entry namespace",
+        "23-byte ASCII names",
+        "contiguous runs and no free-space index",
+        "no permissions or directories",
+        "no current QEMU persistence or physical-media receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the current 133-assertion host gate proves zlfs v2 named-file behavior, hostile admission and cold-process recovery; general filesystem semantics and current target persistence remain open"
     },
     {
       "id": "FS-012",
@@ -5661,19 +7009,49 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "checked allocation, sparse policy, zeroing, concurrent maps and rollback",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/fs/fs.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "checked length overflow",
+        "growth relocation",
+        "neighbor preservation",
+        "failed-copy rollback",
+        "4096-byte geometry"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/fs/fs.c",
+          "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no explicit truncate API",
+        "no sparse files or hole policy",
+        "no concurrent mappings",
+        "growth can require half the remaining space",
+        "no target or physical receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "host proof covers checked contiguous-run growth, relocation and rollback without overlap; truncate, sparse, mapping and target behavior remain open"
     },
     {
       "id": "FS-016",
@@ -5791,19 +7169,55 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "flush/fsync/barrier meaning from app through filesystem to device",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/drivers/storage/block.c",
+        "kernel/src/fs/fs.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "explicit filesystem sync",
+        "bounded dirty drain",
+        "data-before-metadata sequence",
+        "flush failure refusal"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/drivers/storage/block.c",
+          "sha256": "729654179304583a89a7dafccfc395b3e8a8fb2532f0bc5ce0da9209ad072fd7",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/fs/fs.c",
+          "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "NVMe command completion is the lowest stated boundary",
+        "no device power-loss cache contract",
+        "no per-file fsync or barriers",
+        "no current QEMU power-cut or physical durability receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "current host tests prove the software sync boundary and ordered cache drain; stable-media meaning through controller caches and physical power loss remains open"
     },
     {
       "id": "FS-021",
@@ -5817,19 +7231,49 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "checksummed replay, ordering, torn-write and power-cut matrix",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/fs/fs.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "dual checksummed generations",
+        "data-before-header publication",
+        "seven replacement cut points",
+        "newest-generation corruption fallback",
+        "failed-directory rollback"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/fs/fs.c",
+          "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "transaction scope is one flat-directory mutation",
+        "there is no append journal or replay log",
+        "generation wrap policy is narrow",
+        "no multi-object transaction",
+        "no current target or physical power-cut receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "zlfs v2 has a current host-proved dual-generation transaction protocol with old-or-new recovery; general journal/replay and target power-loss proof remain open"
     },
     {
       "id": "FS-022",
@@ -5895,19 +7339,49 @@
         "MP-05"
       ],
       "owner": "Storage, filesystems, packages and recovery",
-      "maturity": "PLANNED_UNPROVED",
+      "maturity": "PARTIAL_CURRENT",
       "acceptance_contract": "length/checksum/range/cycle validation before mount and bounded refusal",
-      "routes": [],
-      "artifacts": [],
-      "tests": [],
-      "evidence": [],
+      "routes": [
+        "python3 kernel/tools/run/run-host-tests.py --run --selftest"
+      ],
+      "artifacts": [
+        "kernel/src/fs/fs.c",
+        "kernel/tests/host/test-run-receipt.json"
+      ],
+      "tests": [
+        "bad magic",
+        "future version",
+        "whole-block checksum corruption",
+        "geometry overflow",
+        "entry range overflow",
+        "corrupt newest generation"
+      ],
+      "evidence": [
+        {
+          "root": "implementation",
+          "path": "kernel/src/fs/fs.c",
+          "sha256": "5943915491e1ca7f35bbfb46068f9e658ba8eab7f59e14d5903897fcde74b1dd",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/test-run-receipt.json",
+          "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+          "schema": "zlos.host-test-run-receipt.v1",
+          "result": "PASS"
+        }
+      ],
       "known_gaps": [
-        "no feature-specific implementation receipt is joined"
+        "no fuzzed corpus receipt",
+        "no cycle/link graph exists to validate",
+        "mount limits are zlfs-specific",
+        "no current QEMU or physical corrupt-media receipt"
       ],
       "rejected_claims": [
         "source/build/host/QEMU proof does not imply native-hardware completion"
       ],
-      "weakest_evidence": "the complete acceptance contract is planned but unproved"
+      "weakest_evidence": "the current host gate rejects malformed zlfs superblocks, geometry and entries and safely falls back from a corrupt generation; broader corpus and target-media admission remain open"
     },
     {
       "id": "FS-025",
@@ -24602,7 +26076,7 @@
   ],
   "generator": {
     "path": "tools/gen_feature_status.py",
-    "sha256": "e94a56aaef35c7ace17f2ed5e1fee770f039d774bd384880ae5c709ca649ef33"
+    "sha256": "78d65d3083b28af0f496e8c7dafa77d3fefe16d3c8ee301b70aee54de8509436"
   },
   "evidence_ceiling": "conservative plan-to-current-evidence join; unlisted current assets are not promoted"
 }

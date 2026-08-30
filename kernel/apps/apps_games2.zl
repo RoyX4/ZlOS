@@ -185,7 +185,7 @@ fn wg_draw(ax, ay, aw, ah) {
         }
         ri = ri + 1
     }
-    if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_cat_color(1), T_CAPTION, W_BOLD) }
+    if wg_done == 1 { label(gx, ay + 8 * u + WG_ROWS * cell, "correct - r restarts", ac_play_color(3), T_CAPTION, W_BOLD) }
     if wg_done == 2 {
         # THE ANSWER, on a loss. Six wrong guesses and then never being told
         # the word is the one outcome of this game that teaches nothing. There
@@ -211,8 +211,21 @@ fn wg_draw(ax, ay, aw, ah) {
 # focus). Every branch that changes anything therefore ends in wm_dmg(win).
 fn wg_event(win, ety, ecode) {
     if ety != 3 { return 0 }
-    if ecode == 114 { wg_reset()  wm_dmg(win)  return 1 }
-    if wg_done != 0 { return 1 }
+    # r RESTARTS ONLY A FINISHED GAME, because r IS A LETTER.
+    #
+    # This handled 114 before any letter handling, and EV_CHAR 114 is exactly
+    # what pressing r produces. So there was no way to type an r at all: the
+    # board cleared and a fresh word was drawn mid-guess. Five of the eight
+    # words in wg_word contain an r - crane, storm, brave, grape, train - so
+    # the game was unwinnable more often than not, and the failure looked like
+    # the game resetting itself at random.
+    #
+    # After the done-guard, r is unambiguous: the game is over, no letter is
+    # being typed, and restart is the only thing it can mean.
+    if wg_done != 0 {
+        if ecode == 114 { wg_reset()  wm_dmg(win)  return 1 }
+        return 1
+    }
     if ecode == 13 { wg_submit()  wm_dmg(win)  return 1 }
     if ecode == 8 {
         if wg_col > 0 { wg_col = wg_col - 1  poke8(WG_BOARD + wg_row * WG_COLS + wg_col, 0) }
@@ -437,13 +450,13 @@ fn mz_draw(ax, ay, aw, ah) {
         }
         ri = ri + 1
     }
-    fill_rgb(gx + (MAZE_W - 1) * cell + 3 * u, gy + (MAZE_H - 1) * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(1))
-    fill_rgb(gx + mz_px * cell + 3 * u, gy + mz_py * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_cat_color(2))
+    fill_rgb(gx + (MAZE_W - 1) * cell + 3 * u, gy + (MAZE_H - 1) * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_play_color(3))
+    fill_rgb(gx + mz_px * cell + 3 * u, gy + mz_py * cell + 3 * u, cell - 6 * u, cell - 6 * u, ac_play_color(4))
     msg_y = gy + MAZE_H * cell + 8 * u
     if mz_won == 1 {
-        label(gx, msg_y, "found the exit in", ac_cat_color(1), T_CAPTION, W_BOLD)
+        label(gx, msg_y, "found the exit in", ac_play_color(3), T_CAPTION, W_BOLD)
         label_num(gx + 116 * u, msg_y, mz_steps, theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
-        label(gx + 146 * u, msg_y, "steps - r generates a new maze", ac_cat_color(1), T_CAPTION, W_BOLD)
+        label(gx + 146 * u, msg_y, "steps - r generates a new maze", ac_play_color(3), T_CAPTION, W_BOLD)
     }
     if mz_won == 0 {
         label(gx, msg_y, "arrows or wasd to the teal exit", theme(TH_TEXT_DIM), T_CAPTION, W_REG)

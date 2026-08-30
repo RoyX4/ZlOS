@@ -136,10 +136,16 @@ expect_break "xhci arena pushed into virtio-gpu's region" \
 
 # The browser's storage is the biggest region in the map. Two ways to get it
 # wrong: run it into the next region, or make the region too small for what
-# browser.c carves into it. Only the second needs browser.c in OWNERS.
-expect_break "the browser's storage grown into fb.c's back buffer" \
-    's/^#define HI_DOM_END 0x06000000UL/#define HI_DOM_END 0x08100000UL/' \
-    "storage has grown into fb.c"
+# browser.c carves into it. Only the second needs browser.c in OWNERS. The
+# archive staging buffer now sits between browser storage and the back buffer,
+# so test both boundaries instead of retaining the old direct-neighbour claim.
+expect_break "the browser's storage grown into the archive staging buffer" \
+    's/^#define HI_DOM_END 0x06000000UL/#define HI_DOM_END 0x06100000UL/' \
+    "browser storage region runs into the archive staging buffer"
+
+expect_break "the archive staging buffer grown into fb.c's back buffer" \
+    's/^#define HI_TAR_END 0x06400000UL/#define HI_TAR_END 0x08100000UL/' \
+    "archive staging buffer runs into the back buffer"
 
 expect_break "the browser's region squeezed below what browser.c puts in it" \
     's/^#define HI_DOM_END 0x06000000UL/#define HI_DOM_END 0x05800000UL/' \

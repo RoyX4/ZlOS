@@ -345,23 +345,12 @@ int main(void)
        "control: the ink flips somewhere in mid grey - it is not a constant");
 
     /* ============================================================== BUTTONS */
-    printf("\n  pill button - S13.1, three sizes\n");
+    printf("\n  button - PRESSWORK fixed geometry, three text sizes\n");
     {
         int hs = ui_pill_h(UI_SM), hm = ui_pill_h(UI_MD), hl = ui_pill_h(UI_LG);
-        /* THE EXPECTED HEIGHT IS THE TOOLKIT'S OWN TYPE SIZE, not ROLE_H.
-         * ROLE_H is fb.c's role ladder and uikit.c no longer asks for a role -
-         * it asks fb_text_rich for design.h's ZD_T_* in pixels, because the
-         * ladder resolves SM and MD to the same 12px. Asserting against the
-         * old table would be asserting that the toolkit still uses a scale it
-         * deliberately left. What this still pins is the padding and WHICH
-         * size each pill takes; the ordering check below is what stops
-         * ui_text_h collapsing back into one number. */
-        oknum(hs == 2 * ZD_PILL_SM_PY + ui_text_h(UI_SM),
-              "sm height is 2*3px padding + caption type", hs,
-              2 * ZD_PILL_SM_PY + ui_text_h(UI_SM));
-        oknum(hm == 2 * ZD_PILL_MD_PY + ui_text_h(UI_MD),
-              "md height is 2*6px padding + body type", hm,
-              2 * ZD_PILL_MD_PY + ui_text_h(UI_MD));
+        oknum(hs == ZD_BUTTON_H && hm == ZD_BUTTON_H && hl == ZD_BUTTON_H,
+              "all text rungs use the authority's one 22dp button", hs,
+              ZD_BUTTON_H);
         oknum(ui_text_h(UI_SM) == ZD_T_SM / 2 && ui_text_h(UI_MD) == ZD_T_MD / 2
               && ui_text_h(UI_LG) == ZD_T_LG / 2,
               "THREE sizes, and they are design.h's 11/13/21 - not fb.c's"
@@ -372,12 +361,13 @@ int main(void)
              != ui_text_w("Handgloves", UI_MD, UI_F_BOLD),
            "control: SM and MD MEASURE differently - the old ladder gave the"
            " same width for both, which is the defect this replaced");
-        ok(hs < hm && hm < hl, "the three sizes are strictly ordered");
+        ok(ui_text_h(UI_SM) < ui_text_h(UI_MD) && ui_text_h(UI_MD) < ui_text_h(UI_LG),
+           "the text rungs remain strictly ordered inside fixed button geometry");
         int wm = ui_pill_w("Pack", UI_MD, 0);
-        oknum(wm == 2 * ZD_PILL_MD_PX + ui_text_w("Pack", UI_MD, 0),
-              "md width is 2*13px padding + the measured label", wm,
-              2 * ZD_PILL_MD_PX + ui_text_w("Pack", UI_MD, 0));
-        ok(ui_pill_w("Pack", UI_MD, UI_F_MONO) == 2 * ZD_PILL_MD_PX + 4 * 8,
+        oknum(wm == 2 * ZD_BUTTON_PX + ui_text_w("Pack", UI_MD, 0),
+              "width is 2*10px padding + the measured label", wm,
+              2 * ZD_BUTTON_PX + ui_text_w("Pack", UI_MD, 0));
+        ok(ui_pill_w("Pack", UI_MD, UI_F_MONO) == 2 * ZD_BUTTON_PX + 4 * 8,
            "the mono flag measures against the fixed cell, not the atlas");
     }
     {
@@ -388,7 +378,7 @@ int main(void)
         const struct op *lab = find_text("Pack");
         ok(face && face->x == 100 && face->y == 50 && face->w == w && face->h == h,
            "primary: the accent face is exactly the rect it was given");
-        ok(face && face->r == ZD_PILL_MD_R, "primary: r11, the house radius");
+        ok(face && face->r == ZD_BUTTON_R, "primary: the chip radius");
         ok(lab && lab->rgb == (unsigned)ZD_INK_DARK,
            "primary: the label is the COMPUTED ink");
         ok(!text_used_colour(0xFFFFFF),

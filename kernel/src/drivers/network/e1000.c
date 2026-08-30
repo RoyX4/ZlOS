@@ -64,6 +64,10 @@ void pci_enable(int i);
 #define TX_N 32
 #define BUF_N 2048
 
+/* This card's frame ceiling is its descriptor buffer - there is no separate
+ * MTU register in play here, RCTL's size bits select BUF_N itself. */
+int e1000_mtu(void) { return BUF_N; }
+
 struct rx_desc { u64 addr; u16 len, csum; u8 status, errors; u16 special; } __attribute__((packed));
 struct tx_desc { u64 addr; u16 len; u8 cso, cmd, status, css; u16 special; } __attribute__((packed));
 

@@ -26,6 +26,7 @@ Generators for registries, manifests, evidence views, and source data.
 ## Direct tracked contents
 
 - `gen-accessibility-registry.py`
+- `gen-address-space-registry.py`
 - `gen-adversarial-registry.py`
 - `gen-app-evidence.py`
 - `gen-app-manifest.py`
@@ -37,15 +38,18 @@ Generators for registries, manifests, evidence views, and source data.
 - `gen-dependency-lock.py`
 - `gen-event-schema.py`
 - `gen-evidence-registry.py`
+- `gen-hardware-receipt-plan.py`
 - `gen-init-registry.py`
 - `gen-license-registry.py`
 - `gen-observability-registry.py`
+- `gen-performance-registry.py`
 - `gen-provenance-viewer.py`
 - `gen-release-notes.py`
 - `gen-security-registry.py`
 - `gen-source-snapshot.py`
 - `gen-test-inventory.py`
 - `gen-toolchain-manifest.py`
+- `gen-user-syscalls.py`
 - `gen-visual-registry.py`
 - `gen-wrapper-registry.py`
 - `gen_aa_font.py`

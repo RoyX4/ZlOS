@@ -549,10 +549,9 @@ int main(void)
     }
 
     /* ------------------------------------------------------------ animation
-     * Four frames of growth, then settled. The properties that matter are not
-     * "it moves" but: it ENDS, it ends at exactly the requested geometry, and
-     * HIT TESTING NEVER SEES THE INTERMEDIATE SIZE - a click that misses
-     * because the target was still growing is worse than no animation. */
+     * PRESSWORK opens ordinary windows as a cut at settled geometry. Hit
+     * testing and pixels must agree from frame zero, and no timeline slot may
+     * be consumed for a transform the authority deleted. */
     for (int i = 0; i < WM_MAX; i++) wm_close(i);
     frame();
     int an = wm_open(7, "anim", 300, 300, 400, 300);
@@ -562,18 +561,18 @@ int main(void)
        gw2 == 400 && gh2 == 300);
     ok("...and so is hit testing, mid-animation", wm_at(310, 310) == an);
 
-    /* the drawn window must actually be smaller on the first frame */
+    /* The drawn window is already at the settled left edge on frame one. */
     frame();
-    int grew = 0;
+    int full = 1;
     for (int x = 300; x < 320; x++)
-        if (fb_get_px(x, 450) == WALL) grew = 1;   /* left edge not yet reached */
-    ok("the first frame is drawn SMALLER than the settled rect", grew);
+        if (fb_get_px(x, 450) == WALL) full = 0;
+    ok("the first frame is drawn at the settled rect", full);
 
     for (int i = 0; i < ANIM_SETTLE; i++) frame();
     int settled = 1;
     for (int x = 302; x < 316; x++)
         if (fb_get_px(x, 450) == WALL) settled = 0;
-    ok("...and after four frames it has settled at full size", settled);
+    ok("...and later frames retain that full size", settled);
 
     int before_calls = draw_calls[7];
     frame(); frame();
@@ -661,6 +660,7 @@ int main(void)
     int avail = bw - 2 * UI_S3(th) - UI_S6(th);
     int step = avail / 3;
     if (step > UI_S6(th) * 5) step = UI_S6(th) * 5;
+    draw_calls[1] = draw_calls[2] = draw_calls[3] = 0;
     pointer(bx + UI_S2(th) + step + step / 4, strip_y, 1);
     ok("clicking a tab selects it", wm_tab(tw) == 1);
     int ax2, ay2;
@@ -668,7 +668,6 @@ int main(void)
     ok("...and does NOT drag the window", ax2 == bx && ay2 == by);
     pointer(bx + UI_S2(th) + step + step / 4, strip_y + 200, 0);
 
-    draw_calls[1] = draw_calls[2] = draw_calls[3] = 0;
     frame();
     ok("...and now the SECOND tab's app is the one that draws",
        draw_calls[2] > 0 && draw_calls[1] == 0);

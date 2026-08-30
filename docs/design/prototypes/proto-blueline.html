@@ -1,0 +1,2902 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLUELINE / zlOS living prototype</title>
+<style>
+/* ======================================================================
+   BLUELINE - the desktop as an engineering drawing.
+
+   ONE HUE per mode. NO BLACK anywhere, in either mode. The ground is
+   neither paper nor near-black: dark is a saturated Prussian-blue
+   cyanotype, light is the buff diazo whiteprint that historically
+   SUCCEEDED the blueprint, so the second ladder is a real second process
+   rather than an inversion of the first.
+
+   Separation is LINE, never value. The surface steps are deliberately
+   below threshold - 1.21:1 dark, 1.07:1 light - because a drawing does
+   not tint its views, it draws them. Everything a desktop normally says
+   with fill, shadow or hue, this says with LINE TYPE:
+
+       continuous     the view you are working in
+       hidden (8-4)   a view that is present but not current
+       chain-dot      a view that BELONGS TO another view
+       phantom        a view that is minimised and still where it was
+
+   All four are drawn at 2px. That is a correction to the original
+   sketch, which had continuous at 2px and hidden at 1px: state would
+   then have been riding partly on a single-pixel mark over a 1.07:1
+   surface step with no value fallback under it. At one weight, the
+   PATTERN alone carries the state, a one-pixel dash-phase drift is
+   invisible, and the distinction survives any panel gamma.
+
+   design.h token block. No hex value appears as a CSS value anywhere
+   outside :root and :root[data-theme="dark"]. Every name below exists in
+   BOTH ladders; a name in one mode only is a defect.
+   ====================================================================== */
+:root {
+  /* ------------------------------------------------ LIGHT: THE DIAZO --
+     The whiteprint. A diazo print is blue line on a buff, slightly
+     yellowed stock - it is what drawing offices moved to when the wet
+     cyanotype process died, and it prints the LINE dark on a light
+     ground rather than clearing it out of a dark one. So it is the same
+     drawing run through a different process, not this document with its
+     values flipped. */
+  --zb-ground:     #F0ECE0;  /* the sheet stock. everything sits on it. */
+  --zb-sheet:      #F7F4EA;  /* a VIEW's fill. 1.07:1 on the ground.    */
+  --zb-inset:      #EBE5D5;  /* a recessed cell: terminal, well, plate. */
+
+  --zb-line-0:     #27427D;  /* FULL DENSITY. body text and continuous. */
+  --zb-line-1:     #4A5F91;  /* secondary text: labels, dims, captions. */
+  --zb-line-2:     #6B7FAE;  /* HIDDEN LINE value. frames and ticks.    */
+
+  --zb-redline:    #A8341D;  /* THE CORRECTION. three uses, no fourth.  */
+  --zb-on-red:     #F7F4EA;
+
+  --zb-mark:       #27427D;  /* a solid graphic that IS the datum.      */
+  --zb-mark-bulk:  #5C74A6;  /* a LARGE tonal area. never the solid.    */
+  --zb-bub-fill:   #27427D;  /* the view bubble, focused: solid disc.   */
+  --zb-bub-num:    #F7F4EA;  /* its number, knocked out of the disc.    */
+  --zb-knob:       #F7F4EA;
+
+  /* ---------------------------------------------------------- metrics */
+  --ui: 1;
+  --zb-corner-w:  calc(320px * var(--ui));
+  --zb-title-h:   calc(180px * var(--ui));
+  --zb-margin:    calc(16px  * var(--ui));
+  --zb-bub:       calc(24px  * var(--ui));
+  --zb-hdr-h:     calc(26px  * var(--ui));
+  --zb-row-h:     calc(22px  * var(--ui));
+  --zb-cell-h:    calc(20px  * var(--ui));
+  --zb-pad:       calc(12px  * var(--ui));
+  --zb-gap:       calc(8px   * var(--ui));
+  --zb-w:         2px;       /* THE ONE LINE WEIGHT. all four patterns. */
+  --zb-hair:      1px;       /* cell divisions inside the title block.  */
+  --zb-r-0:       0px;       /* radius zero everywhere except a bubble. */
+  --zb-dash:      8px;       /* hidden line: 8 on, 4 off.               */
+  --zb-gapd:      4px;
+  --zb-chain-l:   16px;      /* chain dot: 16 on, 4 off, 4 on, 4 off.   */
+
+  --zb-track-lab: calc(2px * var(--ui));
+  --zb-track-th:  calc(1px * var(--ui));
+  --zb-track-big: calc(5px * var(--ui));
+  --fs-data:  calc(11px * var(--ui));   /* 8x16 atlas               */
+  --lh-data:  calc(16px * var(--ui));
+  --fs-label: calc(11px * var(--ui));   /* 8x16 atlas, sans caps    */
+  --fs-body:  calc(15px * var(--ui));   /* 8x16 at ui 1.4, prose    */
+  --lh-body:  calc(22px * var(--ui));
+  --fs-plate: calc(22px * var(--ui));   /* 16x32 atlas              */
+  --lh-plate: calc(26px * var(--ui));
+  --fs-huge:  calc(44px * var(--ui));   /* 24x48 atlas, lock only   */
+
+  --sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+/* ------------------------------------------------- DARK: THE CYANOTYPE --
+   The blueprint proper. Prussian blue ground, white linework, no
+   gradient and no black. #16375E is a real cyanotype ground: saturated,
+   flat, and nothing like the near-black-plus-accent shape this direction
+   is most likely to be mistaken for from a thumbnail. The tell is that
+   the WHITE is the body and the blue is the paper, not the reverse.
+
+   Two things move relative to the light ladder and both are derived:
+     1. The recessed cell goes DOWN in density in light (a well is
+        sunken) and DOWN again in dark - #102A49 is deeper blue, because
+        on a cyanotype an unexposed area is where the ferric salt washed
+        out darker, not lighter.
+     2. The redline opens up. #A8341D is a pencil correction on paper; on
+        a blueprint the same correction is grease pencil or a wax pencil
+        and reads pale. #F99B84 holds 4.76:1 on the view fill, which is
+        where FAIL text actually lands.
+   -------------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  /* COLOUR TOKENS ONLY. Every one of the thirteen names in the light block
+     is redeclared here and none is added; a colour role in one mode only
+     would be a defect. The metric, radius, dash-pitch and type tokens are
+     deliberately NOT repeated, because the direction's claim is that
+     nothing but colour changes between the two processes - repeating them
+     here would create two places for one number to drift. */
+  --zb-ground:     #16375E;
+  --zb-sheet:      #1D4470;
+  --zb-inset:      #102A49;
+
+  --zb-line-0:     #EDF1F3;
+  --zb-line-1:     #A9BFD4;
+  --zb-line-2:     #7E9CB8;
+
+  --zb-redline:    #F99B84;
+  --zb-on-red:     #16375E;
+
+  --zb-mark:       #EDF1F3;
+  --zb-mark-bulk:  #87A5C0;
+  --zb-bub-fill:   #EDF1F3;
+  --zb-bub-num:    #16375E;
+  --zb-knob:       #16375E;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--zb-ground); font-family: var(--sans);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: var(--zb-inset); }
+::-webkit-scrollbar-thumb { background: var(--zb-mark-bulk); border-radius: var(--zb-r-0); }
+
+/* ============================================================= type === */
+.t-data { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+          font-weight: 400; color: var(--zb-line-0); font-variant-numeric: tabular-nums; }
+.t-label{ font-family: var(--sans); font-size: var(--fs-label); line-height: var(--lh-data);
+          font-weight: 700; text-transform: uppercase; letter-spacing: var(--zb-track-lab);
+          margin-right: calc(-1 * var(--zb-track-lab)); color: var(--zb-line-1); }
+.t-body { font-family: var(--sans); font-size: var(--fs-body); line-height: var(--lh-body);
+          color: var(--zb-line-0); }
+.t-plate{ font-family: var(--sans); font-size: var(--fs-plate); line-height: var(--lh-plate);
+          font-weight: 700; text-transform: uppercase; letter-spacing: var(--zb-track-big);
+          margin-right: calc(-1 * var(--zb-track-big)); color: var(--zb-line-0); }
+.t-huge { font-family: var(--mono); font-size: var(--fs-huge);
+          line-height: calc(52px * var(--ui)); font-weight: 700; color: var(--zb-line-0);
+          font-variant-numeric: tabular-nums; letter-spacing: var(--zb-track-big); }
+.l0 { color: var(--zb-line-0); }
+.l1 { color: var(--zb-line-1); }
+.l2 { color: var(--zb-line-2); }
+.bold { font-weight: 700; }
+
+/* ==================================================== harness strip ====
+   NOT desktop chrome. This band is the prototype's own navigation and it
+   is deliberately outside #os, in the mono face, so it reads as a
+   contact sheet header rather than as a top bar. Blueline's desktop has
+   no top bar; deleting it is a third of the direction's claim. */
+#strip {
+  position: fixed; left: 0; right: 0; top: 0; height: 28px; z-index: 400;
+  background: var(--zb-inset); border-bottom: var(--zb-w) solid var(--zb-line-0);
+  display: flex; align-items: stretch; padding-left: 12px;
+}
+#strip .nm { display: flex; align-items: center; color: var(--zb-line-0); }
+#strip .pitch { padding: 0 14px; color: var(--zb-line-1); font-family: var(--mono);
+  font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 28px; min-width: 0; }
+#strip .links { margin-left: auto; display: flex; }
+#strip a, #strip .tk {
+  display: flex; align-items: center; padding: 0 10px; text-decoration: none;
+  border-left: var(--zb-hair) solid var(--zb-line-2); color: var(--zb-line-1);
+  font-family: var(--sans); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 2px; cursor: pointer;
+}
+#strip a.on, #strip .tk.on { background: var(--zb-line-0); color: var(--zb-ground); }
+#strip .thm { display: flex; align-items: stretch; }
+#strip .thint { display: flex; align-items: center; padding: 0 10px;
+  border-left: var(--zb-hair) solid var(--zb-line-2); color: var(--zb-line-2);
+  font-family: var(--mono); font-size: 11px; }
+
+#os { position: fixed; left: 0; right: 0; top: 28px; bottom: 0;
+      background: var(--zb-ground); overflow: hidden; }
+
+/* ============================================== the sheet border ======
+   One 2px rule around everything, divided into lettered and numbered
+   ZONES exactly as a drawing frame is. This replaces PLATE's ruled
+   module grid: the structure is stated on the FRAME, not painted across
+   the field, so the drawing area stays edge to edge and empty. */
+#frame { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+#field { position: absolute; overflow: visible; }
+#wins { position: absolute; inset: 0; }
+#leaders { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 8; }
+
+/* =================================================== a VIEW (window) === */
+.win { position: absolute; background: var(--zb-sheet); display: flex; flex-direction: column;
+       transition: left 100ms linear, top 100ms linear, width 100ms linear, height 100ms linear; }
+.win.drag { transition: none; }
+.win.gone { display: none; }
+
+/* THE FRAME. Four background layers, one per edge, each an explicit
+   repeating gradient so the dash pitch is ours and not the browser's.
+   In fb.c this is a loop of fb_fill_px along an axis aligned edge - the
+   cheapest primitive in the file, and the reason line type costs nothing
+   here. --fc is the frame's colour, --fp its pattern. */
+.fr { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+      background-repeat: no-repeat;
+      background-size: 100% var(--zb-w), 100% var(--zb-w), var(--zb-w) 100%, var(--zb-w) 100%;
+      background-position: 0 0, 0 100%, 0 0, 100% 0; }
+/* continuous - the current view */
+.st-cont > .fr {
+  --fc: var(--zb-line-0);
+  background-image:
+    linear-gradient(var(--fc), var(--fc)), linear-gradient(var(--fc), var(--fc)),
+    linear-gradient(var(--fc), var(--fc)), linear-gradient(var(--fc), var(--fc));
+}
+/* hidden - present, not current */
+.st-hidn > .fr, .st-phan > .fr {
+  --fc: var(--zb-line-2);
+  background-image:
+    repeating-linear-gradient(to right,  var(--fc) 0 var(--zb-dash), transparent var(--zb-dash) calc(var(--zb-dash) + var(--zb-gapd))),
+    repeating-linear-gradient(to right,  var(--fc) 0 var(--zb-dash), transparent var(--zb-dash) calc(var(--zb-dash) + var(--zb-gapd))),
+    repeating-linear-gradient(to bottom, var(--fc) 0 var(--zb-dash), transparent var(--zb-dash) calc(var(--zb-dash) + var(--zb-gapd))),
+    repeating-linear-gradient(to bottom, var(--fc) 0 var(--zb-dash), transparent var(--zb-dash) calc(var(--zb-dash) + var(--zb-gapd)));
+}
+/* chain dot - long short long. the drafting mark for a REFERENCE, so it
+   is what a child window or a dialog is drawn in. */
+.st-chain > .fr {
+  --fc: var(--zb-line-2);
+  background-image:
+    repeating-linear-gradient(to right,  var(--fc) 0 var(--zb-chain-l), transparent var(--zb-chain-l) calc(var(--zb-chain-l) + 4px), var(--fc) calc(var(--zb-chain-l) + 4px) calc(var(--zb-chain-l) + 8px), transparent calc(var(--zb-chain-l) + 8px) calc(var(--zb-chain-l) + 12px)),
+    repeating-linear-gradient(to right,  var(--fc) 0 var(--zb-chain-l), transparent var(--zb-chain-l) calc(var(--zb-chain-l) + 4px), var(--fc) calc(var(--zb-chain-l) + 4px) calc(var(--zb-chain-l) + 8px), transparent calc(var(--zb-chain-l) + 8px) calc(var(--zb-chain-l) + 12px)),
+    repeating-linear-gradient(to bottom, var(--fc) 0 var(--zb-chain-l), transparent var(--zb-chain-l) calc(var(--zb-chain-l) + 4px), var(--fc) calc(var(--zb-chain-l) + 4px) calc(var(--zb-chain-l) + 8px), transparent calc(var(--zb-chain-l) + 8px) calc(var(--zb-chain-l) + 12px)),
+    repeating-linear-gradient(to bottom, var(--fc) 0 var(--zb-chain-l), transparent var(--zb-chain-l) calc(var(--zb-chain-l) + 4px), var(--fc) calc(var(--zb-chain-l) + 4px) calc(var(--zb-chain-l) + 8px), transparent calc(var(--zb-chain-l) + 8px) calc(var(--zb-chain-l) + 12px));
+}
+/* phantom - MINIMISED AND STILL HERE. the outline stays where the view
+   was, at reduced density, carrying only its bubble. This is why
+   Blueline needs no dock: "where did it go" is answered on the sheet. */
+.win.st-phan { background: transparent; }
+/* the sketch said 25 %. measured on both grounds that is a mark you
+   have to hunt for, and a phantom whose job is to answer "where did it
+   go" must be found without hunting. 48 % is where it reads as present
+   but plainly withdrawn, in the cyanotype and the diazo alike. */
+.win.st-phan > .fr { opacity: 0.48; }
+.win.st-phan > .hdr, .win.st-phan > .body, .win.st-phan > .vnote { display: none; }
+.win.st-phan .bub { opacity: 0.80; }
+.nophan .win.st-phan { display: none; }
+
+/* THE VIEW BUBBLE. A drawing labels each view with a balloon on a leader.
+   Focused, it is a solid disc with the number knocked out; unfocused, an
+   outline. It is the only circle in the system and the only nonzero
+   radius. */
+.bub { position: absolute; left: calc(-1 * var(--zb-bub) / 2); top: calc(-1 * var(--zb-bub) / 2);
+       width: var(--zb-bub); height: var(--zb-bub); border-radius: 50%; z-index: 9;
+       display: flex; align-items: center; justify-content: center; cursor: pointer;
+       background: var(--zb-sheet); border: var(--zb-w) solid var(--zb-line-2); }
+.bub span { font-family: var(--mono); font-size: var(--fs-data); font-weight: 700;
+            color: var(--zb-line-0); line-height: 1; }
+.st-cont > .bub { background: var(--zb-bub-fill); border-color: var(--zb-bub-fill); }
+.st-cont > .bub span { color: var(--zb-bub-num); }
+.st-chain > .bub { border-style: dashed; }
+
+.hdr { height: var(--zb-hdr-h); flex: none; display: flex; align-items: center;
+       gap: var(--zb-gap); padding: 0 var(--zb-gap) 0 calc(20px * var(--ui));
+       border-bottom: var(--zb-hair) solid var(--zb-line-2);
+       color: var(--zb-line-1); user-select: none; cursor: default; }
+.hdr .ttl { color: var(--zb-line-0); flex: none; white-space: nowrap; }
+.hdr .sub { color: var(--zb-line-1); flex: 0 1 auto; min-width: 0; overflow: hidden;
+            white-space: nowrap; font-family: var(--mono); font-size: var(--fs-data); }
+.hdr .zone { margin-left: auto; color: var(--zb-line-1); font-family: var(--mono);
+             font-size: var(--fs-data); white-space: nowrap; flex: none; }
+.ctls { display: flex; height: 100%; flex: none; }
+.ctl { width: calc(22px * var(--ui)); display: flex; align-items: center; justify-content: center;
+       border-left: var(--zb-hair) solid var(--zb-line-2); color: var(--zb-line-1); cursor: pointer; }
+.ctl:hover { background: var(--zb-inset); color: var(--zb-line-0); }
+.ctl.x:hover { background: var(--zb-line-0); color: var(--zb-ground); }
+.body { flex: 1; min-height: 0; padding: var(--zb-pad); display: flex; flex-direction: column;
+        overflow: hidden; }
+/* the view note: a drawing puts the view's own identity under it. */
+.vnote { position: absolute; right: calc(-1 * var(--zb-w)); bottom: calc(-14px * var(--ui));
+         height: calc(14px * var(--ui)); display: flex; align-items: center; gap: 6px;
+         padding: 0 4px; background: var(--zb-ground); z-index: 7; white-space: nowrap; }
+.vnote .t-data { font-size: calc(10px * var(--ui)); color: var(--zb-line-1); }
+/* THE DELTA. Redline use 2 of 3: while a view is dragged off its zone,
+   the distance back to the zone it will snap to is dimensioned in red. */
+.delta { position: absolute; z-index: 10; pointer-events: none; }
+.delta .dl { position: absolute; background: var(--zb-redline); }
+.delta .dt { position: absolute; background: var(--zb-redline); color: var(--zb-on-red);
+             font-family: var(--mono); font-size: calc(10px * var(--ui)); padding: 1px 4px;
+             white-space: nowrap; }
+
+/* ================================================ the corner block =====
+   ALL persistent chrome. No rail, no top bar, no dock, no start menu.
+   Bottom right, ruled into cells exactly as a drawing's title block is,
+   with the REVISION TABLE stacked directly above it. */
+#corner { position: absolute; right: var(--zb-margin); bottom: var(--zb-margin);
+          width: var(--zb-corner-w);
+          background: var(--zb-ground); border: var(--zb-w) solid var(--zb-line-0);
+          display: flex; flex-direction: column; z-index: 40; }
+#corner .cell { border-bottom: var(--zb-hair) solid var(--zb-line-2); }
+#corner .chead { display: flex; align-items: center; gap: 6px;
+                 padding: calc(3px * var(--ui)) calc(6px * var(--ui));
+                 border-bottom: var(--zb-w) solid var(--zb-line-0); }
+#corner .chead .t-label { color: var(--zb-line-0); }
+#corner .chead .rt { margin-left: auto; color: var(--zb-line-1); font-family: var(--mono);
+                     font-size: calc(10px * var(--ui)); }
+
+.revrow { display: flex; align-items: center; height: calc(19px * var(--ui));
+          border-bottom: var(--zb-hair) solid var(--zb-line-2);
+          padding: 0 calc(6px * var(--ui)); gap: 6px; }
+.revrow:last-child { border-bottom: 0; }
+.revrow .rv { flex: none; width: calc(18px * var(--ui)); text-align: center; }
+/* THE REVISION BALLOON. Redline use 1 of 3. A drawing circles the
+   revision letter in red where the change landed; so does this. */
+.balloon { display: inline-flex; align-items: center; justify-content: center;
+           width: calc(15px * var(--ui)); height: calc(15px * var(--ui)); border-radius: 50%;
+           border: var(--zb-hair) solid var(--zb-redline); color: var(--zb-redline);
+           font-family: var(--mono); font-size: calc(10px * var(--ui)); font-weight: 700; }
+.noball .balloon { border-color: var(--zb-line-2); color: var(--zb-line-1); }
+.revrow .rw { flex: none; width: calc(58px * var(--ui)); color: var(--zb-line-0);
+              overflow: hidden; white-space: nowrap; }
+.revrow .rd { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
+              text-overflow: ellipsis; color: var(--zb-line-1); }
+.revrow .rt { flex: none; color: var(--zb-line-1); }
+
+#vindex { display: grid; grid-template-columns: 1fr 1fr; }
+.vrow { display: flex; align-items: center; height: calc(18px * var(--ui)); gap: 5px;
+        padding: 0 calc(6px * var(--ui)); cursor: pointer;
+        border-bottom: var(--zb-hair) solid var(--zb-line-2);
+        border-right: var(--zb-hair) solid var(--zb-line-2); }
+.vrow:nth-child(even) { border-right: 0; }
+.vrow .vn { color: var(--zb-line-1); flex: none; }
+.vrow .vl { color: var(--zb-line-1); overflow: hidden; white-space: nowrap; flex: 1; min-width: 0; }
+.vrow .vs { flex: none; width: calc(9px * var(--ui)); height: calc(9px * var(--ui)); }
+.vrow:hover { background: var(--zb-inset); }
+.vrow.open .vl { color: var(--zb-line-0); }
+.vrow.cur { background: var(--zb-line-0); }
+.vrow.cur .vl, .vrow.cur .vn { color: var(--zb-ground); }
+
+#tblock { height: var(--zb-title-h); flex: none; display: flex; flex-direction: column; }
+#tblock .ident { padding: calc(6px * var(--ui)) calc(8px * var(--ui)) calc(4px * var(--ui));
+                 border-bottom: var(--zb-w) solid var(--zb-line-0); }
+#tblock .ident .t-plate { display: block; }
+#tblock .ident .sub { display: block; color: var(--zb-line-1); font-family: var(--mono);
+                      font-size: var(--fs-data); }
+.tbcells { flex: 1; display: grid; grid-template-columns: 1fr 1fr; }
+.tbc { border-right: var(--zb-hair) solid var(--zb-line-2);
+       border-bottom: var(--zb-hair) solid var(--zb-line-2);
+       padding: calc(2px * var(--ui)) calc(6px * var(--ui)); min-width: 0; overflow: hidden; }
+.tbc:nth-child(even) { border-right: 0; }
+.tbc .k { display: block; color: var(--zb-line-1); font-family: var(--sans);
+          font-size: calc(9px * var(--ui)); font-weight: 700; text-transform: uppercase;
+          letter-spacing: var(--zb-track-lab); }
+.tbc .v { display: block; color: var(--zb-line-0); font-family: var(--mono);
+          font-size: var(--fs-data); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.wsrow { display: flex; border-top: var(--zb-w) solid var(--zb-line-0); flex: none; }
+.wsc { flex: 1; height: calc(20px * var(--ui)); display: flex; align-items: center;
+       justify-content: center; cursor: pointer;
+       border-right: var(--zb-hair) solid var(--zb-line-2); }
+.wsc:last-child { border-right: 0; }
+.wsc.on { background: var(--zb-line-0); }
+.wsc.on .t-label { color: var(--zb-ground); }
+
+/* ======================================================== primitives === */
+.scroll { overflow: auto; min-height: 0; flex: 1; }
+.hr2 { height: var(--zb-w); background: var(--zb-line-0); flex: none; }
+.hr1 { height: var(--zb-hair); background: var(--zb-line-2); flex: none; }
+.vr1 { width: var(--zb-hair); background: var(--zb-line-2); align-self: stretch; flex: none; }
+.row { display: flex; align-items: center; gap: var(--zb-gap); flex: none; overflow: hidden; }
+.row > .t-label, .row > .t-data { white-space: nowrap; }
+.spread { margin-left: auto; }
+.pad-t { margin-top: var(--zb-gap); }
+.stack { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.cols2 { display: flex; gap: var(--zb-pad); min-height: 0; flex: 1; }
+.cols2 > * { flex: 1; min-width: 0; overflow: hidden; }
+.pre { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+       white-space: pre; color: var(--zb-line-0); }
+
+.well { background: var(--zb-inset); border: var(--zb-hair) solid var(--zb-line-2);
+        padding: calc(6px * var(--ui)) calc(8px * var(--ui)); }
+.plate { background: var(--zb-inset); border: var(--zb-hair) solid var(--zb-line-2);
+         padding: calc(6px * var(--ui)) calc(8px * var(--ui)); }
+
+.tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tbl th { text-align: left; height: var(--zb-cell-h); padding: 0 calc(4px * var(--ui));
+          border-bottom: var(--zb-hair) solid var(--zb-line-2); white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis;
+          font-family: var(--sans); font-size: var(--fs-label); font-weight: 700;
+          text-transform: uppercase; letter-spacing: var(--zb-track-th); color: var(--zb-line-1); }
+.tbl td { height: var(--zb-cell-h); padding: 0 calc(4px * var(--ui));
+          border-bottom: var(--zb-hair) solid var(--zb-line-2); white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis;
+          font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+          color: var(--zb-line-0); font-variant-numeric: tabular-nums; }
+.tbl th.r, .tbl td.r { text-align: right; }
+/* A SELECTED ROW IS NOT A TINT. There is no zebra and no highlight fill
+   in this system; the surfaces do not step. A selected row is bracketed
+   in continuous rule, top and bottom, the way a drawing calls out a
+   dimension it wants read. */
+.tbl tr.sel td { border-top: var(--zb-w) solid var(--zb-line-0);
+                 border-bottom: var(--zb-w) solid var(--zb-line-0); font-weight: 700; }
+.tbl tr.sel td:first-child { position: relative; }
+.tbl tr.pick { cursor: pointer; }
+.tbl tr.pick:hover:not(.sel) td { background: var(--zb-inset); }
+
+.btn { height: calc(22px * var(--ui)); padding: 0 calc(10px * var(--ui)); display: inline-flex;
+       align-items: center; border: var(--zb-hair) solid var(--zb-line-1);
+       background: transparent; cursor: pointer; flex: none; }
+.btn .t-label { color: var(--zb-line-0); }
+.btn:hover { background: var(--zb-inset); }
+.btn.prim { border: var(--zb-w) solid var(--zb-line-0); }
+.btn.prim .t-label { color: var(--zb-line-0); }
+.btn:active, .btn.down { background: var(--zb-line-0); }
+.btn:active .t-label, .btn.down .t-label { color: var(--zb-ground); }
+
+.seg { display: flex; border: var(--zb-hair) solid var(--zb-line-1); flex: none; }
+.seg > span { flex: 1; height: calc(22px * var(--ui)); display: flex; align-items: center;
+       justify-content: center; border-right: var(--zb-hair) solid var(--zb-line-1);
+       cursor: pointer; }
+.seg > span:last-child { border-right: 0; }
+.seg > span.on { background: var(--zb-line-0); }
+.seg > span.on .t-label { color: var(--zb-ground); }
+
+.meter { margin-bottom: calc(6px * var(--ui)); flex: none; }
+.mrow { display: flex; align-items: baseline; }
+.mrow .t-data { margin-left: auto; color: var(--zb-line-0); font-weight: 700; }
+.track { height: calc(10px * var(--ui)); border: var(--zb-hair) solid var(--zb-line-2); }
+.track > i { display: block; height: 100%; background: var(--zb-mark-bulk); }
+/* one fill, at two densities. over threshold goes to FULL density, not
+   to the redline: a meter states its value with its length, and the
+   redline is not a status colour in this system. */
+.track > i.hi { background: var(--zb-mark); }
+.track > i.bad { background: var(--zb-mark); }
+
+.ctlrow { min-height: calc(28px * var(--ui)); display: flex; align-items: center; flex: none;
+          border-bottom: var(--zb-hair) solid var(--zb-line-2); }
+.ctlrow .right { margin-left: auto; display: flex; align-items: center; gap: calc(10px * var(--ui)); }
+.sw { width: calc(32px * var(--ui)); height: calc(16px * var(--ui));
+      border: var(--zb-w) solid var(--zb-line-0); position: relative; cursor: pointer; flex: none; }
+.sw > i { position: absolute; left: 1px; top: 1px; bottom: 1px; width: calc(12px * var(--ui));
+          background: var(--zb-mark); }
+.sw.on { background: var(--zb-mark); }
+.sw.on > i { left: auto; right: 1px; background: var(--zb-knob); }
+.slider { position: relative; width: calc(170px * var(--ui)); height: calc(16px * var(--ui));
+          display: flex; align-items: center; cursor: pointer; flex: none; }
+.slider .st { position: absolute; left: 0; right: 0; height: calc(8px * var(--ui));
+              border: var(--zb-hair) solid var(--zb-line-2); }
+.slider .sf { position: absolute; left: 1px; top: calc(50% - (4px * var(--ui)) + 1px);
+              height: calc(6px * var(--ui)); background: var(--zb-mark-bulk); }
+.slider .sh { position: absolute; top: 0; width: calc(8px * var(--ui)); height: calc(16px * var(--ui));
+              background: var(--zb-knob); border: var(--zb-w) solid var(--zb-line-0); }
+.slider .tick { position: absolute; top: calc(16px * var(--ui)); width: 1px;
+                height: calc(3px * var(--ui)); background: var(--zb-line-2); }
+
+.kvgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--zb-pad); flex: none; }
+.kv { display: flex; align-items: baseline; border-bottom: var(--zb-hair) solid var(--zb-line-2);
+      height: var(--zb-cell-h); flex: none; overflow: hidden; }
+.kv .v { margin-left: auto; padding-left: calc(10px * var(--ui)); color: var(--zb-line-0);
+         font-family: var(--mono); font-size: var(--fs-data); white-space: nowrap;
+         font-variant-numeric: tabular-nums; }
+.caret { display: inline-block; width: calc(7px * var(--ui)); height: var(--lh-data);
+         background: var(--zb-line-0); vertical-align: text-bottom; }
+.blinkon .caret { animation: bl 500ms steps(1, end) infinite; }
+@keyframes bl { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+.plotbox { position: relative; flex: 1; min-height: calc(40px * var(--ui));
+           max-height: calc(420px * var(--ui));
+           border: var(--zb-hair) solid var(--zb-line-2); overflow: hidden; }
+.plotbox svg { display: block; }
+.meanline { position: absolute; left: 0; right: 0; height: 1px; background: var(--zb-line-0); }
+.gutnum { color: var(--zb-line-1); text-align: right; padding-right: calc(8px * var(--ui));
+          border-right: var(--zb-hair) solid var(--zb-line-2); }
+
+/* the three state words. NO HUE except the failure mark, which is the
+   third and last use of the redline. OK is secondary, WARN is full
+   density under a rule, FAIL is red. Weight and rule, not colour. */
+.st-ok   { color: var(--zb-line-1); }
+.st-warn { color: var(--zb-line-0); border-bottom: var(--zb-w) solid var(--zb-line-0); }
+.st-fail { color: var(--zb-redline); }
+
+/* ========================================================= overview ==== */
+#overview { position: absolute; inset: 0; background: var(--zb-ground); z-index: 60;
+            display: none; flex-direction: column; padding: calc(14px * var(--ui)); }
+#overview.on { display: flex; }
+.ovhead { display: flex; align-items: baseline; gap: var(--zb-pad); flex: none;
+          border-bottom: var(--zb-w) solid var(--zb-line-0); padding-bottom: calc(6px * var(--ui)); }
+.ovbody { flex: none; height: 52%; display: flex; gap: calc(24px * var(--ui)); min-height: 0;
+          padding-top: var(--zb-pad); }
+.ovsh { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ovlab { display: flex; align-items: baseline; gap: var(--zb-gap); flex: none;
+         padding-bottom: calc(4px * var(--ui)); }
+.ovfield { position: relative; flex: 1; border: var(--zb-w) solid var(--zb-line-2);
+           overflow: hidden; cursor: pointer; }
+.ovfield.cur { border-color: var(--zb-line-0); }
+.ovscale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ovscale .win { transition: none; }
+.ovpick { position: absolute; cursor: pointer; z-index: 5; }
+.ovpick:hover { outline: var(--zb-w) solid var(--zb-line-0); }
+.ovreg { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: var(--zb-pad); }
+
+/* ========================================================== palette ==== */
+#palette { position: absolute; inset: 0; z-index: 120; display: none; }
+#palette.on { display: block; }
+#palette .scrim { position: absolute; inset: 0; }
+#palette .sheet { position: absolute; left: 50%; top: calc(60px * var(--ui));
+                  transform: translateX(-50%); width: calc(620px * var(--ui));
+                  background: var(--zb-sheet); border: var(--zb-w) solid var(--zb-line-0);
+                  display: flex; flex-direction: column; }
+.phead { height: calc(26px * var(--ui)); display: flex; align-items: center; gap: var(--zb-gap);
+         padding: 0 calc(10px * var(--ui)); flex: none;
+         border-bottom: var(--zb-w) solid var(--zb-line-0); }
+.pin { display: flex; align-items: center; gap: 6px; background: var(--zb-inset);
+       border-bottom: var(--zb-hair) solid var(--zb-line-2);
+       padding: calc(6px * var(--ui)) calc(10px * var(--ui)); }
+.prow { display: flex; align-items: center; height: var(--zb-row-h);
+        padding: 0 calc(10px * var(--ui)); gap: calc(10px * var(--ui));
+        border-bottom: var(--zb-hair) solid var(--zb-line-2); cursor: pointer; }
+.prow.on { border-top: var(--zb-w) solid var(--zb-line-0);
+           border-bottom: var(--zb-w) solid var(--zb-line-0); }
+.prow.on .t-label { color: var(--zb-line-0); }
+.prow .hint { margin-left: auto; color: var(--zb-line-1); }
+.pfoot { display: flex; align-items: center; gap: var(--zb-pad);
+         padding: calc(5px * var(--ui)) calc(10px * var(--ui));
+         border-top: var(--zb-w) solid var(--zb-line-0); }
+
+/* ============================================================= lock ==== */
+#lock { position: absolute; inset: 0; z-index: 300; background: var(--zb-ground); display: none; }
+#lock.on { display: block; }
+#lock .sheet { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+               width: calc(780px * var(--ui)); background: var(--zb-sheet);
+               border: var(--zb-w) solid var(--zb-line-0); display: flex; }
+#lock .lblock { width: calc(250px * var(--ui)); flex: none;
+                border-right: var(--zb-w) solid var(--zb-line-0);
+                padding: var(--zb-pad); display: flex; flex-direction: column; }
+#lock .lmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#lock .lhead { height: calc(26px * var(--ui)); display: flex; align-items: center; gap: var(--zb-gap);
+               padding: 0 var(--zb-pad); border-bottom: var(--zb-w) solid var(--zb-line-0); }
+#lock .lbody { padding: var(--zb-pad); display: flex; flex-direction: column; }
+#lock .hold { display: flex; align-items: center; gap: var(--zb-gap);
+              border-bottom: var(--zb-hair) solid var(--zb-line-2); height: calc(19px * var(--ui)); }
+#locksvg { position: absolute; left: 0; top: 0; pointer-events: none; }
+
+/* ============================================================= menu ==== */
+.menu { position: absolute; z-index: 200; background: var(--zb-sheet);
+        border: var(--zb-w) solid var(--zb-line-0); min-width: calc(196px * var(--ui)); display: none; }
+.menu.on { display: block; }
+.menu .mh { padding: 0 calc(8px * var(--ui)); height: calc(20px * var(--ui));
+            display: flex; align-items: center; border-bottom: var(--zb-w) solid var(--zb-line-0); }
+.menu .mi { height: var(--zb-row-h); display: flex; align-items: center; gap: calc(10px * var(--ui));
+            padding: 0 calc(10px * var(--ui)); cursor: pointer;
+            border-bottom: var(--zb-hair) solid var(--zb-line-2); }
+.menu .mi:last-child { border-bottom: 0; }
+.menu .mi:hover { background: var(--zb-inset); }
+.menu .mi:hover .t-label { color: var(--zb-line-0); }
+.menu .mi .hint { margin-left: auto; color: var(--zb-line-1); }
+
+/* =========================================================== toasts ==== */
+/* toasts stack directly ABOVE the corner block, in the chrome column, so
+   a transient never lands on the drawing. bottom is set in layout(). */
+#toasts { position: absolute; right: var(--zb-margin); bottom: 0;
+          z-index: 150; display: flex; flex-direction: column; gap: var(--zb-gap);
+          align-items: flex-end; }
+.toast { background: var(--zb-sheet); border: var(--zb-w) solid var(--zb-line-0);
+         width: calc(320px * var(--ui)); padding: calc(5px * var(--ui)) calc(10px * var(--ui))
+         calc(7px * var(--ui)); }
+.toast .tl { display: flex; align-items: baseline; }
+.toast .tx { display: block; color: var(--zb-line-1); font-family: var(--mono);
+             font-size: var(--fs-data); line-height: var(--lh-data); }
+.toast .cl { margin-left: auto; cursor: pointer; color: var(--zb-line-1); display: flex; }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="nm t-label">Blueline</span>
+  <span class="pitch" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+</div>
+
+<div id="os">
+  <svg id="frame" shape-rendering="crispEdges" aria-hidden="true"></svg>
+
+  <div id="field">
+    <svg id="leaders" aria-hidden="true"></svg>
+    <div id="wins"></div>
+  </div>
+
+  <div id="corner">
+    <div class="chead">
+      <span class="t-label">revisions</span>
+      <span class="rt" id="revcount"></span>
+    </div>
+    <div id="revtable"></div>
+    <div class="chead" style="border-top:var(--zb-w) solid var(--zb-line-0)">
+      <span class="t-label">view index</span>
+      <span class="rt" id="vicount"></span>
+    </div>
+    <div id="vindex"></div>
+    <div id="tblock">
+      <div class="ident">
+        <span class="t-plate">zlos</span>
+        <span class="sub">0.3 &middot; x86_64 &middot; sheet 1 of 2</span>
+      </div>
+      <div class="tbcells" id="tbcells"></div>
+      <div class="wsrow" id="wsrow"></div>
+    </div>
+  </div>
+
+  <div id="overview"></div>
+  <div id="toasts"></div>
+
+  <div id="palette">
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="phead">
+        <span class="t-label l0">command</span>
+        <span class="t-data l1">zlsh builtin</span>
+        <span class="t-data l1 spread" id="pcount"></span>
+      </div>
+      <div class="pin">
+        <span class="t-label">run</span>
+        <span class="t-data" id="pq"></span><span class="caret"></span>
+      </div>
+      <div id="presults"></div>
+      <div class="pfoot">
+        <span class="t-label">enter</span><span class="t-data l1">run</span>
+        <span class="t-label">up down</span><span class="t-data l1">select</span>
+        <span class="t-label">esc</span><span class="t-data l1">dismiss</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="lock">
+    <svg id="locksvg" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <div class="sheet">
+      <div class="lblock" id="lockblock"></div>
+      <div class="lmain">
+        <div class="lhead">
+          <span class="t-label l0">session locked</span>
+          <span class="t-data l1">tty1 &middot; seat0</span>
+          <span class="t-data l1 spread" id="lockup"></span>
+        </div>
+        <div class="lbody" id="lockbody"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="menu" id="ctxmenu"></div>
+  <div class="menu" id="winmenu"></div>
+</div>
+<script>
+'use strict';
+/* ====================================================================== *
+ * BLUELINE - a living prototype of the zlOS desktop as an engineering
+ * drawing. Chrome is ONE bottom-right corner block. Focus is LINE TYPE.
+ * The sheet keeps its own revision history in its own title block.
+ * ====================================================================== */
+
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const pad2 = n => (n < 10 ? '0' : '') + n;
+const hx = (n, w) => n.toString(16).toUpperCase().padStart(w || 8, '0');
+
+/* --------------------------------------------------- token readback ----
+ * The settings view prints the stock's own hex values and contrast
+ * ratios. A typed literal is a claim; these read the LIVE custom property
+ * off :root, so the printed number is by construction the number being
+ * rendered. */
+function tokRaw(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function tokResolve(name, depth) {
+  const v = tokRaw(name);
+  const m = /^var\((--[\w-]+)\)$/.exec(v);
+  if (m && (depth || 0) < 8) return tokResolve(m[1], (depth || 0) + 1);
+  return v;
+}
+function tokHex(name) { return tokResolve(name).toUpperCase(); }
+function tokRGB(name) {
+  const h = tokResolve(name).replace('#', '');
+  if (h.length !== 6) return null;
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+function relLum(c) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function tokRatio(fg, bg) {
+  const a = tokRGB(fg), b = tokRGB(bg);
+  if (!a || !b) return '--';
+  let l1 = relLum(a), l2 = relLum(b);
+  if (l1 < l2) { const t = l1; l1 = l2; l2 = t; }
+  return ((l1 + 0.05) / (l2 + 0.05)).toFixed(2);
+}
+/* ------------------------------------------------------------- state -- */
+const S = {
+  sheet: 1,          /* the workspace. a drawing calls it a SHEET.        */
+  theme: 'dark',     /* DARK PRIMARY. the cyanotype is the home ladder.   */
+  scene: 'desktop',
+  focus: null,
+  zc: 8, zr: 5,      /* zone lattice: 8 lettered across, 5 numbered up.   */
+  ui: 1,
+  zones: true,       /* zone letters and ticks on the border rule.        */
+  leaders: true,     /* orthogonal dogleg from a child view to its parent */
+  phantom: true,     /* a minimised view keeps its outline where it was.  */
+  balloons: true,    /* redline circles on the revision letters.          */
+  blink: true,
+  snap: true,
+  dashIdx: 1,        /* dash pitch: 0 = 6-3, 1 = 8-4, 2 = 12-6            */
+  fileSel: 1,
+  procSel: 2,
+  calcAcc: '241690',
+  setTab: 0,
+  pq: '', psel: 0,
+  t: 0,
+  clock: 14 * 3600 + 32 * 60 + 7,
+  hist: { cpu: [], net: [], mem: [] },
+  cpu: [34, 21, 47, 12],
+  memPct: 62, load: 0.31, rx: 148.2, tx: 22.7,
+  rev: [],           /* THE REVISION TABLE. the last five WM changes.     */
+  revN: 0,
+  wins: {}
+};
+for (let i = 0; i < 64; i++) {
+  S.hist.cpu.push(18 + ((i * 37) % 46));
+  S.hist.net.push(6 + ((i * 53) % 58));
+  S.hist.mem.push(56 + ((i * 17) % 12));
+}
+const DASH_STEPS = [[6, 3], [8, 4], [12, 6]];
+const ZONE_L = 'ABCDEFGHJKLM';   /* drawings skip I. so does this.        */
+
+/* ================================================== the revision table =
+ * A desktop that keeps a printed revision history in its own chrome. Every
+ * state change the window manager makes gets a letter, a view, a
+ * description and a time, and the last five stay on the sheet. This is
+ * what a drawing does and what no desktop does.
+ */
+function rev(view, desc) {
+  S.revN += 1;
+  const L = ZONE_L[(S.revN - 1) % ZONE_L.length];
+  S.rev.unshift({ r: L, w: view, d: desc, t: hhmmss(S.clock) });
+  if (S.rev.length > 5) S.rev.pop();
+  renderCorner();
+}
+
+/* ------------------------------------------------------------- icons -- *
+ * Stencils on a 96x96 field, 8x8 modules of 12px, every vertex on a
+ * multiple of 6, one stroke weight. Four constructions: the axis aligned
+ * rectangle, the 45 degree diagonal, the circle, the quarter round. */
+const ICON = {
+  shell: '<path d="M6 12 H90 V84 H6 Z"/><path d="M24 36 L42 54 L24 72"/><path d="M54 72 H78"/>',
+  files: '<path d="M6 24 V12 H36 L48 24"/><path d="M6 24 H90 V84 H6 Z"/>',
+  mon:   '<circle cx="48" cy="48" r="36"/><path d="M48 48 L72 24"/>',
+  edit:  '<path d="M18 6 H78 V90 H18 Z"/><path d="M30 30 H66"/><path d="M30 48 H66"/><path d="M30 66 H54"/>',
+  log:   '<path d="M6 18 H90 V78 H6 Z"/><path d="M18 36 H42"/><path d="M18 48 H78"/><path d="M18 60 H60"/>',
+  hex:   '<path d="M12 12 H84 V84 H12 Z"/><path d="M48 12 V84"/><path d="M12 48 H84"/>',
+  calc:  '<path d="M18 6 H78 V90 H18 Z"/><path d="M30 18 H66 V36 H30 Z"/><path d="M30 54 H42"/><path d="M54 54 H66"/><path d="M30 72 H42"/><path d="M54 72 H66"/>',
+  net:   '<path d="M18 78 L48 48 L78 78"/><path d="M6 84 H90"/><circle cx="48" cy="30" r="6"/>',
+  clock: '<circle cx="48" cy="48" r="36"/><path d="M48 48 V24"/><path d="M48 48 H66"/>',
+  chip:  '<path d="M24 24 H72 V72 H24 Z"/><path d="M36 24 V12"/><path d="M60 24 V12"/><path d="M36 72 V84"/><path d="M60 72 V84"/><path d="M24 36 H12"/><path d="M24 60 H12"/><path d="M72 36 H84"/><path d="M72 60 H84"/>',
+  set:   '<path d="M6 30 H90"/><path d="M6 66 H90"/><path d="M30 18 H42 V42 H30 Z"/><path d="M60 54 H72 V78 H60 Z"/>',
+  disk:  '<path d="M6 24 H90 V72 H6 Z"/><path d="M6 48 H90"/><circle cx="72" cy="36" r="6"/>',
+  proc:  '<path d="M12 18 H84 V36 H12 Z"/><path d="M12 42 H84 V60 H12 Z"/><path d="M12 66 H84 V84 H12 Z"/>',
+  regs:  '<path d="M12 12 H84 V84 H12 Z"/><path d="M36 12 V84"/><path d="M60 12 V84"/><path d="M12 36 H84"/>',
+  type:  '<path d="M24 84 L48 12 L72 84"/><path d="M36 54 H60"/>',
+  zone:  '<path d="M6 6 H90 V90 H6 Z"/><path d="M6 24 H90"/><path d="M24 6 V90"/><path d="M48 48 H90"/>',
+  warn:  '<path d="M48 12 L90 84 H6 Z"/><path d="M48 42 V60"/><path d="M48 70 V72"/>'
+};
+function icon(name, px) {
+  return '<svg width="' + (px || 20) + '" height="' + (px || 20) + '" viewBox="0 0 96 96"' +
+    ' fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="butt"' +
+    ' stroke-linejoin="miter" aria-hidden="true">' + (ICON[name] || '') + '</svg>';
+}
+const CTL_MIN = '<svg width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="9" width="12" height="2" fill="currentColor"/></svg>';
+const CTL_MAX = '<svg width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+const CTL_CLS = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M0 0 L12 12 M12 0 L0 12" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>';
+
+/* ------------------------------------------------------------ tables -- */
+function TH(cols) {
+  return '<tr>' + cols.map(c => '<th class="' + (c.r ? 'r' : '') + '"' +
+    (c.w ? ' style="width:' + c.w + '"' : '') + '>' + c.h + '</th>').join('') + '</tr>';
+}
+function TR(cells, attr) {
+  return '<tr ' + (attr || '') + '>' + cells.map(c => {
+    if (typeof c === 'string') return '<td>' + c + '</td>';
+    return '<td class="' + (c.c || '') + '">' + c.t + '</td>';
+  }).join('') + '</tr>';
+}
+function TBL(head, rows) {
+  return '<table class="tbl"><thead>' + TH(head) + '</thead><tbody>' + rows.join('') + '</tbody></table>';
+}
+function plotFlex(series, max, minH) {
+  const n = series.length, bw = 100 / n;
+  let bars = '';
+  series.forEach((v, i) => {
+    const h = Math.max(1, (v / max) * 100);
+    bars += '<rect x="' + (i * bw).toFixed(2) + '" y="' + (100 - h).toFixed(2) +
+      '" width="' + (bw * 0.66).toFixed(2) + '" height="' + h.toFixed(2) + '"/>';
+  });
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  return '<div class="plotbox"' + (minH ? ' style="min-height:' + minH + 'px"' : '') + '>' +
+    '<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" ' +
+    'fill="var(--zb-mark-bulk)" aria-hidden="true">' + bars + '</svg>' +
+    '<span class="meanline" style="top:' + (100 - (mean / max) * 100).toFixed(2) + '%"></span></div>';
+}
+function meter(label, val, unit, kind) {
+  const k = kind === 'bad' ? 'bad' : kind === 'hi' ? 'hi' : '';
+  return '<div class="meter"><div class="mrow"><span class="t-label">' + label + '</span>' +
+    '<span class="t-data">' + val + (unit || '') + '</span></div>' +
+    '<div class="track"><i class="' + k + '" style="width:' + Math.max(0, Math.min(100, val)) + '%"></i></div></div>';
+}
+function kv(k, v) {
+  return '<div class="kv"><span class="t-label">' + k + '</span><span class="v">' + v + '</span></div>';
+}
+/* the state word. hue is spent ONCE, on FAIL. */
+function statword(w) {
+  const c = w === 'FAIL' ? 'st-fail' : w === 'WARN' ? 'st-warn' : 'st-ok';
+  return '<span class="t-label ' + c + '">' + w + '</span>';
+}
+function hhmmss(s) {
+  s = ((s % 86400) + 86400) % 86400;
+  return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60);
+}
+/* ================================================================ vfs = */
+const FILES = [
+  ['kernel.zl',   '41.2 KiB', 'zl source',  '-r--r--r--', '12:04'],
+  ['fb.c',        '68.4 KiB', 'C source',   '-r--r--r--', '12:04'],
+  ['intel.c',     '112.9 KiB','C source',   '-rw-r--r--', '11:58'],
+  ['xhci.c',      '54.1 KiB', 'C source',   '-r--r--r--', '09:41'],
+  ['hid.c',       '19.6 KiB', 'C source',   '-r--r--r--', '09:41'],
+  ['zlfs.c',      '37.8 KiB', 'C source',   '-r--r--r--', '10:22'],
+  ['nvme.c',      '28.3 KiB', 'C source',   '-r--r--r--', '10:22'],
+  ['apic.c',      '11.4 KiB', 'C source',   '-r--r--r--', '08:50'],
+  ['wm.c',        '46.0 KiB', 'C source',   '-r--r--r--', '12:01'],
+  ['uikit.c',     '52.7 KiB', 'C source',   '-r--r--r--', '12:01'],
+  ['design.h',    '18.9 KiB', 'C header',   '-r--r--r--', '12:03'],
+  ['font_aa.c',   '24.5 KiB', 'C source',   '-r--r--r--', '07:31'],
+  ['font_sub.c',  '9.8 KiB',  'C source',   '-r--r--r--', '07:31'],
+  ['gen_icons.py','7.2 KiB',  'Python',     '-rwxr-xr-x', '12:00'],
+  ['link.ld',     '412 B',    'Linker',     '-r--r--r--', '06:12'],
+  ['Makefile',    '3.1 KiB',  'Makefile',   '-r--r--r--', '12:03'],
+  ['zlos.elf',    '249.8 KiB','Executable', '-rwxr-xr-x', '12:04'],
+  ['boot.log',    '2.4 KiB',  'Log',        '-r--r--r--', '12:04'],
+  ['ui.c',        '33.6 KiB', 'C source',   '-r--r--r--', '12:01'],
+  ['wm_drag.c',   '14.2 KiB', 'C source',   '-r--r--r--', '11:44'],
+  ['pci.c',       '16.8 KiB', 'C source',   '-r--r--r--', '08:50'],
+  ['dpll.c',      '21.7 KiB', 'C source',   '-rw-r--r--', '11:58'],
+  ['edid.c',      '8.9 KiB',  'C source',   '-r--r--r--', '09:02'],
+  ['ps2.c',       '6.4 KiB',  'C source',   '-r--r--r--', '07:12'],
+  ['sched.c',     '12.1 KiB', 'C source',   '-r--r--r--', '10:40'],
+  ['heap.c',      '9.3 KiB',  'C source',   '-r--r--r--', '10:40'],
+  ['atlas48.bin', '196.0 KiB','Binary',     '-r--r--r--', '12:00'],
+  ['dejavu_mono.ttf', '641.0 KiB', 'Font',  '-r--r--r--', '06:04'],
+  ['zlfs.img',    '4.0 MiB',  'Disk image', '-rw-r--r--', '12:04'],
+  ['core.dump',   '256.0 KiB','Core dump',  '-rw-------', '11:41'],
+  ['GUARDS.md',   '11.7 KiB', 'Markdown',   '-r--r--r--', '12:02']
+];
+const SRC = {
+  'fb.c':
+'1204  /* BLUELINE. the whole depth system is line type, and a\n' +
+'1205     dashed axis aligned rectangle is a loop of fb_fill_px.\n' +
+'1206     phase is carried, not recomputed per edge, so a corner\n' +
+'1207     never opens. all four patterns are drawn at ZB_W. */\n' +
+'1208  void fb_frame(int x, int y, int w, int h, int pat, u32 c)\n' +
+'1209  {\n' +
+'1210      const u8 *m = LINETYPE[pat];      /* on, off, on, off */\n' +
+'1211      int p = 0;\n' +
+'1212      p = dash_run(x,       y,       w, 0, m, p, c);\n' +
+'1213      p = dash_run(x + w,   y,       h, 1, m, p, c);\n' +
+'1214      p = dash_run(x + w,   y + h,  -w, 0, m, p, c);\n' +
+'1215      p = dash_run(x,       y + h,  -h, 1, m, p, c);\n' +
+'1216  }\n' +
+'1217\n' +
+'1218  /* subpixel LCD text. 5 tap (1,2,3,2,1)/9 FIR over the\n' +
+'1219     three colour stripes of one cell, gamma correct in\n' +
+'1220     linear light through the two boot built LUTs. */\n' +
+'1221  static void blend_sub(u32 *dst, const u8 *cov, u32 fg)\n' +
+'1222  {\n' +
+'1223      u32 bg = *dst;\n' +
+'1224      int r = fir5(cov, 0), g = fir5(cov, 1), b = fir5(cov, 2);\n' +
+'1225      u32 lr = lut_to_lin[(bg >> 16) & 0xff];\n' +
+'1226      u32 lg = lut_to_lin[(bg >>  8) & 0xff];\n' +
+'1227      u32 lb = lut_to_lin[(bg      ) & 0xff];\n' +
+'1228      lr += ((lut_to_lin[(fg >> 16) & 0xff] - lr) * r) >> 8;\n' +
+'1229      lg += ((lut_to_lin[(fg >>  8) & 0xff] - lg) * g) >> 8;\n' +
+'1230      lb += ((lut_to_lin[(fg      ) & 0xff] - lb) * b) >> 8;\n' +
+'1231      *dst = (lut_to_srgb[lr] << 16)\n' +
+'1232           | (lut_to_srgb[lg] <<  8)\n' +
+'1233           |  lut_to_srgb[lb];\n' +
+'1234  }',
+  'intel.c':
+'2041  /* Gen9 display. the DPLL is the point of this file.\n' +
+'2042     measured on the host: 241690 kHz, 59.998 Hz. */\n' +
+'2043  static u32 dpll_from_link(u32 m, u32 n, u32 bpp)\n' +
+'2044  {\n' +
+'2045      /* PIPE_LINK_M / PIPE_LINK_N, 24 bit fixed point */\n' +
+'2046      u64 num = (u64)m * 270000ull * 8ull;\n' +
+'2047      u64 den = (u64)n * bpp;\n' +
+'2048      return (u32)(num / den);          /* kHz */\n' +
+'2049  }\n' +
+'2050\n' +
+'2051  /* WARNING: writing PIPE_CONF while PSR is armed parks\n' +
+'2052     the panel with the backlight on. read PSR_STATUS and\n' +
+'2053     wait for idle before touching the pipe. */\n' +
+'2054  static int pipe_safe(void)\n' +
+'2055  {\n' +
+'2056      u32 psr = mmio_rd(PSR_STATUS);\n' +
+'2057      for (int i = 0; i < 200 && (psr & PSR_BUSY); i++) {\n' +
+'2058          udelay(500);\n' +
+'2059          psr = mmio_rd(PSR_STATUS);\n' +
+'2060      }\n' +
+'2061      return (psr & PSR_BUSY) == 0;\n' +
+'2062  }\n' +
+'2063\n' +
+'2064  void intel_modeset(const struct mode *m)\n' +
+'2065  {\n' +
+'2066      if (!pipe_safe()) { klog(WARN, "psr busy"); return; }\n' +
+'2067      mmio_wr(HTOTAL_A, (m->htotal - 1) << 16 | (m->hact - 1));\n' +
+'2068      mmio_wr(VTOTAL_A, (m->vtotal - 1) << 16 | (m->vact - 1));\n' +
+'2069      mmio_wr(PIPE_A_SRCSZ, (m->hact - 1) << 16 | (m->vact - 1));\n' +
+'2070      mmio_wr(PIPE_A_LINK_M, m->link_m);\n' +
+'2071      mmio_wr(PIPE_A_LINK_N, m->link_n);\n' +
+'2072      mmio_wr(PIPE_A_CONF, PIPE_ENABLE | BPC_8);\n' +
+'2073  }',
+  'kernel.zl':
+'   1  # zlOS entry. called from boot.S after the handoff.\n' +
+'   2  fn main() {\n' +
+'   3      gdt()\n' +
+'   4      idt()\n' +
+'   5      apic(4)                 # 4 logical CPUs\n' +
+'   6      pit(1000)               # 1193182 / 1000\n' +
+'   7      xhci()                  # usb hid keyboard + mouse\n' +
+'   8      fb(1600, 1000, 32)\n' +
+'   9      zlfs_mount("rd0")\n' +
+'  10      desktop()               # the compositor is the boot state\n' +
+'  11  }\n' +
+'  12\n' +
+'  13  fn desktop() {\n' +
+'  14      ui_theme_init_q8(256)   # ui scale 1.0 in q8\n' +
+'  15      sheet_border()          # the 2px rule and its zone marks\n' +
+'  16      title_block()           # every piece of persistent chrome\n' +
+'  17      loop { input() compose() }\n' +
+'  18  }',
+  'design.h':
+'   1  /* design.h - every literal in the desktop lives here.\n' +
+'   2     kernel.zl names roles only. ui.c maps roles to these. */\n' +
+'   3\n' +
+'   4  #define ZB_GROUND     0x16375E   /* cyanotype ground  */\n' +
+'   5  #define ZB_SHEET      0x1D4470   /* a view fill       */\n' +
+'   6  #define ZB_INSET      0x102A49   /* a recessed cell   */\n' +
+'   7  #define ZB_LINE_0     0xEDF1F3   /* full density      */\n' +
+'   8  #define ZB_LINE_1     0xA9BFD4   /* secondary         */\n' +
+'   9  #define ZB_LINE_2     0x7E9CB8   /* hidden line       */\n' +
+'  10  #define ZB_REDLINE    0xF99B84   /* three uses only   */\n' +
+'  11\n' +
+'  12  #define ZB_W          2          /* THE line weight   */\n' +
+'  13  #define ZB_R_0        0          /* radius, except a bubble */\n' +
+'  14  #define ZB_CORNER_W   320\n' +
+'  15  #define ZB_TITLE_H    180\n' +
+'  16  #define ZB_MARGIN     16\n' +
+'  17  #define ZB_DASH       8          /* 8 on, 4 off       */\n' +
+'  18  #define ZB_CHAIN      16         /* 16, 4, 4, 4       */\n' +
+'  19  #define ZB_MS_SLIDE   100        /* linear, the only motion */',
+  'Makefile':
+'   1  ZL      = tools/zlc\n' +
+'   2  CFLAGS  = -ffreestanding -mno-red-zone -Wall -Werror\n' +
+'   3  OBJ     = build/kernel.o build/fb.o build/intel.o \\\n' +
+'   4            build/xhci.o build/hid.o build/zlfs.o\n' +
+'   5\n' +
+'   6  all: build/zlos.elf\n' +
+'   7\n' +
+'   8  build/zlos.elf: $(OBJ) link.ld\n' +
+'   9  \tld -T link.ld -o $@ $(OBJ)\n' +
+'  10\n' +
+'  11  build/%.o: %.zl\n' +
+'  12  \t$(ZL) -c $< -o $@'
+};
+
+/* ============================================================== views ==
+ * A window is a VIEW. It has a number, a label, and a place on the sheet.
+ * p is [col, row, colspan, rowspan] on the zone lattice.
+ * parent, when set, makes this view a CHILD: drawn in chain dot and
+ * joined to its parent by an orthogonal dogleg leader. */
+const APPS = [
+  { id: 'shell', n: '01', name: 'terminal', sub: 'zlsh',      ico: 'shell', p: [0, 0, 4, 3] },
+  { id: 'files', n: '02', name: 'files',    sub: 'zlfs rd0',  ico: 'files', p: [4, 0, 4, 3] },
+  { id: 'mon',   n: '03', name: 'monitor',  sub: '1 Hz',      ico: 'mon',   p: [0, 3, 3, 2] },
+  { id: 'edit',  n: '04', name: 'editor',   sub: 'fb.c',      ico: 'edit',  p: [3, 0, 5, 5] },
+  { id: 'log',   n: '05', name: 'kernel log', sub: 'dmesg',   ico: 'log',   p: [0, 0, 6, 3] },
+  { id: 'hex',   n: '06', name: 'hex',      sub: '/dev/rd0',  ico: 'hex',   p: [0, 3, 6, 2] },
+  { id: 'calc',  n: '07', name: 'calculator', sub: 'int64',   ico: 'calc',  p: [5, 0, 3, 3] },
+  { id: 'net',   n: '08', name: 'network',  sub: 'enp0s31f6', ico: 'net',   p: [3, 3, 3, 2] },
+  { id: 'clock', n: '09', name: 'clocks',   sub: 'monotonic', ico: 'clock', p: [2, 1, 4, 3] },
+  { id: 'sys',   n: '10', name: 'system',   sub: '0.3',       ico: 'chip',  p: [2, 0, 4, 3] },
+  { id: 'set',   n: '11', name: 'settings', sub: 'design.h',  ico: 'set',   p: [0, 0, 5, 5] },
+  { id: 'disk',  n: '12', name: 'disk',     sub: 'nvme0n1',   ico: 'disk',  p: [4, 0, 4, 3] },
+  { id: 'proc',  n: '13', name: 'process',  sub: '42 tasks',  ico: 'proc',  p: [1, 0, 5, 3] },
+  { id: 'regs',  n: '14', name: 'registers', sub: 'pipe A',   ico: 'regs',  p: [2, 0, 5, 4] },
+  { id: 'type',  n: '15', name: 'type',     sub: 'DejaVu',    ico: 'type',  p: [1, 1, 5, 3] },
+  { id: 'zones', n: '16', name: 'zones',    sub: 'lattice',   ico: 'zone',  p: [1, 0, 5, 3] },
+  { id: 'dlg',   n: '17', name: 'unmount rd0', sub: 'confirm', ico: 'warn', p: [5, 2, 3, 2],
+    parent: 'files', dialog: true }
+];
+const APP = {};
+APPS.forEach(a => { APP[a.id] = a; });
+/* ==================================================== view renderers === */
+const R = {};
+
+function viewhead(cells) {
+  return '<div class="row" style="border-bottom:var(--zb-w) solid var(--zb-line-0);' +
+    'height:var(--zb-row-h);flex:none">' + cells + '</div>';
+}
+
+R.shell = () => {
+  const L = [
+    ['zlsh 0.3  -  no host OS, no libc', 'dim'], null,
+    ['$ make -C kernel modeset', ''],
+    ['  ZL   kernel.zl -> build/kernel.o', 'dim'],
+    ['  CC   fb.c intel.c xhci.c hid.c zlfs.c', 'dim'],
+    ['  LD   build/zlos.elf', 'dim'],
+    ['       text 218432  data 30720  bss 1441792', 'dim'],
+    ['$ ./tools/regdump --pipe A', ''],
+    ['  PIPE_A_CONF     0xC0000000   enabled, 8 bpc', 'dim'],
+    ['  PIPE_A_LINK_M   0x0080D9E4', 'dim'],
+    ['  PIPE_A_LINK_N   0x00800000', 'dim'],
+    ['  DPLL_CTRL1      0x00000601   link 2.7 GHz', 'dim'],
+    ['  pixel clock 241690 kHz -> 59.998 Hz', ''],
+    ['$ zlfs fsck rd0', ''],
+    ['  3 generations, 0 orphan extents', 'dim'],
+    ['  power cycle 1 -> 2 -> 3 survived', 'dim'],
+    ['$ ', 'caret']
+  ];
+  let out = '<div class="plate stack" style="flex:1;min-height:0;overflow:hidden">';
+  L.forEach(l => {
+    if (!l) { out += '<span class="t-data">&nbsp;</span>'; return; }
+    if (l[1] === 'caret') { out += '<span class="t-data">' + l[0] + '<span class="caret"></span></span>'; return; }
+    out += '<span class="t-data ' + (l[1] === 'dim' ? 'l1' : 'l0') + '">' + l[0] + '</span>';
+  });
+  out += '</div>';
+  out += '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="toast" data-arg="build"><span class="t-label">rebuild</span></span>' +
+    '<span class="btn" data-act="open" data-arg="log"><span class="t-label">dmesg</span></span>' +
+    '<span class="btn" data-act="open" data-arg="regs"><span class="t-label">regdump</span></span>' +
+    '<span class="t-data l1 spread">exit 0 &middot; 1.42 s</span></div>';
+  return out;
+};
+
+R.files = () => {
+  const rows = FILES.map((f, i) => TR(
+    [f[0], { t: f[1], c: 'r' }, f[2], f[3], { t: f[4], c: 'r' }],
+    'class="pick' + (i === S.fileSel ? ' sel' : '') + '" data-act="file" data-arg="' + i + '"'
+  ));
+  return viewhead('<span class="t-label">path</span><span class="t-data">/src/kernel</span>' +
+      '<span class="t-data l1 spread">' + FILES.length + ' entries</span>') +
+    '<div class="scroll">' + TBL(
+      [{ h: 'name', w: '34%' }, { h: 'size', w: '16%', r: 1 }, { h: 'kind', w: '20%' },
+       { h: 'perm', w: '18%' }, { h: 'mtime', w: '12%', r: 1 }], rows) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="height:var(--zb-row-h)"><span class="t-label">selected</span>' +
+    '<span class="t-data l0 bold">' + FILES[S.fileSel][0] + '</span>' +
+    '<span class="t-data l1">' + FILES[S.fileSel][1] + '</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data l1">checksum verified</span></div>' +
+    kv('full path', '/src/kernel/' + FILES[S.fileSel][0]) +
+    kv('kind', FILES[S.fileSel][2]) +
+    kv('mode', FILES[S.fileSel][3] + '  uid 0  gid 0') +
+    kv('extent', 'generation 3, 1 extent, contiguous') +
+    kv('crc32', '0x' + hx((S.fileSel * 2654435761) >>> 0, 8)) +
+    '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="open" data-arg="edit"><span class="t-label">open in editor</span></span>' +
+    '<span class="btn" data-act="open" data-arg="hex"><span class="t-label">hex</span></span>' +
+    '<span class="btn" data-act="open" data-arg="dlg"><span class="t-label">unmount rd0</span></span></div>';
+};
+
+/* THE CHILD VIEW. Drawn in chain dot and joined to 02 FILES by a dogleg
+   leader, because chain dot is the drafting mark for a reference and a
+   dialog IS a reference to the view that raised it. */
+R.dlg = () => {
+  return '<div class="row" style="gap:10px;flex:none">' +
+    '<span class="l0" style="display:flex">' + icon('warn', 26) + '</span>' +
+    '<span class="t-body">Unmount /dev/rd0. Generation 3 has 0 orphan extents, but 2 dirty pages are still queued behind the nvme admin path.</span>' +
+    '</div>' +
+    '<div class="pad-t">' + kv('mount', '/dev/rd0 on /mnt/rd0') +
+    kv('dirty pages', '2 queued, 8 KiB') +
+    kv('holder', 'pid 37 zlfs') + '</div>' +
+    '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="toast" data-arg="unmount"><span class="t-label">flush and unmount</span></span>' +
+    '<span class="btn" data-act="closeself"><span class="t-label">cancel</span></span>' +
+    '<span class="t-data l1 spread">child of view 02</span></div>';
+};
+
+R.edit = () => {
+  const name = FILES[S.fileSel][0];
+  const body = SRC[name];
+  if (!body) {
+    return viewhead('<span class="t-label">buffer</span><span class="t-data">' + name + '</span>' +
+        '<span class="t-data l1 spread">binary</span>') +
+      '<div class="well stack" style="flex:1;justify-content:center;align-items:center;margin-top:8px">' +
+      '<span class="t-label">no text preview</span>' +
+      '<span class="t-data l1">' + name + ' is not a text buffer. open it in view 06 HEX.</span>' +
+      '</div><div class="row pad-t"><span class="btn prim" data-act="open" data-arg="hex">' +
+      '<span class="t-label">open in hex</span></span></div>';
+  }
+  const lines = body.split('\n');
+  let out = viewhead('<span class="t-label">buffer</span><span class="t-data">' + name + '</span>' +
+    '<span class="t-data l1">read only</span>' +
+    '<span class="t-data l1 spread">utf-8 &middot; lf &middot; ' + lines.length + ' ln</span>');
+  out += '<div class="scroll"><div style="display:flex;min-height:100%">' +
+    '<div class="gutnum t-data">';
+  lines.forEach(l => { out += (l.slice(0, 6).trim() || '&middot;') + '<br>'; });
+  out += '</div><div class="pre" style="padding-left:8px;flex:1">';
+  lines.forEach(l => { out += l.slice(6) + '\n'; });
+  out += '<span class="caret"></span></div></div></div>';
+  out += '<div class="hr2"></div><div class="row" style="height:var(--zb-row-h)">' +
+    '<span class="t-label">ln</span><span class="t-data">' + lines.length + '</span>' +
+    '<span class="t-label">col</span><span class="t-data">1</span>' +
+    '<span class="t-label">tab</span><span class="t-data">4</span>' +
+    '<span class="spread"></span>' + statword('OK') + '<span class="t-data l1">buffer clean</span></div>';
+  return out;
+};
+
+R.mon = () => {
+  const cores = S.cpu.map((v, i) =>
+    meter('cpu ' + i, v, ' %', v > 80 ? 'bad' : v > 60 ? 'hi' : ''));
+  const procs = [
+    ['1', 'zlos', '18.4', '212.0', 'R', 'compose'],
+    ['12', 'zlsh', '2.1', '4.2', 'S', 'tty1'],
+    ['18', 'wm', '9.6', '31.8', 'R', 'surface'],
+    ['24', 'fbcon', '0.4', '2.0', 'S', 'console'],
+    ['31', 'xhci', '1.2', '8.4', 'S', 'irq 16'],
+    ['37', 'zlfs', '0.8', '18.6', 'S', 'rd0'],
+    ['42', 'regdump', '0.0', '1.1', 'Z', 'exited'],
+    ['48', 'intel', '4.4', '22.9', 'R', 'pipe A']
+  ].map((p, i) => TR([p[0], p[1], { t: p[2], c: 'r' }, { t: p[3], c: 'r' },
+    { t: p[4] === 'Z' ? '<span class="bold">Z</span>' : p[4] }, p[5]],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  const irq = [
+    ['0', 'timer', '1 024', 'apic', 'OK'], ['1', 'i8042', '0', 'legacy', 'WARN'],
+    ['16', 'xhci', '312', 'msi-x', 'OK'], ['19', 'e1000e', '148', 'msi', 'OK'],
+    ['24', 'nvme q0', '96', 'msi-x', 'OK'], ['25', 'nvme q1', '41', 'msi-x', 'OK'],
+    ['33', 'intel vbl', '60', 'msi', 'OK'], ['255', 'spurious', '0', 'apic', 'OK']
+  ].map(r => TR([r[0], r[1], { t: r[2], c: 'r' }, r[3], { t: statword(r[4]) }]));
+  return '<div class="cols2">' +
+    '<div class="stack">' + cores.join('') +
+      meter('memory', S.memPct, ' %', S.memPct > 85 ? 'hi' : '') +
+      '<div class="row"><span class="t-label">cpu history</span>' +
+      '<span class="t-data l1 spread">64 s &middot; 1 Hz &middot; mean ruled</span></div>' +
+      '<div class="stack" style="flex:1;margin-top:4px">' + plotFlex(S.hist.cpu, 100, 48) + '</div>' +
+      '<div class="row pad-t"><span class="t-label">resident</span>' +
+      '<span class="t-data l1 spread">15.4 GiB total</span></div>' +
+      kv('kernel image', '218 KiB text, 30 KiB data') +
+      kv('back buffer', '6.4 MiB') +
+      kv('drag scratch', '128 MiB at high RAM') +
+    '</div>' +
+    '<div class="stack" style="min-height:0">' +
+      TBL([{ h: 'pid', w: '13%' }, { h: 'task', w: '24%' },
+        { h: 'cpu', w: '16%', r: 1 }, { h: 'mem', w: '18%', r: 1 },
+        { h: 'st', w: '11%' }, { h: 'note', w: '18%' }], procs) +
+      '<div class="row pad-t"><span class="t-label">interrupts</span>' +
+      '<span class="t-data l1 spread">since boot &middot; per second</span></div>' +
+      TBL([{ h: 'vec', w: '14%' }, { h: 'source', w: '30%' }, { h: 'rate', w: '20%', r: 1 },
+        { h: 'route', w: '20%' }, { h: 'st', w: '16%' }], irq) +
+      '<div class="row pad-t"><span class="t-label">memory history</span>' +
+      '<span class="t-data l1 spread">64 s &middot; resident</span></div>' +
+      '<div class="stack" style="flex:1;margin-top:4px;min-height:0">' +
+      plotFlex(S.hist.mem, 100, 40) + '</div>' +
+      '<div class="row pad-t"><span class="t-label">scheduler</span>' +
+      '<span class="t-data l1 spread">round robin, 4 ms quantum</span></div>' +
+      kv('context switches', '18 412 &middot; 288 /s') +
+      kv('run queue', '2 ready, 0 blocked on io') +
+      kv('preemptions', '1 904 since boot') +
+    '</div></div>' +
+    '<div class="hr2 pad-t"></div>' +
+    '<div class="row" style="height:var(--zb-row-h)">' +
+    '<span class="t-label">load</span><span class="t-data l0 bold">' + S.load.toFixed(2) + '</span>' +
+    '<span class="t-label">tasks</span><span class="t-data">42</span>' +
+    '<span class="t-label">irq/s</span><span class="t-data">1024</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data l1">scheduler nominal</span></div>';
+};
+
+R.log = () => {
+  const L = [
+    ['0.000000', 'OK', 'zlOS 0.3 x86_64, built from 11 files'],
+    ['0.000412', 'OK', 'e820: usable 0x0000000000100000 - 0x00000000bffdffff'],
+    ['0.001980', 'OK', 'apic: I/O APIC id 2, 24 redirection entries'],
+    ['0.004221', 'OK', 'tsc: 2904.001 MHz, invariant'],
+    ['0.010884', 'OK', 'pci: 0000:00:02.0 8086:5916 gen9 display'],
+    ['0.011240', 'OK', 'pci: bar0 64 bit, 0x00000000d0000000 len 16 MiB'],
+    ['0.028119', 'WARN', 'intel: PSR armed, deferring PIPE_CONF write'],
+    ['0.031002', 'OK', 'intel: PIPE_A_LINK_M/N 0x0080D9E4 / 0x00800000'],
+    ['0.031440', 'OK', 'intel: pixel clock 241690 kHz, refresh 59.998 Hz'],
+    ['0.048210', 'OK', 'fb: 1600x1000x32 stride 6400, gamma LUTs built'],
+    ['0.061773', 'OK', 'xhci: 0000:00:14.0, 16 slots, 4 ports'],
+    ['0.062114', 'WARN', 'xhci: BIOS owns the controller, requesting handoff'],
+    ['0.079003', 'OK', 'xhci: handoff complete after 16.9 ms'],
+    ['0.081550', 'OK', 'xhci: scratchpad buffers 8 x 4 KiB'],
+    ['0.094612', 'OK', 'hid: keyboard on slot 1, 8 byte boot report'],
+    ['0.095004', 'OK', 'hid: mouse on slot 2, depth 1, 125 Hz'],
+    ['0.121880', 'FAIL', 'nvme: admin queue timeout after 500 ms, retrying'],
+    ['0.640210', 'OK', 'nvme: identify ok, 1 namespace, 476.9 GiB'],
+    ['0.712004', 'OK', 'zlfs: rd0 mounted, generation 3, 0 orphans'],
+    ['0.804119', 'OK', 'ui: theme_init_q8(256), 21 roles bound'],
+    ['0.812440', 'OK', 'wm: sheet border ruled, zones 8 x 5'],
+    ['0.819003', 'OK', 'wm: title block placed at 320 x 180 dp, bottom right'],
+    ['0.821770', 'OK', 'wm: line types A continuous B hidden C chain D phantom'],
+    ['0.826114', 'OK', 'desktop: compositor is the boot state, 4 views']
+  ].map(l => TR([{ t: '[ ' + l[0] + ' ]', c: 'l1' }, { t: statword(l[1]) }, l[2]]));
+  return viewhead('<span class="t-label">ring buffer</span><span class="t-data">64 KiB</span>' +
+      '<span class="t-label">level</span><span class="t-data">all</span>' +
+      '<span class="t-data l1 spread">24 records &middot; 2 warn &middot; 1 fail</span>') +
+    '<div class="scroll">' + TBL([{ h: 'time', w: '16%' }, { h: 'state', w: '9%' },
+      { h: 'record', w: '75%' }], L) + '</div>';
+};
+
+R.hex = () => {
+  const base = 0x0011A4C0;
+  const rows = [];
+  const seed = [0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00];
+  for (let r = 0; r < 20; r++) {
+    let bytes = [], asc = '';
+    for (let i = 0; i < 16; i++) {
+      const v = r === 0 && i < 8 ? seed[i] : ((r * 37 + i * 11 + 0x21) & 0xff);
+      bytes.push(hx(v, 2));
+      asc += (v >= 32 && v < 127) ? String.fromCharCode(v) : '.';
+    }
+    rows.push('<tr' + (r === 0 ? ' class="sel"' : '') + '><td>' + hx(base + r * 16, 8) + '</td><td>' +
+      bytes.slice(0, 8).join(' ') + '</td><td>' + bytes.slice(8).join(' ') + '</td><td>' +
+      asc.replace(/</g, '&lt;') + '</td></tr>');
+  }
+  return viewhead('<span class="t-label">source</span><span class="t-data">/dev/rd0</span>' +
+      '<span class="t-label">offset</span><span class="t-data">0x' + hx(base) + '</span>' +
+      '<span class="t-data l1 spread">width 16 &middot; ascii</span>') +
+    '<div class="scroll"><table class="tbl"><thead>' +
+    TH([{ h: 'address', w: '17%' }, { h: '00 .. 07', w: '28%' }, { h: '08 .. 0f', w: '28%' },
+        { h: 'ascii', w: '27%' }]) + '</thead><tbody>' + rows.join('') + '</tbody></table></div>' +
+    '<div class="hr2"></div><div class="row" style="height:var(--zb-row-h)">' +
+    '<span class="t-label">signature</span><span class="t-data l0 bold">7F 45 4C 46</span>' +
+    '<span class="t-data l1">elf64, little endian</span>' +
+    '<span class="spread"></span>' + statword('OK') + '</div>';
+};
+
+R.calc = () => {
+  const keys = [
+    ['hex', 'dec', 'bin', 'clr'],
+    ['7', '8', '9', 'div'],
+    ['4', '5', '6', 'mul'],
+    ['1', '2', '3', 'sub'],
+    ['0', 'dot', 'eq', 'add']
+  ];
+  const n = parseInt(S.calcAcc, 10) || 0;
+  let grid = '<div style="display:grid;grid-template-columns:repeat(4,1fr);' +
+    'border-left:var(--zb-hair) solid var(--zb-line-2);' +
+    'border-top:var(--zb-hair) solid var(--zb-line-2);flex:1;min-height:0">';
+  keys.forEach(row => row.forEach(k => {
+    const label = { div: '/', mul: 'x', sub: '-', add: '+', eq: '=', dot: '.', clr: 'c' }[k] || k;
+    grid += '<span data-act="calc" data-arg="' + k + '" style="' +
+      'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+      'border-right:var(--zb-hair) solid var(--zb-line-2);' +
+      'border-bottom:var(--zb-hair) solid var(--zb-line-2);' +
+      (k === 'eq' ? 'background:var(--zb-line-0)' : '') + '">' +
+      '<span class="t-label" style="color:var(--' + (k === 'eq' ? 'zb-ground' : 'zb-line-0') + ')">' +
+      label + '</span></span>';
+  }));
+  grid += '</div>';
+  return '<div class="well" style="text-align:right;flex:none">' +
+    '<span class="t-label" style="float:left">acc</span>' +
+    '<span class="t-data l0 bold" style="font-size:calc(18px * var(--ui))">' + S.calcAcc + '</span></div>' +
+    '<div class="pad-t" style="flex:none">' +
+    kv('hex', '0x' + hx(n, 8)) +
+    kv('bin', n.toString(2).padStart(24, '0').replace(/(.{8})/g, '$1 ').trim()) +
+    kv('oct', '0o' + n.toString(8)) +
+    kv('kHz to Hz', (n * 1000).toLocaleString('en-US')) +
+    '</div><div class="pad-t stack" style="flex:1;min-height:0">' + grid + '</div>';
+};
+
+R.net = () => {
+  const ifs = [
+    ['enp0s31f6', 'OK', 'UP', '10.0.2.15/24', S.rx.toFixed(1), S.tx.toFixed(1), '1500'],
+    ['wlp3s0', 'WARN', 'DOWN', '-', '0.0', '0.0', '1500'],
+    ['lo', 'OK', 'UP', '127.0.0.1/8', '0.4', '0.4', '65536']
+  ].map(f => TR([f[0], { t: statword(f[1]) + ' <span class="t-data">' + f[2] + '</span>' },
+    f[3], { t: f[4], c: 'r' }, { t: f[5], c: 'r' }, { t: f[6], c: 'r' }]));
+  const socks = [
+    ['tcp', '10.0.2.15:22', '10.0.2.2:51402', 'ESTABLISHED', '12'],
+    ['tcp', '10.0.2.15:8080', '0.0.0.0:*', 'LISTEN', '18'],
+    ['tcp', '10.0.2.15:5900', '10.0.2.2:44118', 'ESTABLISHED', '18'],
+    ['udp', '0.0.0.0:68', '0.0.0.0:*', 'BOUND', '9'],
+    ['udp', '10.0.2.15:123', '162.159.200.1:123', 'BOUND', '9']
+  ].map(s => TR([s[0], s[1], s[2], { t: '<span class="t-label l1">' + s[3] + '</span>' }, { t: s[4], c: 'r' }]));
+  const routes = [
+    ['0.0.0.0/0', '10.0.2.2', 'enp0s31f6', '100', 'static'],
+    ['10.0.2.0/24', 'link', 'enp0s31f6', '100', 'kernel'],
+    ['127.0.0.0/8', 'link', 'lo', '0', 'kernel'],
+    ['169.254.0.0/16', 'link', 'enp0s31f6', '1000', 'fallback']
+  ].map(r => TR([r[0], r[1], r[2], { t: r[3], c: 'r' }, r[4]]));
+  return viewhead('<span class="t-label">throughput</span>' +
+      '<span class="t-data l0 bold">rx ' + S.rx.toFixed(1) + ' KiB/s</span>' +
+      '<span class="t-data l0 bold">tx ' + S.tx.toFixed(1) + ' KiB/s</span>' +
+      '<span class="t-data l1 spread">rtt 0.42 ms &middot; 0 retransmit</span>') +
+    '<div class="stack" style="flex:1;margin:8px 0 6px;min-height:0">' + plotFlex(S.hist.net, 80, 52) + '</div>' +
+    TBL([{ h: 'iface', w: '18%' }, { h: 'state', w: '22%' }, { h: 'address', w: '22%' },
+      { h: 'rx kib', w: '13%', r: 1 }, { h: 'tx kib', w: '13%', r: 1 }, { h: 'mtu', w: '12%', r: 1 }], ifs) +
+    '<div class="row pad-t"><span class="t-label">sockets</span>' +
+    '<span class="t-data l1 spread">5 open &middot; 0 timewait</span></div>' +
+    TBL([{ h: 'proto', w: '14%' }, { h: 'local', w: '26%' },
+      { h: 'remote', w: '28%' }, { h: 'state', w: '24%' }, { h: 'pid', w: '8%', r: 1 }], socks) +
+    '<div class="row pad-t"><span class="t-label">routes</span>' +
+    '<span class="t-data l1 spread">4 entries</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'destination', w: '28%' }, { h: 'via', w: '19%' },
+      { h: 'dev', w: '22%' }, { h: 'metric', w: '15%', r: 1 }, { h: 'proto', w: '16%' }], routes) + '</div>';
+};
+
+R.clock = () => {
+  const t = S.clock;
+  const zones = [['local', 0, 'Europe/London'], ['utc', 0, 'Etc/UTC'],
+    ['new york', -18000, 'America/New_York'], ['tokyo', 32400, 'Asia/Tokyo']];
+  const rows = zones.map(z => TR([z[0], { t: hhmmss(t + z[1]), c: 'r bold' }, z[2],
+    { t: (z[1] >= 0 ? '+' : '') + (z[1] / 3600).toFixed(0) + ' h', c: 'r' }]));
+  const sec = t % 60, min = Math.floor(t / 60) % 60, hr = Math.floor(t / 3600) % 12;
+  const ang = (deg, len) => {
+    const a = (deg - 90) * Math.PI / 180;
+    return { x: 48 + Math.cos(a) * len, y: 48 + Math.sin(a) * len };
+  };
+  const hp = ang(hr * 30 + min * 0.5, 22), mp = ang(min * 6, 33), sp = ang(sec * 6, 37);
+  /* the dial is a drawing: the hour hand is continuous, the minute hand
+     continuous thin, and the second hand is drawn as a CENTRE LINE, which
+     is the drafting mark for an axis. no colour is spent on it. */
+  const dial = '<svg width="118" height="118" viewBox="0 0 96 96" fill="none" ' +
+    'stroke="var(--zb-line-0)" stroke-width="2" aria-hidden="true">' +
+    '<circle cx="48" cy="48" r="42" stroke="var(--zb-line-0)" stroke-width="2"/>' +
+    '<circle cx="48" cy="48" r="36" stroke="var(--zb-line-2)" stroke-width="1" stroke-dasharray="8 4"/>' +
+    [0, 3, 6, 9].map(h => {
+      const a = ang(h * 30, 42), b = ang(h * 30, 33);
+      return '<path d="M' + a.x.toFixed(1) + ' ' + a.y.toFixed(1) + ' L' + b.x.toFixed(1) + ' ' + b.y.toFixed(1) + '" stroke-width="3"/>';
+    }).join('') +
+    '<path d="M48 48 L' + hp.x.toFixed(1) + ' ' + hp.y.toFixed(1) + '" stroke-width="4"/>' +
+    '<path d="M48 48 L' + mp.x.toFixed(1) + ' ' + mp.y.toFixed(1) + '" stroke-width="2"/>' +
+    '<path d="M48 48 L' + sp.x.toFixed(1) + ' ' + sp.y.toFixed(1) + '" stroke-width="1" ' +
+      'stroke="var(--zb-line-2)" stroke-dasharray="10 3 3 3"/>' +
+    '<circle cx="48" cy="48" r="2" fill="var(--zb-line-0)" stroke="none"/></svg>';
+  const timers = [['build watch', '00:04:12', 'OK'], ['soak test', '02:41:55', 'OK'],
+    ['pomodoro', '00:00:00', 'IDLE']].map(x => TR([x[0], { t: x[1], c: 'r bold' },
+      { t: x[2] === 'IDLE' ? '<span class="t-label l1">IDLE</span>' : statword('OK') }]));
+  return '<div class="cols2"><div class="stack">' +
+    TBL([{ h: 'zone', w: '26%' }, { h: 'time', w: '26%', r: 1 }, { h: 'tz', w: '34%' },
+      { h: 'off', w: '14%', r: 1 }], rows) +
+    '<div class="row pad-t"><span class="t-label">timers</span>' +
+    '<span class="t-data l1 spread">2 running</span></div>' +
+    TBL([{ h: 'name', w: '46%' }, { h: 'elapsed', w: '30%', r: 1 }, { h: 'state', w: '24%' }], timers) +
+    '</div><div class="stack" style="align-items:center;flex:0 0 auto;padding-left:12px">' +
+    dial + '<span class="t-data l0 bold pad-t" style="font-size:calc(16px * var(--ui))">' +
+    hhmmss(t) + '</span><span class="t-label">local</span>' +
+    '<div class="hr1" style="width:100%;margin:8px 0"></div>' +
+    kv('uptime', hhmmss(4211 + S.t)) + kv('monotonic', (4211 + S.t) + '.004 s') +
+    kv('tsc', '2904.001 MHz') + '</div></div>';
+};
+
+R.sys = () => {
+  return '<div class="cols2"><div class="stack">' +
+    '<span class="t-plate">zlOS 0.3</span>' +
+    '<div class="row" style="gap:12px;margin:6px 0 10px">' +
+    '<span class="t-data">no host OS</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data">no libc</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data">no GPU</span></div>' +
+    kv('kernel', 'zlos 0.3 x86_64') + kv('language', 'zl, self hosting') +
+    kv('lines', '11 374 hand written') + kv('cpu', 'core i5-7300U, 4 threads') +
+    kv('tsc', '2904.001 MHz invariant') + kv('memory', '15.4 GiB, ' + S.memPct + ' % used') +
+    kv('framebuffer', '1600 x 1000 x 32') + kv('stride', '6400 B') +
+    kv('pixel clock', '241 690 kHz') + kv('refresh', '59.998 Hz') +
+    kv('uptime', hhmmss(4211 + S.t)) +
+    '<div class="plate pad-t" style="flex:1;min-height:calc(52px * var(--ui));overflow:hidden">' +
+    '<span class="pre">zlOS 0.3 x86_64\n' +
+    'link 12:04 &middot; 11 objects &middot; 218 432 B text\n' +
+    'no host OS &middot; no libc &middot; no GPU driver stack\n' +
+    'self hosting since generation 3</span></div>' +
+    '</div><div class="stack">' +
+    '<span class="t-label">pci topology</span>' +
+    TBL([{ h: 'slot', w: '32%' }, { h: 'id', w: '26%' }, { h: 'driver', w: '23%' }, { h: 'st', w: '19%' }],
+      [['0000:00:02.0', '8086:5916', 'intel', 'OK'], ['0000:00:14.0', '8086:9d2f', 'xhci', 'OK'],
+       ['0000:00:1f.6', '8086:15d8', 'e1000e', 'OK'], ['0000:02:00.0', '144d:a808', 'nvme', 'WARN'],
+       ['0000:00:1f.3', '8086:9d71', 'none', 'FAIL']]
+        .map(p => TR([p[0], p[1], p[2], { t: statword(p[3]) }]))) +
+    '<div class="row pad-t"><span class="t-label">subsystems</span></div>' +
+    kv('display', 'gen9 modeset, real DPLL') + kv('input', 'xHCI + HID boot protocol') +
+    kv('storage', 'zlfs on nvme, generation 3') + kv('text', 'subpixel LCD, 5 tap FIR') +
+    '<div class="row pad-t"><span class="t-label">memory map</span>' +
+    '<span class="t-data l1 spread">e820, as handed over</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'base', w: '34%' }, { h: 'length', w: '25%', r: 1 },
+      { h: 'kind', w: '41%' }],
+      [['0x00000000', '640 KiB', 'usable'],
+       ['0x000A0000', '384 KiB', 'reserved'],
+       ['0x00100000', '3.0 GiB', 'usable'],
+       ['0xC0000000', '128 MiB', 'drag scratch'],
+       ['0xD0000000', '16 MiB', 'gen9 bar0'],
+       ['0xE0000000', '256 MiB', 'gen9 stolen'],
+       ['0xFEC00000', '4 KiB', 'io apic'],
+       ['0xFED00000', '1 KiB', 'hpet'],
+       ['0xFEE00000', '4 KiB', 'local apic'],
+       ['0xFFC00000', '4 MiB', 'firmware'],
+       ['0x1_00000000', '12.4 GiB', 'usable']]
+        .map(m => TR([m[0], { t: m[1], c: 'r' }, m[2]]))) + '</div>' +
+    '</div></div>';
+};
+
+R.disk = () => {
+  const mounts = [
+    ['/', 'zlfs', '476.9 GiB', '182.4 GiB', 38],
+    ['/boot', 'fat32', '512.0 MiB', '108.2 MiB', 21],
+    ['/src', 'zlfs', '64.0 GiB', '54.9 GiB', 86],
+    ['/dev/rd0', 'ramfs', '4.0 MiB', '3.8 MiB', 95]
+  ];
+  const rows = mounts.map(m => TR([m[0], m[1], { t: m[2], c: 'r' }, { t: m[3], c: 'r' },
+    { t: m[4] + ' %', c: 'r bold' },
+    { t: statword(m[4] > 90 ? 'FAIL' : m[4] > 80 ? 'WARN' : 'OK') }]));
+  /* the stacked bar is a DIMENSION STRING: each segment is measured
+     between two extension lines, the way a drawing dimensions a run. */
+  const blocks = [['build', 62], ['src', 21], ['docs', 9], ['tmp', 5], ['free', 3]];
+  let bar = '<div style="display:flex;height:calc(24px * var(--ui));' +
+    'border:var(--zb-hair) solid var(--zb-line-2)">';
+  blocks.forEach((b, i) => {
+    bar += '<div style="width:' + b[1] + '%;' +
+      (i < 3 ? 'background:var(--zb-mark-bulk);opacity:' + (1 - i * 0.28) + ';' : '') +
+      'border-right:var(--zb-hair) solid var(--zb-line-2)"></div>';
+  });
+  bar += '</div>';
+  return viewhead('<span class="t-label">volume</span><span class="t-data">nvme0n1</span>' +
+      '<span class="t-data l1 spread">4 mounts &middot; generation 3</span>') +
+    '<div class="pad-t">' + TBL([{ h: 'mount', w: '22%' }, { h: 'fs', w: '14%' },
+      { h: 'size', w: '18%', r: 1 }, { h: 'used', w: '18%', r: 1 },
+      { h: 'pct', w: '13%', r: 1 }, { h: 'st', w: '15%' }], rows) + '</div>' +
+    '<div class="row pad-t"><span class="t-label">/src by directory</span>' +
+    '<span class="t-data l1 spread">54.9 GiB</span></div>' +
+    '<div style="margin-top:4px">' + bar + '</div>' +
+    '<div class="row" style="margin-top:4px;gap:14px">' + blocks.map(b =>
+      '<span class="t-data l1">' + b[0] + ' ' + b[1] + '%</span>').join('') + '</div>' +
+    '<div class="scroll pad-t">' + TBL([{ h: 'path', w: '52%' }, { h: 'size', w: '24%', r: 1 },
+      { h: 'files', w: '24%', r: 1 }],
+      [['/src/kernel', '34.1 GiB', '11 374'], ['/src/kernel/build', '18.2 GiB', '486'],
+       ['/src/docs', '1.9 GiB', '208'], ['/src/tools', '0.6 GiB', '44'],
+       ['/src/tests', '0.1 GiB', '312']].map(d => TR([d[0], { t: d[1], c: 'r' }, { t: d[2], c: 'r' }]))) +
+    '</div>';
+};
+
+R.proc = () => {
+  const rows = [
+    ['1', 'zlos', 'R', '18.4', '212.0 MiB', '0.0', 'compose'],
+    ['12', 'zlsh', 'S', '2.1', '4.2 MiB', '0.0', 'tty1 read'],
+    ['18', 'wm', 'R', '9.6', '31.8 MiB', '0.2', 'surface blit'],
+    ['24', 'fbcon', 'S', '0.4', '2.0 MiB', '0.0', 'console'],
+    ['31', 'xhci', 'S', '1.2', '8.4 MiB', '1.1', 'irq 16'],
+    ['37', 'zlfs', 'S', '0.8', '18.6 MiB', '4.4', 'rd0 flush'],
+    ['42', 'regdump', 'Z', '0.0', '1.1 MiB', '0.0', 'exit 0'],
+    ['48', 'intel', 'R', '4.4', '22.9 MiB', '0.0', 'pipe A'],
+    ['51', 'nvme', 'D', '0.9', '9.8 MiB', '12.6', 'admin queue'],
+    ['57', 'hid', 'S', '0.3', '1.4 MiB', '0.0', 'boot report'],
+    ['61', 'soak', 'R', '31.2', '64.0 MiB', '0.0', 'power cycle 3'],
+    ['66', 'toast', 'S', '0.0', '0.9 MiB', '0.0', 'idle']
+  ].map(p => TR([p[0], p[1],
+    { t: '<span class="' + (p[2] === 'D' || p[2] === 'Z' ? 'bold' : '') + '">' + p[2] + '</span>' },
+    { t: p[3], c: 'r' }, { t: p[4], c: 'r' }, { t: p[5], c: 'r' }, p[6]],
+    'class="pick" data-act="none"'));
+  return viewhead('<span class="t-label">tasks</span><span class="t-data">42</span>' +
+      '<span class="t-label">running</span><span class="t-data">4</span>' +
+      '<span class="t-label">zombie</span><span class="t-data bold">1</span>' +
+      '<span class="t-label">blocked</span><span class="t-data bold">1</span>' +
+      '<span class="t-data l1 spread">sort by cpu</span>') +
+    '<div class="scroll">' + TBL([{ h: 'pid', w: '9%' }, { h: 'task', w: '17%' }, { h: 'st', w: '8%' },
+      { h: 'cpu', w: '11%', r: 1 }, { h: 'rss', w: '17%', r: 1 }, { h: 'io ms', w: '12%', r: 1 },
+      { h: 'note', w: '26%' }], rows) + '</div>' +
+    '<div class="hr2"></div><div class="row" style="height:calc(30px * var(--ui))">' +
+    '<span class="btn" data-act="toast" data-arg="reap"><span class="t-label">reap 42</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="renice"><span class="t-label">renice 61</span></span>' +
+    '<span class="spread"></span>' + statword('WARN') +
+    '<span class="t-data l1">nvme 51 blocked 12.6 ms</span></div>';
+};
+
+R.regs = () => {
+  const regs = [
+    ['PIPE_A_CONF', '0x70008', 'C0000000', 'enable=1 bpc=8 gamma=split'],
+    ['PIPE_A_SRCSZ', '0x6001C', '063F03E7', '1600 x 1000'],
+    ['PIPE_A_LINK_M', '0x60040', '0080D9E4', 'M = 8444388'],
+    ['PIPE_A_LINK_N', '0x60044', '00800000', 'N = 8388608'],
+    ['PIPE_A_DATA_M', '0x60030', '7E03D090', 'tu = 63'],
+    ['DPLL_CTRL1', '0x6C058', '00000601', 'link 2.7 GHz, ssc off'],
+    ['DPLL_CTRL2', '0x6C05C', '00007A80', 'ddi A clk sel 0'],
+    ['TRANS_DDI_FUNC', '0x60400', '81000000', 'ddi A, edp, 8 bpc'],
+    ['PSR_STATUS', '0x64840', '00000000', 'idle, safe to write'],
+    ['PLANE_CTL_A', '0x70180', 'C4000000', 'enable=1 xrgb8888'],
+    ['PLANE_STRIDE_A', '0x70188', '00000032', '6400 B'],
+    ['PLANE_SURF_A', '0x7019C', 'D0000000', 'ggtt offset 0'],
+    ['WM_LINETIME_A', '0x45270', '0000003B', '59 us'],
+    ['HTOTAL_A', '0x60000', '0731063F', 'hactive 1600 htotal 1842'],
+    ['VTOTAL_A', '0x6000C', '040803E7', 'vactive 1000 vtotal 1033']
+  ].map(r => TR([r[0], { t: r[1], c: 'r l1' }, { t: r[2], c: 'r bold' }, r[3]]));
+  return viewhead('<span class="t-label">device</span><span class="t-data">0000:00:02.0 gen9</span>' +
+      '<span class="t-label">bar0</span><span class="t-data">0xD0000000</span>' +
+      '<span class="t-data l1 spread">read via mmio, 15 registers</span>') +
+    '<div class="scroll">' + TBL([{ h: 'register', w: '28%' }, { h: 'offset', w: '14%', r: 1 },
+      { h: 'value', w: '18%', r: 1 }, { h: 'decoded', w: '40%' }], regs) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="height:calc(30px * var(--ui))">' +
+    '<span class="t-label">derived</span>' +
+    '<span class="t-data">pixel clock</span><span class="t-data l0 bold">241 690 kHz</span>' +
+    '<span class="t-data">refresh</span><span class="t-data l0 bold">59.998 Hz</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data l1">matches firmware bit for bit</span></div>';
+};
+
+R.type = () => {
+  const glyphs = '0123456789ABCDEFabcdefghij.,:;-_/\\[]{}()<>=+*&%$#@!?';
+  let atlas = '<div style="display:flex;flex-wrap:wrap;' +
+    'border-left:var(--zb-hair) solid var(--zb-line-2);' +
+    'border-top:var(--zb-hair) solid var(--zb-line-2)">';
+  for (const ch of glyphs) {
+    atlas += '<span class="t-data" style="width:calc(24px * var(--ui));height:calc(24px * var(--ui));' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'border-right:var(--zb-hair) solid var(--zb-line-2);' +
+      'border-bottom:var(--zb-hair) solid var(--zb-line-2)">' +
+      (ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch) + '</span>';
+  }
+  atlas += '</div>';
+  return '<div class="cols2"><div class="stack">' +
+    '<span class="t-label">three atlases, three sizes, no upscale</span>' +
+    '<div class="hr1" style="margin:4px 0 8px"></div>' +
+    '<span class="t-label">1 data - 8x16</span>' +
+    '<span class="t-data">0123456789 fb.c 0x0080D9E4 241690 kHz</span>' +
+    '<span class="t-data l1">mono, one size forever, ZB_LINE_0</span>' +
+    '<div class="hr1" style="margin:8px 0"></div>' +
+    '<span class="t-label">2 label - 8x16, sans caps</span>' +
+    '<span class="t-label l0">column head section head button caption</span>' +
+    '<span class="t-data l1">track 2, ZB_LINE_1, most of the screen</span>' +
+    '<div class="hr1" style="margin:8px 0"></div>' +
+    '<span class="t-label">3 body - 8x16 at ui 1.4</span>' +
+    '<span class="t-body">Prose only. Dialog copy and help text. Deliberately rare, because a drawing is mostly not prose.</span>' +
+    '<div class="hr1" style="margin:8px 0"></div>' +
+    '<span class="t-label">4 plate - 16x32</span>' +
+    '<span class="t-plate">once per view</span>' +
+    '<span class="t-data l1">the 24x48 atlas is used in exactly one place, the lock clock</span>' +
+    '</div><div class="stack"><span class="t-label">mono atlas, 16x32 cell at ui 2</span>' +
+    '<div class="pad-t">' + atlas + '</div>' +
+    '<div class="pad-t">' + kv('face', 'DejaVu Sans Mono') + kv('hinting', 'FreeType, full') +
+    kv('pipeline', 'subpixel LCD, 5 tap') + kv('gamma', 'linear light, 2 LUTs') +
+    kv('atlases', '8x16, 16x32, 24x48') +
+    kv('runtime rasteriser', 'none. by design.') + '</div></div></div>';
+};
+
+/* the zone view: the lattice this desktop actually places views on, and
+   the arithmetic that produces it. integer division only. */
+R.zones = () => {
+  const Z = LAT;
+  let cells = '<div style="display:grid;gap:1px;grid-template-columns:repeat(' + S.zc +
+    ',1fr);border:var(--zb-hair) solid var(--zb-line-2);padding:1px">';
+  for (let r = 0; r < S.zr; r++) {
+    for (let c = 0; c < S.zc; c++) {
+      const occ = Object.values(S.wins).some(w => !w.det && w.ws === S.sheet && !w.min &&
+        c >= w.c && c < w.c + w.cw && r >= w.r && r < w.r + w.rh);
+      const resv = c >= Z.resC && r >= Z.resR;
+      cells += '<span style="height:calc(15px * var(--ui));display:flex;align-items:center;' +
+        'justify-content:center;' +
+        (occ ? 'background:var(--zb-mark-bulk);' : resv ? 'border:var(--zb-hair) dashed var(--zb-line-2);' : '') +
+        '"><span class="t-data" style="font-size:calc(9px * var(--ui));color:var(--' +
+        (occ ? 'zb-ground' : 'zb-line-1') + ')">' + ZONE_L[c] + (r + 1) + '</span></span>';
+    }
+  }
+  cells += '</div>';
+  return viewhead('<span class="t-label">lattice</span>' +
+      '<span class="t-data l0 bold">' + S.zc + ' x ' + S.zr + '</span>' +
+      '<span class="t-label">margin</span><span class="t-data">' + Z.mar + ' px</span>' +
+      '<span class="t-data l1 spread">integer division, remainder to the first R zones</span>') +
+    '<div class="pad-t">' + cells + '</div>' +
+    '<div class="row pad-t"><span class="t-label">key</span>' +
+    '<span class="t-data l1">filled = a view stands here &middot; dashed = reserved for the title block</span></div>' +
+    '<div class="well pad-t"><span class="pre">' +
+    'drawing   ' + Z.W + ' x ' + Z.H + ' px\n' +
+    'margin    ' + Z.mar + '   border ' + 2 + '\n' +
+    'zone_w    ' + (Z.W - 2 * Z.mar) + ' / ' + S.zc + ' = ' + Z.zwBase + ' r ' + Z.zwRem + '\n' +
+    'zone_h    ' + (Z.H - 2 * Z.mar) + ' / ' + S.zr + ' = ' + Z.zhBase + ' r ' + Z.zhRem + '\n' +
+    'widths    ' + Z.zw.join(' ') + '\n' +
+    'heights   ' + Z.zh.join(' ') + '\n' +
+    'reserved  ' + ZONE_L[Z.resC] + (Z.resR + 1) + ' to ' + ZONE_L[S.zc - 1] + S.zr +
+    '</span></div>' +
+    '<div class="cols2 pad-t">' +
+    '<div class="stack"><span class="t-label">column ledger</span>' +
+    '<div class="scroll">' + TBL([{ h: 'zone', w: '24%' }, { h: 'x', w: '38%', r: 1 },
+      { h: 'width', w: '38%', r: 1 }],
+      Z.zx.map((x, i) => TR([ZONE_L[i], { t: String(x), c: 'r' },
+        { t: Z.zw[i] + (i < Z.zwRem ? '  +1' : ''), c: 'r' + (i < Z.zwRem ? ' bold' : '') }]))) +
+    '</div></div>' +
+    '<div class="stack"><span class="t-label">row ledger</span>' +
+    '<div class="scroll">' + TBL([{ h: 'zone', w: '24%' }, { h: 'y', w: '38%', r: 1 },
+      { h: 'height', w: '38%', r: 1 }],
+      Z.zy.map((y, i) => TR([String(i + 1), { t: String(y), c: 'r' },
+        { t: Z.zh[i] + (i < Z.zhRem ? '  +1' : ''), c: 'r' + (i < Z.zhRem ? ' bold' : '') }]))) +
+    '</div></div></div>';
+};
+/* ------------------------------------------------------ settings view -- */
+const UI_STEPS = [0.9, 1.0, 1.1, 1.25];
+const ZC_STEPS = [6, 8, 10];
+const ZR_STEPS = [4, 5, 6];
+const DASH_IDX = [0, 1, 2];
+
+function sliderHTML(name, steps, val) {
+  const i = steps.indexOf(val);
+  const pct = steps.length === 1 ? 0 : i / (steps.length - 1);
+  const ticks = steps.map((s, k) => '<span class="tick" style="left:' +
+    (steps.length === 1 ? 0 : (k / (steps.length - 1)) * 100) + '%"></span>').join('');
+  return '<span class="slider" data-slider="' + name + '">' +
+    '<span class="st"></span>' +
+    '<span class="sf" style="width:calc(' + (pct * 100) + '% - 2px)"></span>' +
+    '<span class="sh" style="left:calc(' + (pct * 100) + '% - ' + (pct * 8) + 'px)"></span>' +
+    ticks + '</span>';
+}
+function toggleRow(label, key, note) {
+  return '<div class="ctlrow"><span class="t-label">' + label + '</span>' +
+    (note ? '<span class="t-data l1" style="margin-left:10px">' + note + '</span>' : '') +
+    '<span class="right"><span class="t-label l0">' + (S[key] ? 'on' : 'off') + '</span>' +
+    '<span class="sw' + (S[key] ? ' on' : '') + '" data-toggle="' + key + '"><i></i></span>' +
+    '</span></div>';
+}
+/* a live specimen of all four line types, drawn with the same four
+   background layers the real frames use, so the settings view is showing
+   the actual mechanism rather than a picture of it. */
+function lineSpecimen() {
+  const kinds = [['st-cont', 'continuous', 'the view you are in'],
+    ['st-hidn', 'hidden 8-4', 'present, not current'],
+    ['st-chain', 'chain dot', 'belongs to another view'],
+    ['st-phan', 'phantom', 'minimised, still here']];
+  return '<div class="row pad-t" style="gap:calc(10px * var(--ui));align-items:stretch">' +
+    kinds.map(k => '<div style="flex:1;min-width:0">' +
+      '<div class="' + k[0] + '" style="position:relative;height:calc(40px * var(--ui))">' +
+      '<span class="fr"></span></div>' +
+      '<span class="t-label l0" style="display:block;margin-top:4px">' + k[1] + '</span>' +
+      '<span class="t-data l1" style="display:block">' + k[2] + '</span></div>').join('') +
+    '</div>';
+}
+function setLine() {
+  const d = DASH_STEPS[S.dashIdx];
+  let out = '<div class="ctlrow" style="border-bottom:0"><span class="t-label">line type</span>' +
+    '<span class="t-data l1" style="margin-left:10px">the whole focus system. no value, no weight, no hue.</span></div>' +
+    lineSpecimen();
+  out += '<div class="ctlrow pad-t"><span class="t-label">dash pitch</span>' +
+    '<span class="right"><span class="t-data l0">' + d[0] + ' on &middot; ' + d[1] + ' off</span>' +
+    sliderHTML('dash', DASH_IDX, S.dashIdx) + '</span></div>';
+  out += toggleRow('phantom outlines', 'phantom', 'a minimised view stays outlined where it was');
+  out += toggleRow('leader lines', 'leaders', 'orthogonal dogleg from a child view to its parent');
+  out += toggleRow('zone marks', 'zones', 'letters and ticks on the sheet border');
+  out += toggleRow('revision balloons', 'balloons', 'redline circles the revision letter');
+  out += toggleRow('caret blink', 'blink', '500 ms period, hard on off');
+  out += toggleRow('snap to zone', 'snap', 'a dropped view returns to the lattice');
+  out += '<div class="row pad-t"><span class="t-label">weight ledger</span>' +
+    '<span class="t-data l1 spread">one weight. the pattern carries the state.</span></div>';
+  out += '<div class="kvgrid">' + kv('line weights', '1 structural, 1 hairline') +
+    kv('shadow tokens', '0') + kv('gradient fills', '0') +
+    kv('radius values', '0, plus the bubble') +
+    kv('surface steps', tokRatio('--zb-sheet', '--zb-ground') + ':1, below threshold') +
+    kv('motion', 'slide, blink. nothing else.') + '</div>';
+  return out;
+}
+function setInk() {
+  let out = '<div class="ctlrow" style="border-bottom:0"><span class="t-label">the redline</span>' +
+    '<span class="t-data l1" style="margin-left:10px">one second ink, three uses, no fourth</span></div>';
+  out += '<div class="kvgrid pad-t">' +
+    kv('1 revision balloon', 'the letter, circled') +
+    kv('2 failure mark', 'FAIL, and nothing else') +
+    kv('3 the delta', 'dragged vs snapped geometry') +
+    kv('status hue', 'none. OK and WARN are weight.') +
+    kv('accent on chrome', 'none') +
+    kv('accent on focus', 'none. focus is line type.') + '</div>';
+  out += '<div class="row pad-t"><span class="t-label">stock</span>' +
+    '<span class="t-data l1" style="margin-left:10px">one role set, two processes, ctrl i</span>' +
+    '<span class="right" style="margin-left:auto;display:flex">' +
+    '<span class="seg" data-seg="stock" style="width:calc(220px * var(--ui))">' +
+    '<span class="' + (S.theme === 'dark' ? 'on' : '') + '" data-arg="1"><span class="t-label">cyanotype</span></span>' +
+    '<span class="' + (S.theme === 'dark' ? '' : 'on') + '" data-arg="0"><span class="t-label">diazo</span></span>' +
+    '</span></span></div>';
+  /* MEASURED, NOT TYPED. read back off the live custom properties, so
+     the view cannot print a number it does not render. */
+  const L = [
+    ['ZB_GROUND', '--zb-ground', null, 'the ground'],
+    ['ZB_SHEET', '--zb-sheet', '--zb-ground', 'a view fill'],
+    ['ZB_INSET', '--zb-inset', '--zb-sheet', 'a recessed cell'],
+    ['ZB_LINE_0', '--zb-line-0', '--zb-sheet', 'body, continuous'],
+    ['ZB_LINE_1', '--zb-line-1', '--zb-sheet', 'secondary text'],
+    ['ZB_LINE_2', '--zb-line-2', '--zb-sheet', 'hidden line'],
+    ['ZB_REDLINE', '--zb-redline', '--zb-sheet', 'the correction'],
+    ['ZB_MARK_BULK', '--zb-mark-bulk', '--zb-sheet', 'a large tonal area'],
+    ['ZB_BUB_NUM', '--zb-bub-num', '--zb-bub-fill', 'knocked out of the disc']
+  ].map(t => TR([t[0], { t: t[1] ? tokHex(t[1]) : '', c: 'r' },
+    { t: t[2] ? tokRatio(t[1], t[2]) : '-', c: 'r bold' }, t[3]]));
+  out += '<div class="row pad-t"><span class="t-label">measured, this instant</span>' +
+    '<span class="t-data l1 spread">read off :root, not typed</span></div>' +
+    TBL([{ h: 'token', w: '28%' }, { h: 'value', w: '20%', r: 1 },
+      { h: 'ratio', w: '16%', r: 1 }, { h: 'role', w: '36%' }], L);
+  return out;
+}
+function setMetric() {
+  const Z = LAT;
+  let out = '<div class="ctlrow"><span class="t-label">ui scale</span>' +
+    '<span class="right"><span class="t-data l0">' + S.ui.toFixed(2) + ' &middot; q8 ' +
+    Math.round(S.ui * 256) + '</span>' + sliderHTML('ui', UI_STEPS, S.ui) + '</span></div>';
+  out += '<div class="ctlrow"><span class="t-label">zone columns</span>' +
+    '<span class="right"><span class="t-data l0">' + S.zc + ' lettered</span>' +
+    sliderHTML('zc', ZC_STEPS, S.zc) + '</span></div>';
+  out += '<div class="ctlrow"><span class="t-label">zone rows</span>' +
+    '<span class="right"><span class="t-data l0">' + S.zr + ' numbered</span>' +
+    sliderHTML('zr', ZR_STEPS, S.zr) + '</span></div>';
+  out += '<div class="row pad-t"><span class="t-label">title block</span>' +
+    '<span class="t-data l1 spread">every piece of persistent chrome, in one corner</span></div>';
+  out += '<div class="kvgrid">' + kv('block width', '320 dp') +
+    kv('title cell height', '180 dp') +
+    kv('rail', 'deleted') + kv('top bar', 'deleted') +
+    kv('dock', 'deleted') + kv('start menu', 'deleted') + '</div>';
+  out += '<div class="well pad-t"><span class="pre">' +
+    'drawing   ' + Z.W + ' x ' + Z.H + ' px\n' +
+    'zone_w    ' + (Z.W - 2 * Z.mar) + ' / ' + S.zc + ' = ' + Z.zwBase + ' r ' + Z.zwRem + '\n' +
+    'zone_h    ' + (Z.H - 2 * Z.mar) + ' / ' + S.zr + ' = ' + Z.zhBase + ' r ' + Z.zhRem + '\n' +
+    'reserved  ' + ZONE_L[Z.resC] + (Z.resR + 1) + ' to ' + ZONE_L[S.zc - 1] + S.zr +
+    '</span></div>';
+  out += '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="ov"><span class="t-label">sheet index</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="retile"><span class="t-label">retile</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="plot"><span class="t-label">plot to pdf</span></span></div>';
+  return out;
+}
+R.set = () => {
+  const tabs = ['all', 'line', 'ink', 'metric'];
+  let out = '<div class="seg" data-seg="settab">' + tabs.map((t, i) =>
+    '<span class="' + (i === S.setTab ? 'on' : '') + '" data-arg="' + i + '"><span class="t-label">' +
+    t + '</span></span>').join('') + '</div><div class="scroll pad-t">';
+  const head = t => '<div class="row" style="margin:0 0 4px"><span class="t-label l0">' + t +
+    '</span><span class="hr1" style="flex:1;margin-left:10px"></span></div>';
+  if (S.setTab === 0 || S.setTab === 1) out += head('line') + setLine();
+  if (S.setTab === 0 || S.setTab === 2) out += (S.setTab === 0 ? '<div class="hr2" style="margin:12px 0 8px"></div>' : '') + head('ink') + setInk();
+  if (S.setTab === 0 || S.setTab === 3) out += (S.setTab === 0 ? '<div class="hr2" style="margin:12px 0 8px"></div>' : '') + head('metric') + setMetric();
+  out += '</div>';
+  return out;
+};
+
+/* ====================================================== the lattice ==== */
+let LAT = { W: 0, H: 0, mar: 16, zw: [], zx: [], zh: [], zy: [],
+  zwBase: 0, zwRem: 0, zhBase: 0, zhRem: 0, resC: 99, resR: 99 };
+
+function computeLat() {
+  const os = $('#os');
+  const mar = Math.round(16 * S.ui);
+  const W = os.clientWidth, H = os.clientHeight;
+  const f = $('#field');
+  f.style.left = mar + 'px'; f.style.top = mar + 'px';
+  f.style.width = (W - 2 * mar) + 'px'; f.style.height = (H - 2 * mar) + 'px';
+  const fw = W - 2 * mar, fh = H - 2 * mar;
+  const NC = S.zc, NR = S.zr;
+  const zwBase = Math.floor(fw / NC), zwRem = fw - zwBase * NC;
+  const zhBase = Math.floor(fh / NR), zhRem = fh - zhBase * NR;
+  const zw = [], zx = [], zh = [], zy = [];
+  let x = 0;
+  for (let i = 0; i < NC; i++) { const w = zwBase + (i < zwRem ? 1 : 0); zw.push(w); zx.push(x); x += w; }
+  let y = 0;
+  for (let i = 0; i < NR; i++) { const h = zhBase + (i < zhRem ? 1 : 0); zh.push(h); zy.push(y); y += h; }
+  /* the corner block is printed on the sheet, so the lattice records
+     which zones it covers and no default placement stands there. */
+  const cb = $('#corner');
+  const bw = cb.offsetWidth || Math.round(320 * S.ui);
+  const bh = cb.offsetHeight || Math.round(456 * S.ui);
+  const bx = fw - bw, by = fh - bh;
+  let resC = NC, resR = NR;
+  for (let i = 0; i < NC; i++) if (zx[i] + zw[i] > bx + 8) { resC = i; break; }
+  for (let i = 0; i < NR; i++) if (zy[i] + zh[i] > by + 8) { resR = i; break; }
+  LAT = { W, H, mar, zw, zx, zh, zy, zwBase, zwRem, zhBase, zhRem, resC, resR };
+}
+/* THE TITLE BLOCK IS PRINTED ON THE SHEET. A view never runs under it,
+   the way a view on a real drawing never runs under the title block. So
+   the reserve is enforced HERE, once, rather than trusted to callers:
+   a placement that would enter the reserved zones is shortened, upward
+   first, then leftward. */
+function zoneRect(c, r, cw, rh) {
+  const Z = LAT;
+  c = Math.max(0, Math.min(S.zc - 1, c));
+  r = Math.max(0, Math.min(S.zr - 1, r));
+  cw = Math.max(1, Math.min(S.zc - c, cw));
+  rh = Math.max(1, Math.min(S.zr - r, rh));
+  if (c + cw - 1 >= Z.resC && r + rh - 1 >= Z.resR) {
+    if (r < Z.resR) rh = Z.resR - r;
+    else if (c < Z.resC) cw = Z.resC - c;
+    else { c = Math.max(0, Z.resC - cw); cw = Math.min(Z.resC - c, cw); }
+    cw = Math.max(1, cw); rh = Math.max(1, rh);
+  }
+  let w = 0, h = 0;
+  for (let i = 0; i < cw; i++) w += Z.zw[c + i];
+  for (let i = 0; i < rh; i++) h += Z.zh[r + i];
+  return { x: Z.zx[c], y: Z.zy[r], w, h, c, r, cw, rh };
+}
+function zoneName(c, r) { return (ZONE_L[c] || '?') + (r + 1); }
+
+/* ================================================= the sheet border ====
+ * One 2px rule. Its ONLY subdivision is the zone marks, which sit ON the
+ * frame and never cross the drawing. Nothing is ruled across the field:
+ * that is the difference between a drawing frame and a module grid. */
+function drawFrame() {
+  const svg = $('#frame'), Z = LAT;
+  svg.setAttribute('width', Z.W); svg.setAttribute('height', Z.H);
+  const m = Z.mar, W = Z.W, H = Z.H, w2 = 2;
+  let s = '';
+  const R = (x, y, w, h, c) => '<rect x="' + x + '" y="' + y + '" width="' + Math.max(0, w) +
+    '" height="' + Math.max(0, h) + '" fill="var(--' + c + ')"/>';
+  /* the border rule itself, 2px, continuous, ZB_LINE_0 */
+  s += R(m - w2, m - w2, W - 2 * m + 2 * w2, w2, 'zb-line-0');
+  s += R(m - w2, H - m, W - 2 * m + 2 * w2, w2, 'zb-line-0');
+  s += R(m - w2, m - w2, w2, H - 2 * m + 2 * w2, 'zb-line-0');
+  s += R(W - m, m - w2, w2, H - 2 * m + 2 * w2, 'zb-line-0');
+  if (S.zones) {
+    const tk = Math.round(6 * S.ui);
+    Z.zx.forEach((x, i) => {
+      if (i > 0) {
+        s += R(m + x, m - w2 - tk, 1, tk, 'zb-line-2');
+        s += R(m + x, H - m + w2, 1, tk, 'zb-line-2');
+      }
+      const cx = m + x + Z.zw[i] / 2;
+      s += '<text x="' + cx.toFixed(1) + '" y="' + (m - 6) + '" text-anchor="middle" ' +
+        'font-family="ui-monospace, DejaVu Sans Mono, monospace" font-size="' +
+        Math.round(10 * S.ui) + '" fill="var(--zb-line-2)">' + ZONE_L[i] + '</text>';
+      s += '<text x="' + cx.toFixed(1) + '" y="' + (H - m + 14) + '" text-anchor="middle" ' +
+        'font-family="ui-monospace, DejaVu Sans Mono, monospace" font-size="' +
+        Math.round(10 * S.ui) + '" fill="var(--zb-line-2)">' + ZONE_L[i] + '</text>';
+    });
+    Z.zy.forEach((y, i) => {
+      if (i > 0) {
+        s += R(m - w2 - tk, m + y, tk, 1, 'zb-line-2');
+        s += R(W - m + w2, m + y, tk, 1, 'zb-line-2');
+      }
+      const cy = m + y + Z.zh[i] / 2 + 4;
+      s += '<text x="' + (m - 8) + '" y="' + cy.toFixed(1) + '" text-anchor="end" ' +
+        'font-family="ui-monospace, DejaVu Sans Mono, monospace" font-size="' +
+        Math.round(10 * S.ui) + '" fill="var(--zb-line-2)">' + (i + 1) + '</text>';
+      s += '<text x="' + (W - m + 8) + '" y="' + cy.toFixed(1) + '" ' +
+        'font-family="ui-monospace, DejaVu Sans Mono, monospace" font-size="' +
+        Math.round(10 * S.ui) + '" fill="var(--zb-line-2)">' + (i + 1) + '</text>';
+    });
+  }
+  svg.innerHTML = s;
+}
+/* ====================================================== view manager === */
+let ZTOP = 10;
+function openWin(id, place, ws, quiet) {
+  const a = APP[id];
+  if (!a) return;
+  if (S.wins[id]) { S.wins[id].min = false; focusWin(id); return; }
+  const p = place || a.p;
+  S.wins[id] = { id: id, ws: ws || S.sheet, c: p[0], r: p[1], cw: p[2], rh: p[3],
+    det: false, x: 0, y: 0, w: 0, h: 0, min: false, max: false, prev: null, z: ++ZTOP };
+  buildWin(id);
+  focusWin(id);
+  layout();
+  if (!quiet) rev(a.n + ' ' + a.name, 'view opened at ' + zoneName(p[0], p[1]));
+}
+function closeWin(id, quiet) {
+  const e = $('.win[data-id="' + id + '"]');
+  if (e) e.remove();
+  const had = !!S.wins[id];
+  delete S.wins[id];
+  /* a parent closing takes its children with it. that is what a leader
+     means: the child exists only in reference to the parent. */
+  APPS.filter(a => a.parent === id).forEach(a => { if (S.wins[a.id]) closeWin(a.id, true); });
+  if (S.focus === id) {
+    const rest = Object.values(S.wins).filter(w => w.ws === S.sheet && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = rest.length ? rest[0].id : null;
+  }
+  layout();
+  if (had && !quiet) rev(APP[id].n + ' ' + APP[id].name, 'view removed from sheet ' + pad2(S.sheet));
+}
+function focusWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].z = ++ZTOP;
+  S.wins[id].min = false;
+  S.focus = id;
+  layout();
+}
+function minWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].min = true;
+  if (S.focus === id) {
+    const rest = Object.values(S.wins).filter(w => w.ws === S.sheet && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = rest.length ? rest[0].id : null;
+  }
+  layout();
+  rev(APP[id].n + ' ' + APP[id].name, S.phantom ? 'phantom, outline held at ' +
+    zoneName(S.wins[id].c, S.wins[id].r) : 'minimised, outline suppressed');
+}
+function maxWin(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  if (w.max) { Object.assign(w, w.prev); w.max = false; }
+  else {
+    w.prev = { c: w.c, r: w.r, cw: w.cw, rh: w.rh, det: w.det, x: w.x, y: w.y, w: w.w, h: w.h };
+    /* full sheet, but the title block is printed on the sheet and a view
+       does not run under it. so a maximised view stops at the reserve. */
+    w.c = 0; w.r = 0; w.cw = S.zc; w.rh = LAT.resR > 0 ? LAT.resR : S.zr;
+    w.det = false; w.max = true;
+  }
+  focusWin(id);
+  rev(APP[id].n + ' ' + APP[id].name, w.max ? 'enlarged to A1 - ' + zoneName(S.zc - 1, w.rh - 1)
+    : 'restored to ' + zoneName(w.c, w.r));
+}
+
+function buildWin(id) {
+  const a = APP[id];
+  const e = document.createElement('div');
+  e.className = 'win';
+  e.setAttribute('data-id', id);
+  e.innerHTML =
+    '<span class="fr"></span>' +
+    '<span class="bub" data-act="winmenu"><span>' + a.n + '</span></span>' +
+    '<div class="hdr">' +
+      '<span class="t-label ttl">' + a.name + '</span>' +
+      '<span class="sub">' + a.sub + '</span>' +
+      '<span class="zone"></span>' +
+      '<span class="ctls">' +
+        '<span class="ctl" data-act="min">' + CTL_MIN + '</span>' +
+        '<span class="ctl" data-act="max">' + CTL_MAX + '</span>' +
+        '<span class="ctl x" data-act="close">' + CTL_CLS + '</span>' +
+      '</span>' +
+    '</div>' +
+    '<div class="body"></div>' +
+    '<span class="vnote"><span class="t-data nt"></span></span>';
+  $('#wins').appendChild(e);
+  redraw(id);
+}
+function redraw(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  const e = $('.win[data-id="' + id + '"]');
+  if (!e) return;
+  $('.body', e).innerHTML = R[id] ? R[id]() : '';
+}
+function redrawAll() { Object.keys(S.wins).forEach(redraw); }
+
+/* line type is assigned HERE and nowhere else. four states, one channel. */
+function stateOf(w) {
+  if (w.min) return 'st-phan';
+  if (S.focus === w.id) return 'st-cont';
+  if (APP[w.id].parent) return 'st-chain';
+  return 'st-hidn';
+}
+function layout() {
+  computeLat();
+  drawFrame();
+  Object.values(S.wins).forEach(w => {
+    const e = $('.win[data-id="' + w.id + '"]');
+    if (!e) return;
+    const vis = w.ws === S.sheet;
+    e.classList.toggle('gone', !vis);
+    let x, y, ww, hh, zn;
+    if (w.det) {
+      x = w.x; y = w.y; ww = w.w; hh = w.h;
+      zn = Math.round(x) + ', ' + Math.round(y) + ' px';
+    } else {
+      const r = zoneRect(w.c, w.r, w.cw, w.rh);
+      x = r.x; y = r.y; ww = r.w; hh = r.h;
+      w.c = r.c; w.r = r.r; w.cw = r.cw; w.rh = r.rh;
+      zn = zoneName(r.c, r.r) + ' - ' + zoneName(r.c + r.cw - 1, r.r + r.rh - 1);
+    }
+    e.style.left = x + 'px'; e.style.top = y + 'px';
+    e.style.width = ww + 'px'; e.style.height = hh + 'px';
+    e.style.zIndex = String(w.min ? 3 : w.z);
+    e.classList.remove('st-cont', 'st-hidn', 'st-chain', 'st-phan');
+    e.classList.add(stateOf(w));
+    const zs = $('.zone', e); if (zs) zs.textContent = zn;
+    const nt = $('.nt', e);
+    if (nt) {
+      const st = w.min ? 'PHANTOM' : S.focus === w.id ? 'CONTINUOUS' :
+        APP[w.id].parent ? 'CHAIN OF ' + APP[APP[w.id].parent].n : 'HIDDEN';
+      nt.textContent = 'VIEW ' + APP[w.id].n + '  /  ' + zn + '  /  ' + st +
+        '  /  ' + ww + ' x ' + hh;
+    }
+  });
+  document.body.classList.toggle('nophan', !S.phantom);
+  const cb = $('#corner');
+  $('#toasts').style.bottom = (cb.offsetHeight + Math.round(24 * S.ui)) + 'px';
+  drawLeaders();
+  renderCorner();
+}
+
+/* ================================================== the dogleg leader ==
+ * A child view is joined to its parent by an ORTHOGONAL leader with one
+ * dogleg, drawn in chain dot. Orthogonal because fb_line has no dashed
+ * diagonal path, which is also the correct drafting convention, so the
+ * constraint and the artifact agree. */
+function drawLeaders() {
+  const svg = $('#leaders'), Z = LAT;
+  svg.setAttribute('width', Z.W - 2 * Z.mar);
+  svg.setAttribute('height', Z.H - 2 * Z.mar);
+  if (!S.leaders) { svg.innerHTML = ''; return; }
+  let s = '';
+  Object.values(S.wins).forEach(w => {
+    const par = APP[w.id].parent;
+    if (!par || !S.wins[par]) return;
+    if (w.ws !== S.sheet || S.wins[par].ws !== S.sheet) return;
+    const ce = $('.win[data-id="' + w.id + '"]'), pe = $('.win[data-id="' + par + '"]');
+    if (!ce || !pe) return;
+    /* from the child's bubble (its top left) to the parent's nearest edge */
+    const cx = parseFloat(ce.style.left), cy = parseFloat(ce.style.top);
+    const px = parseFloat(pe.style.left), py = parseFloat(pe.style.top);
+    const pw = parseFloat(pe.style.width), ph = parseFloat(pe.style.height);
+    const ax = cx, ay = cy;
+    /* attach to the parent's NEAREST vertical edge, at the parent's own
+       header line - a leader points at what a thing IS, not at wherever
+       the child happens to be sitting. */
+    const bx = Math.abs(ax - px) <= Math.abs(ax - (px + pw)) ? px : px + pw;
+    const by = Math.round(py + 13);
+    /* the dogleg: run out from the bubble, turn once, come in square on
+       the edge with a 24 px stub. one turn, both legs orthogonal. */
+    const midx = bx + (ax >= bx ? 24 : -24);
+    s += '<path d="M' + ax + ' ' + ay + ' H' + midx + ' V' + by + ' H' + bx + '" ' +
+      'fill="none" stroke="var(--zb-line-2)" stroke-width="2" ' +
+      'stroke-dasharray="16 4 4 4" shape-rendering="crispEdges"/>';
+    /* the arrow at the parent end. a leader terminates, it does not fade. */
+    const d = midx < bx ? -1 : 1;
+    s += '<path d="M' + bx + ' ' + by + ' l' + (d * 9) + ' -5 l0 10 Z" fill="var(--zb-line-2)"/>';
+  });
+  svg.innerHTML = s;
+}
+
+/* ================================================== the corner block ===
+ * Revisions, view index, title block. This is the complete persistent
+ * chrome of the desktop. There is nothing else. */
+function renderCorner() {
+  const rows = S.rev.slice(0, 5);
+  $('#revcount').textContent = 'last 5 of ' + S.revN;
+  $('#revtable').innerHTML = rows.length ? rows.map(r =>
+    '<div class="revrow"><span class="rv"><span class="balloon">' + r.r + '</span></span>' +
+    '<span class="t-data rw">' + r.w + '</span>' +
+    '<span class="t-data rd">' + r.d + '</span>' +
+    '<span class="t-data rt">' + r.t + '</span></div>').join('') :
+    '<div class="revrow"><span class="t-data rd l1">no revisions on this sheet</span></div>';
+  for (let i = rows.length; i < 5; i++) {
+    $('#revtable').innerHTML += '<div class="revrow"><span class="rv t-data l1">-</span>' +
+      '<span class="t-data rw"></span><span class="t-data rd"></span><span class="t-data rt"></span></div>';
+  }
+  const open = Object.values(S.wins).length;
+  $('#vicount').textContent = open + ' open of ' + APPS.length;
+  $('#vindex').innerHTML = APPS.map(a => {
+    const w = S.wins[a.id];
+    const cur = w && S.focus === a.id && w.ws === S.sheet && !w.min;
+    let mark;
+    if (!w) mark = '';
+    else if (w.min) mark = 'phan';
+    else if (a.parent) mark = 'chain';
+    else if (cur) mark = 'cont';
+    else mark = 'hidn';
+    return '<div class="vrow' + (w ? ' open' : '') + (cur ? ' cur' : '') + '" data-app="' + a.id + '">' +
+      '<span class="t-data vn">' + a.n + '</span>' +
+      '<span class="t-label vl">' + a.name + '</span>' +
+      '<span class="vs">' + stateGlyph(mark) + '</span></div>';
+  }).join('');
+  /* the title block cells. SCALE prints the measured ui scale and the
+     lattice, because a drawing's scale cell states how to read it. */
+  const Z = LAT;
+  const cells = [
+    ['scale', '1:1 &middot; ui ' + S.ui.toFixed(2)],
+    ['zones', S.zc + ' x ' + S.zr],
+    ['sheet', pad2(S.sheet) + ' of 02'],
+    ['rev', S.revN ? ZONE_L[(S.revN - 1) % ZONE_L.length] : '-'],
+    ['drawn', 'zac &middot; seat0'],
+    ['time', hhmmss(S.clock)],
+    ['load', S.load.toFixed(2) + ' &middot; mem ' + S.memPct + '%'],
+    ['views', Object.values(S.wins).filter(w => w.ws === S.sheet).length + ' on sheet']
+  ];
+  $('#tbcells').innerHTML = cells.map(c =>
+    '<div class="tbc"><span class="k">' + c[0] + '</span><span class="v">' + c[1] + '</span></div>').join('');
+  const c1 = Object.values(S.wins).filter(w => w.ws === 1).length;
+  const c2 = Object.values(S.wins).filter(w => w.ws === 2).length;
+  $('#wsrow').innerHTML =
+    '<span class="wsc' + (S.sheet === 1 ? ' on' : '') + '" data-ws="1"><span class="t-label">sheet 01 &middot; ' + c1 + '</span></span>' +
+    '<span class="wsc' + (S.sheet === 2 ? ' on' : '') + '" data-ws="2"><span class="t-label">sheet 02 &middot; ' + c2 + '</span></span>' +
+    '<span class="wsc" data-ov="1"><span class="t-label">index</span></span>';
+  document.body.classList.toggle('noball', !S.balloons);
+}
+/* a nine pixel specimen of the view's own line type, in the index. the
+   index therefore says WHICH LINE TYPE each view is drawn in, which is
+   the whole state model, in one glyph. */
+function stateGlyph(kind) {
+  if (!kind) return '';
+  const c = kind === 'cont' ? 'zb-line-0' : 'zb-line-2';
+  const da = kind === 'cont' ? '' : kind === 'chain' ? ' stroke-dasharray="5 1.5 1.5 1.5"' :
+    ' stroke-dasharray="3 1.5"';
+  const op = kind === 'phan' ? ' opacity="0.45"' : '';
+  return '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"' + op + '>' +
+    '<path d="M0 5 H10" stroke="var(--' + c + ')" stroke-width="2"' + da + '/></svg>';
+}
+/* ========================================================= sheet index =
+ * The overview is a SHEET INDEX: both sheets to scale, every view listed
+ * with the line type it is drawn in, and the revision history under it. */
+function overviewOn() { return $('#overview').classList.contains('on'); }
+function showOverview(on) {
+  const ov = $('#overview');
+  if (!on) { ov.classList.remove('on'); ov.innerHTML = ''; return; }
+  const Z = LAT;
+  let html = '<div class="ovhead"><span class="t-plate">sheet index</span>' +
+    '<span class="t-data l1">both sheets, every view, to scale</span>' +
+    '<span class="t-data l1 spread">esc or click to return</span></div><div class="ovbody">';
+  [1, 2].forEach(ws => {
+    const n = Object.values(S.wins).filter(w => w.ws === ws).length;
+    html += '<div class="ovsh"><div class="ovlab"><span class="t-label l0">sheet ' + pad2(ws) + '</span>' +
+      '<span class="t-data l1">' + n + ' view' + (n === 1 ? '' : 's') + '</span>' +
+      (ws === S.sheet ? '<span class="t-label l0 spread">current</span>' : '<span class="spread"></span>') +
+      '</div><div class="ovfield' + (ws === S.sheet ? ' cur' : '') + '" data-ovws="' + ws + '"></div></div>';
+  });
+  html += '</div>';
+  const rows = Object.values(S.wins).sort((a, b) => APP[a.id].n.localeCompare(APP[b.id].n)).map(w => {
+    const st = w.min ? 'PHANTOM' : S.focus === w.id && w.ws === S.sheet ? 'CONTINUOUS' :
+      APP[w.id].parent ? 'CHAIN' : 'HIDDEN';
+    const zn = w.det ? Math.round(w.x) + ', ' + Math.round(w.y) + ' px' :
+      zoneName(w.c, w.r) + ' - ' + zoneName(w.c + w.cw - 1, w.r + w.rh - 1);
+    return TR([APP[w.id].n, { t: '<span class="t-label l0">' + APP[w.id].name + '</span>' },
+      APP[w.id].sub, 'sheet ' + pad2(w.ws), zn,
+      { t: '<span class="t-label ' + (w.det ? 'l0' : 'l1') + '">' + (w.det ? 'FREE' : 'ON ZONE') + '</span>' },
+      { t: '<span class="t-label l0">' + st + '</span>' }],
+      'class="pick" data-ovpick="' + w.id + '" data-ovws="' + w.ws + '"');
+  });
+  html += '<div class="ovreg"><div class="row" style="padding-bottom:4px">' +
+    '<span class="t-label">view register</span>' +
+    '<span class="t-data l1 spread">' + Object.keys(S.wins).length +
+    ' open &middot; lattice ' + S.zc + ' x ' + S.zr + ' &middot; scale <span data-kscale>1.00</span></span></div>' +
+    '<div class="scroll">' +
+    TBL([{ h: 'no', w: '6%' }, { h: 'view', w: '18%' }, { h: 'subtitle', w: '16%' },
+      { h: 'sheet', w: '11%' }, { h: 'zones', w: '18%' }, { h: 'placement', w: '13%' },
+      { h: 'line type', w: '18%' }], rows) + '</div>' +
+    '<div class="hr2" style="margin-top:auto"></div>' +
+    '<div class="row" style="height:var(--zb-row-h)">' +
+    '<span class="t-label">revisions</span>' +
+    '<span class="t-data l1">' + S.revN + ' recorded, last 5 printed in the title block</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data l1">click a view, a sheet or a row to return to it</span></div></div>';
+  ov.innerHTML = html;
+  ov.classList.add('on');
+  const fw = Z.W - 2 * Z.mar, fh = Z.H - 2 * Z.mar;
+  $$('.ovfield', ov).forEach(host => {
+    const ws = Number(host.getAttribute('data-ovws'));
+    const k = Math.min(host.clientWidth / fw, host.clientHeight / fh);
+    host.style.flex = 'none';
+    host.style.width = Math.round(fw * k) + 'px';
+    host.style.height = Math.round(fh * k) + 'px';
+    const ks = $('[data-kscale]', ov);
+    if (ks) ks.textContent = k.toFixed(2);
+    const wrap = document.createElement('div');
+    wrap.className = 'ovscale';
+    wrap.style.width = fw + 'px';
+    wrap.style.height = fh + 'px';
+    wrap.style.transform = 'scale(' + k + ')';
+    Object.values(S.wins).filter(w => w.ws === ws).sort((a, b) => a.z - b.z).forEach(w => {
+      const src = $('.win[data-id="' + w.id + '"]');
+      if (!src) return;
+      const c = src.cloneNode(true);
+      c.classList.remove('gone');
+      c.style.pointerEvents = 'none';
+      wrap.appendChild(c);
+      const hit = document.createElement('div');
+      hit.className = 'ovpick';
+      hit.style.left = (parseFloat(src.style.left) * k) + 'px';
+      hit.style.top = (parseFloat(src.style.top) * k) + 'px';
+      hit.style.width = (parseFloat(src.style.width) * k) + 'px';
+      hit.style.height = (parseFloat(src.style.height) * k) + 'px';
+      hit.setAttribute('data-ovpick', w.id);
+      hit.setAttribute('data-ovws', String(ws));
+      host.appendChild(hit);
+    });
+    host.insertBefore(wrap, host.firstChild);
+  });
+}
+
+/* ========================================================== palette ==== */
+const CMDS = [];
+APPS.forEach(a => CMDS.push({
+  n: a.n, name: 'open ' + a.n + ' ' + a.name, hint: 'alt ' + Number(a.n),
+  run: () => { openWin(a.id); toast('opened', 'view ' + a.n + ' ' + a.name.toUpperCase() + ' placed on the lattice'); }
+}));
+CMDS.push(
+  { n: '20', name: 'monitor sample rate 1 hz', hint: 'set', run: () => toast('monitor', 'sample rate held at 1 Hz, 64 s history') },
+  { n: '21', name: 'tile monitor to zones a1 c5', hint: 'wm', run: () => { openWin('mon'); const w = S.wins.mon; w.det = false; w.c = 0; w.r = 0; w.cw = 3; w.rh = S.zr; layout(); rev('03 monitor', 'moved to A1 - C' + S.zr); toast('placed', 'MONITOR at A1 - ' + zoneName(2, S.zr - 1)); } },
+  { n: '22', name: 'dump monitor snapshot to /tmp', hint: 'io', run: () => toast('written', '/tmp/monitor-1432.txt, 4.2 KiB') },
+  { n: '23', name: 'toggle zone marks on the border', hint: 'ctrl g', run: () => { S.zones = !S.zones; drawFrame(); redraw('set'); toast('zone marks', S.zones ? 'ruled on the border' : 'suppressed'); } },
+  { n: '24', name: 'set zone lattice 10 x 5', hint: 'grid', run: () => { S.zc = 10; layout(); redrawAll(); rev('sheet', 'lattice re-ruled to 10 x ' + S.zr); toast('lattice', 're-ruled to 10 x ' + S.zr); } },
+  { n: '25', name: 'send current view to sheet 02', hint: 'shift 2', run: () => { if (S.focus) { S.wins[S.focus].ws = 2; rev(APP[S.focus].n + ' ' + APP[S.focus].name, 'transferred to sheet 02'); layout(); toast('moved', APP[S.focus] ? APP[S.focus].name.toUpperCase() + ' to sheet 02' : ''); } } },
+  { n: '26', name: 'regenerate icon atlas at 48x48', hint: 'gen', run: () => toast('gen_icons', '53 stencils emitted, every vertex on a multiple of 6') },
+  { n: '27', name: 'dump pipe A registers', hint: 'mmio', run: () => { openWin('regs'); toast('regdump', '15 registers read from bar0 0xD0000000'); } },
+  { n: '28', name: 'run fsck on rd0', hint: 'zlfs', run: () => toast('zlfs', 'generation 3, 0 orphan extents, OK') },
+  { n: '29', name: 'lock session', hint: 'ctrl l', run: () => setScene('lock') },
+  { n: '30', name: 'open sheet index', hint: 'ctrl space', run: () => setScene('overview') },
+  { n: '31', name: 'clear every view on this sheet', hint: 'wm', run: () => { Object.values(S.wins).filter(w => w.ws === S.sheet).forEach(w => closeWin(w.id, true)); rev('sheet ' + pad2(S.sheet), 'all views removed'); layout(); toast('cleared', 'sheet ' + pad2(S.sheet) + ' is empty'); } },
+  { n: '32', name: 'switch process cyanotype diazo', hint: 'ctrl i', run: () => setStock(S.theme === 'dark' ? 'light' : 'dark', true) },
+  { n: '33', name: 'plot sheet to pdf', hint: 'out', run: () => toast('plotted', 'sheet ' + pad2(S.sheet) + ', 1 page, 1:1, monochrome') }
+);
+function paletteResults() {
+  const q = S.pq.trim().toLowerCase();
+  return CMDS.filter(c => !q || c.name.includes(q) || c.n.includes(q));
+}
+function renderPalette() {
+  const res = paletteResults();
+  if (S.psel >= res.length) S.psel = Math.max(0, res.length - 1);
+  $('#pq').innerHTML = S.pq.replace(/ /g, '&nbsp;') || '<span class="l1">type a command</span>';
+  $('#pcount').textContent = res.length + ' of ' + CMDS.length;
+  $('#presults').innerHTML = res.slice(0, 8).map((c, i) =>
+    '<div class="prow' + (i === S.psel ? ' on' : '') + '" data-pi="' + i + '">' +
+    '<span class="t-data l1">' + c.n + '</span>' +
+    '<span class="t-label">' + c.name + '</span>' +
+    '<span class="t-data hint">' + c.hint + '</span></div>').join('') ||
+    '<div class="prow"><span class="t-label l1">no command matches</span></div>';
+}
+function showPalette(on) {
+  $('#palette').classList.toggle('on', on);
+  if (on) renderPalette();
+}
+function runPalette() {
+  const res = paletteResults();
+  const c = res[S.psel];
+  showPalette(false);
+  if (c) c.run();
+}
+
+/* ============================================================= lock ==== */
+function renderLock() {
+  $('#lockup').textContent = 'up ' + hhmmss(4211 + S.t);
+  const held = Object.values(S.wins);
+  $('#lockblock').innerHTML =
+    '<span class="t-plate">zlos</span>' +
+    '<span class="t-data l1">0.3 &middot; x86_64</span>' +
+    '<div class="hr2" style="margin:10px 0 8px"></div>' +
+    '<span class="t-label">views held</span>' +
+    held.slice(0, 8).map(w =>
+      '<div class="hold"><span class="t-data l1">' + APP[w.id].n + '</span>' +
+      '<span class="t-label l0">' + APP[w.id].name + '</span>' +
+      '<span class="t-data l1 spread">s' + pad2(w.ws) + '</span></div>').join('') +
+    '<div style="margin-top:auto">' +
+    kv('load', S.load.toFixed(2)) + kv('mem', S.memPct + ' %') +
+    kv('net', S.rx.toFixed(0) + ' KiB/s') + kv('state', 'HELD') +
+    '</div>';
+  $('#lockbody').innerHTML =
+    '<span class="t-label">local time</span>' +
+    '<span class="t-huge">' + hhmmss(S.clock) + '</span>' +
+    '<span class="t-data l1">friday 12 september &middot; week 37 &middot; day 255</span>' +
+    '<div class="hr2" style="margin:10px 0 8px"></div>' +
+    '<div class="row"><span class="t-label">operator</span>' +
+    '<span class="t-data l0 bold">zac</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data l1">seat0 &middot; tty1 &middot; console 200x62</span></div>' +
+    '<div class="well row" style="margin-top:8px">' +
+    '<span class="t-label">passphrase</span>' +
+    '<span class="t-data l0" style="letter-spacing:3px">' + '•'.repeat(9) + '</span>' +
+    '<span class="caret"></span></div>' +
+    '<div class="row" style="margin-top:4px">' +
+    '<span class="t-data l1">press enter, or click anywhere, to unlock</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data l1">' + held.length + ' views held</span></div>' +
+    '<div class="hr1" style="margin:10px 0 0"></div>' +
+    kv('session', 'seat0 since 13:21:56') +
+    kv('compositor', 'parked, back buffer retained') +
+    kv('framebuffer', '1600 x 1000 x 32, dimmed 0 %') +
+    kv('last revision', S.rev.length ? S.rev[0].r + ' - ' + S.rev[0].d : 'none') +
+    '<div class="row" style="margin-top:12px">' +
+    '<span class="btn prim" data-act="unlock"><span class="t-label">unlock</span></span>' +
+    '<span class="btn"><span class="t-label">switch operator</span></span>' +
+    '<span class="t-data l1 spread">esc also unlocks</span></div>';
+  /* the lock screen is the sheet with every view withdrawn: the border
+     rule and its zone marks stay, because the sheet is still the sheet. */
+  const svg = $('#locksvg');
+  const w = $('#lock').clientWidth, h = $('#lock').clientHeight;
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  const m = Math.round(24 * S.ui);
+  let s = '';
+  s += '<rect x="' + m + '" y="' + m + '" width="' + (w - 2 * m) + '" height="2" fill="var(--zb-line-0)"/>';
+  s += '<rect x="' + m + '" y="' + (h - m) + '" width="' + (w - 2 * m) + '" height="2" fill="var(--zb-line-0)"/>';
+  s += '<rect x="' + m + '" y="' + m + '" width="2" height="' + (h - 2 * m) + '" fill="var(--zb-line-0)"/>';
+  s += '<rect x="' + (w - m) + '" y="' + m + '" width="2" height="' + (h - 2 * m + 2) + '" fill="var(--zb-line-0)"/>';
+  for (let i = 1; i < 8; i++) {
+    const x = m + Math.round((w - 2 * m) * i / 8);
+    s += '<rect x="' + x + '" y="' + (m - 6) + '" width="1" height="6" fill="var(--zb-line-2)"/>';
+    s += '<rect x="' + x + '" y="' + (h - m + 2) + '" width="1" height="6" fill="var(--zb-line-2)"/>';
+  }
+  for (let i = 1; i < 5; i++) {
+    const y = m + Math.round((h - 2 * m) * i / 5);
+    s += '<rect x="' + (m - 6) + '" y="' + y + '" width="6" height="1" fill="var(--zb-line-2)"/>';
+    s += '<rect x="' + (w - m + 2) + '" y="' + y + '" width="6" height="1" fill="var(--zb-line-2)"/>';
+  }
+  svg.innerHTML = s;
+}
+function showLock(on) {
+  $('#lock').classList.toggle('on', on);
+  if (on) renderLock();
+}
+
+/* =========================================================== toasts ==== */
+const TOAST_MS = 4200, TOAST_MAX = 3;
+function toast(title, body) {
+  const host = $('#toasts');
+  while (host.children.length >= TOAST_MAX) host.removeChild(host.firstChild);
+  const e = document.createElement('div');
+  e.className = 'toast';
+  e.innerHTML = '<div class="tl"><span class="t-label l0">' + title + '</span>' +
+    '<span class="cl" data-act="untoast">' + CTL_CLS + '</span></div>' +
+    '<span class="tx">' + body + '</span>';
+  host.appendChild(e);
+  setTimeout(() => { if (e.parentNode) e.remove(); }, TOAST_MS);
+}
+
+/* ============================================================ menus ==== */
+function showMenu(el, x, y, items, head) {
+  el.innerHTML = (head ? '<div class="mh"><span class="t-label l0">' + head + '</span></div>' : '') +
+    items.map((it, i) => '<div class="mi" data-mi="' + i + '"><span class="t-label">' + it[0] +
+      '</span><span class="t-data hint">' + (it[1] || '') + '</span></div>').join('');
+  el.classList.add('on');
+  const os = $('#os').getBoundingClientRect();
+  el.style.left = Math.min(x, os.width - el.offsetWidth - 8) + 'px';
+  el.style.top = Math.min(y, os.height - el.offsetHeight - 8) + 'px';
+  el._items = items;
+}
+function hideMenus() { $('#ctxmenu').classList.remove('on'); $('#winmenu').classList.remove('on'); }
+
+/* ============================================================= tick ==== */
+function walk(v, lo, hi, amp) {
+  const n = v + (Math.random() - 0.5) * amp;
+  return Math.max(lo, Math.min(hi, n));
+}
+function tick() {
+  S.t += 1; S.clock += 1;
+  S.cpu = S.cpu.map(v => Math.round(walk(v, 2, 99, 22)));
+  S.memPct = Math.round(walk(S.memPct, 40, 92, 3));
+  S.load = Math.round(walk(S.load, 0.05, 3.2, 0.22) * 100) / 100;
+  S.rx = Math.round(walk(S.rx, 0, 420, 90) * 10) / 10;
+  S.tx = Math.round(walk(S.tx, 0, 180, 30) * 10) / 10;
+  S.hist.cpu.push(Math.round(S.cpu.reduce((a, b) => a + b, 0) / 4)); S.hist.cpu.shift();
+  S.hist.net.push(Math.min(80, Math.round(S.rx / 5))); S.hist.net.shift();
+  S.hist.mem.push(S.memPct); S.hist.mem.shift();
+  renderCorner();
+  ['mon', 'net', 'clock', 'proc', 'sys'].forEach(id => { if (S.wins[id] && !S.wins[id].min) redraw(id); });
+  if ($('#lock').classList.contains('on')) renderLock();
+}
+/* =========================================================== events ==== */
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  if (!t.closest('.menu')) hideMenus();
+
+  if ($('#lock').classList.contains('on')) {
+    if (t.closest('#lock')) { setScene('desktop'); toast('session', 'unlocked, views restored to their zones'); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    const pr = t.closest('.prow');
+    if (pr && pr.getAttribute('data-pi') !== null) { S.psel = Number(pr.getAttribute('data-pi')); runPalette(); return; }
+    if (!t.closest('.sheet')) showPalette(false);
+    return;
+  }
+  if (overviewOn()) {
+    const pick = t.closest('[data-ovpick]');
+    if (pick) {
+      S.sheet = Number(pick.getAttribute('data-ovws'));
+      showOverview(false);
+      focusWin(pick.getAttribute('data-ovpick'));
+      return;
+    }
+    const fld = t.closest('.ovfield');
+    if (fld) { S.sheet = Number(fld.getAttribute('data-ovws')); showOverview(false); layout(); return; }
+    if (!t.closest('.ovhead')) showOverview(false);
+    return;
+  }
+
+  /* the view index in the title block is the tasklist AND the launcher */
+  const vr = t.closest('.vrow');
+  if (vr) {
+    const id = vr.getAttribute('data-app');
+    const w = S.wins[id];
+    if (!w) openWin(id);
+    else if (w.min || w.ws !== S.sheet) { w.ws = S.sheet; w.min = false; focusWin(id); }
+    else if (S.focus === id) minWin(id);
+    else focusWin(id);
+    return;
+  }
+  const wsc = t.closest('.wsc');
+  if (wsc) {
+    if (wsc.getAttribute('data-ov')) { setScene('overview'); return; }
+    S.sheet = Number(wsc.getAttribute('data-ws'));
+    const top = Object.values(S.wins).filter(w => w.ws === S.sheet && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+    layout();
+    rev('sheet ' + pad2(S.sheet), 'brought forward, ' + top.length + ' views visible');
+    toast('sheet', 'switched to ' + pad2(S.sheet) + ', ' + top.length + ' views visible');
+    return;
+  }
+
+  const win = t.closest('.win');
+  if (win) {
+    const id = win.getAttribute('data-id');
+    if (!S.wins[id]) return;
+    if (S.wins[id].min) { focusWin(id); return; }
+    const actEl = t.closest('[data-act]');
+    const act = actEl ? actEl.getAttribute('data-act') : null;
+    if (act === 'close') { closeWin(id); return; }
+    if (act === 'closeself') { closeWin(id); return; }
+    if (act === 'min') { minWin(id); return; }
+    if (act === 'max') { maxWin(id); return; }
+    if (act === 'winmenu') {
+      focusWin(id);
+      const r = win.getBoundingClientRect(), os = $('#os').getBoundingClientRect();
+      showMenu($('#winmenu'), r.left - os.left, r.top - os.top + 26, [
+        ['raise to continuous', 'click'],
+        ['minimise to phantom', 'ctrl m'],
+        [S.wins[id].max ? 'restore' : 'enlarge to sheet', 'ctrl f'],
+        [S.wins[id].det ? 'return to zone' : 'free from zone', 'ctrl d'],
+        ['transfer to sheet ' + (S.sheet === 1 ? '02' : '01'), 'shift ' + (S.sheet === 1 ? '2' : '1')],
+        ['remove view', 'ctrl w']
+      ], 'view ' + APP[id].n + ' ' + APP[id].name);
+      $('#winmenu')._win = id;
+      return;
+    }
+    if (S.focus !== id) focusWin(id);
+    handleWinAction(id, t);
+    const hdr = t.closest('.hdr');
+    if (hdr && !t.closest('.ctls')) startDrag(ev, id, win);
+    return;
+  }
+});
+
+document.addEventListener('contextmenu', ev => {
+  if ($('#lock').classList.contains('on')) return;
+  const os = $('#os').getBoundingClientRect();
+  const inWin = ev.target.closest('.win');
+  const inField = !inWin && !ev.target.closest('#corner') && !ev.target.closest('#strip');
+  if (!inWin && !inField) return;
+  ev.preventDefault();
+  const x = ev.clientX - os.left, y = ev.clientY - os.top;
+  if (inField) {
+    showMenu($('#ctxmenu'), x, y, [
+      ['new terminal', 'alt 1'],
+      ['command palette', 'ctrl k'],
+      ['sheet index', 'ctrl space'],
+      [S.zones ? 'hide zone marks' : 'rule zone marks', 'ctrl g'],
+      ['fit every view to zones', 'ctrl t'],
+      ['lock session', 'ctrl l'],
+      ['process ' + PROC[S.theme].other, 'ctrl i']
+    ], 'sheet ' + pad2(S.sheet));
+    $('#ctxmenu')._kind = 'field';
+  } else {
+    const id = inWin.getAttribute('data-id');
+    showMenu($('#ctxmenu'), x, y, [
+      ['raise to continuous', 'click'],
+      ['enlarge to sheet', 'ctrl f'],
+      ['minimise to phantom', 'ctrl m'],
+      ['transfer to sheet ' + (S.sheet === 1 ? '02' : '01'), 'shift'],
+      ['remove view', 'ctrl w']
+    ], 'view ' + APP[id].n + ' ' + APP[id].name);
+    $('#ctxmenu')._kind = 'win';
+    $('#ctxmenu')._win = id;
+  }
+});
+
+$('#ctxmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi');
+  if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const el = $('#ctxmenu');
+  hideMenus();
+  if (el._kind === 'field') {
+    [() => openWin('shell'), () => showPalette(true), () => setScene('overview'),
+     () => { S.zones = !S.zones; drawFrame(); redraw('set'); toast('zone marks', S.zones ? 'ruled on the border' : 'suppressed'); },
+     () => tileAll(), () => setScene('lock'),
+     () => setStock(S.theme === 'dark' ? 'light' : 'dark', true)][i]();
+  } else {
+    const id = el._win;
+    [() => focusWin(id), () => maxWin(id), () => minWin(id),
+     () => { S.wins[id].ws = S.sheet === 1 ? 2 : 1; layout(); rev(APP[id].n + ' ' + APP[id].name, 'transferred to sheet ' + pad2(S.sheet === 1 ? 2 : 1)); },
+     () => closeWin(id)][i]();
+  }
+});
+$('#winmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi');
+  if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const id = $('#winmenu')._win;
+  hideMenus();
+  const w = S.wins[id];
+  if (!w) return;
+  [() => focusWin(id), () => minWin(id), () => maxWin(id),
+   () => {
+     if (w.det) { w.det = false; rev(APP[id].n + ' ' + APP[id].name, 'returned to zone ' + zoneName(w.c, w.r)); }
+     else {
+       const r = zoneRect(w.c, w.r, w.cw, w.rh);
+       w.det = true; w.x = r.x + 26; w.y = r.y + 22; w.w = r.w; w.h = r.h;
+       rev(APP[id].n + ' ' + APP[id].name, 'freed from the zone lattice');
+     }
+     layout();
+   },
+   () => { w.ws = S.sheet === 1 ? 2 : 1; layout(); rev(APP[id].n + ' ' + APP[id].name, 'transferred to sheet ' + pad2(w.ws)); },
+   () => closeWin(id)][i]();
+});
+
+function handleWinAction(id, t) {
+  const node = t.closest('[data-act], [data-toggle], [data-seg], [data-slider]');
+  if (!node) return;
+  if (node.hasAttribute('data-toggle')) {
+    const k = node.getAttribute('data-toggle');
+    S[k] = !S[k];
+    if (k === 'zones') drawFrame();
+    if (k === 'blink') document.body.classList.toggle('blinkon', S.blink);
+    layout();
+    redraw('set');
+    toast(k, S[k] ? 'on' : 'off');
+    return;
+  }
+  const segp = t.closest('[data-seg]');
+  if (segp && t.closest('[data-arg]')) {
+    const av = Number(t.closest('[data-arg]').getAttribute('data-arg'));
+    if (segp.getAttribute('data-seg') === 'stock') { setStock(av ? 'dark' : 'light', true); return; }
+    S.setTab = av; redraw('set');
+    return;
+  }
+  const act = node.getAttribute('data-act');
+  const arg = node.getAttribute('data-arg');
+  if (act === 'file') { S.fileSel = Number(arg); redraw('files'); redraw('edit'); return; }
+  if (act === 'proc') { S.procSel = Number(arg); redraw('mon'); return; }
+  if (act === 'open') { openWin(arg); return; }
+  if (act === 'ov') { setScene('overview'); return; }
+  if (act === 'calc') { calcKey(arg); redraw('calc'); return; }
+  if (act === 'toast') {
+    const M = {
+      build: ['make', 'zlos.elf relinked, text 218432 data 30720 bss 1441792'],
+      unmount: ['zlfs', 'rd0 flushed, 2 pages written, unmounted clean'],
+      reap: ['reaped', 'pid 42 regdump removed from the table'],
+      renice: ['renice', 'pid 61 soak moved to nice 10'],
+      retile: ['fitted', 'every view returned to the zone lattice'],
+      plot: ['plotted', 'sheet ' + pad2(S.sheet) + ', 1 page, 1:1, monochrome']
+    }[arg] || ['ok', arg];
+    if (arg === 'retile') tileAll();
+    if (arg === 'unmount') closeWin('dlg');
+    toast(M[0], M[1]);
+    return;
+  }
+}
+function calcKey(k) {
+  if (k === 'clr') { S.calcAcc = '0'; return; }
+  if (k === 'eq') { S.calcAcc = String(parseInt(S.calcAcc, 10) || 0); return; }
+  if (/^[0-9]$/.test(k)) { S.calcAcc = (S.calcAcc === '0' ? '' : S.calcAcc) + k; return; }
+  if (k === 'div') { S.calcAcc = String(Math.floor((parseInt(S.calcAcc, 10) || 0) / 2)); return; }
+  if (k === 'mul') { S.calcAcc = String((parseInt(S.calcAcc, 10) || 0) * 2); return; }
+  if (k === 'add') { S.calcAcc = String((parseInt(S.calcAcc, 10) || 0) + 1); return; }
+  if (k === 'sub') { S.calcAcc = String((parseInt(S.calcAcc, 10) || 0) - 1); return; }
+  if (k === 'hex' || k === 'dec' || k === 'bin') { toast('base', k + ' shown in the ledger above'); return; }
+}
+/* fit every view back onto the lattice, avoiding the reserved corner. */
+function tileAll() {
+  const list = Object.values(S.wins).filter(w => w.ws === S.sheet && !w.min && !APP[w.id].parent);
+  const n = list.length;
+  if (!n) return;
+  const perRow = n <= 2 ? n : Math.ceil(n / 2);
+  const rowsN = n <= 2 ? 1 : 2;
+  const usableR = Math.max(1, LAT.resR);
+  list.forEach((w, i) => {
+    const rr = Math.floor(i / perRow), cc = i % perRow;
+    const cwid = Math.max(1, Math.floor(S.zc / perRow));
+    const rhh = Math.max(1, Math.floor(usableR / rowsN));
+    w.det = false; w.max = false;
+    w.c = cc * cwid; w.r = rr * rhh; w.cw = cwid; w.rh = rhh;
+  });
+  layout();
+  rev('sheet ' + pad2(S.sheet), n + ' views fitted to the lattice');
+  toast('fitted', n + ' views onto the ' + S.zc + ' x ' + S.zr + ' zone lattice');
+}
+
+/* ---------------------------------------------------------- sliders -- */
+let SL = null;
+document.addEventListener('mousedown', ev => {
+  const s = ev.target.closest('[data-slider]');
+  if (!s) return;
+  SL = s; setSlider(ev);
+});
+document.addEventListener('mousemove', ev => { if (SL) setSlider(ev); });
+document.addEventListener('mouseup', () => { SL = null; });
+function setSlider(ev) {
+  const name = SL.getAttribute('data-slider');
+  const r = SL.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+  const steps = name === 'ui' ? UI_STEPS : name === 'zc' ? ZC_STEPS : name === 'zr' ? ZR_STEPS : DASH_IDX;
+  const v = steps[Math.round(p * (steps.length - 1))];
+  if (name === 'ui') { if (v === S.ui) return; S.ui = v; applyUI(); }
+  else if (name === 'zc') { if (v === S.zc) return; S.zc = v; }
+  else if (name === 'zr') { if (v === S.zr) return; S.zr = v; }
+  else {
+    if (v === S.dashIdx) return;
+    S.dashIdx = v;
+    applyDash();
+  }
+  layout(); redraw('set'); redraw('zones');
+}
+function applyDash() {
+  const d = DASH_STEPS[S.dashIdx];
+  const root = document.documentElement.style;
+  root.setProperty('--zb-dash', d[0] + 'px');
+  root.setProperty('--zb-gapd', d[1] + 'px');
+  root.setProperty('--zb-chain-l', (d[0] * 2) + 'px');
+}
+function applyUI() { document.documentElement.style.setProperty('--ui', String(S.ui)); }
+
+/* ------------------------------------------------------------- drag --
+ * While a view is off its zone, the distance back to the zone it will
+ * snap to is DIMENSIONED IN REDLINE. That is the third and last use of
+ * the second ink, and it is the only moment the desktop shows a delta. */
+let DELTA = null;
+function showDelta(w, tx, ty) {
+  if (!DELTA) {
+    DELTA = document.createElement('div');
+    DELTA.className = 'delta';
+    $('#field').appendChild(DELTA);
+  }
+  const dx = tx - w.x, dy = ty - w.y;
+  DELTA.style.left = '0px'; DELTA.style.top = '0px';
+  DELTA.style.width = '100%'; DELTA.style.height = '100%';
+  let s = '';
+  s += '<span class="dl" style="left:' + Math.min(w.x, tx) + 'px;top:' + w.y +
+       'px;width:' + Math.abs(dx) + 'px;height:2px"></span>';
+  s += '<span class="dl" style="left:' + tx + 'px;top:' + Math.min(w.y, ty) +
+       'px;width:2px;height:' + Math.abs(dy) + 'px"></span>';
+  s += '<span class="dt" style="left:' + (Math.min(w.x, tx) + 4) + 'px;top:' + (w.y - 16) +
+       'px">dx ' + dx + '  dy ' + dy + '</span>';
+  DELTA.innerHTML = s;
+}
+function hideDelta() { if (DELTA) { DELTA.remove(); DELTA = null; } }
+function startDrag(ev, id, el) {
+  const w = S.wins[id];
+  if (w.max) return;
+  const r = el.getBoundingClientRect(), f = $('#field').getBoundingClientRect();
+  const ox = ev.clientX - r.left, oy = ev.clientY - r.top;
+  const wid = r.width, hgt = r.height;
+  el.classList.add('drag');
+  function nearestZone() {
+    let bc = 0, br = 0, bd = 1e9;
+    LAT.zx.forEach((x, i) => { const d = Math.abs(x - w.x); if (d < bd) { bd = d; bc = i; } });
+    bd = 1e9;
+    LAT.zy.forEach((y, i) => { const d = Math.abs(y - w.y); if (d < bd) { bd = d; br = i; } });
+    return { c: bc, r: br };
+  }
+  function move(e) {
+    w.det = true;
+    w.x = Math.round(e.clientX - f.left - ox);
+    w.y = Math.round(e.clientY - f.top - oy);
+    w.w = wid; w.h = hgt;
+    layout();
+    if (S.snap) { const z = nearestZone(); showDelta(w, LAT.zx[z.c], LAT.zy[z.r]); }
+  }
+  function up() {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    el.classList.remove('drag');
+    hideDelta();
+    if (S.snap && w.det) {
+      const z = nearestZone();
+      w.det = false; w.c = z.c; w.r = z.r;
+      layout();
+      rev(APP[id].n + ' ' + APP[id].name, 'snapped to zone ' + zoneName(z.c, z.r));
+      toast('snapped', APP[id].name.toUpperCase() + ' to zone ' + zoneName(z.c, z.r));
+    } else if (w.det) {
+      rev(APP[id].n + ' ' + APP[id].name, 'placed free at ' + Math.round(w.x) + ', ' + Math.round(w.y));
+    }
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* -------------------------------------------------------- keyboard --- */
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if ($('#lock').classList.contains('on')) {
+    if (k === 'Enter' || k === 'Escape') { setScene('desktop'); toast('session', 'unlocked, views restored'); ev.preventDefault(); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); ev.preventDefault(); return; }
+    if (k === 'Enter') { runPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowDown') { S.psel = Math.min(S.psel + 1, Math.min(7, paletteResults().length - 1)); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    if (k.length === 1 && !ev.ctrlKey && !ev.metaKey) { S.pq += k; S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    return;
+  }
+  if (ev.shiftKey && (k === 'D' || k === 'd') && !ev.ctrlKey && !ev.metaKey) {
+    setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return;
+  }
+  if (ev.ctrlKey && (k === 'k' || k === 'K')) { S.pq = ''; S.psel = 0; showPalette(true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && k === ' ') { setScene(overviewOn() ? 'desktop' : 'overview'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'l' || k === 'L')) { setScene('lock'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'g' || k === 'G')) { S.zones = !S.zones; drawFrame(); redraw('set'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'i' || k === 'I')) { setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 't' || k === 'T')) { tileAll(); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'w' || k === 'W')) { if (S.focus) closeWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'f' || k === 'F')) { if (S.focus) maxWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'm' || k === 'M')) { if (S.focus) minWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === '1' || k === '2')) {
+    S.sheet = Number(k);
+    const top = Object.values(S.wins).filter(w => w.ws === S.sheet && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+    layout(); ev.preventDefault(); return;
+  }
+  if (ev.altKey && /^[0-9]$/.test(k)) {
+    const idx = k === '0' ? 9 : Number(k) - 1;
+    if (APPS[idx]) openWin(APPS[idx].id);
+    ev.preventDefault(); return;
+  }
+  if (k === 'Escape') { if (overviewOn()) setScene('desktop'); hideMenus(); }
+});
+
+/* ========================================================== process ====
+ * Two processes, one set of role names. The cyanotype is the home ladder
+ * and the default; the diazo whiteprint is the historical successor, not
+ * an inversion. Setting data-theme is the ONLY switch - no weight, no
+ * metric, no radius, no dash pitch and no motion value differs. */
+const PROC = {
+  dark: { name: 'cyanotype', other: 'diazo',
+    pitch: 'the blueprint. prussian blue, white linework, no black.',
+    toast: ['cyanotype', 'ground #16375E, linework #EDF1F3, redline #F99B84'] },
+  light: { name: 'diazo', other: 'cyanotype',
+    pitch: 'the whiteprint. the process that replaced it. still no black.',
+    toast: ['diazo', 'ground #F0ECE0, blueline #27427D, redline #A8341D'] }
+};
+function applyTheme() {
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = PROC[S.theme].pitch;
+  renderThemeTog();
+}
+function renderThemeTog() {
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-stock="dark">cyanotype</span>' +
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-stock="light">diazo</span>' +
+    '<span class="thint">shift d</span>';
+}
+function hashName() { return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setStock(t, announce) {
+  const next = t === 'dark' ? 'dark' : 'light';
+  if (next === S.theme && announce) return;
+  S.theme = next;
+  applyTheme();
+  renderLinks();
+  redraw('set');
+  drawFrame();
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    rev('sheet ' + pad2(S.sheet), 'printed on ' + PROC[S.theme].name + ' stock');
+    toast(PROC[S.theme].toast[0], PROC[S.theme].toast[1]);
+  }
+}
+function renderLinks() {
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENE_NAMES.map(n => '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  markLinks(S.scene);
+}
+function markLinks(name) {
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === name));
+}
+
+/* =========================================================== scenes ==== */
+const SCENE_NAMES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function clearAll() {
+  Object.keys(S.wins).forEach(id => { const e = $('.win[data-id="' + id + '"]'); if (e) e.remove(); });
+  S.wins = {}; S.focus = null; ZTOP = 10;
+  S.rev = []; S.revN = 0;
+  showOverview(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+}
+function place(id, c, r, cw, rh, ws) { openWin(id, [c, r, cw, rh], ws || S.sheet, true); }
+/* a seeded revision history, so the title block is never empty on load
+   and the direction's own claim is visible in a screenshot. */
+function seedRev() {
+  S.rev = []; S.revN = 0;
+  [['05 kernel log', 'nvme admin queue retried, 1 fail recorded'],
+   ['03 monitor', 'sample rate held at 1 Hz, 64 s history'],
+   ['02 files', 'unmount raised as a child view, chain dot'],
+   ['sheet 01', '4 views fitted to the lattice'],
+   ['14 registers', 'pipe A read back, 15 registers']].reverse()
+    .forEach((r, i) => { S.revN += 1; S.rev.unshift({ r: ZONE_L[S.revN - 1], w: r[0], d: r[1],
+      t: hhmmss(S.clock - (5 - i) * 47) }); });
+}
+function baseDesktop() {
+  clearAll();
+  S.sheet = 1; S.zc = 8; S.zr = 5;
+  computeLat();
+  place('shell', 0, 0, 3, 2);
+  place('files', 3, 0, 3, 2);
+  place('mon', 0, 2, 3, 3);
+  place('net', 3, 2, 3, 3);
+  /* 03 MONITOR is left MINIMISED, so the fourth line type - phantom - is
+     on the sheet in a still. The outline stays exactly where the view
+     was, carrying only its bubble, which is what makes a dock pointless. */
+  S.wins.mon.min = true;
+  place('log', 0, 0, 5, 3, 2);
+  place('regs', 5, 0, 3, 2, 2);
+  place('hex', 0, 3, 6, 2, 2);
+  const Z = LAT, fw = Z.W - 2 * Z.mar;
+  /* the child view: a dialog raised by 02 FILES, drawn in chain dot and
+     joined to its parent by a dogleg leader. free of the lattice, because
+     a dialog is a reference and not a view of the machine. */
+  place('dlg', 5, 0, 3, 2);
+  const d = S.wins.dlg;
+  d.det = true;
+  d.x = Z.zx[6] + 24; d.y = Math.round(40 * S.ui);
+  d.w = Math.max(300, fw - d.x - 8); d.h = Math.round(268 * S.ui);
+  /* one view freed from the lattice, front most, so the overlap state is
+     visible without touching anything. */
+  place('sys', 1, 0, 4, 3);
+  const w = S.wins.sys;
+  w.det = true;
+  w.x = Math.round(fw * 0.115); w.y = Math.round(150 * S.ui);
+  w.w = Math.round(fw * 0.446); w.h = Math.round(520 * S.ui);
+  focusWin('sys');
+  seedRev();
+  layout();
+}
+function setScene(name, push) {
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  else if (SCENE_NAMES.indexOf(name) >= 0) dark = false;
+  if (SCENE_NAMES.indexOf(name) < 0) { name = 'desktop'; dark = S.theme === 'dark'; }
+  S.scene = name;
+  S.theme = dark ? 'dark' : 'light';
+  applyTheme();
+  renderLinks();
+  if (push !== false && location.hash.slice(1) !== hashName()) {
+    history.replaceState(null, '', '#' + hashName());
+  }
+  markLinks(name);
+  if (name === 'desktop') {
+    baseDesktop();
+    toast('sheet 01', '6 views: one continuous, two hidden, one chain dot, one phantom, one freed');
+  } else if (name === 'overview') {
+    baseDesktop(); showOverview(true);
+  } else if (name === 'palette') {
+    baseDesktop(); S.pq = 'zone'; S.psel = 0; showPalette(true);
+  } else if (name === 'files') {
+    clearAll(); S.sheet = 1; computeLat();
+    place('files', 0, 0, 3, 5);
+    place('edit', 3, 0, 3, 5);
+    place('hex', 6, 0, 2, 2);
+    S.fileSel = 1;
+    redraw('files'); redraw('edit');
+    focusWin('files');
+    seedRev(); layout();
+    toast('selected', 'fb.c 68.4 KiB, opened in view 04 EDITOR');
+  } else if (name === 'monitor') {
+    clearAll(); S.sheet = 1; computeLat();
+    place('mon', 0, 0, 4, 5);
+    place('net', 4, 0, 4, 2);
+    place('proc', 4, 2, 2, 3);
+    focusWin('mon');
+    seedRev(); layout();
+    toast('sampling', 'monitor and network at 1 Hz, 64 s history');
+  } else if (name === 'settings') {
+    clearAll(); S.sheet = 1; computeLat();
+    place('set', 0, 0, 4, 5);
+    place('type', 4, 0, 4, 2);
+    place('calc', 4, 2, 2, 3);
+    S.setTab = 0;
+    redraw('set');
+    focusWin('set');
+    seedRev(); layout();
+  } else if (name === 'lock') {
+    baseDesktop(); showLock(true);
+  }
+  layout();
+}
+$('#themetog').addEventListener('mousedown', ev => {
+  const t = ev.target.closest('[data-stock]');
+  if (t) { ev.preventDefault(); setStock(t.getAttribute('data-stock'), true); }
+});
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop', false));
+window.addEventListener('resize', () => {
+  layout();
+  if (overviewOn()) showOverview(true);
+  if ($('#lock').classList.contains('on')) renderLock();
+});
+
+/* ============================================================ start ====
+ * With no hash the desktop comes up on the CYANOTYPE. Blueline is the
+ * dark primary member of the family; the diazo is the second process,
+ * reachable by every deep link without the -dark suffix. */
+document.body.classList.add('blinkon');
+applyTheme(); applyUI(); applyDash();
+computeLat();
+setScene(location.hash.slice(1) || 'desktop-dark', false);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

@@ -9,6 +9,10 @@
  * talks only to these functions and never learns which one it is on.
  */
 #include "boot_handover.h"
+/* HI_TAR / HI_TAR_END - the archive staging buffer. Included rather than
+ * restated: a second copy of a fixed address is the drift this header's
+ * _Static_assert chain exists to make impossible. */
+#include "memmap.h"
 
 /* Pointer-sized. NOT `unsigned long`, which is 4 bytes under buildefi.sh's
  * LLP64 target and 8 everywhere else - the whole hazard class this file's
@@ -64,6 +68,7 @@ void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 void fb_cursor_arrow(int x, int y, unsigned int fill, unsigned int edge);
 unsigned int fb_get_px(int x, int y);
 void fb_shade(int x, int y, int w, int h, int num, int den);
+void fb_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den);
 void fb_shadow(int x, int y, int w, int h, int off, int soft);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
@@ -447,6 +452,10 @@ int console_get_px(int x, int y) { return fb_active() ? (int)fb_get_px(x, y) : 0
 void console_shade(int x, int y, int w, int h, int num, int den)
 { if (fb_active()) fb_shade(x, y, w, h, num, den); }
 
+/* mix a region toward a colour - the scrim, which is not a darkening */
+void console_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den)
+{ if (fb_active()) fb_mix(x, y, w, h, rgb, num, den); }
+
 /* a soft drop shadow offset down-right of a window footprint */
 void console_shadow(int x, int y, int w, int h, int off, int soft)
 { if (fb_active()) fb_shadow(x, y, w, h, off, soft); }
@@ -498,6 +507,57 @@ void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb)
 /* clip box for the 3D cube - set to a window's interior so it can't overdraw */
 void console_cube_clip(int x0, int y0, int x1, int y1)
 { if (fb_active()) fb3d_set_clip(x0, y0, x1, y1); }
+
+/* THE OTHER THREE SOLIDS, AND THE TWO FIGURES THAT DESCRIBE THEM. The Renderer
+ * pane printed "44 tris - 24 verts" for a cylinder nothing could draw; these
+ * three are what let zl draw the solid AND read its counts off the same table,
+ * so the caption cannot say one thing while the canvas shows another. */
+void fb3d_mesh_filled(int kind, int cx, int cy, int size, int angle,
+                      unsigned int base);
+int  fb3d_mesh_verts(int kind);
+int  fb3d_mesh_tris(int kind);
+
+void console_mesh_filled(int kind, int cx, int cy, int size, int angle,
+                         unsigned int rgb)
+{ if (fb_active()) fb3d_mesh_filled(kind, cx, cy, size, angle, rgb); }
+
+int console_mesh_verts(int kind) { return fb3d_mesh_verts(kind); }
+int console_mesh_tris(int kind)  { return fb3d_mesh_tris(kind); }
+
+/* THE THREE COMPUTED PICTURES. The Image Viewer named three files that do not
+ * exist over a flat fill; these are what it can actually make. */
+void img_draw(int kind, int x, int y, int w, int h, int px, unsigned int base);
+int  img_src_w(int w, int px);
+int  img_src_h(int h, int px);
+
+void console_img_draw(int kind, int x, int y, int w, int h, int px,
+                      unsigned int rgb)
+{ if (fb_active()) img_draw(kind, x, y, w, h, px, rgb); }
+
+int console_img_w(int w, int px) { return img_src_w(w, px); }
+int console_img_h(int h, int px) { return img_src_h(h, px); }
+
+/* ---- the archive ----------------------------------------------------------
+ * zl gets the SIZE and the RESULT, never the address. The staging buffer's
+ * base lives here, where memmap.h's chain can assert about it; handing
+ * 0x06000000 to zl as a number would put a fifth copy of a fixed address in a
+ * file no memory check reads. tar_cap is exported so the pane can print the
+ * ceiling it was refused against. */
+unsigned int tar_size(void);
+unsigned int tar_commit(void *stage, unsigned int cap);
+int tar_slot(void);
+int tar_self_byte(int i);
+int tar_members(void);
+unsigned int tar_payload(void);
+
+unsigned console_tar_size(void) { return tar_size(); }
+unsigned console_tar_cap(void)  { return (unsigned)(HI_TAR_END - HI_TAR); }
+unsigned console_tar_commit(void)
+{ return tar_commit((void *)(unsigned long)HI_TAR, console_tar_cap()); }
+int console_tar_slot(void)      { return tar_slot(); }
+int console_tar_members(void)   { return tar_members(); }
+unsigned console_tar_payload(void) { return tar_payload(); }
+int console_tar_self_byte(int i){ return tar_self_byte(i); }
 
 
 void console_logo(int px, int py, const char *s, int scale, unsigned char attr)

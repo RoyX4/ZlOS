@@ -1,0 +1,132 @@
+{
+  "schema": "zlos.visual-golden-registry.v1",
+  "result": "PASS_CURRENT_STRICT_GOLDENS_WITH_OPEN_MATRIX",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "visual_receipt": {
+    "path": "kernel/docs/receipts/visual-qemu-2026-08-29.json",
+    "sha256": "36679572d19ee731f330da71db12da337b823e49afe1a183b64c64a9d879808c"
+  },
+  "comparison_policy": {
+    "stable_region": "exact RGB pixel equality",
+    "dynamic_region": "ignored only inside the named rectangles below",
+    "dimension_change": "always fail",
+    "missing_or_extra_capture": "always fail",
+    "thresholds": {
+      "changed_stable_pixels": 0
+    }
+  },
+  "dynamic_masks": [
+    {
+      "id": "top-live-telemetry",
+      "rect": [
+        0,
+        0,
+        1920,
+        42
+      ],
+      "reason": "frame timing, wakeup and budget counters advance while running"
+    },
+    {
+      "id": "system-monitor-live-surface",
+      "rect": [
+        790,
+        54,
+        440,
+        388
+      ],
+      "reason": "the booted System Monitor graph and counters sample live state"
+    },
+    {
+      "id": "rail-clock-and-power",
+      "rect": [
+        0,
+        1018,
+        170,
+        182
+      ],
+      "reason": "wall clock, uptime and emulated power state are live"
+    },
+    {
+      "id": "bottom-live-telemetry",
+      "rect": [
+        170,
+        1144,
+        1750,
+        56
+      ],
+      "reason": "memory, frame and uptime telemetry changes between captures"
+    }
+  ],
+  "goldens": [
+    {
+      "route": "grub-bios32",
+      "state": "desktop-ready",
+      "path": "kernel/docs/evidence/current-visuals-2026-08-29/grub-bios32-desktop-ready.png",
+      "sha256": "09dd48043918b0b56937f433c601443bdcab4bce400458f1be5c57454c8c8fd8",
+      "pixels_sha256": "3173ead77a1035bab206908cd60a74e4a99c2abb3be2de5b6c238b66122e3632",
+      "width": 1920,
+      "height": 1200,
+      "stable_pixels": 1923700,
+      "masked_pixels": 380300,
+      "stable_pixels_sha256": "efd6ed61b9b46952c015fc6e232270caa63902d0db20a5f660849f14ad846eac"
+    },
+    {
+      "route": "grub-bios32",
+      "state": "paint-open",
+      "path": "kernel/docs/evidence/current-visuals-2026-08-29/grub-bios32-paint-open.png",
+      "sha256": "59f101888698d7c282e1c0a349bba92212512f0367fe0ff0e8872d7266f1a97c",
+      "pixels_sha256": "963b2e0816b58a02db5fb2e9558cd755d466c6443fde89065c99b51348623574",
+      "width": 1920,
+      "height": 1200,
+      "stable_pixels": 1923700,
+      "masked_pixels": 380300,
+      "stable_pixels_sha256": "63b0682c509a0fbe19cdc0c861adc7fb49368cc63694c829a48b4112ae9a0831"
+    },
+    {
+      "route": "native-uefi64",
+      "state": "desktop-ready",
+      "path": "kernel/docs/evidence/current-visuals-2026-08-29/native-uefi64-desktop-ready.png",
+      "sha256": "6cad275dcb188b15cd84b71e3c89cb01ab77f674cc86c807e8cd77fa42fc026b",
+      "pixels_sha256": "524319604f1a6c3ac26e89976c1f0a640f818da40b7b5d8d4baea66e49e37f90",
+      "width": 1920,
+      "height": 1200,
+      "stable_pixels": 1923700,
+      "masked_pixels": 380300,
+      "stable_pixels_sha256": "45be537c6a4b4848df0f8d24d0602f4176d15273c0af0d6415031ed33ab286db"
+    },
+    {
+      "route": "native-uefi64",
+      "state": "paint-open",
+      "path": "kernel/docs/evidence/current-visuals-2026-08-29/native-uefi64-paint-open.png",
+      "sha256": "4ca182377119dc55cedb1667c51e877a8cb0411ca23fa3c40d31bff32de97228",
+      "pixels_sha256": "0258247e6f9edeb732c8da2c6e621e9bc1efa90b957d6f752742faa5ecd0be18",
+      "width": 1920,
+      "height": 1200,
+      "stable_pixels": 1923700,
+      "masked_pixels": 380300,
+      "stable_pixels_sha256": "59f6b183c9feb3d3c6b3bff6882b04bbdddae9f1afa80d23529363c0e7d1f054"
+    }
+  ],
+  "counts": {
+    "goldens": 4,
+    "routes": 2,
+    "states": 2,
+    "dynamic_masks": 4,
+    "complete_variant_dimensions": 0,
+    "open_variant_dimensions": 6
+  },
+  "open_gaps": [
+    "scale",
+    "theme",
+    "locale",
+    "accessibility",
+    "ui-state",
+    "backend"
+  ],
+  "generator": {
+    "path": "kernel/tools/checks/check-visual-goldens.py",
+    "sha256": "11a2c422039e1182e55ad2d5048010025ff64c1059101966eace2896a3943266"
+  },
+  "evidence_ceiling": "strict current-build BIOS/native-UEFI pixel goldens for desktop-ready and Paint-open outside four named live regions; not a complete variant, physical or design-approval matrix",
+  "weakest_link": "four default-path frames cannot cover the six required variant dimensions"
+}

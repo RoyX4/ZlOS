@@ -1,0 +1,62 @@
+{
+  "schema": "zlos.scheduler-native-uefi64-qemu-receipt.v1",
+  "result": "PASS_BOUNDED_TWO_PROCESS_GATE",
+  "build_identity": "9aeb5f46dffa99a1072a38b224380857f14c7e33fd1e6cd42603d3eb2968fd28",
+  "route": "native-uefi64",
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "fdd955bc58933d2616a7f495cfb619aaac6577f477b90ce5669ee2d85cb93f68"
+  },
+  "boot_log_sha256": "fc29e051cddbf575491fd6cd6d31de45068a3418c06c9ae3b567af5ceff8c971",
+  "harness": {
+    "path": "kernel/tools/checks/verify-efi.sh",
+    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+  },
+  "implementation": [
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "142801cd87b614c9c70ea4df999ece5de5aff1d3ac496e920b0e2274630725b3"
+    },
+    {
+      "path": "kernel/src/arch/x86/idt.c",
+      "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "cooperative-context-resume",
+      "marker": "<- two PML4 processes yielded/resumed AB12 and exited independently",
+      "processes": 2,
+      "trace": "AB12",
+      "separate_address_spaces": true,
+      "separate_kernel_stacks": true
+    },
+    {
+      "id": "timer-preemption",
+      "marker": "<- PIT preempted two non-yielding Ring-3 loops PQ",
+      "processes": 2,
+      "trace": "PQ",
+      "non_yielding": true,
+      "minimum_preemptions": 2
+    },
+    {
+      "id": "faulted-process-sibling-survival",
+      "marker": "<- one process GP-faulted; its sibling ran and exited",
+      "fault_vector": 13,
+      "sibling_trace": "K",
+      "kernel_survived": true
+    }
+  ],
+  "known_gaps": [
+    "the preemptive Ring-3 gate has exactly two fixed process slots",
+    "there is no general priority, fairness or deadline contract",
+    "there is no per-CPU run-queue ownership or process migration",
+    "spawn, reap, cancellation and resource reclamation are not persistent services",
+    "there is no current physical-hardware scheduler receipt"
+  ],
+  "evidence_ceiling": "exact current native-UEFI64 QEMU artifact and three bounded two-process observations; not a general scheduler or physical-hardware qualification",
+  "generator": {
+    "path": "kernel/tools/checks/write-scheduler-receipt.py",
+    "sha256": "c5c8ec014013ac0de5fd40a0c37dc2fa11d073ae14a0dff88dc14f0f22130f82"
+  }
+}

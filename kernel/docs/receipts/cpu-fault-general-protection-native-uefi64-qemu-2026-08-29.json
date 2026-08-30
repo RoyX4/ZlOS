@@ -1,0 +1,76 @@
+{
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9"
+  },
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "crash_line": "ZLCRASH v=3 bytes=240 bits=64 regmask=0x000000000000ffff vec=13 haserr=1 err=0x0000000000000038 ip=0x000000003cf3c089 cs=0x0000000000000008 flags=0x0000000000010246 sp=0x000000003fe56478 ss=0x0000000000000000 cr2=0x0000000000000000 handlersp=0x000000003fe563c0 stacklo=0x0000000000000000 stackhi=0x0000000000000000 ax=0x0000000000000038 bx=0x1112131415161718 cx=0x2122232425262728 dx=0x3132333435363738 si=0x4142434445464748 di=0x5152535455565758 bp=0x6162636465666768 rsp=0x000000003fe56478 r8=0x8182838485868788 r9=0x9192939495969798 r10=0xa1a2a3a4a5a6a7a8 r11=0xb1b2b3b4b5b6b7b8 r12=0xc1c2c3c4c5c6c7c8 r13=0xd1d2d3d4d5d6d7d8 r14=0xe1e2e3e4e5e6e7e8 r15=0x000000003cf3c089 checksum=0x50a4720109e670ea END\n",
+  "crash_line_sha256": "ac889c5de9e4c6c863dbedcc4943a899f1cb56feae8b82061965408fa73e52b3",
+  "evidence": "QEMU target execution of the exact current artifact; architectural vector/error shape, pre-prologue registers, bounded schema, checksum and halted state independently verified; the double-fault case additionally binds serial handler SP and QEMU halted RSP to IST1",
+  "fault_case": "gp",
+  "guest_halted_after_record": true,
+  "halted_cpu": {
+    "register_dump_sha256": "f76bc35fdfcc7574d3d2c275b3f5958ae56b8edd483868c97fe5847ead171ed9",
+    "rsp": 1071997520
+  },
+  "kernel": {
+    "path": "kernel/ZLOS.EFI",
+    "sha256": "37611a475a5c77ce952177d2fe28c06168a0050228969a11fede56c96af90a92"
+  },
+  "kernel_symbol_ip": 1022607497,
+  "record": {
+    "ax": 56,
+    "bits": 64,
+    "bp": 7017280452245743464,
+    "bx": 1230066625199609624,
+    "bytes": 240,
+    "checksum": 5810894768001413354,
+    "cr2": 0,
+    "cs": 8,
+    "cx": 2387509390608836392,
+    "di": 5859837686836516696,
+    "dx": 3544952156018063160,
+    "emergency_stack_high": 0,
+    "emergency_stack_low": 0,
+    "error": 56,
+    "flags": 66118,
+    "handler_sp": 1071997888,
+    "has_error": 1,
+    "ip": 1022607497,
+    "r10": 11647051513882650536,
+    "r11": 12804494279291877304,
+    "r12": 13961937044701104072,
+    "r13": 15119379810110330840,
+    "r14": 16276822575519557608,
+    "r15": 1022607497,
+    "r8": 9332165983064197000,
+    "r9": 10489608748473423768,
+    "register_mask": 65535,
+    "register_sp": 1071998072,
+    "si": 4702394921427289928,
+    "sp": 1071998072,
+    "ss": 0,
+    "vector": 13,
+    "version": 3
+  },
+  "result": "PASS",
+  "route": "native-uefi64-qemu",
+  "runtime_symbol_binding": {
+    "address": 1022607497,
+    "mechanism": "fault label address loaded before trigger",
+    "register": "r15"
+  },
+  "schema": "zlos.cpu-fault-qemu-receipt.v3",
+  "source_sha256": {
+    "freestanding/runtime_kernel.c": "44a98e4017ae78b9ec6d759548b56a63faf1eb22054d5027bcca8b7c91145e80",
+    "kernel/boot/gdt64.c": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+    "kernel/src/arch/x86/idt.c": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+    "kernel/src/core/crash.c": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+    "kernel/src/core/crash.h": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
+    "kernel/src/graphics/windowing/term.c": "617113fcae29504aa6cd210dce1d1367cb97906f034f8db9a8287b61b2c5f481",
+    "kernel/src/kernel.zl": "c69681f274758145bd3b96de96c1486d44f141a32b09d50cc2932ed4f30aa9c8",
+    "kernel/tools/checks/verify-crash.py": "d76a8606998ff5ca717b62deff4b77678f0446b5129896e644cecec4dc05ef23"
+  },
+  "trigger": "invalid GDT selector 0x38 through typed crashgptest diagnostic",
+  "weakest_link": "the exercised matrix remains bounded; stack unwinding, durable dump storage, recovery policy and physical fault injection remain unimplemented"
+}

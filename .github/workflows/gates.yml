@@ -9,6 +9,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  deadstate:
+    name: state nothing reads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain: this is a read of the sources, one second, no build.
+      - name: the guard can fail
+        run: bash kernel/tools/checks/check-dead-state-selftest.sh
+
+      - name: and does not, on this tree
+        run: python3 kernel/tools/checks/check-dead-state.py
+
   lang:
     name: language (interp vs C backend vs native)
     runs-on: ubuntu-latest

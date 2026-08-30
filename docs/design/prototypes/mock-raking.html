@@ -1,0 +1,585 @@
+<meta charset="utf-8">
+<title>zlOS - Raking</title>
+<style>
+:root{
+  /* ---- ZD surface ladder (warm graphite, hue 22, L* 10.9 to 23.2) ---- */
+  --zd-cut:        #19120E;
+  --zd-well:       #231C18;
+  --zd-void:       #29221E;
+  --zd-base:       #322B27;
+  --zd-raise:      #38312D;
+  --zd-float:      #3D3632;
+  /* ---- the light ---- */
+  --zd-litsoft:    #4A433F;
+  --zd-lit:        #5F5854;
+  /* ---- ink ---- */
+  --zd-text-0:     #F2EDE4;
+  --zd-text-1:     #DAD3C7;
+  --zd-text-2:     #BDB5A7;
+  --zd-text-3:     #AAA194;
+  --zd-text-inert: #6A635A;
+  /* ---- structural accent = the light source ---- */
+  --zd-steel:      #7FB2E0;
+  --zd-steel-br:   #A9CFF2;
+  /* ---- state only ---- */
+  --zd-ok:         #7FBF63;
+  --zd-warn:       #E3A63F;
+  --zd-bad:        #E8664B;
+  --zd-bad-ink:    #E58972;
+  --zd-ink-dark:   #181310;
+  /* ---- radius system ---- */
+  --zd-r-bolt:   0px;
+  --zd-r-plate: 10px;
+  --zd-r-inset:  5px;
+  --zd-r-chip:   3px;
+  /* ---- type scale (3 atlases, no font server) ---- */
+  --zd-t-sm: 11px;
+  --zd-t-md: 13px;
+  --zd-t-lg: 21px;
+  --zd-t-mono: 11px;
+  /* ---- page furniture, NOT zlOS tokens (see notes) ---- */
+  --page-ground: #2a2a2a;
+  --page-rule:   #3f3f3f;
+  --page-ink:    #8d8880;
+  --page-ink-hi: #cfc9c0;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--page-ground)}
+body{
+  font-family:ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  font-size:var(--zd-t-md);
+  color:var(--page-ink);
+  -webkit-font-smoothing:antialiased;
+  padding:28px 0 44px;
+}
+.sheet{width:1280px;margin:0 auto}
+
+/* ================= header ================= */
+.hd{display:flex;align-items:baseline;gap:14px;margin:0 0 14px 1px}
+.hd h1{
+  font-size:var(--zd-t-md);font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--page-ink-hi);
+}
+.hd p{font-size:var(--zd-t-sm);line-height:1.5;max-width:900px;color:var(--page-ink)}
+
+/* ================= desktop frame ================= */
+.frame{
+  position:relative;width:1280px;height:720px;
+  outline:1px solid var(--page-rule);outline-offset:0;
+  overflow:hidden;
+  font-size:var(--zd-t-md);
+}
+
+/* ---------- depth recipes ---------- */
+/* RAISED: cut ring + surface + 1px struck top + 1px grazed left */
+.raised{position:relative;box-shadow:0 0 0 1px var(--zd-cut);--er:5px;
+        --edge-top:var(--zd-lit);--edge-left:var(--zd-litsoft)}
+.raised::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:3;
+  background:
+    linear-gradient(var(--edge-top),var(--edge-top))   var(--er) 0    / calc(100% - var(--er) * 2) 1px no-repeat,
+    linear-gradient(var(--edge-left),var(--edge-left)) 0 var(--er)    / 1px calc(100% - var(--er) * 2) no-repeat;
+}
+/* SUNKEN: the same, sign flipped */
+.sunken{position:relative;background:var(--zd-well);--er:5px}
+.sunken::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;
+  background:
+    linear-gradient(var(--zd-cut),var(--zd-cut))         var(--er) 0    / calc(100% - var(--er) * 2) 1px no-repeat,
+    linear-gradient(var(--zd-cut),var(--zd-cut))         0 var(--er)    / 1px calc(100% - var(--er) * 2) no-repeat,
+    linear-gradient(var(--zd-litsoft),var(--zd-litsoft)) var(--er) 100% / calc(100% - var(--er) * 2) 1px no-repeat;
+}
+
+/* ================= THE RAIL ================= */
+.rail{
+  position:absolute;left:0;top:0;width:56px;height:720px;
+  background:var(--zd-raise);border-radius:var(--zd-r-bolt);
+}
+.rail .lit-edge{position:absolute;right:0;top:0;width:1px;height:100%;background:var(--zd-lit)}
+.rail .div{position:absolute;left:12px;width:32px;height:1px;background:var(--zd-cut)}
+.ic{display:block;fill:none;stroke:currentColor;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+.ic .sol{fill:currentColor;stroke:none}
+.ic .thin{stroke-width:1.5}
+.rail .slot{position:absolute;left:16px;width:24px;height:24px}
+.rail .runbar{position:absolute;right:0;width:2px;height:16px;background:var(--zd-steel)}
+.rail .stat{position:absolute;left:16px;width:24px;height:24px;color:var(--zd-text-3)}
+.rail .clk{
+  position:absolute;left:0;width:56px;text-align:center;
+  font-size:var(--zd-t-lg);line-height:22px;color:var(--zd-text-0);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em;
+}
+.rail .date{
+  position:absolute;left:0;width:56px;text-align:center;
+  font-size:var(--zd-t-sm);line-height:13px;color:var(--zd-text-3);
+  letter-spacing:.1em;
+}
+.rail .corelbl{
+  position:absolute;left:0;width:56px;text-align:center;
+  font-size:var(--zd-t-sm);line-height:13px;color:var(--zd-text-3);letter-spacing:.06em;
+}
+
+/* ================= THE FIELD ================= */
+.field{
+  position:absolute;left:56px;top:0;width:1224px;height:720px;
+  background:var(--zd-void);border-radius:var(--zd-r-bolt);
+}
+/* exactly one decoration: fb_glow from off-screen upper left */
+.field::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(137.5% 137.5% at -12.5% -16.7%,
+    color-mix(in srgb, var(--zd-litsoft) 26%, transparent) 0%,
+    color-mix(in srgb, var(--zd-litsoft) 0%, transparent) 100%);
+}
+
+/* ================= WINDOWS ================= */
+.win{
+  position:absolute;background:var(--zd-base);
+  border-radius:var(--zd-r-plate);--er:10px;
+  /* NO SHADOW. A resting window is seated, not floating. */
+}
+.win.focused{--edge-top:var(--zd-steel);--edge-left:var(--zd-steel)}
+.title{
+  position:absolute;left:0;top:0;right:0;height:28px;
+  display:flex;align-items:center;
+}
+.title .t{
+  margin-left:12px;font-size:var(--zd-t-md);font-weight:700;
+  color:var(--zd-text-2);letter-spacing:.005em;
+}
+.win.focused .title .t{color:var(--zd-text-0)}
+.title .ctl{margin-left:auto;margin-right:8px;display:flex;gap:4px}
+.title .ctl span{
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  color:var(--zd-text-3);
+}
+.title .ctl svg{width:12px;height:12px}
+.grip{position:absolute;right:4px;bottom:4px;width:12px;height:12px;color:var(--zd-text-inert)}
+.grip svg{width:12px;height:12px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round}
+
+/* ---------- w1 : zl shell ---------- */
+.term{
+  position:absolute;left:10px;top:38px;right:10px;height:112px;
+  border-radius:var(--zd-r-inset);--er:5px;
+  padding:8px 10px;overflow:hidden;
+}
+.term pre{
+  font-family:ui-monospace, 'DejaVu Sans Mono', monospace;
+  font-size:var(--zd-t-mono);line-height:16px;color:var(--zd-text-1);
+  white-space:pre;
+}
+.term .hi{color:var(--zd-text-0)}
+.term .dim{color:var(--zd-text-2)}
+.term .ok{color:var(--zd-ok)}
+.term .info{color:var(--zd-text-3)}
+.caret{display:inline-block;width:6px;height:11px;background:var(--zd-steel);
+       vertical-align:-1px;margin-left:2px}
+.btnrow{position:absolute;left:10px;bottom:10px;display:flex;gap:8px}
+.btn{
+  height:24px;padding:0 10px;display:flex;align-items:center;
+  background:var(--zd-raise);border-radius:var(--zd-r-inset);--er:5px;
+  font-size:var(--zd-t-md);color:var(--zd-text-1);
+}
+
+/* ---------- w2 : Files ---------- */
+.pathrow{
+  position:absolute;left:10px;top:38px;right:10px;height:24px;
+  border-radius:var(--zd-r-inset);--er:5px;
+  display:flex;align-items:center;gap:7px;padding:0 8px;
+  font-size:var(--zd-t-md);color:var(--zd-text-2);
+}
+.pathrow svg{width:14px;height:14px;color:var(--zd-text-3);flex:none}
+.list{position:absolute;left:10px;top:70px;right:22px;}
+.row{
+  position:relative;height:26px;display:flex;align-items:center;gap:8px;
+  padding-left:10px;border-radius:var(--zd-r-inset);
+  font-size:var(--zd-t-md);color:var(--zd-text-2);margin-bottom:2px;
+}
+.row svg{width:16px;height:16px;color:var(--zd-text-3);flex:none}
+.row.sel{background:var(--zd-raise);color:var(--zd-text-0);--er:5px}
+.row.sel svg{color:var(--zd-text-0)}
+.selbar{position:absolute;left:0;top:5px;width:2px;height:16px;background:var(--zd-steel)}
+.sbtrack{
+  position:absolute;right:10px;top:70px;width:6px;height:140px;
+  border-radius:999px;--er:3px;
+}
+.sbthumb{position:absolute;right:10px;top:70px;width:6px;height:58px;
+  border-radius:999px;background:var(--zd-lit)}
+
+/* ---------- w3 : System Monitor ---------- */
+.mbody{position:absolute;left:12px;top:38px;right:12px;bottom:12px}
+.mrow{display:flex;align-items:baseline;justify-content:space-between;height:24px}
+.mlbl{font-size:var(--zd-t-sm);letter-spacing:.14em;text-transform:uppercase;color:var(--zd-text-3)}
+.mval{font-size:var(--zd-t-lg);line-height:22px;color:var(--zd-text-0);font-variant-numeric:tabular-nums}
+.mtrack{position:relative;height:8px;border-radius:999px;--er:4px;margin-top:5px}
+.mfill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--zd-steel)}
+.hair{height:1px;background:var(--zd-text-inert);margin:15px 0 14px;opacity:1}
+.ctlrow{display:flex;align-items:center;justify-content:space-between;height:20px}
+.ctlrow .cl{font-size:var(--zd-t-md);color:var(--zd-text-1)}
+.sw{position:relative;width:32px;height:18px;border-radius:999px;--er:9px;
+    background:var(--zd-steel);box-shadow:0 0 0 1px var(--zd-cut)}
+.sw i{position:absolute;top:2px;left:16px;width:14px;height:14px;border-radius:999px;
+      background:var(--zd-ink-dark)}
+.slwrap{margin-top:16px}
+.slhead{display:flex;align-items:baseline;justify-content:space-between;height:16px}
+.slhead .u{font-size:var(--zd-t-sm);color:var(--zd-text-3);font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.sltrack{position:relative;height:6px;border-radius:999px;--er:3px;margin-top:9px}
+.slfill{position:absolute;left:0;top:0;bottom:0;width:70%;border-radius:999px;background:var(--zd-steel)}
+.slthumb{position:absolute;top:-4px;left:70%;margin-left:-7px;width:14px;height:14px;
+  border-radius:999px;background:var(--zd-float);box-shadow:0 0 0 1px var(--zd-cut), inset 0 1px 0 var(--zd-lit)}
+
+/* ---------- w4 : About ---------- */
+.tabstrip{
+  position:absolute;left:0;top:28px;right:0;height:30px;
+  background:var(--zd-raise);border-radius:var(--zd-r-bolt);
+}
+.tabstrip .top{position:absolute;left:0;right:0;top:0;height:1px;background:var(--zd-lit)}
+.tabstrip .bot{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--zd-cut)}
+.tabs{position:absolute;left:12px;top:0;height:30px;display:flex}
+.tab{height:30px;padding:0 14px;display:flex;align-items:center;
+     font-size:var(--zd-t-md);color:var(--zd-text-3)}
+.tab.on{
+  position:relative;height:31px;background:var(--zd-base);
+  border-radius:var(--zd-r-inset) var(--zd-r-inset) 0 0;
+  color:var(--zd-text-0);font-weight:700;
+}
+.tab.on::after{content:"";position:absolute;left:5px;right:5px;top:0;height:1px;background:var(--zd-lit)}
+.abody{position:absolute;left:14px;top:72px;right:14px}
+.abody .h{font-size:var(--zd-t-md);font-weight:700;color:var(--zd-text-0);line-height:18px}
+.abody .s{font-size:var(--zd-t-md);color:var(--zd-text-2);line-height:18px;margin-top:6px;white-space:pre}
+.figrow{display:flex;align-items:baseline;gap:8px;margin-top:16px}
+.figrow .n{font-size:var(--zd-t-lg);line-height:22px;color:var(--zd-text-0);font-variant-numeric:tabular-nums}
+.figrow .c{font-size:var(--zd-t-md);color:var(--zd-text-3)}
+.abtns{position:absolute;right:14px;bottom:14px;display:flex;gap:8px}
+.b-pri{
+  height:30px;padding:0 16px;display:flex;align-items:center;
+  background:var(--zd-steel);color:var(--zd-ink-dark);font-weight:700;
+  border-radius:var(--zd-r-inset);--er:5px;
+  --edge-top:var(--zd-steel-br);--edge-left:var(--zd-steel-br);
+  font-size:var(--zd-t-md);
+}
+.b-sec{
+  height:30px;padding:0 16px;display:flex;align-items:center;
+  background:var(--zd-raise);color:var(--zd-text-1);
+  border-radius:var(--zd-r-inset);--er:5px;font-size:var(--zd-t-md);
+}
+
+/* ================= specimen ================= */
+.spec{width:1280px;margin:26px auto 0;color:var(--page-ink)}
+.spec h2{font-size:var(--zd-t-sm);letter-spacing:.18em;text-transform:uppercase;
+         color:var(--page-ink-hi);margin-bottom:9px;font-weight:700}
+.spec section{margin-bottom:20px}
+.sw-grid{display:flex;flex-wrap:wrap;gap:5px}
+.sw-c{width:97px}
+.sw-c .chip{height:30px;border-radius:2px;outline:1px solid var(--page-rule);outline-offset:-1px}
+.sw-c .nm{font-size:9px;line-height:13px;margin-top:4px;color:var(--page-ink-hi);letter-spacing:.03em}
+.sw-c .hx{font-family:ui-monospace,'DejaVu Sans Mono',monospace;font-size:9px;line-height:12px;color:var(--page-ink)}
+.two{display:flex;gap:56px}
+.ts{display:flex;align-items:baseline;gap:12px;margin-bottom:7px}
+.ts .k{font-size:9px;letter-spacing:.1em;color:var(--page-ink);width:150px;flex:none;
+       font-family:ui-monospace,'DejaVu Sans Mono',monospace}
+.ts .v{color:var(--page-ink-hi)}
+.rr{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.rr .box{width:34px;height:24px;background:var(--zd-raise);
+         outline:1px solid var(--zd-lit);outline-offset:-1px;flex:none}
+.rr .k{font-size:9px;letter-spacing:.1em;color:var(--page-ink);
+       font-family:ui-monospace,'DejaVu Sans Mono',monospace}
+.rr .k b{color:var(--page-ink-hi);font-weight:400}
+.note{font-size:9px;line-height:1.6;color:var(--page-ink);max-width:1280px}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-grid">
+    <rect class="sol" x="3" y="3" width="8" height="8" rx="1.5"/>
+    <rect x="14" y="4" width="6" height="6" rx="1.5"/>
+    <rect x="4" y="14" width="6" height="6" rx="1.5"/>
+    <rect x="14" y="14" width="6" height="6" rx="1.5"/>
+  </g>
+  <g id="i-term">
+    <rect x="3" y="5" width="18" height="14" rx="2"/>
+    <polygon class="sol" points="7,9.5 11.5,12.5 7,15.5 7,14 9.5,12.5 7,11"/>
+    <path class="thin" d="M13.5 15.5 H17.5"/>
+  </g>
+  <g id="i-folder">
+    <rect x="3" y="7" width="18" height="12" rx="1.5"/>
+    <polygon class="sol" points="3,7 3,4 8,4 11,7"/>
+  </g>
+  <g id="i-monitor">
+    <rect x="3" y="4" width="18" height="14" rx="2"/>
+    <path d="M12 18 V21 M8 21 H16"/>
+    <rect class="sol" x="10.8" y="8" width="2.4" height="7" rx="0.6"/>
+    <path class="thin" d="M7.4 15 V12 M16.6 15 V10.5"/>
+  </g>
+  <g id="i-info">
+    <circle cx="12" cy="12" r="8"/>
+    <circle class="sol" cx="12" cy="8.2" r="1.4"/>
+    <path class="thin" d="M12 11.4 V16.4"/>
+  </g>
+  <g id="i-net">
+    <path d="M4.6 13.2 A 10.4 10.4 0 0 1 19.4 13.2"/>
+    <path d="M8.1 16.3 A 5.5 5.5 0 0 1 15.9 16.3"/>
+    <circle class="sol" cx="12" cy="19.2" r="1.8"/>
+  </g>
+  <g id="i-vol">
+    <polygon class="sol" points="4,10 8,10 13,5 13,19 8,14 4,14"/>
+    <path d="M16.4 9.2 A 4.4 4.4 0 0 1 16.4 14.8"/>
+    <path class="thin" d="M19.2 6.4 A 8.2 8.2 0 0 1 19.2 17.6"/>
+  </g>
+  <g id="i-power">
+    <path d="M7.6 6.9 A 8 8 0 1 0 16.4 6.9"/>
+    <rect class="sol" x="11" y="3" width="2" height="8" rx="1"/>
+  </g>
+  <g id="i-chip">
+    <rect x="5" y="5" width="14" height="14" rx="2"/>
+    <rect class="sol" x="9.5" y="9.5" width="5" height="5" rx="1"/>
+    <path class="thin" d="M5 8.5 H2 M5 12 H2 M5 15.5 H2 M19 8.5 H22 M19 12 H22 M19 15.5 H22"/>
+  </g>
+  <g id="i-doc">
+    <path d="M6 3.5 H14 L18 7.5 V20.5 H6 Z"/>
+    <polygon class="sol" points="14,3.5 18,7.5 14,7.5"/>
+    <path class="thin" d="M9 12.5 H15 M9 16 H15"/>
+  </g>
+  <g id="g-min"><path d="M6 12 H18"/></g>
+  <g id="g-max"><rect x="5" y="5" width="14" height="14" rx="2"/></g>
+  <g id="g-close"><path d="M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5"/></g>
+  <g id="g-grip"><path d="M11 1 L1 11 M11 5 L5 11 M11 9 L9 11"/></g>
+</defs></svg>
+
+<div class="sheet">
+  <div class="hd">
+    <h1>Raking</h1>
+    <p>A warm-graphite machine lit by one cold light from the upper left: depth is a 1px lit edge and a 1px cut groove, focus means "turned toward the light", and all system furniture collapses into a single left rail.</p>
+  </div>
+
+  <div class="frame">
+
+    <!-- ============ THE FIELD ============ -->
+    <div class="field"></div>
+
+    <!-- ============ WINDOW 1 : zl shell (backmost) ============ -->
+    <div class="win raised" style="left:226px;top:44px;width:474px;height:216px">
+      <div class="title">
+        <span class="t">zl shell</span>
+        <span class="ctl">
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-min"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-max"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-close"/></svg></span>
+        </span>
+      </div>
+      <div class="term sunken" style="border-radius:var(--zd-r-inset)">
+<pre><span class="hi">zlOS 0.3</span><span class="dim">   a desktop written in zl</span>
+<span class="ok">[ OK ]</span> framebuffer console, 120x37
+<span class="ok">[ OK ]</span> APIC: IRQs via I/O APIC, 4 CPU(s)
+<span class="ok">[ OK ]</span> zl runtime, kernel subset
+<span class="info">[ INFO ]</span> no heap, zlfs mounts on demand, no scheduler
+<span class="dim">ready.</span><span class="caret"></span></pre>
+      </div>
+      <div class="btnrow">
+        <div class="btn raised">help</div>
+        <div class="btn raised">snake</div>
+        <div class="btn raised">3D cube</div>
+      </div>
+      <div class="grip"><svg viewBox="0 0 12 12"><use href="#g-grip"/></svg></div>
+    </div>
+
+    <!-- ============ WINDOW 2 : Files ============ -->
+    <div class="win raised" style="left:680px;top:88px;width:316px;height:252px">
+      <div class="title">
+        <span class="t">Files</span>
+        <span class="ctl">
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-min"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-max"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-close"/></svg></span>
+        </span>
+      </div>
+      <div class="pathrow sunken">
+        <svg viewBox="0 0 24 24" class="ic"><use href="#i-folder"/></svg>kernel/
+      </div>
+      <div class="list">
+        <div class="row"><svg viewBox="0 0 24 24" class="ic"><use href="#i-doc"/></svg>kernel.zl</div>
+        <div class="row sel raised"><span class="selbar"></span><svg viewBox="0 0 24 24" class="ic"><use href="#i-doc"/></svg>fb.c</div>
+        <div class="row"><svg viewBox="0 0 24 24" class="ic"><use href="#i-doc"/></svg>intel.c</div>
+        <div class="row"><svg viewBox="0 0 24 24" class="ic"><use href="#i-doc"/></svg>wm.c</div>
+        <div class="row"><svg viewBox="0 0 24 24" class="ic"><use href="#i-doc"/></svg>design.h</div>
+      </div>
+      <div class="sbtrack sunken"></div>
+      <div class="sbthumb"></div>
+      <div class="grip"><svg viewBox="0 0 12 12"><use href="#g-grip"/></svg></div>
+    </div>
+
+    <!-- ============ WINDOW 3 : System Monitor ============ -->
+    <div class="win raised" style="left:440px;top:246px;width:250px;height:250px">
+      <div class="title">
+        <span class="t">System Monitor</span>
+        <span class="ctl">
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-min"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-max"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-close"/></svg></span>
+        </span>
+      </div>
+      <div class="mbody">
+        <div class="mrow"><span class="mlbl">CPU</span><span class="mval">34</span></div>
+        <div class="mtrack sunken"><span class="mfill" style="width:34%"></span></div>
+
+        <div class="mrow" style="margin-top:12px"><span class="mlbl">MEM</span><span class="mval">62</span></div>
+        <div class="mtrack sunken"><span class="mfill" style="width:62%"></span></div>
+
+        <div class="hair"></div>
+
+        <div class="ctlrow">
+          <span class="cl">subpixel</span>
+          <span class="sw"><i></i></span>
+        </div>
+
+        <div class="slwrap">
+          <div class="slhead"><span class="cl">volume</span><span class="u">70</span></div>
+          <div class="sltrack sunken">
+            <span class="slfill"></span>
+            <span class="slthumb"></span>
+          </div>
+        </div>
+      </div>
+      <div class="grip"><svg viewBox="0 0 12 12"><use href="#g-grip"/></svg></div>
+    </div>
+
+    <!-- ============ WINDOW 4 : About  ===  FOCUSED, front-most ============ -->
+    <div class="win raised focused" style="left:684px;top:312px;width:402px;height:240px">
+      <div class="title">
+        <span class="t">About</span>
+        <span class="ctl">
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-min"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-max"/></svg></span>
+          <span><svg viewBox="0 0 24 24" class="ic"><use href="#g-close"/></svg></span>
+        </span>
+      </div>
+      <div class="tabstrip">
+        <span class="top"></span>
+        <span class="bot"></span>
+        <div class="tabs">
+          <div class="tab on">About</div>
+          <div class="tab">Stats</div>
+          <div class="tab">Files</div>
+        </div>
+      </div>
+      <div class="abody">
+        <div class="h">zlOS 0.3</div>
+        <div class="s">no OS   no libc   no GNU</div>
+        <div class="figrow"><span class="n">11,374</span><span class="c">lines, hand written</span></div>
+      </div>
+      <div class="abtns">
+        <div class="b-sec raised">Details</div>
+        <div class="b-pri raised">Close</div>
+      </div>
+      <div class="grip"><svg viewBox="0 0 12 12"><use href="#g-grip"/></svg></div>
+    </div>
+
+    <!-- ============ THE RAIL (drawn last: never covered) ============ -->
+    <div class="rail">
+      <span class="lit-edge"></span>
+
+      <!-- launcher -->
+      <div class="slot" style="top:16px;color:var(--zd-text-1)">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-grid"/></svg>
+      </div>
+      <span class="div" style="top:56px"></span>
+
+      <!-- app column : 44dp slots, 4dp apart. No tiles. -->
+      <div class="slot" style="top:78px;color:var(--zd-text-3)">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-term"/></svg>
+      </div>
+      <span class="runbar" style="top:82px"></span>
+
+      <div class="slot" style="top:126px;color:var(--zd-text-3)">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-folder"/></svg>
+      </div>
+      <span class="runbar" style="top:130px"></span>
+
+      <div class="slot" style="top:174px;color:var(--zd-text-3)">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-monitor"/></svg>
+      </div>
+      <span class="runbar" style="top:178px"></span>
+
+      <!-- this app owns the focused window : ink ZD_TEXT_0 -->
+      <div class="slot" style="top:222px;color:var(--zd-text-0)">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-info"/></svg>
+      </div>
+      <span class="runbar" style="top:226px"></span>
+
+      <!-- status column : 32dp pitch -->
+      <div class="stat" style="top:476px;color:var(--zd-ok)">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-net"/></svg>
+      </div>
+      <div class="stat" style="top:508px">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-vol"/></svg>
+      </div>
+      <div class="stat" style="top:540px">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-power"/></svg>
+      </div>
+      <div class="stat" style="top:572px">
+        <svg viewBox="0 0 24 24" class="ic" width="24" height="24"><use href="#i-chip"/></svg>
+      </div>
+      <span class="corelbl" style="top:598px">4 CORES</span>
+
+      <span class="div" style="top:627px"></span>
+
+      <!-- the clock, stacked : a 56dp rail cannot hold 14:32 on one line at display size -->
+      <span class="clk" style="top:643px">14</span>
+      <span class="clk" style="top:665px">32</span>
+      <span class="date" style="top:691px">25 AUG</span>
+    </div>
+
+  </div>
+
+  <!-- ================= SPECIMEN ================= -->
+  <div class="spec">
+    <section>
+      <h2>Palette</h2>
+      <div class="sw-grid">
+        <div class="sw-c"><div class="chip" style="background:var(--zd-cut)"></div><div class="nm">ZD_CUT</div><div class="hx">#19120E</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-well)"></div><div class="nm">ZD_WELL</div><div class="hx">#231C18</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-void)"></div><div class="nm">ZD_VOID</div><div class="hx">#29221E</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-base)"></div><div class="nm">ZD_BASE</div><div class="hx">#322B27</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-raise)"></div><div class="nm">ZD_RAISE</div><div class="hx">#38312D</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-float)"></div><div class="nm">ZD_FLOAT</div><div class="hx">#3D3632</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-litsoft)"></div><div class="nm">ZD_LITSOFT</div><div class="hx">#4A433F</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-lit)"></div><div class="nm">ZD_LIT</div><div class="hx">#5F5854</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-text-0)"></div><div class="nm">ZD_TEXT_0</div><div class="hx">#F2EDE4</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-text-1)"></div><div class="nm">ZD_TEXT_1</div><div class="hx">#DAD3C7</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-text-2)"></div><div class="nm">ZD_TEXT_2</div><div class="hx">#BDB5A7</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-text-3)"></div><div class="nm">ZD_TEXT_3</div><div class="hx">#AAA194</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-text-inert)"></div><div class="nm">ZD_TEXT_INERT</div><div class="hx">#6A635A</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-steel)"></div><div class="nm">ZD_STEEL</div><div class="hx">#7FB2E0</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-steel-br)"></div><div class="nm">ZD_STEEL_BR</div><div class="hx">#A9CFF2</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-ok)"></div><div class="nm">ZD_OK</div><div class="hx">#7FBF63</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-warn)"></div><div class="nm">ZD_WARN</div><div class="hx">#E3A63F</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-bad)"></div><div class="nm">ZD_BAD</div><div class="hx">#E8664B</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-bad-ink)"></div><div class="nm">ZD_BAD_INK</div><div class="hx">#E58972</div></div>
+        <div class="sw-c"><div class="chip" style="background:var(--zd-ink-dark)"></div><div class="nm">ZD_INK_DARK</div><div class="hx">#181310</div></div>
+      </div>
+    </section>
+
+    <div class="two">
+      <section style="flex:1">
+        <h2>Type scale - three atlases, no font server</h2>
+        <div class="ts"><span class="k">ZD_T_SM   22 / 11.0px</span><span class="v" style="font-size:var(--zd-t-sm);letter-spacing:.14em;text-transform:uppercase">micro label</span></div>
+        <div class="ts"><span class="k">ZD_T_MD   26 / 13.0px</span><span class="v" style="font-size:var(--zd-t-md)">the root - everything read as prose</span></div>
+        <div class="ts"><span class="k">ZD_T_LG   42 / 21.0px</span><span class="v" style="font-size:var(--zd-t-lg);font-variant-numeric:tabular-nums">11,374</span></div>
+        <div class="ts"><span class="k">mono      11.0px</span><span class="v" style="font-size:var(--zd-t-mono);font-family:ui-monospace,'DejaVu Sans Mono',monospace">[ OK ] zl runtime, kernel subset</span></div>
+      </section>
+
+      <section style="width:330px">
+        <h2>Radius</h2>
+        <div class="rr"><span class="box" style="border-radius:var(--zd-r-bolt)"></span><span class="k">ZD_R_BOLT   <b>0</b>   bolted to the screen</span></div>
+        <div class="rr"><span class="box" style="border-radius:var(--zd-r-plate)"></span><span class="k">ZD_R_PLATE  <b>10</b>  moves as a whole</span></div>
+        <div class="rr"><span class="box" style="border-radius:var(--zd-r-inset)"></span><span class="k">ZD_R_INSET  <b>5</b>   one level inside</span></div>
+        <div class="rr"><span class="box" style="border-radius:var(--zd-r-chip)"></span><span class="k">ZD_R_CHIP   <b>3</b>   smallest object</span></div>
+        <div class="rr"><span class="box" style="border-radius:999px"></span><span class="k">capsule     <b>h/2</b> computed, not a token</span></div>
+      </section>
+    </div>
+
+    <div class="note">
+      Focus = light direction. The focused plate's 1px top and left runs are painted ZD_STEEL instead of ZD_LIT / ZD_LITSOFT. Fill is identical on all four windows. No shadow on any resting window.
+    </div>
+  </div>
+</div>

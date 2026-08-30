@@ -1,0 +1,83 @@
+{
+  "schema": "zlos.page-table-native-uefi64-qemu-receipt.v1",
+  "result": "PASS_TRANSACTION_CORE_AND_NATIVE_HEAP_WINDOW_WITH_OPEN_GAPS",
+  "build_identity": "9aeb5f46dffa99a1072a38b224380857f14c7e33fd1e6cd42603d3eb2968fd28",
+  "route": "native-uefi64",
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "fdd955bc58933d2616a7f495cfb619aaac6577f477b90ce5669ee2d85cb93f68"
+  },
+  "boot_log_sha256": "fc29e051cddbf575491fd6cd6d31de45068a3418c06c9ae3b567af5ceff8c971",
+  "boot_journal_sha256": "1c5f7fb9e07f9f848f5ca7896e343b27740a5bb80d2a4218405160de7f265b3c",
+  "harness": {
+    "path": "kernel/tools/checks/verify-efi.sh",
+    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+  },
+  "implementation": [
+    {
+      "path": "kernel/src/arch/x86/page_table_txn.h",
+      "sha256": "fb61024acc4d16f1423bc3548497435e7089a98a35a5a3de1ba37035605cd608"
+    },
+    {
+      "path": "kernel/src/arch/x86/page_table_txn.c",
+      "sha256": "95232c2f9d38f532d5b0923d3658622819356b412ace2f54ba175155752014e5"
+    },
+    {
+      "path": "kernel/src/arch/x86/paging.c",
+      "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989"
+    }
+  ],
+  "host_receipt": {
+    "path": "kernel/tests/host/test-run-receipt.json",
+    "sha256": "1d3222407337d5ecdb6a8ac838c19391a68fda24412e63eea1c14cc7f5248c69",
+    "target_id": "HT-052",
+    "target": "pagetxntest",
+    "injected_write_positions": 512,
+    "checks": 26
+  },
+  "assertions": [
+    {
+      "id": "full-range-host-transaction",
+      "entries": 512,
+      "stages": [
+        "reserve",
+        "validate",
+        "apply",
+        "flush",
+        "commit"
+      ],
+      "exact_rollback": true,
+      "nth_write_failures": 512,
+      "flush_failure": true,
+      "post_flush_corruption": true,
+      "rollback_flush_failure_is_fatal": true
+    },
+    {
+      "id": "native-heap-window-commit",
+      "marker": "vmm: 64 MiB mapped: virtual 130560 GiB -> physical 256 MiB",
+      "bytes": 67108864,
+      "physical_base": 268435456,
+      "alias_probe_passed_before_commit": true
+    },
+    {
+      "id": "native-framebuffer-cache-transaction",
+      "journal_marker": "cache=write-combining",
+      "full_range_validated_before_apply": true,
+      "global_tlb_flush": true,
+      "transaction_committed": true
+    }
+  ],
+  "known_gaps": [
+    "callers must still provide exclusive page-table ownership",
+    "there is no general page-table allocation or teardown service",
+    "fixed Ring-3 private page tables are built before CR3 publication but do not use the journal",
+    "future live page-table writers must adopt the transaction core before publication",
+    "the live transaction route is x86-64; the 32-bit build has paging disabled",
+    "there is no current physical-hardware page-table receipt"
+  ],
+  "evidence_ceiling": "current host full-range mutation proof plus exact native-UEFI64 QEMU heap-window and framebuffer-cache commits; not all page-table users or physical hardware",
+  "generator": {
+    "path": "kernel/tools/checks/write-page-table-receipt.py",
+    "sha256": "5ded44a1ab222879d3254b59a6fa563632ad48375904d6460b2c2c543f39a1ca"
+  }
+}

@@ -525,6 +525,12 @@ int main(void)
     ok(ui_ratio_q4(ZD_EDGE_OVER, ZD_FLOAT)   == 34322, "ZD_EDGE_OVER on ZD_FLOAT is 3.4322:1 - the worst case");
     ok(ui_ratio_q4(ZD_EDGE_OVER, ZD_BASE)    == 49991, "ZD_EDGE_OVER on ZD_BASE is 4.9991:1");
     ok(ui_ratio_q4(ZD_RAISE, ZD_FLOAT)       == 11682, "the smallest surface step is 1.1682:1");
+    ok(ui_lstar_q2(0x000000) == 0 && ui_lstar_q2(0xFFFFFF) == 10000,
+       "CIE L star spans exactly 0.00 through 100.00");
+    ok(ui_lstar_q2(ZD_BASE) == 1815 && ui_lstar_q2(ZD_FLOAT) == 2941,
+       "live ladder L star matches an independent sRGB calculation");
+    ok(ui_lstar_q2(ZD_TEXT_3) == 7319 && ui_lstar_q2(ZD_TEXT_0) == 9153,
+       "the text ramp exposes its live L star endpoints");
     /* ORDER INDEPENDENCE. WCAG defines the ratio lighter-over-darker, so no
      * caller has to know which of its two colours is on top - and every table
      * in the settings pane relies on that, because a cell passes a token and

@@ -38,8 +38,10 @@ them:
   action, optional instrument or builder.
 - `gen-test-inventory.py` parses all 53 `gcc -o` products from the real build
   script, scans all 7 executable shell scripts and requires exact one-to-one
-  policy coverage. It emits `hosttest/test-inventory.json` with source hashes,
+  policy coverage. It emits `kernel/metadata/test-inventory.json` with source hashes,
   exact commands, timeouts, allowed exits and evidence ceilings.
+- `kernel/tests/host/test-inventory.json` is a compatibility mirror generated
+  from the same value; checks fail if either copy drifts.
 - its mutation suite proves missing compiled targets, duplicate classification,
   unknown policy kinds, unclassified scripts and foreign command overrides all
   fail nonzero.
@@ -74,7 +76,10 @@ manual Intel tools and three manual hardware recovery wrappers.
 
 ## Evidence ceiling
 
-This is current host execution evidence. It does not promote skipped or manual
+The dated counts above describe the 2026-08-22 run. The live canonical
+inventory is `kernel/metadata/test-inventory.json`; the current execution
+receipt is `kernel/tests/host/test-run-receipt.json`. This is host execution
+evidence. It does not promote skipped or manual
 GPU paths to hardware proof, does not replace QEMU boot receipts and does not
 claim that visual artifacts were reviewed merely because their generators
 exist. The complete landing gate and physical ThinkPad suite remain separate.

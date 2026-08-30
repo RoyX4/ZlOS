@@ -1,7 +1,8 @@
 /* memmap.h - the fixed high-RAM map, in ONE place, checked by the compiler.
  *
- * There is no allocator in this kernel, so every multi-megabyte buffer lives at
- * a fixed physical address. They are NEIGHBOURS, and the only thing stopping
+ * Legacy multi-megabyte buffers still live at fixed physical addresses. The
+ * physical allocator starts above their 320 MiB ceiling, so these are still
+ * NEIGHBOURS, and the only thing stopping
  * one from eating the next is arithmetic.
  *
  * WHY THIS IS A HEADER AND NOT A COMMENT
@@ -45,7 +46,7 @@
  *   0x0E000000  224   xhci.c        the USB DMA arena             16 MiB
  *   0x0F000000  240   virtio_gpu.c  rings + the GPU framebuffer   16 MiB
  *   0x10000000  256   heap.c        the general allocator         64 MiB
- *   0x14000000  320   --- everything above here is unclaimed ---
+ *   0x14000000  320   pmm.c         firmware-usable dynamic pages   to 1 GiB
  *   0x40000000 1024   --- HI_TOP: the smallest machine we promise ---
  *
  * FIVE FILES BELOW THE LINE ABOVE HELD A FIXED ADDRESS THIS FILE DID NOT KNOW
@@ -253,6 +254,23 @@
 #define HI_DOM     0x05000000UL  /* browser.c    - document, tree, CSS, runs */
 #define HI_DOM_END 0x06000000UL  /* +16 MiB                                  */
 
+/* THE ARCHIVE STAGING BUFFER, and it is here because 96..128 MiB was the one
+ * gap in this chain wide enough to take it without moving a neighbour.
+ *
+ * WHY A CONTIGUOUS BUFFER AT ALL. zlfs has no append and no seek -
+ * fs_write(idx, src, bytes) takes a pointer and a length and writes the whole
+ * file - so a streamed tar is not expressible against this filesystem. The
+ * archive is staged whole and written once, which makes this a HARD CEILING on
+ * what the Archive Manager can produce. tar_size() is public precisely so the
+ * pane can refuse before it commits, and name both figures when it does.
+ *
+ * 4 MiB is not a guess about disks; it is what fits here with the same slack
+ * every other region in this chain carries. A volume whose contents exceed it
+ * gets a refusal that prints the two numbers, which is a better answer than a
+ * truncated archive that lists clean and extracts short. */
+#define HI_TAR     0x06000000UL  /* tar.c        - ustar staging            */
+#define HI_TAR_END 0x06400000UL  /* +4 MiB                                  */
+
 #define HI_BACK   0x08000000UL   /* fb.c         - the back buffer          */
 /* THE AP STACKS, and this region is why BACK_LIMIT is 40 MiB and not 48.
  *
@@ -287,6 +305,7 @@
  * building the desktop app suite against this map at the time, and the one
  * thing that could not happen was an occupied region changing address. */
 #define HI_HEAP   0x10000000UL   /* heap.c       - the general allocator     */
+#define HI_PMM    0x14000000UL   /* pmm.c        - dynamic physical pages    */
 #define HI_TOP    0x40000000UL   /* 1 GiB - the smallest guest we promise   */
 
 /* The same number the gates must pass to `-m`, in the units `-m` takes, so the
@@ -332,8 +351,11 @@ _Static_assert(HI_NET   < HI_NET_END, "the network arena is inverted");
 _Static_assert(HI_NET_END <= HI_DOM,
                "virtio_net.c's rings have grown into the browser's storage");
 _Static_assert(HI_DOM   < HI_DOM_END, "the browser storage region is inverted");
-_Static_assert(HI_DOM_END <= HI_BACK,
-               "the browser's storage has grown into fb.c's back buffer");
+_Static_assert(HI_DOM_END <= HI_TAR,
+               "the browser storage region runs into the archive staging buffer");
+_Static_assert(HI_TAR   < HI_TAR_END, "the archive staging buffer is inverted");
+_Static_assert(HI_TAR_END <= HI_BACK,
+               "the archive staging buffer runs into the back buffer");
 _Static_assert(HI_IMG   < HI_BACK,  "high-RAM map out of order: img >= back");
 /* HI_APSTK WAS IN THE MAP AND NOT IN THE CHAIN, which is two of the three
  * things "ADDING A REGION" asks for and therefore a hole. Caught by a review
@@ -354,6 +376,7 @@ _Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
 _Static_assert(HI_NVME  < HI_XHCI,  "high-RAM map out of order: nvme >= xhci");
 _Static_assert(HI_XHCI  < HI_VGPU,  "high-RAM map out of order: xhci >= vgpu");
 _Static_assert(HI_VGPU  < HI_HEAP,  "high-RAM map out of order: vgpu >= heap");
-_Static_assert(HI_HEAP  < HI_TOP,   "high-RAM map out of order: heap >= HI_TOP");
+_Static_assert(HI_HEAP  < HI_PMM,   "high-RAM map out of order: heap >= pmm");
+_Static_assert(HI_PMM   < HI_TOP,   "high-RAM map out of order: pmm >= HI_TOP");
 
 #endif /* ZL_MEMMAP_H */

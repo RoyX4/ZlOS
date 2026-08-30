@@ -1,0 +1,2580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deck - zlOS desktop prototype</title>
+<style>
+/* ============================================================================
+   DECK. The desktop is a front page that has been MADE UP.
+   No window frames. Stories abut across shared rules. Hierarchy is RANK, not
+   z-order. Persistent chrome is two horizontal typographic bands: a MASTHEAD
+   at the head and a FOLIO LINE at the foot. There is no rail.
+
+   Every colour below is a design.h token name, lowercased. Zero hex appears
+   as a CSS value anywhere outside the two :root blocks. Every name in the
+   light block exists in the dark block; a name in one mode only is a defect.
+   ============================================================================ */
+:root{
+  /* ---- GROUNDS. LIGHT IS NEWSPRINT, NOT BOOK PAPER. ------------------------
+     Groundwood buff, greyer and cooler than Folio's #E9E4DB, because ink on
+     newsprint never reaches black and the whole ladder has to live inside
+     that. PAGE is the ONLY ground the page shows: there are no sheets, no
+     desk behind them, no gutter. BOX is the tint block a sidebar or a table
+     head is set on. PATCH is the pasted-in patch - the terminal, code, an
+     input well - and it is LIGHTER than the page, because a patch is a fresh
+     scrap laid on top of a printed sheet.
+     L*: PAGE 85.3   BOX 80.6   PATCH 90.9                                  */
+  --zd-page:        #D9D5C9;
+  --zd-box:         #CDC8B9;
+  --zd-patch:       #E8E5DC;
+
+  /* ---- INK. Four rungs, and every one of them is measured against BOX, not
+     against PAGE, because BOX is the darkest text-bearing ground in the mode.
+     Checking against the page is what let Folio ship a 4.13:1 mark.
+       INK_0  12.22 page / 10.73 box / 14.24 patch   heads, region rules
+       INK_1  10.03 /  8.80 / 11.68                  body
+       INK_2   6.31 /  5.54 /  7.35                  secondary
+       INK_3   5.31 /  4.66 /  6.18                  quiet. the floor.       */
+  --zd-ink-0:       #19170F;
+  --zd-ink-1:       #2B2820;
+  --zd-ink-2:       #4C4739;
+  --zd-ink-3:       #585240;
+
+  /* ---- RULES. THREE RANKS AND THEY ARE NOT INTERCHANGEABLE. ---------------
+     HAIR   1.49:1 on page.  INSIDE a story only: table rules, sub-column
+            rules, the unset head rule. A hairline is allowed to be faint
+            because both sides of it belong to the same story.
+     CUT    3.18:1, dL* 36.4. THE BOUNDARY BETWEEN TWO ABUTTING STORIES.
+            The direction's own stated weakness was that adjacent stories
+            would be separated by one 1.49:1 hairline. They are not: the rule
+            that ends a story is the CUT-OFF rule, which the palette already
+            carried, and it is 2.1x the hairline and 2.6x its dL*.
+     REGION 2px INK_0, 12.22:1. Masthead foot, folio head, and the FOCUSED
+            head rule at 3px. Only a region boundary is allowed to be black. */
+  --zd-rule-hair:   #B5AF9D;
+  --zd-rule-cut:    #7A7462;
+  --zd-rule-region: #19170F;
+
+  /* ---- ZERO CHROMATIC INK. ------------------------------------------------
+     Deck spends less colour than Folio, which still keeps three state hues.
+     Here state is THE WORD, in R1 caps, and nothing else: OK, WARN, FAIL,
+     LISTEN, BOUND, STALE, HELD. There is no --zd-red in this file to find.
+     A state that matters is set in INK_0 and ruled under; a state that does
+     not is set in INK_3. That is the entire mechanism.                     */
+  --zd-state-hi:    #19170F;
+  --zd-state-lo:    #585240;
+
+  /* ---- DERIVED ALPHAS. Declared so no rule anywhere carries a literal. --- */
+  --zd-veil:        rgba(25,23,15,0.44);   /* INK_0 44%  modal scrim        */
+  --zd-drop:        rgba(25,23,15,0.13);   /* INK_0 13%  make-up drop target */
+  --zd-zebra:       rgba(25,23,15,0.055);  /* INK_0 5.5% zebra tint          */
+  --zd-mute:        rgba(217,213,201,0.55);/* PAGE  55%  held-over overlay   */
+
+  /* ---- METRICS. Spacing on the 4 / 8 / 12 / 16 / 24 scale, no exceptions. */
+  --ui: 1;
+  --zd-mast-h:  calc(50px * var(--ui));
+  --zd-folio-h: calc(26px * var(--ui));
+  --zd-margin:  calc(16px * var(--ui));
+  --zd-pad:     calc(12px * var(--ui));
+  --zd-gap:     calc(8px  * var(--ui));
+  --zd-tick:    calc(4px  * var(--ui));
+  /* THE RESERVED AIR. Both of these are unconditional. A story reserves the
+     deck's 24dp and the head's R4 line whether the deck is set or not, so
+     focus FILLS AIR and never moves geometry: no reflow, no re-wrap, the
+     terminal does not lose a row.                                          */
+  --zd-deck-h:  calc(24px * var(--ui));
+  --zd-head-h:  calc(36px * var(--ui));
+  --zd-kick-h:  calc(15px * var(--ui));
+  --zd-hrule-h: calc(3px  * var(--ui));
+
+  /* ---- TYPE. THREE BAKED ATLASES, FOUR REGISTERS. ------------------------
+     8x16 -> R1 and R2.  16x32 -> R3.  24x48 -> R4.
+     R1 and R2 are the same 16px cell and differ ONLY by case and tracking,
+     which is Folio's move and costs no atlas. R2 is that cell's proportional
+     AA face (fb_text_prop); R1 is the mono role face (fb_text_role).
+     R3 -> R4 is ONE REAL ATLAS STEP, 22 -> 33 device px, no resampling.
+     Nothing in this file asks for a fifth size. Datum lost points there.   */
+  --zd-r1: calc(11px * var(--ui));
+  --zd-r2: calc(13px * var(--ui));
+  --zd-r3: calc(22px * var(--ui));
+  --zd-r4: calc(33px * var(--ui));
+  --zd-trk-1: calc(1.4px * var(--ui));
+  --zd-trk-4: calc(4px   * var(--ui));
+
+  --zd-sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --zd-mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+
+  /* ---- RADIUS. There is one value and it is zero. A page has no corners. */
+  --zd-r-page: 0px;
+}
+
+/* ============================================================================
+   DARK IS THE COMPOSING STONE, and it is made of what a stone is made of.
+   The page is made up on a slate imposing stone and the marks are TYPE METAL,
+   not ink. So this mode is COOLER and slightly BRIGHTER than light Deck is
+   warm - the exact opposite move to a tint-inversion, and the reason it is
+   not just newsprint with the sign flipped.
+
+   1. STONE IS COOL SLATE, not a warm dark. #1A1C1A has G > R = B: the green
+      cast of a ground slate surface. Light Deck's newsprint is R > G > B.
+      The two modes sit on OPPOSITE SIDES of neutral, on purpose.
+   2. METAL IS CAPPED BELOW PAPER WHITE. Type metal is a dull lead-antimony
+      grey, not white, and a full-white body of marks blooms on a dark ground.
+      METAL_0 #E9E7DF is the lightest value in the system and it is below
+      light mode's PATCH. Folio capped INK_0 for the same reason.
+   3. THE PATCH REVERSES AND THAT IS DERIVED, NOT DECORATIVE. On newsprint a
+      pasted patch is a fresh white scrap, so it is LIGHTER than the page. On
+      the stone a patch is a bare recess in the forme with no type standing in
+      it, so it is DARKER than the stone. PATCH is the one token whose sign
+      flips between the modes; BOX keeps its sign (a tint block is furniture
+      standing proud of the stone, so it is lighter than the stone here and
+      darker than the page there - also a sign flip, also derived).
+      L*: STONE 10.0   BOX 15.8   PATCH 6.1
+   4. HAIR IS dL*-MATCHED, NOT RATIO-MATCHED, and the match is loose. On the
+      stone a hairline of 1.49:1 would vanish, because contrast ratio is a
+      light-mode-flattering measure at the dark end. HAIR sits at 1.94:1 /
+      dL* 21.6 against light's 1.49:1 / dL* 13.8 - dark's hairline is the
+      stronger of the two, and that is the honest reading of this pair.
+   5. NOTHING ELSE MOVES. Not one rule weight, not one metric, not one radius,
+      not one register. data-theme is the only switch in the file.
+       METAL_0 13.85 stone / 12.01 box / 14.94 patch
+       METAL_1 11.00 /  9.54 / 11.87
+       METAL_2  7.13 /  6.18 /  7.69
+       METAL_3  5.65 /  4.90 /  6.09                                        */
+:root[data-theme="dark"]{
+  --zd-page:        #1A1C1A;   /* THE STONE.  cool slate, L* 10.0           */
+  --zd-box:         #262825;   /* FURNITURE.  standing proud of the stone   */
+  --zd-patch:       #121413;   /* A RECESS.   no type standing in it        */
+
+  --zd-ink-0:       #E9E7DF;   /* METAL_0. below paper white, on purpose    */
+  --zd-ink-1:       #D2CFC5;
+  --zd-ink-2:       #ABA79B;
+  --zd-ink-3:       #989486;
+
+  --zd-rule-hair:   #494B46;
+  --zd-rule-cut:    #6C6E67;
+  --zd-rule-region: #E9E7DF;
+
+  --zd-state-hi:    #E9E7DF;
+  --zd-state-lo:    #989486;
+
+  --zd-veil:        rgba(8,9,8,0.60);
+  --zd-drop:        rgba(233,231,223,0.14);
+  --zd-zebra:       rgba(233,231,223,0.055);
+  --zd-mute:        rgba(26,28,26,0.55);
+}
+
+/* ============================================================== harness === */
+*{ box-sizing: border-box; }
+html,body{ margin:0; padding:0; height:100%; }
+body{
+  background: var(--zd-page); font-family: var(--zd-sans);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar{ width:9px; height:9px; }
+::-webkit-scrollbar-track{ background: var(--zd-box); }
+::-webkit-scrollbar-thumb{ background: var(--zd-ink-3); border-radius: var(--zd-r-page); }
+
+/* =================================================================== type = */
+.r1{ font-family: var(--zd-mono); font-size: var(--zd-r1); line-height: calc(15px * var(--ui));
+     font-weight:700; text-transform: uppercase; letter-spacing: var(--zd-trk-1);
+     color: var(--zd-ink-2); font-variant-numeric: tabular-nums; }
+.r1n{ font-family: var(--zd-mono); font-size: var(--zd-r1); line-height: calc(15px * var(--ui));
+      font-weight:400; text-transform:none; letter-spacing:0; color: var(--zd-ink-1);
+      font-variant-numeric: tabular-nums; }
+.r2{ font-family: var(--zd-sans); font-size: var(--zd-r2); line-height: calc(19px * var(--ui));
+     font-weight:400; color: var(--zd-ink-1); }
+.r3{ font-family: var(--zd-sans); font-size: var(--zd-r3); line-height: calc(26px * var(--ui));
+     font-weight:700; color: var(--zd-ink-0); letter-spacing:0; }
+.r4{ font-family: var(--zd-sans); font-size: var(--zd-r4); line-height: calc(34px * var(--ui));
+     font-weight:700; color: var(--zd-ink-0); text-transform: uppercase;
+     letter-spacing: var(--zd-trk-4); margin-right: calc(-1 * var(--zd-trk-4)); }
+.k0{ color: var(--zd-ink-0); } .k1{ color: var(--zd-ink-1); }
+.k2{ color: var(--zd-ink-2); } .k3{ color: var(--zd-ink-3); }
+.hi{ color: var(--zd-state-hi); } .lo{ color: var(--zd-state-lo); }
+
+/* ================================================================ strip === */
+#strip{
+  position: fixed; left:0; right:0; top:0; height: calc(30px * var(--ui)); z-index: 900;
+  display:flex; align-items:center; gap: var(--zd-pad); padding: 0 var(--zd-pad);
+  background: var(--zd-box); border-bottom: 1px solid var(--zd-rule-cut);
+}
+#strip .nm{ color: var(--zd-ink-0); letter-spacing: calc(2px * var(--ui)); }
+#strip .pitch{ font-family: var(--zd-sans); font-size: var(--zd-r1);
+  color: var(--zd-ink-2); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; flex:1; }
+#strip .links{ display:flex; gap: var(--zd-tick); }
+#strip .links a{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  text-decoration:none; padding: calc(2px * var(--ui)) calc(5px * var(--ui)); }
+#strip .links a.on{ color: var(--zd-page); background: var(--zd-ink-0); }
+#strip .thm{ display:flex; gap:0; align-items:center; }
+#strip .tk{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  padding: calc(2px * var(--ui)) calc(6px * var(--ui)); cursor:pointer;
+  border:1px solid var(--zd-rule-cut); }
+#strip .tk + .tk{ border-left:0; }
+#strip .tk.on{ color: var(--zd-page); background: var(--zd-ink-0); border-color: var(--zd-ink-0); }
+#strip .thint{ font-family: var(--zd-mono); font-size: var(--zd-r1); color: var(--zd-ink-3);
+  margin-left: var(--zd-gap); text-transform:uppercase; letter-spacing: var(--zd-trk-1); }
+
+/* ================================================================== os ==== */
+#os{
+  position: fixed; left:0; right:0; top: calc(30px * var(--ui)); bottom:0;
+  background: var(--zd-page); overflow:hidden; display:flex; flex-direction:column;
+}
+
+/* ============================================================= masthead === *
+ * THE LAW OF THIS BAND, AND IT IS MECHANICAL, NOT DISCIPLINARY.
+ * The masthead's only permitted draw calls are fb_text_role plus ONE
+ * fb_fill_px rule. No tray, no menu, no icon, no popover, no glyph, no
+ * status dot, no background fill on any child. assertMasthead() walks this
+ * subtree after every render and refuses anything else; Settings > PROOF
+ * has a control that plants a status glyph so you can watch it fire.
+ * As a guideline this dies quietly the first time someone adds a widget,
+ * and then it is the top bar all four round-one directions deleted.        */
+#masthead{ flex:0 0 auto; height: var(--zd-mast-h); padding: 0 var(--zd-margin);
+  display:flex; flex-direction:column; justify-content:flex-start; }
+#mastwm{ height: calc(28px * var(--ui)); display:flex; align-items:baseline; gap: var(--zd-pad); }
+#mastwm .wm{ font-family: var(--zd-sans); font-size: var(--zd-r3);
+  line-height: calc(26px * var(--ui)); font-weight:700; text-transform:uppercase;
+  letter-spacing: var(--zd-trk-4); color: var(--zd-ink-0);
+  margin-right: calc(-1 * var(--zd-trk-4)); }
+#mastwm .ed{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-2); }
+#mastwm .ed.far{ margin-left:auto; }
+.mast-rule{ height:2px; background: var(--zd-rule-region); flex:0 0 auto; }
+#mastin{ height: calc(20px * var(--ui)); display:flex; align-items:center;
+  gap: var(--zd-gap); overflow:hidden; white-space:nowrap; }
+#mastin .w{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-2); }
+#mastin .w.lab{ color: var(--zd-ink-3); }
+#mastin .w.tab{ cursor:pointer; color: var(--zd-ink-1); }
+#mastin .w.tab.set{ color: var(--zd-page); background: var(--zd-ink-0);
+  padding: 0 calc(4px * var(--ui)); margin: 0 calc(-2px * var(--ui)); }
+#mastin .w.tab.over{ color: var(--zd-ink-3); text-decoration: line-through; }
+#mastin .w.ix{ cursor:pointer; color: var(--zd-ink-0); border-bottom: 2px solid var(--zd-ink-0); }
+
+/* ================================================================= page === */
+#pagewrap{ flex:1 1 auto; position:relative; overflow:hidden; padding: var(--zd-margin); }
+#page{ position:absolute; left: var(--zd-margin); top: var(--zd-margin);
+  right: var(--zd-margin); bottom: var(--zd-margin); }
+#openpage{ position:absolute; inset:0; display:none; align-items:center; justify-content:center; }
+#openpage.on{ display:flex; }
+
+/* ================================================================ story === *
+ * A STORY HAS NO FRAME. It is bounded only by the rules it shares with its
+ * neighbours: a CUT on the right and a CUT on the bottom, suppressed at the
+ * trim edge. There is no gutter, no mount, no shadow and no radius, because
+ * there is nothing for any of them to be between.                          */
+.story{ position:absolute; background: var(--zd-page); overflow:hidden;
+  display:flex; flex-direction:column;
+  border-right: 1px solid var(--zd-rule-cut);
+  border-bottom: 1px solid var(--zd-rule-cut); }
+.story.edge-r{ border-right-color: transparent; }
+.story.edge-b{ border-bottom-color: transparent; }
+body.norule .story{ border-right-color: transparent; border-bottom-color: transparent; }
+.story .hrule{ flex:0 0 auto; height: var(--zd-hrule-h); position:relative; }
+.story .hrule::after{ content:''; position:absolute; left:0; right:0; bottom:0;
+  height:1px; background: var(--zd-rule-hair); }
+.story.set .hrule::after{ height: var(--zd-hrule-h); background: var(--zd-rule-region); }
+.story .hd{ flex:0 0 auto; padding: calc(6px * var(--ui)) var(--zd-pad) 0 var(--zd-pad); }
+.story .kick{ height: var(--zd-kick-h); display:flex; align-items:center; gap: var(--zd-gap);
+  overflow:hidden; white-space:nowrap; }
+.story .kick .rk{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-page);
+  background: var(--zd-ink-2); padding: 0 calc(4px * var(--ui)); }
+.story.lead .kick .rk{ background: var(--zd-ink-0); }
+.story .kick .kx{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-2);
+  overflow:hidden; text-overflow:ellipsis; }
+/* THE DESK MARKS ARE NOT PRINTED ON EVERY STORY. Four set words repeated
+   down a page is furniture, and furniture on every story is exactly the
+   equal-chrome habit this direction exists to break. They are carried by the
+   SET story, and by whatever the pointer is over. */
+.story .marks{ margin-left:auto; display:flex; gap: calc(6px * var(--ui)); visibility:hidden; }
+.story.set .marks, .story:hover .marks{ visibility:visible; }
+.story .marks span{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  cursor:pointer; }
+.story .marks span:hover{ color: var(--zd-page); background: var(--zd-ink-0);
+  padding: 0 calc(3px * var(--ui)); margin: 0 calc(-3px * var(--ui)); }
+/* THE HEAD ROW IS RESERVED AT THE R4 LINE IN EVERY STORY, SET OR NOT. */
+.story .hl{ height: var(--zd-head-h); display:flex; align-items:flex-end; overflow:hidden; }
+.story .hl b{ font-family: var(--zd-sans); font-size: var(--zd-r3);
+  line-height: calc(26px * var(--ui)); font-weight:700; color: var(--zd-ink-0);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:0;
+  text-transform:none; }
+.story.set .hl b{ font-size: var(--zd-r4); line-height: calc(34px * var(--ui));
+  text-transform:uppercase; letter-spacing: var(--zd-trk-4);
+  margin-right: calc(-1 * var(--zd-trk-4)); }
+/* THE DECK. 24dp of air in every story. Filled only when the story is set. */
+.story .dk{ height: var(--zd-deck-h); display:flex; align-items:center; overflow:hidden;
+  white-space:nowrap; }
+.story .dk span{ font-family: var(--zd-sans); font-size: var(--zd-r2);
+  line-height: calc(19px * var(--ui)); color: var(--zd-ink-2);
+  overflow:hidden; text-overflow:ellipsis; }
+body.deckall .story .dk span{ color: var(--zd-ink-3); }
+.story .bd{ flex:1 1 auto; min-height:0; overflow:hidden; padding: 0 var(--zd-pad) var(--zd-pad); }
+.story.held{ display:none; }
+.story.drag{ opacity:0.55; }
+/* THE JUMP LINE. A broadsheet story that does not fit is CUT and says so; it
+   does not end in a sliced row of glyphs. This is the shell's answer to the
+   clipped-content failure, and it is measured, not decorative. */
+.story .jump{ flex:0 0 auto; border-top: 1px solid var(--zd-rule-cut);
+  padding: calc(3px * var(--ui)) var(--zd-pad) calc(4px * var(--ui));
+  font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  background: var(--zd-page); white-space:nowrap; overflow:hidden; }
+
+/* ================================================= the reflow gate ====== *
+ * The shell owns reflow, not the app renderers. PLATE's one structural
+ * failure was that an app authored for a 7x8 tile overflowed its own frame at
+ * 7x4, and four separate defects turned out to be that same miss wearing
+ * different hats. Everything below is keyed off data-w / data-h, which
+ * layout() measures; no renderer knows how big its story is.
+ */
+.story[data-w="xs"] .opt1,
+.story[data-w="xs"] .opt2,
+.story[data-w="sm"] .opt2{ display:none !important; }
+/* A PLOT IS A GRAPHIC AND A GRAPHIC NEEDS A FIXED SLOT. Letting it flex meant
+   it could be squeezed to a stub that still looked like a chart, which is the
+   worst outcome: wrong data, drawn confidently. It gets 88 dp or it is not
+   drawn, and which stories are tall enough to earn one is decided by RANK. */
+.story[data-h="xs"] .optv,
+.story[data-h="sm"] .optv{ display:none !important; }
+/* nothing in a story body may push a sibling out of its own box. */
+.story .bd *{ min-width: 0; }
+.story .bd > div{ min-height: 0; }
+/* a plot either gets enough height to say something or the gate drops it
+   outright. Silently squashing it to nothing is the worst of both. */
+.optv{ overflow: hidden; flex: 0 0 auto; height: calc(88px * var(--ui)); }
+/* flex:0 0 auto, because the plot next to it grows and a shrinkable label
+   next to a growing graphic gets crushed to 1.4 px and still reports
+   display:block. Measured, not assumed. */
+.plotlab{ display:block; flex:0 0 auto; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis; }
+/* AT A SHORT MEASURE THE HEAD COMPRESSES, AND IT COMPRESSES BY SIZE, NEVER BY
+   FOCUS. The kicker goes and the head holds at R3, so a set story at this
+   height carries two of the three focus signals (the 3 px region rule and the
+   deck line) and not the register step. Geometry still never moves when a
+   story is set; it moves only when the story is re-measured, which is a
+   different event with a different cause. */
+.story[data-h="xs"] .kick{ height:0; overflow:hidden; }
+.story[data-h="xs"] .hl{ height: calc(26px * var(--ui)); }
+.story[data-h="xs"].set .hl b{ font-size: var(--zd-r3); line-height: calc(26px * var(--ui));
+  text-transform:none; letter-spacing:0; margin-right:0; }
+.story[data-h="xs"] .hd{ padding-top: calc(4px * var(--ui)); }
+
+/* =========================================================== primitives === */
+.tbl{ width:100%; border-collapse: collapse; font-family: var(--zd-mono);
+  font-size: var(--zd-r1); font-variant-numeric: tabular-nums; }
+.tbl th{ text-align:left; font-weight:700; text-transform:uppercase;
+  letter-spacing: var(--zd-trk-1); color: var(--zd-ink-2); background: var(--zd-box);
+  padding: calc(3px * var(--ui)) calc(6px * var(--ui));
+  border-bottom: 1px solid var(--zd-rule-hair); white-space:nowrap; }
+.tbl td{ color: var(--zd-ink-1); padding: calc(3px * var(--ui)) calc(6px * var(--ui));
+  border-bottom: 1px solid var(--zd-rule-hair); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.tbl th.r, .tbl td.r{ text-align:right; }
+body.zebra .tbl tbody tr:nth-child(even) td{ background: var(--zd-zebra); }
+.tbl tbody tr.sel td{ background: var(--zd-box); color: var(--zd-ink-0); font-weight:700; }
+.tbl tbody tr{ cursor:pointer; }
+.scroll{ height:100%; overflow:auto; }
+.patch{ background: var(--zd-patch); padding: var(--zd-gap); height:100%; overflow:auto;
+  font-family: var(--zd-mono); font-size: var(--zd-r1); line-height: calc(16px * var(--ui));
+  color: var(--zd-ink-1); white-space:pre; font-variant-numeric: tabular-nums; }
+.patch .d{ color: var(--zd-ink-3); } .patch .b{ color: var(--zd-ink-0); font-weight:700; }
+.patch .g{ color: var(--zd-ink-2); }
+.caret{ display:inline-block; width: calc(7px * var(--ui)); height: calc(12px * var(--ui));
+  background: var(--zd-ink-0); vertical-align:-2px; }
+body.blinkon .caret{ animation: bl 1s steps(1,end) infinite; }
+@keyframes bl{ 0%,50%{opacity:1} 50.01%,100%{opacity:0} }
+.kv{ display:flex; align-items:baseline; gap: var(--zd-gap);
+  border-bottom: 1px solid var(--zd-rule-hair); padding: calc(3px * var(--ui)) 0; }
+.kv .k{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  flex:0 0 auto; min-width: calc(88px * var(--ui)); }
+.kv .v{ font-family: var(--zd-mono); font-size: var(--zd-r1); color: var(--zd-ink-1);
+  margin-left:auto; text-align:right; font-variant-numeric: tabular-nums;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mtr{ margin: calc(6px * var(--ui)) 0; }
+.mtr .mr{ display:flex; align-items:baseline; }
+.mtr .mr .k{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-2); }
+.mtr .mr .v{ margin-left:auto; font-family: var(--zd-mono); font-size: var(--zd-r1);
+  color: var(--zd-ink-0); font-weight:700; font-variant-numeric: tabular-nums; }
+.mtr .tr{ height: calc(8px * var(--ui)); background: var(--zd-box); margin-top: calc(3px * var(--ui));
+  border-bottom: 1px solid var(--zd-rule-hair); }
+.mtr .tr i{ display:block; height:100%; background: var(--zd-ink-2); }
+.mtr.hot .tr i{ background: var(--zd-ink-0); }
+.plot{ position:relative; width:100%; flex:1 1 auto; min-height: calc(44px * var(--ui));
+  background: var(--zd-box); border-bottom: 1px solid var(--zd-rule-hair); }
+.plot svg{ display:block; width:100%; height:100%; }
+.plot .mean{ position:absolute; left:0; right:0; height:1px; background: var(--zd-rule-region); }
+.wordrow{ display:flex; gap: var(--zd-pad); flex-wrap:wrap; align-items:baseline; }
+.stw{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); }
+.stw.on{ color: var(--zd-state-hi); border-bottom: 2px solid var(--zd-state-hi); }
+.stw.off{ color: var(--zd-state-lo); }
+.btn{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-1);
+  border:1px solid var(--zd-rule-cut); background: var(--zd-page); cursor:pointer;
+  padding: calc(4px * var(--ui)) calc(8px * var(--ui)); border-radius: var(--zd-r-page); }
+.btn:hover{ background: var(--zd-ink-0); color: var(--zd-page); border-color: var(--zd-ink-0); }
+.seg{ display:flex; }
+.seg span{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-2);
+  border:1px solid var(--zd-rule-cut); padding: calc(3px * var(--ui)) calc(8px * var(--ui));
+  cursor:pointer; }
+.seg span + span{ border-left:0; }
+.seg span.on{ background: var(--zd-ink-0); color: var(--zd-page); border-color: var(--zd-ink-0); }
+.sl{ height: calc(16px * var(--ui)); position:relative; cursor:pointer; display:flex;
+  align-items:center; }
+.sl .rail{ position:absolute; left:0; right:0; height:1px; background: var(--zd-rule-cut); }
+.sl .stop{ position:absolute; width:1px; height: calc(8px * var(--ui));
+  background: var(--zd-rule-cut); top: calc(4px * var(--ui)); }
+.sl .knob{ position:absolute; width: calc(3px * var(--ui)); height: calc(16px * var(--ui));
+  background: var(--zd-ink-0); top:0; }
+.tg{ display:flex; align-items:baseline; gap: var(--zd-gap); cursor:pointer;
+  border-bottom: 1px solid var(--zd-rule-hair); padding: calc(5px * var(--ui)) 0; }
+.tg .lb{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-1); }
+.tg .nt{ font-family: var(--zd-sans); font-size: var(--zd-r2); color: var(--zd-ink-3);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tg .st{ margin-left:auto; }
+.sect{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  display:block; margin: var(--zd-pad) 0 var(--zd-tick);
+  border-bottom: 1px solid var(--zd-rule-cut); padding-bottom: calc(2px * var(--ui)); }
+.sect:first-child{ margin-top: var(--zd-gap); }
+
+/* ============================================================ folio line == */
+#folio{ flex:0 0 auto; height: var(--zd-folio-h); border-top: 2px solid var(--zd-rule-region);
+  display:flex; align-items:center; gap: var(--zd-pad); padding: 0 var(--zd-margin); }
+#folio .col{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#folio .stats{ margin:0 auto; font-family: var(--zd-mono); font-size: var(--zd-r1);
+  color: var(--zd-ink-2); font-variant-numeric: tabular-nums; white-space:nowrap; }
+#folio .hold{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); cursor:pointer;
+  color: var(--zd-ink-3); border:1px solid var(--zd-rule-cut);
+  padding: 0 calc(6px * var(--ui)); }
+#folio .hold.on{ color: var(--zd-page); background: var(--zd-ink-0); border-color: var(--zd-ink-0); }
+#folio .wsn{ font-family: var(--zd-sans); font-size: var(--zd-r3);
+  line-height: calc(24px * var(--ui)); font-weight:700; color: var(--zd-ink-0);
+  letter-spacing: var(--zd-trk-1); cursor:pointer; }
+#folio .wsn.off{ color: var(--zd-ink-3); }
+
+/* ================================================================ index === */
+#index{ position:absolute; inset:0; display:none; z-index:500; background: var(--zd-page); }
+#index.on{ display:flex; flex-direction:column; }
+#index .ihd{ flex:0 0 auto; padding: var(--zd-margin) var(--zd-margin) 0; }
+#index .ibody{ flex:1 1 auto; min-height:0; display:flex; gap:0;
+  padding: 0 var(--zd-margin) var(--zd-margin); }
+#index .icol{ flex:1 1 0; min-width:0; padding: var(--zd-pad);
+  border-right: 1px solid var(--zd-rule-cut); display:flex; flex-direction:column; }
+#index .icol:last-child{ border-right:0; }
+.mini{ flex:1 1 auto; min-height:0; position:relative; background: var(--zd-page);
+  border:1px solid var(--zd-rule-cut); cursor:pointer; }
+.mini.on{ border-color: var(--zd-rule-region); border-width:2px; }
+.mini .ms{ position:absolute; background: var(--zd-page); overflow:hidden;
+  border-right:1px solid var(--zd-rule-cut); border-bottom:1px solid var(--zd-rule-cut); }
+.mini .ms.lead{ background: var(--zd-box); }
+.mini .ms i{ display:block; position:absolute; left:0; right:0; top:0; height:2px;
+  background: var(--zd-rule-hair); }
+.mini .ms.set i{ height:3px; background: var(--zd-rule-region); }
+.mini .ms span{ position:absolute; left: calc(4px * var(--ui)); top: calc(6px * var(--ui));
+  right: calc(4px * var(--ui)); font-family: var(--zd-mono); font-size: calc(9px * var(--ui));
+  font-weight:700; text-transform:uppercase; letter-spacing: calc(0.6px * var(--ui));
+  color: var(--zd-ink-1); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+#index .ixlist{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:0;
+  overflow:auto; }
+#index .ixrow{ display:flex; align-items:baseline; gap: var(--zd-gap); cursor:pointer;
+  padding: calc(5px * var(--ui)) var(--zd-gap);
+  border-bottom: 1px solid var(--zd-rule-hair); }
+#index .ixrow:hover{ background: var(--zd-box); }
+#index .ixrow .n{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  color: var(--zd-ink-3); }
+#index .ixrow .t{ font-family: var(--zd-sans); font-size: var(--zd-r2); font-weight:700;
+  color: var(--zd-ink-0); }
+#index .ixrow .s{ font-family: var(--zd-mono); font-size: var(--zd-r1); color: var(--zd-ink-3);
+  margin-left:auto; text-transform:uppercase; letter-spacing: var(--zd-trk-1);
+  overflow:hidden; white-space:nowrap; }
+
+/* ============================================================== palette === */
+#palette{ position:absolute; inset:0; display:none; z-index:600; }
+#palette.on{ display:block; }
+#palette .veil{ position:absolute; inset:0; background: var(--zd-veil); }
+#palette .stick{ position:absolute; left:50%; top: calc(64px * var(--ui));
+  transform: translateX(-50%); width: min(680px, 78%); background: var(--zd-page);
+  border: 2px solid var(--zd-rule-region); }
+#palette .phd{ display:flex; align-items:baseline; gap: var(--zd-gap);
+  padding: var(--zd-gap) var(--zd-pad); border-bottom: 2px solid var(--zd-rule-region); }
+#palette .pin{ display:flex; align-items:baseline; gap: var(--zd-gap);
+  padding: var(--zd-gap) var(--zd-pad); background: var(--zd-patch);
+  border-bottom: 1px solid var(--zd-rule-cut); }
+#palette .pin .q{ font-family: var(--zd-mono); font-size: var(--zd-r2); color: var(--zd-ink-0); }
+#palette .prow{ display:flex; align-items:baseline; gap: var(--zd-gap); cursor:pointer;
+  padding: calc(5px * var(--ui)) var(--zd-pad); border-bottom: 1px solid var(--zd-rule-hair); }
+#palette .prow.on{ background: var(--zd-box); }
+#palette .prow.on .t{ color: var(--zd-ink-0); }
+#palette .prow .n{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  color: var(--zd-ink-3); min-width: calc(24px * var(--ui)); }
+#palette .prow .t{ font-family: var(--zd-sans); font-size: var(--zd-r2); font-weight:700;
+  color: var(--zd-ink-1); }
+#palette .prow .d{ font-family: var(--zd-sans); font-size: var(--zd-r2); color: var(--zd-ink-3);
+  overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+#palette .prow .kb{ margin-left:auto; font-family: var(--zd-mono); font-size: var(--zd-r1);
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3);
+  white-space:nowrap; }
+#palette .pft{ display:flex; gap: var(--zd-pad); padding: var(--zd-gap) var(--zd-pad);
+  border-top: 1px solid var(--zd-rule-cut); background: var(--zd-box); }
+
+/* ================================================================= lock === */
+#lock{ position:absolute; inset:0; display:none; z-index:700; background: var(--zd-page); }
+#lock.on{ display:flex; flex-direction:column; }
+#lock .lmast{ padding: var(--zd-margin) var(--zd-margin) 0; }
+#lock .lbig{ flex:1 1 auto; min-height:0;
+  padding: calc(40px * var(--ui)) var(--zd-margin) 0;
+  display:flex; flex-direction:column; justify-content:flex-start; }
+#lock .lgrid{ display:flex; gap:0; border-top: 2px solid var(--zd-rule-region);
+  border-bottom: 1px solid var(--zd-rule-cut); }
+#lock .lcol{ flex:1 1 0; min-width:0; padding: var(--zd-pad);
+  border-right: 1px solid var(--zd-rule-cut); }
+#lock .lcol:last-child{ border-right:0; }
+#lock .lfoot{ padding: var(--zd-pad) var(--zd-margin) var(--zd-margin); }
+#lock .lproof{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+  padding-top: var(--zd-pad); }
+#lock .lproof .mini{ flex:1 1 auto; margin-top: var(--zd-tick); cursor:default; }
+#lock .huge{ font-family: var(--zd-sans); font-size: calc(78px * var(--ui));
+  line-height: calc(84px * var(--ui)); font-weight:700; color: var(--zd-ink-0);
+  letter-spacing: calc(-1px * var(--ui)); font-variant-numeric: tabular-nums; }
+
+/* ================================================================= menu === */
+.menu{ position:absolute; display:none; z-index:800; background: var(--zd-page);
+  border: 1px solid var(--zd-rule-region); min-width: calc(230px * var(--ui)); }
+.menu.on{ display:block; }
+.menu .mh{ padding: calc(5px * var(--ui)) var(--zd-pad); background: var(--zd-ink-0);
+  color: var(--zd-page); font-family: var(--zd-mono); font-size: var(--zd-r1);
+  font-weight:700; text-transform:uppercase; letter-spacing: var(--zd-trk-1); }
+.menu .mi{ display:flex; align-items:baseline; gap: var(--zd-pad); cursor:pointer;
+  padding: calc(5px * var(--ui)) var(--zd-pad);
+  border-bottom: 1px solid var(--zd-rule-hair); }
+.menu .mi:last-child{ border-bottom:0; }
+.menu .mi:hover{ background: var(--zd-ink-0); }
+.menu .mi:hover .a, .menu .mi:hover .b{ color: var(--zd-page); }
+.menu .mi .a{ font-family: var(--zd-sans); font-size: var(--zd-r2); color: var(--zd-ink-1); }
+.menu .mi .b{ margin-left:auto; font-family: var(--zd-mono); font-size: var(--zd-r1);
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-3); }
+
+/* =============================================================== toasts === */
+#toasts{ position:absolute; right: var(--zd-margin); bottom: var(--zd-margin);
+  z-index:850; display:flex; flex-direction:column-reverse; gap: var(--zd-gap);
+  width: calc(320px * var(--ui)); }
+.toast{ background: var(--zd-page); border: 1px solid var(--zd-rule-region);
+  border-left-width: 4px; padding: var(--zd-gap) var(--zd-pad); }
+.toast .tt{ font-family: var(--zd-mono); font-size: var(--zd-r1); font-weight:700;
+  text-transform:uppercase; letter-spacing: var(--zd-trk-1); color: var(--zd-ink-0); }
+.toast .tb{ font-family: var(--zd-sans); font-size: var(--zd-r2); color: var(--zd-ink-2); }
+
+/* ============================================================ drop caret == */
+#caretline{ position:absolute; display:none; z-index:450; background: var(--zd-rule-region);
+  pointer-events:none; }
+#caretline.on{ display:block; }
+.dropzone{ position:absolute; background: var(--zd-drop); z-index:440; pointer-events:none;
+  display:none; }
+.dropzone.on{ display:block; }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="r1 nm">Deck</span>
+  <span class="pitch" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+</div>
+
+<div id="os">
+
+  <!-- ===== MASTHEAD. set type and one rule. nothing else is permitted. ==== -->
+  <div id="masthead">
+    <div id="mastwm">
+      <span class="wm">zlOS</span>
+      <span class="ed" id="ed-date"></span>
+      <span class="ed far" id="ed-right"></span>
+    </div>
+    <div class="mast-rule"></div>
+    <div id="mastin"></div>
+  </div>
+
+  <div id="pagewrap">
+    <div id="page"></div>
+    <div id="openpage"><span class="r1 k3">this space stands open</span></div>
+    <div id="caretline"></div>
+    <div class="dropzone" id="dropzone"></div>
+    <div id="index"></div>
+    <div id="palette">
+      <div class="veil"></div>
+      <div class="stick">
+        <div class="phd">
+          <span class="r1 k0">set</span>
+          <span class="r1 k3">zlsh builtin</span>
+          <span class="r1 k3" style="margin-left:auto" id="pcount"></span>
+        </div>
+        <div class="pin"><span class="r1 k3">run</span><span class="q" id="pq"></span><span class="caret"></span></div>
+        <div id="presults"></div>
+        <div class="pft">
+          <span class="r1 k3">enter run</span><span class="r1 k3">up down select</span><span class="r1 k3">esc dismiss</span>
+        </div>
+      </div>
+    </div>
+    <div id="lock"></div>
+    <div id="toasts"></div>
+  </div>
+
+  <!-- ===== FOLIO LINE ==================================================== -->
+  <div id="folio">
+    <span class="col" id="colophon"></span>
+    <span class="stats" id="fstats"></span>
+    <span class="hold" id="holdbtn">hold</span>
+    <span class="wsn" data-ws="1" id="wsn1">01</span>
+    <span class="wsn" data-ws="2" id="wsn2">02</span>
+  </div>
+
+  <div class="menu" id="ctxmenu"></div>
+  <div class="menu" id="stmenu"></div>
+</div>
+
+<script>
+'use strict';
+/* ==========================================================================
+ * DECK - a living prototype of the zlOS desktop.
+ *
+ * The page is MADE UP. Windows are stories; stories have RANK, not z-order;
+ * rank sets the measure. Opening a story re-makes ONE BAND, never the page.
+ * Focus SETS THE DECK. Persistent chrome is a masthead and a folio line.
+ * ========================================================================== */
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const pad2 = n => (n < 10 ? '0' : '') + n;
+const hx = (n, w) => (n >>> 0).toString(16).toUpperCase().padStart(w || 8, '0');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------------------------------------------------- token readback -----
+ * The PROOF tab prints the ladder's own hex values and its measured contrast
+ * ratios. Typed literals are a claim; these read the LIVE custom property off
+ * :root, so the printed number is by construction the number being rendered.
+ */
+function tokRaw(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function tokResolve(n, d){
+  const v = tokRaw(n), m = /^var\((--[\w-]+)\)$/.exec(v);
+  return (m && (d || 0) < 8) ? tokResolve(m[1], (d || 0) + 1) : v;
+}
+function tokHex(n){ return tokResolve(n).toUpperCase(); }
+function tokRGB(n){
+  const h = tokResolve(n).replace('#', '');
+  if (h.length !== 6) return null;
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+function relLum(c){
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function tokRatio(fg, bg){
+  const a = tokRGB(fg), b = tokRGB(bg);
+  if (!a || !b) return '--';
+  let l1 = relLum(a), l2 = relLum(b);
+  if (l1 < l2) { const t = l1; l1 = l2; l2 = t; }
+  return ((l1 + 0.05) / (l2 + 0.05)).toFixed(2);
+}
+function tokLstar(n){
+  const c = tokRGB(n); if (!c) return '--';
+  const y = relLum(c);
+  return (y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : y * 24389 / 27).toFixed(1);
+}
+
+/* ------------------------------------------------------------- state ---- */
+const S = {
+  theme: 'light',
+  scene: 'desktop',
+  ws: 1,
+  set: null,          /* the story whose DECK IS SET. focus. */
+  full: null,         /* the story running full page, if any */
+  held: { 1: [], 2: [] },
+  cols: 12,
+  bands: 3,
+  lead: 1,            /* how many columns the lead steals. 0..3 */
+  hold: false,        /* HOLD LOCK. freezes make-up. */
+  colrule: true,
+  zebra: true,
+  deckall: false,
+  blink: true,
+  ui: 1,
+  margin: 16,
+  fileSel: 1,
+  procSel: 2,
+  calcAcc: '241690',
+  setTab: 0,
+  pq: '', psel: 0,
+  planted: false,     /* the deliberately planted masthead widget */
+  guard: { walked: 0, fills: 0, bad: [] },
+  t: 0,
+  clock: 14 * 3600 + 32 * 60 + 7,
+  up: 4 * 3600 + 11 * 60 + 6,
+  hist: { cpu: [], net: [], mem: [], irq: [] },
+  cpu: [34, 21, 47, 12],
+  memPct: 62, load: 0.31, rx: 148.2, tx: 22.7,
+  pages: null
+};
+for (let i = 0; i < 72; i++) {
+  S.hist.cpu.push(18 + ((i * 37) % 46));
+  S.hist.net.push(6 + ((i * 53) % 58));
+  S.hist.mem.push(56 + ((i * 17) % 12));
+  S.hist.irq.push(30 + ((i * 29) % 40));
+}
+
+/* ================================================================ apps == *
+ * Sixteen. The twelve the brief names, plus process, registers, type and
+ * make-up. `n` is the INSIDE-line ordinal only when the story is on the page;
+ * a story that is not on the page has no number, because a newspaper index
+ * does not number things that are not in the paper.
+ */
+const APPS = [
+  { id:'shell', name:'Shell',      kick:'zlsh · tty1',        sec:'SESSION' },
+  { id:'files', name:'Files',      kick:'zlfs · rd0',         sec:'VOLUME'  },
+  { id:'mon',   name:'Monitor',    kick:'sampling 1 hz',      sec:'MACHINE' },
+  { id:'edit',  name:'Editor',     kick:'buffer',             sec:'SOURCE'  },
+  { id:'log',   name:'Kernel log', kick:'dmesg · ring 64 ki', sec:'MACHINE' },
+  { id:'hex',   name:'Hex',        kick:'rd0 · offset',       sec:'VOLUME'  },
+  { id:'calc',  name:'Calc',       kick:'int64 · no fpu',     sec:'TOOL'    },
+  { id:'net',   name:'Network',    kick:'enp0s31f6',          sec:'MACHINE' },
+  { id:'clock', name:'Clocks',     kick:'four sources',       sec:'MACHINE' },
+  { id:'sys',   name:'System',     kick:'zlos 0.3 · x86_64',  sec:'MACHINE' },
+  { id:'set',   name:'Settings',   kick:'design.h',           sec:'TOOL'    },
+  { id:'disk',  name:'Disk usage', kick:'zlfs · 4.0 mib',     sec:'VOLUME'  },
+  { id:'proc',  name:'Process',    kick:'42 tasks',           sec:'MACHINE' },
+  { id:'regs',  name:'Registers',  kick:'pipe a · gen9',      sec:'MACHINE' },
+  { id:'type',  name:'Type',       kick:'three atlases',      sec:'TOOL'    },
+  { id:'make',  name:'Make-up',    kick:'bands and ranks',    sec:'TOOL'    }
+];
+const APP = {};
+APPS.forEach(a => { APP[a.id] = a; });
+
+/* ================================================================ data == */
+const FILES = [
+  ['kernel.zl',    '41.2 KiB',  'zl source', '-r--r--r--', '12:04', 3],
+  ['fb.c',         '68.4 KiB',  'C source',  '-r--r--r--', '12:04', 3],
+  ['intel.c',      '112.9 KiB', 'C source',  '-rw-r--r--', '11:58', 3],
+  ['xhci.c',       '54.1 KiB',  'C source',  '-r--r--r--', '09:41', 2],
+  ['hid.c',        '19.6 KiB',  'C source',  '-r--r--r--', '09:41', 2],
+  ['zlfs.c',       '37.8 KiB',  'C source',  '-r--r--r--', '10:22', 3],
+  ['nvme.c',       '28.3 KiB',  'C source',  '-r--r--r--', '10:22', 3],
+  ['apic.c',       '11.4 KiB',  'C source',  '-r--r--r--', '08:50', 1],
+  ['smp.c',        '13.9 KiB',  'C source',  '-rw-r--r--', '11:12', 3],
+  ['wm.c',         '46.0 KiB',  'C source',  '-r--r--r--', '12:01', 3],
+  ['uikit.c',      '52.7 KiB',  'C source',  '-r--r--r--', '12:01', 3],
+  ['ui.c',         '33.6 KiB',  'C source',  '-r--r--r--', '12:01', 3],
+  ['design.h',     '18.9 KiB',  'C header',  '-r--r--r--', '12:03', 3],
+  ['memmap.h',     '7.4 KiB',   'C header',  '-r--r--r--', '11:12', 3],
+  ['font_aa.c',    '24.5 KiB',  'C source',  '-r--r--r--', '07:31', 1],
+  ['font_sub.c',   '9.8 KiB',   'C source',  '-r--r--r--', '07:31', 1],
+  ['font8x16.c',   '18.0 KiB',  'C source',  '-r--r--r--', '07:31', 1],
+  ['icons.c',      '12.6 KiB',  'C source',  '-r--r--r--', '07:31', 1],
+  ['virtio_net.c', '22.1 KiB',  'C source',  '-r--r--r--', '10:55', 2],
+  ['efi.c',        '17.3 KiB',  'C source',  '-rw-r--r--', '11:58', 3],
+  ['idt.c',        '15.2 KiB',  'C source',  '-r--r--r--', '11:12', 3],
+  ['dpll.c',       '21.7 KiB',  'C source',  '-rw-r--r--', '11:58', 3],
+  ['edid.c',       '8.9 KiB',   'C source',  '-r--r--r--', '09:02', 2],
+  ['ps2.c',        '6.4 KiB',   'C source',  '-r--r--r--', '07:12', 1],
+  ['sched.c',      '12.1 KiB',  'C source',  '-r--r--r--', '10:40', 2],
+  ['heap.c',       '9.3 KiB',   'C source',  '-r--r--r--', '10:40', 2],
+  ['pci.c',        '16.8 KiB',  'C source',  '-r--r--r--', '08:50', 1],
+  ['link.ld',      '412 B',     'Linker',    '-r--r--r--', '06:12', 1],
+  ['Makefile',     '3.1 KiB',   'Makefile',  '-r--r--r--', '12:03', 3],
+  ['zlos.elf',     '249.8 KiB', 'Executable','-rwxr-xr-x', '12:04', 3],
+  ['atlas48.bin',  '196.0 KiB', 'Binary',    '-r--r--r--', '12:00', 1],
+  ['zlfs.img',     '4.0 MiB',   'Disk image','-rw-r--r--', '12:04', 3],
+  ['boot.log',     '2.4 KiB',   'Log',       '-r--r--r--', '12:04', 3],
+  ['core.dump',    '256.0 KiB', 'Core dump', '-rw-------', '11:41', 2]
+];
+
+const SRC = {
+'fb.c':
+'1168  /* subpixel LCD text. 5 tap (1,2,3,2,1)/9 FIR over the\n' +
+'1169     three colour stripes of one cell, gamma correct in\n' +
+'1170     linear light through the two boot built LUTs. */\n' +
+'1171  static void blend_sub(u32 *dst, const u8 *cov, u32 fg)\n' +
+'1172  {\n' +
+'1173      u32 bg = *dst;\n' +
+'1174      int r = fir5(cov, 0), g = fir5(cov, 1), b = fir5(cov, 2);\n' +
+'1175      u32 lr = lut_to_lin[(bg >> 16) & 0xff];\n' +
+'1176      u32 lg = lut_to_lin[(bg >>  8) & 0xff];\n' +
+'1177      u32 lb = lut_to_lin[(bg      ) & 0xff];\n' +
+'1178      lr = lr + (((lut_to_lin[(fg>>16)&0xff] - lr) * r) >> 8);\n' +
+'1179      lg = lg + (((lut_to_lin[(fg>> 8)&0xff] - lg) * g) >> 8);\n' +
+'1180      lb = lb + (((lut_to_lin[(fg    )&0xff] - lb) * b) >> 8);\n' +
+'1181      *dst = (lut_to_srgb[lr] << 16)\n' +
+'1182           | (lut_to_srgb[lg] <<  8)\n' +
+'1183           |  lut_to_srgb[lb];\n' +
+'1184  }\n' +
+'1185\n' +
+'1186  /* DECK: a story has no frame, so fb_box is never called on\n' +
+'1187     one. The only rules drawn are the CUT a story shares with\n' +
+'1188     its right and lower neighbour, and the head rule, which is\n' +
+'1189     1 px ZD_RULE_HAIR unset and 3 px ZD_RULE_REGION set. Both\n' +
+'1190     are fb_fill_px. No fb_shadow, no fb_glow, no fb_rrect. */\n' +
+'1191\n' +
+'1192  void fb_rule(int x, int y, int len, int vert, u32 c)\n' +
+'1193  {\n' +
+'1194      if (vert) fb_fill_px(x, y, 1, len, c);\n' +
+'1195      else      fb_fill_px(x, y, len, 1, c);\n' +
+'1196  }',
+'intel.c':
+'2041  /* Gen9 display. the DPLL is the point of this file.\n' +
+'2042     measured on the host from PIPE_LINK_M / PIPE_LINK_N:\n' +
+'2043     241690 kHz, 59.998 Hz, verified bit for bit vs firmware. */\n' +
+'2044  static u32 dpll_from_link(u32 m, u32 n, u32 bpp)\n' +
+'2045  {\n' +
+'2046      u64 num = (u64)m * 270000ull * 8ull;\n' +
+'2047      u64 den = (u64)n * bpp;\n' +
+'2048      return (u32)(num / den);           /* kHz */\n' +
+'2049  }\n' +
+'2050\n' +
+'2051  /* HAZARD. writing PIPE_CONF while PSR is armed parks the\n' +
+'2052     panel with the backlight on. read PSR_STATUS and wait\n' +
+'2053     for idle. violating T12 (500 ms) damages hardware. */\n' +
+'2054  static int pipe_safe(void)\n' +
+'2055  {\n' +
+'2056      u32 psr = mmio_rd(PSR_STATUS);\n' +
+'2057      for (int i = 0; i < 200 && (psr & PSR_BUSY); i++) {\n' +
+'2058          udelay(500);\n' +
+'2059          psr = mmio_rd(PSR_STATUS);\n' +
+'2060      }\n' +
+'2061      return (psr & PSR_BUSY) == 0;\n' +
+'2062  }',
+'kernel.zl':
+'   1  # zlOS entry. called from boot.S after the handoff.\n' +
+'   2  fn main() {\n' +
+'   3      gdt()\n' +
+'   4      idt()\n' +
+'   5      apic(4)                  # 4 logical CPUs\n' +
+'   6      pit(1000)                # 1193182 / 1000\n' +
+'   7      xhci()                   # usb hid keyboard + mouse\n' +
+'   8      fb(1600, 1000, 32)\n' +
+'   9      zlfs_mount("rd0")\n' +
+'  10      desktop()                # the compositor IS the boot state\n' +
+'  11  }\n' +
+'  12\n' +
+'  13  fn desktop() {\n' +
+'  14      ui_theme_init_q8(256)    # ui scale 1.0 in q8\n' +
+'  15      masthead()               # set type and one rule. nothing else.\n' +
+'  16      folio()\n' +
+'  17      makeup()                 # bands, ranks, measures\n' +
+'  18      loop { input() compose() }\n' +
+'  19  }',
+'design.h':
+'   1  /* design.h - every literal in the desktop lives here.\n' +
+'   2     kernel.zl names roles only; ui.c maps roles to these. */\n' +
+'   3\n' +
+'   4  #define ZD_PAGE        0xD9D5C9  /* newsprint. the only ground */\n' +
+'   5  #define ZD_BOX         0xCDC8B9  /* the tint block             */\n' +
+'   6  #define ZD_PATCH       0xE8E5DC  /* the pasted-in patch        */\n' +
+'   7  #define ZD_INK_0       0x19170F  /* 12.22:1 on page            */\n' +
+'   8  #define ZD_INK_3       0x585240  /*  4.66:1 on BOX. the floor  */\n' +
+'   9  #define ZD_RULE_HAIR   0xB5AF9D  /* inside a story only        */\n' +
+'  10  #define ZD_RULE_CUT    0x7A7462  /* between two stories        */\n' +
+'  11  #define ZD_RULE_REGION 0x19170F  /* 2 px. region boundary      */\n' +
+'  12\n' +
+'  13  /* there is no ZD_ACCENT. state is the WORD. */\n' +
+'  14\n' +
+'  15  #define ZD_DECK_H      24        /* RESERVED IN EVERY STORY    */\n' +
+'  16  #define ZD_HEAD_H      36        /* reserved at the R4 line    */\n' +
+'  17  #define ZD_MAST_H      50\n' +
+'  18  #define ZD_FOLIO_H     26\n' +
+'  19  #define ZD_R_PAGE      0         /* the only radius            */',
+'memmap.h':
+'   1  /* the address space, and for each boundary the thing that\n' +
+'   2     actually enforces it. four ceilings people conflate. */\n' +
+'   3  #define HI_FB      0x08000000ull   /* 128 MiB  drag buffer   */\n' +
+'   4  #define HI_SCRATCH 0x0A000000ull   /* 160 MiB  compositor    */\n' +
+'   5  #define HI_DOM     0x0C000000ull   /* 192 MiB  parser arena  */\n' +
+'   6  #define HI_NET     0x04000000ull   /*  64 MiB  virtio_net    */\n' +
+'   7  _Static_assert(HI_DOM > HI_SCRATCH, "dom under scratch");\n' +
+'   8  _Static_assert(HI_FB  > HI_NET,     "fb under net");\n' +
+'   9\n' +
+'  10  /* the compositor needs 256 KiB of stack. 16 KiB overflowed\n' +
+'  11     into the console statics and the failure looked like a\n' +
+'  12     font bug for two days. */\n' +
+'  13  #define STACK_COMPOSITOR (256 * 1024)',
+'Makefile':
+'   1  ZL      = tools/zlc\n' +
+'   2  CFLAGS  = -ffreestanding -mno-red-zone -Wall -Werror\n' +
+'   3  EFIWARN = -Werror=shift-count-overflow \\\n' +
+'   4            -Werror=pointer-to-int-cast \\\n' +
+'   5            -Werror=int-to-pointer-cast\n' +
+'   6  OBJ     = build/kernel.o build/fb.o build/intel.o \\\n' +
+'   7            build/xhci.o build/hid.o build/zlfs.o\n' +
+'   8\n' +
+'   9  all: build/zlos.elf\n' +
+'  10\n' +
+'  11  build/zlos.elf: $(OBJ) link.ld\n' +
+'  12  \tld -T link.ld -o $@ $(OBJ)'
+};
+
+const KLOG = [
+  ['0.000041','OK',  'zl','boot handoff, multiboot2, 15.6 GiB usable'],
+  ['0.000388','OK',  'gdt','flat 64 bit, 5 descriptors, tss at 0x11A000'],
+  ['0.001204','OK',  'idt','256 gates, high 32 bits cast u64, not u long'],
+  ['0.004871','WARN','idt','11 excessive-regsave, inherent to interrupt attr'],
+  ['0.012660','OK',  'apic','xapic 0xFEE00000, 4 logical, 4 physical'],
+  ['0.019402','OK',  'smp','ap 1 2 3 parked at 0x8000, ENTRY_PTR is u64'],
+  ['0.031118','OK',  'pit','divisor 1193, 1000.15 Hz measured'],
+  ['0.048250','OK',  'pci','00:02.0 8086:9B41 rev 02, class 030000'],
+  ['0.049013','OK',  'pci','00:14.0 8086:02ed xhci, bar0 64 bit'],
+  ['0.049880','OK',  'pci','00:1f.6 8086:0d4f enp0s31f6'],
+  ['0.061705','OK',  'intel','bar0 mapped 8 MiB, all display regs under 1 MiB'],
+  ['0.062440','OK',  'edid','LP140WF7-SPH1 1920x1080, 60.0 Hz nominal'],
+  ['0.071319','OK',  'dpll','LINK_M 0x0080D9E4 LINK_N 0x00800000'],
+  ['0.071455','OK',  'dpll','pixel clock 241690 kHz, 59.998 Hz'],
+  ['0.078802','WARN','intel','psr armed, waited 3.5 ms for idle before pipe'],
+  ['0.086130','OK',  'fb','1600x1000x32, stride 6400 B, gamma LUTs built'],
+  ['0.101663','OK',  'xhci','firmware ownership released after 41 ms'],
+  ['0.104900','OK',  'xhci','64 scratchpad pages, 8 slots, ring at 0x1C0000'],
+  ['0.118374','OK',  'hid','usb-kbd boot protocol, depth 1, ep speed 1 ms'],
+  ['0.118902','WARN','hid','usb-mouse enumerated AFTER the tablet gate passed'],
+  ['0.140218','OK',  'nvme','SAMSUNG MZVLB512 512 GB, 1 ns q, 4 KiB lba'],
+  ['0.155660','OK',  'zlfs','mount rd0, generation 3, 0 orphan extents'],
+  ['0.155904','OK',  'zlfs','power cycle 1 to 2 to 3 survived, crc verified'],
+  ['0.171003','OK',  'net','enp0s31f6 up, 1000 Mb/s full, dhcp 10.0.2.15'],
+  ['0.190552','OK',  'heap','no heap in the drawing path. 0 B allocated'],
+  ['0.201884','OK',  'wm','compositor stack 256 KiB, high map at 128 MiB'],
+  ['0.204410','OK',  'ui','ui_theme_init_q8(256), 2 ladders, 1 role set'],
+  ['0.208877','OK',  'deck','made up 3 bands, 6 stories, lead measure 5 col'],
+  ['0.209003','FAIL','deck','masthead widget refused: 1 non-text draw call'],
+  ['0.209110','OK',  'deck','masthead guard armed, 14 nodes, 1 permitted fill'],
+  ['0.213556','OK',  'zl','desktop() entered, compose loop at 59.998 Hz']
+];
+
+const PROCS = [
+  ['1',  'zlinit',   'R', '0.4', '1.2',  '00:00:04', '0'],
+  ['2',  'compose',  'R', '11.8','18.6', '00:41:02', '0'],
+  ['4',  'kworker',  'S', '0.9', '0.3',  '00:00:51', '1'],
+  ['9',  'xhci-irq', 'S', '1.4', '0.2',  '00:01:12', '2'],
+  ['12', 'zlfs-sync','S', '0.6', '2.1',  '00:00:38', '1'],
+  ['17', 'net-rx',   'S', '3.1', '1.9',  '00:04:20', '3'],
+  ['23', 'net-tx',   'S', '1.2', '1.4',  '00:01:44', '3'],
+  ['31', 'dpll-mon', 'S', '0.2', '0.1',  '00:00:09', '0'],
+  ['42', 'regdump',  'R', '7.6', '0.8',  '00:00:02', '2'],
+  ['48', 'zlsh',     'S', '0.1', '0.9',  '00:00:11', '1'],
+  ['55', 'atlas-ld', 'S', '0.0', '4.7',  '00:00:03', '0'],
+  ['61', 'soak',     'R', '22.4','6.2',  '01:58:31', '3'],
+  ['66', 'hidmon',   'S', '0.3', '0.2',  '00:00:07', '2'],
+  ['70', 'zlfmt',    'Z', '0.0', '0.0',  '00:00:00', '1']
+];
+
+const REGS = [
+  ['PIPE_A_CONF',    '0x70008', '0xC0000000', 'enable, 8 bpc, prog'],
+  ['PIPE_A_SRCSZ',   '0x6001C', '0x077F0437', '1920 x 1080'],
+  ['HTOTAL_A',       '0x60000', '0x083F077F', 'hact 1920 htot 2112'],
+  ['HBLANK_A',       '0x60004', '0x083F077F', ''],
+  ['HSYNC_A',        '0x60008', '0x082F07DF', ''],
+  ['VTOTAL_A',       '0x6000C', '0x046F0437', 'vact 1080 vtot 1136'],
+  ['VSYNC_A',        '0x60014', '0x0443043B', ''],
+  ['PIPE_A_LINK_M',  '0x60040', '0x0080D9E4', 'm 33252'],
+  ['PIPE_A_LINK_N',  '0x60044', '0x00800000', 'n 8388608'],
+  ['DPLL_CTRL1',     '0x6C058', '0x00000601', 'link rate 2.7 GHz'],
+  ['DPLL_CTRL2',     '0x6C05C', '0x00001820', 'ddi a to dpll 0'],
+  ['LCPLL1_CTL',     '0x46010', '0x80000000', 'pll enable, locked'],
+  ['PSR_STATUS',     '0x64840', '0x00000000', 'idle, safe to write'],
+  ['PP_CONTROL',     '0xC7204', '0x00000067', 'panel on, T12 held'],
+  ['PLANE_CTL_1_A',  '0x70180', '0xD0000400', 'enable, xrgb8888'],
+  ['PLANE_SURF_1_A', '0x7019C', '0x00300000', 'surface at 3 MiB'],
+  ['PLANE_STRIDE_1A','0x70188', '0x0000001E', '1920 * 4 / 64 * 4'],
+  ['GAMMA_MODE_A',   '0x4A480', '0x00000004', '10 bit split gamma']
+];
+
+const SOCKS = [
+  ['tcp','10.0.2.15:22',     '10.0.2.2:51844','ESTAB', '48','zlsh'],
+  ['tcp','10.0.2.15:5900',   '0.0.0.0:*',     'LISTEN','2', 'compose'],
+  ['tcp','10.0.2.15:44120',  '151.101.1.1:443','ESTAB','17','net-rx'],
+  ['udp','10.0.2.15:68',     '10.0.2.2:67',   'BOUND', '1', 'zlinit'],
+  ['udp','0.0.0.0:5353',     '0.0.0.0:*',     'BOUND', '1', 'zlinit'],
+  ['tcp','127.0.0.1:9001',   '0.0.0.0:*',     'LISTEN','31','dpll-mon'],
+  ['tcp','10.0.2.15:44206',  '140.82.121.4:443','TIME','17','net-rx']
+];
+
+const EXTENTS = [
+  ['/kernel',      '1.42 MiB', '38.9', '1',  '3'],
+  ['/kernel/docs', '212.0 KiB','5.7',  '9',  '3'],
+  ['/atlas',       '624.0 KiB','16.7', '1',  '1'],
+  ['/etc',         '18.4 KiB', '0.5',  '4',  '2'],
+  ['/var/log',     '96.2 KiB', '2.6',  '11', '3'],
+  ['/tmp',         '4.0 KiB',  '0.1',  '1',  '3'],
+  ['free',         '1.36 MiB', '35.5', '2',  '-']
+];
+
+/* ========================================================= primitives === */
+function TBL(head, rows){
+  return '<table class="tbl"><thead><tr>' + head.map(c =>
+    '<th class="' + (c.r ? 'r ' : '') + (c.o || '') + '">' + c.h + '</th>').join('') +
+    '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+}
+function TR(cells, attr){
+  return '<tr ' + (attr || '') + '>' + cells.map(c =>
+    typeof c === 'string' ? '<td>' + c + '</td>'
+      : '<td class="' + (c.c || '') + '">' + c.t + '</td>').join('') + '</tr>';
+}
+function kv(k, v){ return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+function mtr(k, v, unit, hot){
+  return '<div class="mtr' + (hot ? ' hot' : '') + '"><div class="mr"><span class="k">' + k +
+    '</span><span class="v">' + v + (unit || '') + '</span></div>' +
+    '<div class="tr"><i style="width:' + clamp(v, 0, 100) + '%"></i></div></div>';
+}
+/* STATE IS THE WORD. There is no colour in this function and none anywhere
+   else: a state that matters is INK_0 with a 2 px rule under it, a state that
+   does not is INK_3. That is the whole mechanism, and it survives greyscale,
+   a colour blind reader and a monochrome panel unchanged. */
+function word(w){
+  const hot = (w === 'FAIL' || w === 'WARN' || w === 'HELD' || w === 'LEAD' || w === 'ESTAB' || w === 'R');
+  return '<span class="stw ' + (hot ? 'on' : 'off') + '">' + w + '</span>';
+}
+function plot(series, max, cls){
+  const n = series.length, bw = 100 / n;
+  let bars = '';
+  series.forEach((v, i) => {
+    const h = Math.max(1, (v / max) * 100);
+    bars += '<rect x="' + (i * bw).toFixed(2) + '" y="' + (100 - h).toFixed(2) +
+      '" width="' + (bw * 0.66).toFixed(2) + '" height="' + h.toFixed(2) + '"/>';
+  });
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  return '<div class="plot ' + (cls || '') + '">' +
+    '<svg viewBox="0 0 100 100" preserveAspectRatio="none" fill="var(--zd-ink-2)" aria-hidden="true">' +
+    bars + '</svg><span class="mean" style="top:' + (100 - (mean / max) * 100).toFixed(2) + '%"></span></div>';
+}
+function sect(t){ return '<span class="sect">' + t + '</span>'; }
+function col2(a, b){
+  return '<div style="display:flex;gap:var(--zd-pad);align-items:flex-start">' +
+    '<div style="flex:1 1 0;min-width:0">' + a + '</div>' +
+    '<div class="opt1" style="flex:1 1 0;min-width:0">' + b + '</div></div>';
+}
+function hhmmss(s){
+  s = Math.floor(s);
+  return pad2(Math.floor(s / 3600) % 24) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60);
+}
+function fileSel(){ return FILES[clamp(S.fileSel, 0, FILES.length - 1)]; }
+
+/* ==================================================== THE MAKE-UP MODEL == *
+ * A page is a list of BANDS. A band has a height in band-units (they sum to
+ * 9) and an ordered list of stories. RANK is position in that list: rank 1 is
+ * the LEAD and it gets the widest measure. There is no z-order anywhere in
+ * this file, because nothing overlaps.
+ *
+ * THE ONE CHANGE: make-up is scoped to the BAND, not the page. Opening a
+ * story re-measures exactly one band; a terminal three bands away does not
+ * move. That kills the direction's genuinely user hostile behaviour without
+ * touching the metaphor, and demotes HOLD from a hedge to a convenience.
+ */
+function freshPages(){
+  return {
+    1: [
+      { h: 4, st: ['shell', 'files', 'mon'] },
+      { h: 3, st: ['log', 'net'] },
+      { h: 2, st: ['clock', 'disk', 'sys'] }
+    ],
+    2: [
+      { h: 3, st: ['hex'] },
+      { h: 3, st: ['regs', 'proc'] },
+      { h: 3, st: ['edit', 'type'] }
+    ]
+  };
+}
+S.pages = freshPages();
+
+function page(ws){ return S.pages[ws || S.ws]; }
+function bandOf(id, ws){
+  const p = page(ws);
+  for (let i = 0; i < p.length; i++) if (p[i].st.indexOf(id) >= 0) return i;
+  return -1;
+}
+function rankOf(id, ws){
+  const b = bandOf(id, ws);
+  return b < 0 ? -1 : page(ws)[b].st.indexOf(id);
+}
+function onPage(id, ws){ return bandOf(id, ws) >= 0; }
+function allOnPage(ws){
+  const out = [];
+  page(ws).forEach(b => b.st.forEach(id => out.push(id)));
+  return out;
+}
+
+/* THE MEASURE TABLE. A broadsheet does not give every story the same width:
+   the lead takes the widest measure and the last takes the narrowest. This
+   reproduces 12 -> [12] / [7,5] / [5,4,3] / [4,3,3,2] / [3,3,2,2,2] exactly.
+   S.lead is how many columns the lead steals; the Settings slider moves it. */
+function measures(n, cols, lead){
+  if (n <= 0) return [];
+  if (n === 1) return [cols];
+  const base = Math.floor(cols / n);
+  let rem = cols - base * n, i = 0;
+  const out = new Array(n).fill(base);
+  while (rem > 0) { out[i % n]++; rem--; i++; }
+  let steal = (lead === undefined ? S.lead : lead);
+  for (let k = n - 1; k > 0 && steal > 0; k--) {
+    while (steal > 0 && out[k] > 2) { out[k]--; out[0]++; steal--; }
+  }
+  return out;
+}
+/* band heights normalise to 9 units. an emptied band gives its units to the
+   band above it, which is what a compositor does when a story is killed. */
+function normBands(ws){
+  const p = page(ws);
+  for (let i = p.length - 1; i >= 0; i--) {
+    if (p[i].st.length === 0 && p.length > 1) {
+      const give = p[i].h;
+      p.splice(i, 1);
+      p[Math.max(0, i - 1)].h += give;
+    }
+  }
+  let tot = p.reduce((a, b) => a + b.h, 0);
+  if (tot !== 9 && p.length) {
+    p[0].h += 9 - tot;
+    if (p[0].h < 1) { p[0].h = 1; }
+  }
+}
+/* PUT A STORY ON THE PAGE. Unheld, it takes the LEAD of band 0 and everything
+   in band 0 demotes one rank. Held, it takes the last rank of the first band
+   with a free column, and nothing demotes. Either way exactly ONE band is
+   re-made and the toast names which. */
+function makeUp(id, ws){
+  ws = ws || S.ws;
+  const p = S.pages[ws];
+  let b = 0;
+  if (S.hold) {
+    b = -1;
+    for (let i = 0; i < p.length; i++) {
+      if (p[i].st.length < Math.floor(S.cols / 2)) { b = i; break; }
+    }
+    if (b < 0) b = p.length - 1;
+    p[b].st.push(id);
+  } else {
+    if (p[0].st.length >= Math.floor(S.cols / 2)) {
+      /* the lead band is full to its narrowest permitted measure. the last
+         story in it is pushed down rather than the page being re-made. */
+      const pushed = p[0].st.pop();
+      (p[1] || p[0]).st.unshift(pushed);
+    }
+    p[0].st.unshift(id);
+  }
+  S.held[ws] = S.held[ws].filter(x => x !== id);
+  normBands(ws);
+  return b;
+}
+function killStory(id, ws){
+  ws = ws || S.ws;
+  const b = bandOf(id, ws);
+  if (b < 0) return -1;
+  S.pages[ws][b].st = S.pages[ws][b].st.filter(x => x !== id);
+  normBands(ws);
+  if (S.set === id) S.set = allOnPage(ws)[0] || null;
+  if (S.full === id) S.full = null;
+  return b;
+}
+function holdOver(id, ws){
+  ws = ws || S.ws;
+  const b = killStory(id, ws);
+  if (b >= 0 && S.held[ws].indexOf(id) < 0) S.held[ws].push(id);
+  return b;
+}
+function promote(id){
+  const b = bandOf(id); if (b < 0) return;
+  const st = page()[b].st, i = st.indexOf(id);
+  if (i <= 0) return;
+  st.splice(i, 1); st.splice(i - 1, 0, id);
+}
+function demote(id){
+  const b = bandOf(id); if (b < 0) return;
+  const st = page()[b].st, i = st.indexOf(id);
+  if (i < 0 || i >= st.length - 1) return;
+  st.splice(i, 1); st.splice(i + 1, 0, id);
+}
+function moveToBand(id, target){
+  const b = bandOf(id); if (b < 0) return;
+  const p = page();
+  target = clamp(target, 0, p.length - 1);
+  if (target === b) return;
+  p[b].st = p[b].st.filter(x => x !== id);
+  p[target].st.unshift(id);
+  normBands(S.ws);
+}
+function setBandCount(n){
+  [1, 2].forEach(ws => {
+    const flat = allOnPage(ws);
+    const p = [];
+    const base = Math.floor(9 / n);
+    for (let i = 0; i < n; i++) p.push({ h: base, st: [] });
+    p[0].h += 9 - base * n;
+    flat.forEach((id, i) => p[i % n].st.push(id));
+    S.pages[ws] = p;
+    normBands(ws);
+  });
+}
+
+/* ============================================================== layout == *
+ * There are no gutters. A story's rect IS its module rect; the 1 px CUT it
+ * carries on its right and lower edge is the only thing between it and its
+ * neighbour, and it is suppressed at the trim edge.
+ */
+let GEO = { W: 0, H: 0, colX: [], bandY: [] };
+function computeGeo(){
+  const el = $('#page');
+  const W = el.clientWidth, H = el.clientHeight;
+  GEO.W = W; GEO.H = H;
+  GEO.colX = [];
+  for (let i = 0; i <= S.cols; i++) GEO.colX.push(Math.round(i * W / S.cols));
+  GEO.bandY = [0];
+  const p = page();
+  let acc = 0;
+  p.forEach(b => { acc += b.h; GEO.bandY.push(Math.round(acc / 9 * H)); });
+  GEO.bandY[GEO.bandY.length - 1] = H;
+}
+function storyRect(id){
+  const b = bandOf(id);
+  if (b < 0) return null;
+  const st = page()[b].st;
+  const m = measures(st.length, S.cols);
+  const i = st.indexOf(id);
+  let c = 0;
+  for (let k = 0; k < i; k++) c += m[k];
+  const x = GEO.colX[c], x2 = GEO.colX[Math.min(S.cols, c + m[i])];
+  const y = GEO.bandY[b], y2 = GEO.bandY[b + 1];
+  return { x: x, y: y, w: x2 - x, h: y2 - y, band: b, rank: i,
+           lastCol: (c + m[i]) >= S.cols, lastBand: b === page().length - 1 };
+}
+
+/* the shell owns reflow, not the app renderers. PLATE's one structural miss
+   was an app authored for 7x8 overflowing at 7x4, and four separate defects
+   turned out to be that same failure wearing hats. This is the gate. */
+function fitClass(w, h){
+  return [ w < 235 ? 'xs' : w < 360 ? 'sm' : w < 540 ? 'md' : 'lg',
+           h < 150 ? 'xs' : h < 240 ? 'sm' : 'lg' ];
+}
+
+function buildStory(id){
+  const a = APP[id];
+  const el = document.createElement('div');
+  el.className = 'story';
+  el.setAttribute('data-id', id);
+  el.innerHTML =
+    '<i class="hrule"></i>' +
+    '<div class="hd">' +
+      '<div class="kick"><span class="rk"></span><span class="kx"></span>' +
+        '<span class="marks">' +
+          '<span data-act="set" title="set the deck">SET</span>' +
+          '<span data-act="over" title="hold over">OVER</span>' +
+          '<span data-act="full" title="run full page">FULL</span>' +
+          '<span data-act="kill" title="kill the story">KILL</span>' +
+        '</span></div>' +
+      '<div class="hl"><b></b></div>' +
+      '<div class="dk"><span></span></div>' +
+    '</div>' +
+    '<div class="bd"></div>';
+  $('#page').appendChild(el);
+  return el;
+}
+function redraw(id){
+  const el = $('.story[data-id="' + id + '"]');
+  if (!el) return;
+  const a = APP[id], r = storyRect(id);
+  const isSet = S.set === id;
+  el.classList.toggle('set', isSet);
+  /* ONE story on the page is the LEAD and it is the one the reader's eye is
+     meant to hit first. Every other story carries its band and its rank, so
+     the chrome states out loud that they are not equal. */
+  const isLead = !!r && r.band === 0 && r.rank === 0;
+  el.classList.toggle('lead', isLead);
+  $('.rk', el).textContent = !r ? '-' : isLead ? 'LEAD' : (r.band + 1) + '.' + (r.rank + 1);
+  $('.kx', el).textContent = a.kick;
+  $('.hl b', el).textContent = a.name;
+  /* THE DECK LINE. A whole line of type materialises in air that was already
+     reserved. At arm's length this is the loudest of the three focus moves,
+     because a line appearing is a change of INK AREA, not of value. */
+  $('.dk span', el).textContent = (isSet || S.deckall) ? (DECK[id] ? DECK[id]() : '') : '';
+  $('.bd', el).innerHTML = R[id] ? R[id]() : '';
+}
+function layout(){
+  computeGeo();
+  const live = allOnPage();
+  const want = S.full ? [S.full] : live;
+  $$('.story').forEach(el => {
+    if (want.indexOf(el.getAttribute('data-id')) < 0) el.remove();
+  });
+  want.forEach(id => { if (!$('.story[data-id="' + id + '"]')) buildStory(id); });
+  if (S.full) {
+    const el = $('.story[data-id="' + S.full + '"]');
+    el.style.left = '0px'; el.style.top = '0px';
+    el.style.width = GEO.W + 'px'; el.style.height = GEO.H + 'px';
+    el.classList.add('edge-r', 'edge-b');
+    const f = fitClass(GEO.W, GEO.H);
+    el.setAttribute('data-w', f[0]); el.setAttribute('data-h', f[1]);
+  } else {
+    want.forEach(id => {
+      const el = $('.story[data-id="' + id + '"]'), r = storyRect(id);
+      if (!el || !r) return;
+      el.style.left = r.x + 'px'; el.style.top = r.y + 'px';
+      el.style.width = r.w + 'px'; el.style.height = r.h + 'px';
+      el.classList.toggle('edge-r', r.lastCol);
+      el.classList.toggle('edge-b', r.lastBand);
+      const f = fitClass(r.w, r.h);
+      el.setAttribute('data-w', f[0]); el.setAttribute('data-h', f[1]);
+    });
+  }
+  $('#openpage').classList.toggle('on', want.length === 0);
+  want.forEach(redraw);
+  jumpLines();
+  renderMasthead(); renderFolio();
+}
+/* MEASURE, THEN SET THE JUMP. This is the shell's reflow gate: the app
+   renderers do not know how tall their story is and must not have to. PLATE's
+   one structural failure was that they did. */
+function jumpLines(){
+  $$('.story').forEach(el => {
+    const bd = $('.bd', el);
+    if (!bd) return;
+    /* the deepest overflowing descendant, not a guess at which one it is.
+       an app renderer may put its scroller anywhere and must not have to
+       declare it. */
+    let over = bd.scrollHeight - bd.clientHeight;
+    $$('*', bd).forEach(n => {
+      const d = n.scrollHeight - n.clientHeight;
+      if (d > over) over = d;
+    });
+    let j = $('.jump', el);
+    const lh = 16 * S.ui;
+    /* a single clipped line is indistinguishable from a clean end, so it does
+       not earn a jump line. Below that the story really is cut and says so. */
+    if (over > lh * 1.5) {
+      if (!j) { j = document.createElement('div'); j.className = 'jump'; el.appendChild(j); }
+      j.textContent = 'CONTINUED · ' + Math.ceil(over / lh) + ' LINES BELOW THE FOLD';
+    } else if (j) { j.remove(); }
+  });
+}
+function redrawAll(){ allOnPage().forEach(redraw); }
+
+/* ============================================================ masthead == *
+ * THE INSIDE LINE IS THE TASKLIST, THE LAUNCHER AND THE KEYMAP, and it is one
+ * line of set type. Click a name to raise it; alt+N raises the Nth; INDEX
+ * opens the full page index. There is no tray, no menu, no clock widget and
+ * no click target that is not a set word.
+ */
+function renderMasthead(){
+  const d = new Date(2026, 7, 25);
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const mons = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  $('#ed-date').textContent = days[d.getDay()] + ' ' + d.getDate() + ' ' + mons[d.getMonth()] +
+    ' · EDITION 0.3 · X86_64';
+  $('#ed-right').textContent = 'PAGE ' + pad2(S.ws) + ' OF 02 · ' + S.cols + ' COLUMNS · ' +
+    page().length + ' BANDS';
+  const live = allOnPage();
+  let h = '<span class="w lab">INSIDE</span>';
+  live.forEach((id, i) => {
+    h += '<span class="w tab' + (S.set === id ? ' set' : '') + '" data-raise="' + id + '">' +
+      (i + 1) + ' ' + APP[id].name.toUpperCase() + '</span>';
+  });
+  S.held[S.ws].forEach(id => {
+    h += '<span class="w tab over" data-raise="' + id + '">' + APP[id].name.toUpperCase() + '</span>';
+  });
+  if (!live.length && !S.held[S.ws].length) h += '<span class="w lab">NOTHING</span>';
+  h += '<span class="w ix" data-index="1">INDEX</span>';
+  $('#mastin').innerHTML = h;
+  if (S.planted) plantWidget();
+  assertMasthead();
+}
+/* THE LAW, MADE MECHANICAL. The masthead band's only permitted draw calls are
+   fb_text_role plus ONE fb_fill_px rule. This walks the subtree after every
+   render and refuses anything else. As a guideline the law dies quietly the
+   first time someone adds a status glyph, and then it is the top bar all four
+   round-one directions deleted. Settings > PROOF plants one so you can watch
+   the guard fire against a real defect rather than against a comment. */
+const MAST_TAGS = { DIV: 1, SPAN: 1 };
+function assertMasthead(){
+  const root = $('#masthead');
+  const nodes = $$('*', root);
+  const bad = [];
+  let fills = 0;
+  nodes.forEach(n => {
+    if (n.classList.contains('mast-rule')) { fills++; return; }
+    if (!MAST_TAGS[n.tagName]) { bad.push(n.tagName.toLowerCase() + ' is not set type'); return; }
+    const cs = getComputedStyle(n);
+    if (cs.backgroundImage !== 'none') bad.push('background-image on ' + (n.className || n.tagName));
+    const bg = cs.backgroundColor;
+    /* the one permitted fill on a text node is the SET tab's reverse, which is
+       fb_text_role's own knockout, not a second draw call. */
+    if (bg && bg !== 'rgba(0, 0, 0, 0)' && !n.classList.contains('set')) {
+      bad.push('fill on ' + (n.className || n.tagName));
+    }
+  });
+  if (fills !== 1) bad.push(fills + ' rules, exactly 1 permitted');
+  S.guard = { walked: nodes.length, fills: fills, bad: bad };
+  root.classList.toggle('violated', bad.length > 0);
+  return bad;
+}
+function plantWidget(){
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('width', '12'); s.setAttribute('height', '12');
+  s.setAttribute('viewBox', '0 0 12 12');
+  s.innerHTML = '<circle cx="6" cy="6" r="4" fill="var(--zd-ink-0)"/>';
+  s.style.marginLeft = '6px';
+  $('#mastin').appendChild(s);
+}
+
+/* ========================================================== folio line == */
+function renderFolio(){
+  $('#colophon').textContent = 'ZLOS 0.3 · SET IN DEJAVU · 8x16 16x32 24x48 · NO HEAP IN THE DRAWING PATH';
+  $('#fstats').textContent =
+    hhmmss(S.clock) + '  UP ' + hhmmss(S.up) +
+    '  LOAD ' + S.load.toFixed(2) +
+    '  MEM ' + S.memPct + '%' +
+    '  RX ' + S.rx.toFixed(1) + ' KB/S' +
+    '  TX ' + S.tx.toFixed(1) + ' KB/S' +
+    '  59.998 HZ';
+  $('#holdbtn').classList.toggle('on', S.hold);
+  $('#holdbtn').textContent = S.hold ? 'held' : 'hold';
+  $('#wsn1').classList.toggle('off', S.ws !== 1);
+  $('#wsn2').classList.toggle('off', S.ws !== 2);
+}
+
+/* =============================================================== decks == *
+ * ONE LINE OF TYPE, stating what the story is currently doing. Not a title,
+ * not a subtitle: a statement in the present tense with live numbers in it.
+ */
+const DECK = {
+  shell: () => 'zlsh · /kernel · last exit 0 · 118 lines scrollback',
+  files: () => '/kernel · ' + FILES.length + ' items · ' + fileSel()[0] + ' selected, ' + fileSel()[1],
+  mon:   () => 'sampling 1 Hz · load ' + S.load.toFixed(2) + ' · 4 cores · ' + S.memPct + '% of 15.6 GiB',
+  edit:  () => fileSel()[0] + ' · read only · line 1171 col 1 · ' + (SRC[fileSel()[0]] ? 'in buffer' : 'no buffer, showing stat'),
+  log:   () => 'dmesg · ' + KLOG.length + ' records · 1 FAIL 3 WARN · ring 64 KiB, 0 dropped',
+  hex:   () => 'rd0 · offset 0x00003000 · 256 bytes shown · generation 3',
+  calc:  () => 'int64 · accumulator ' + S.calcAcc + ' · 0x' + hx(parseInt(S.calcAcc, 10) || 0) + ' · no fpu in the drawing path',
+  net:   () => 'enp0s31f6 up · 1000 Mb/s full · rx ' + S.rx.toFixed(1) + ' tx ' + S.tx.toFixed(1) + ' KB/s · 7 sockets',
+  clock: () => 'four sources · tsc 2803.2 MHz · pit drift 150 ppm · monotonic ' + hhmmss(S.up),
+  sys:   () => 'zlOS 0.3 · CML-U 8086:9B41 · 15.6 GiB · 5 fixed maps, all asserted',
+  set:   () => 'design.h · ' + ['stock', 'make-up', 'type', 'proof'][S.setTab] + ' · ' + (S.hold ? 'make-up held' : 'make-up live') + ' · ui ' + S.ui.toFixed(2),
+  disk:  () => 'zlfs rd0 · 2.64 MiB of 4.00 MiB · 29 extents · 0 orphans',
+  proc:  () => PROCS.length + ' tasks · ' + PROCS.filter(p => p[2] === 'R').length + ' running, 1 zombie · pid ' + PROCS[S.procSel][0] + ' selected',
+  regs:  () => 'pipe A · 18 registers · PSR idle · pixel clock 241690 kHz',
+  type:  () => 'three baked atlases, four registers · R3 to R4 is one real step, 22 to 33 px',
+  make:  () => page().length + ' bands · ' + allOnPage().length + ' stories · measures ' + measures(page()[0].st.length, S.cols).join('/') + ' · ' + (S.hold ? 'held' : 'live')
+};
+
+/* ================================================== the app renderers === */
+const R = {};
+
+R.shell = () => {
+  const L = [
+    ['zlsh 0.3 · no job control · builtins only', 'd'],
+    ['', ''],
+    ['$ make -C kernel modeset', 'b'],
+    ['  ZL   kernel.zl -> build/kernel.o', 'd'],
+    ['  CC   fb.c intel.c xhci.c hid.c zlfs.c smp.c', 'd'],
+    ['  LD   build/zlos.elf', 'd'],
+    ['       text 218432  data 30720  bss 1441792', 'd'],
+    ['$ ./tools/regdump --pipe A', 'b'],
+    ['  PIPE_A_CONF    0xC0000000  enabled, 8 bpc', 'd'],
+    ['  PIPE_A_LINK_M  0x0080D9E4', 'd'],
+    ['  PIPE_A_LINK_N  0x00800000', 'd'],
+    ['  DPLL_CTRL1     0x00000601  link 2.7 GHz', 'd'],
+    ['  pixel clock 241690 kHz -> 59.998 Hz', 'g'],
+    ['$ zlfs fsck rd0', 'b'],
+    ['  3 generations, 0 orphan extents', 'd'],
+    ['  power cycle 1 -> 2 -> 3 survived', 'g'],
+    ['$ ./wguard.sh', 'b'],
+    ['  planted defect  CAUGHT', 'g'],
+    ['  with -w         SILENCED  (this is the point)', 'g'],
+    ['  real sources    CLEAN, 0 of 33 casts remain', 'g'],
+    ['$ ', 'b']
+  ];
+  return '<div class="patch">' + L.map((l, i) =>
+    '<span class="' + l[1] + '">' + l[0] + (i === L.length - 1 ? '</span><span class="caret"></span>' : '</span>')
+  ).join('\n') + '</div>';
+};
+
+R.files = () => {
+  const rows = FILES.map((f, i) => TR([
+    f[0],
+    { t: f[1], c: 'r' },
+    { t: f[2], c: 'opt1' },
+    { t: f[3], c: 'opt2' },
+    { t: f[4], c: 'r opt2' },
+    { t: word('G' + f[5]), c: 'r opt1' }
+  ], 'data-act="file" data-arg="' + i + '"' + (S.fileSel === i ? ' class="sel"' : '')));
+  return '<div class="scroll">' + TBL([
+    { h: 'name' }, { h: 'size', r: 1 }, { h: 'kind', o: 'opt1' },
+    { h: 'mode', o: 'opt2' }, { h: 'mtime', r: 1, o: 'opt2' }, { h: 'gen', r: 1, o: 'opt1' }
+  ], rows) + '</div>';
+};
+
+R.mon = () => {
+  const c = S.cpu;
+  return '<div style="height:100%;display:flex;flex-direction:column;gap:var(--zd-gap)">' +
+    '<div class="optv" style="display:flex;flex-direction:column">' +
+      '<span class="r1 k3 plotlab">CPU AGGREGATE, 72 s AT 1 Hz, MEAN RULED</span>' + plot(S.hist.cpu, 100) +
+    '</div>' +
+    '<div style="flex:0 0 auto">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 var(--zd-pad)">' +
+        c.map((v, i) => mtr('cpu ' + i, v, '%', v > 70)).join('') + '</div>' +
+      mtr('memory', S.memPct, '% of 15.6 GiB', S.memPct > 85) +
+    '</div>' +
+    '<div class="opt1" style="flex:0 0 auto">' +
+      '<div class="kv"><span class="k">load</span><span class="v">' + S.load.toFixed(2) + ' ' + (S.load + 0.12).toFixed(2) + ' ' + (S.load + 0.05).toFixed(2) + '</span></div>' +
+      '<div class="kv"><span class="k">ctx sw</span><span class="v">' + (18400 + (S.t * 37) % 900) + ' /s</span></div>' +
+      '<div class="kv"><span class="k">irq</span><span class="v">' + (1120 + (S.t * 11) % 60) + ' /s</span></div>' +
+      '<div class="kv"><span class="k">compose</span><span class="v">16.67 ms budget, 4.12 ms used</span></div>' +
+    '</div></div>';
+};
+
+R.edit = () => {
+  const f = fileSel(), src = SRC[f[0]];
+  if (!src) {
+    return '<div style="height:100%;overflow:auto">' + sect('no buffer · stat only') +
+      kv('name', f[0]) + kv('size', f[1]) + kv('kind', f[2]) + kv('mode', f[3]) +
+      kv('mtime', f[4]) + kv('generation', f[5]) + kv('extents', '1, contiguous') +
+      kv('crc32', '0x' + hx(0x5F2A81C3 ^ (f[0].length * 2654435761))) +
+      '<div style="margin-top:var(--zd-pad)"><span class="btn" data-act="toast" data-arg="stat">verify extent</span></div>' +
+      '</div>';
+  }
+  return '<div class="patch">' + src.split('\n').map(l => {
+    const n = l.slice(0, 6), rest = l.slice(6);
+    return '<span class="d">' + n + '</span><span class="' +
+      (/^\s*\/\*|^\s*#|^\s*\*/.test(rest) ? 'g' : '') + '">' +
+      rest.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>';
+  }).join('\n') + '</div>';
+};
+
+R.log = () => {
+  const rows = KLOG.map(l => TR([
+    { t: l[0], c: 'r' },
+    { t: word(l[1]), c: 'opt1' },
+    { t: l[2], c: 'opt2' },
+    l[3]
+  ]));
+  return '<div class="scroll">' + TBL([
+    { h: 'time', r: 1 }, { h: 'state', o: 'opt1' }, { h: 'unit', o: 'opt2' }, { h: 'record' }
+  ], rows) + '</div>';
+};
+
+R.hex = () => {
+  let out = '';
+  const seed = 0x9E3779B1;
+  const ascii = 'zlfs\0\0\0\0gen 3';
+  for (let r = 0; r < 24; r++) {
+    const base = 0x3000 + r * 16;
+    let bytes = [], txt = '';
+    for (let i = 0; i < 16; i++) {
+      let v;
+      if (r === 0) v = [0x7A, 0x6C, 0x66, 0x73, 0x00, 0x03, 0x00, 0x00,
+                        0x00, 0x10, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00][i];
+      else v = ((base * seed + i * 131) >>> ((i % 4) * 3)) & 0xFF;
+      bytes.push(hx(v, 2));
+      txt += (v >= 32 && v < 127) ? String.fromCharCode(v) : '.';
+    }
+    out += '<span class="d">' + hx(base, 8) + '</span>  ' +
+      '<span class="b">' + bytes.slice(0, 8).join(' ') + '</span>  ' +
+      '<span class="b">' + bytes.slice(8).join(' ') + '</span>  ' +
+      '<span class="g">' + txt.replace(/</g, '&lt;').replace(/&(?!amp;|lt;)/g, '&amp;') + '</span>\n';
+  }
+  return '<div class="patch">' + out + '</div>';
+};
+
+R.calc = () => {
+  const n = parseInt(S.calcAcc, 10) || 0;
+  const keys = [['7','7'],['8','8'],['9','9'],['/','div'],
+                ['4','4'],['5','5'],['6','6'],['x','mul'],
+                ['1','1'],['2','2'],['3','3'],['+','add'],
+                ['0','0'],['C','clr'],['=','eq'],['-','sub']];
+  return '<div style="height:100%;display:flex;flex-direction:column;gap:var(--zd-gap)">' +
+    '<div style="background:var(--zd-patch);padding:var(--zd-gap);text-align:right">' +
+      '<div class="r1 k3">ACCUMULATOR</div>' +
+      '<div style="font-family:var(--zd-mono);font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0)">' + S.calcAcc + '</div>' +
+    '</div>' +
+    '<div class="opt1">' + kv('hex', '0x' + hx(n)) + kv('oct', '0o' + n.toString(8)) +
+      kv('bin', n.toString(2).padStart(24, '0').replace(/(.{8})(?=.)/g, '$1 ')) +
+      kv('as khz', (n / 1000).toFixed(3) + ' MHz') + '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--zd-rule-hair);flex:1 1 auto;min-height:0">' +
+      keys.map(k => '<span class="btn" style="border:0;display:flex;align-items:center;justify-content:center" data-act="calc" data-arg="' + k[1] + '">' + k[0] + '</span>').join('') +
+    '</div></div>';
+};
+
+R.net = () => {
+  const rows = SOCKS.map(s => TR([
+    { t: s[0], c: 'opt2' }, s[1], { t: s[2], c: 'opt1' },
+    { t: word(s[3]), c: '' }, { t: s[4], c: 'r opt2' }, { t: s[5], c: 'opt1' }
+  ]));
+  return '<div style="height:100%;display:flex;flex-direction:column;gap:var(--zd-gap)">' +
+    '<div class="optv" style="display:flex;flex-direction:column">' +
+      '<span class="r1 k3 plotlab">RX KB/S, 72 s</span>' + plot(S.hist.net, 100) +
+    '</div>' +
+    '<div class="opt1">' + kv('link', '1000 Mb/s full duplex') + kv('mac', '3C:58:C2:0B:19:F4') +
+      kv('inet', '10.0.2.15/24 via 10.0.2.2') + kv('rx / tx', S.rx.toFixed(1) + ' / ' + S.tx.toFixed(1) + ' KB/s') +
+      kv('errors', '0 rx, 0 tx, 0 dropped') + '</div>' +
+    '<div style="flex:1 1 0;min-height:0;overflow:auto">' + TBL([
+      { h: 'p', o: 'opt2' }, { h: 'local' }, { h: 'peer', o: 'opt1' },
+      { h: 'state' }, { h: 'pid', r: 1, o: 'opt2' }, { h: 'task', o: 'opt1' }
+    ], rows) + '</div></div>';
+};
+
+R.clock = () => {
+  const rows = [
+    ['monotonic', hhmmss(S.up) + '.' + pad2(S.t % 100), 'clock_gettime', 'ns'],
+    ['wall', hhmmss(S.clock), 'rtc cmos', 's'],
+    ['tsc', (2803233000 + S.t * 2803233).toString(), 'rdtsc, invariant', 'tick'],
+    ['pit', (1000150 + S.t * 1000).toString(), 'divisor 1193', 'tick'],
+    ['boot', '0.213556', 'to desktop()', 's'],
+    ['vblank', (S.t * 60 + 41291).toString(), 'pipe A, 59.998 Hz', 'frame']
+  ].map(r => TR([r[0], { t: r[1], c: 'r' }, { t: r[2], c: 'opt1' }, { t: r[3], c: 'opt2' }]));
+  return '<div style="height:100%;display:flex;flex-direction:column">' +
+    '<div style="font-family:var(--zd-mono);font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0);letter-spacing:var(--zd-trk-1)">' +
+      hhmmss(S.clock) + '</div>' +
+    '<div class="r1 k3" style="margin-bottom:var(--zd-gap)">SAT 25 AUG 2026 · UTC+00 · RTC RUNS BEHIND, NTP CORRECTS MID SESSION</div>' +
+    '<div style="flex:1 1 auto;min-height:0;overflow:auto">' + TBL([
+      { h: 'source' }, { h: 'value', r: 1 }, { h: 'via', o: 'opt1' }, { h: 'unit', o: 'opt2' }
+    ], rows) + '</div></div>';
+};
+
+R.sys = () => {
+  return '<div style="height:100%;overflow:auto">' +
+    sect('machine') +
+    kv('kernel', 'zlOS 0.3, x86_64, freestanding') +
+    kv('cpu', 'CML-U i7-10610U, 4 core 8 thread') +
+    kv('base clock', '1.80 GHz, turbo 4.90 GHz') +
+    kv('memory', '15.6 GiB usable, 62% in use') +
+    kv('firmware', 'UEFI, own BOOTX64.EFI, no GRUB') +
+    kv('display', '8086:9B41 rev 02, Gen9 LP') +
+    kv('panel', 'LP140WF7-SPH1 1920x1080') +
+    kv('pixel clock', '241690 kHz, 59.998 Hz') +
+    '<div class="opt1">' + sect('fixed maps, all asserted') +
+    kv('HI_NET', '0x04000000  64 MiB  virtio_net') +
+    kv('HI_FB', '0x08000000  128 MiB  drag buffer') +
+    kv('HI_SCRATCH', '0x0A000000  160 MiB  compositor') +
+    kv('HI_DOM', '0x0C000000  192 MiB  parser arena') +
+    kv('stack', '256 KiB compositor, 16 KiB overflowed') + '</div>' +
+    '<div class="opt1">' + sect('drawing path') +
+    kv('heap', '0 B. there is none.') +
+    kv('float', 'none. q8 fixed point throughout.') +
+    kv('atlases', '8x16, 16x32, 24x48 + aa + subpixel') +
+    kv('blending', 'gamma correct, linear light, 2 LUTs') + '</div>' +
+    '<div style="margin-top:var(--zd-pad);display:flex;gap:var(--zd-gap);flex-wrap:wrap">' +
+      '<span class="btn" data-act="toast" data-arg="build">relink</span>' +
+      '<span class="btn" data-act="toast" data-arg="proof">pull a proof</span>' +
+    '</div></div>';
+};
+
+R.disk = () => {
+  const rows = EXTENTS.map(e => TR([
+    e[0], { t: e[1], c: 'r' }, { t: e[2] + '%', c: 'r opt1' },
+    { t: e[3], c: 'r opt2' }, { t: e[4] === '-' ? '-' : word('G' + e[4]), c: 'r opt2' }
+  ]));
+  return '<div style="height:100%;display:flex;flex-direction:column;gap:var(--zd-gap)">' +
+    '<div class="optv">' + EXTENTS.slice(0, 3).map(e => mtr(e[0], parseFloat(e[2]), '%')).join('') + '</div>' +
+    '<div style="flex:1 1 auto;min-height:0;overflow:auto">' + TBL([
+      { h: 'path' }, { h: 'size', r: 1 }, { h: 'share', r: 1, o: 'opt1' },
+      { h: 'ext', r: 1, o: 'opt2' }, { h: 'gen', r: 1, o: 'opt2' }
+    ], rows) + '</div>' +
+    '<div class="r1 k3">2.64 MIB OF 4.00 MIB · 29 EXTENTS · 0 ORPHANS · CRC VERIFIED AT MOUNT</div>' +
+    '</div>';
+};
+
+R.proc = () => {
+  const rows = PROCS.map((p, i) => TR([
+    { t: p[0], c: 'r' }, p[1], { t: word(p[2]), c: '' },
+    { t: p[3], c: 'r opt1' }, { t: p[4], c: 'r opt1' },
+    { t: p[5], c: 'r opt2' }, { t: p[6], c: 'r opt2' }
+  ], 'data-act="proc" data-arg="' + i + '"' + (S.procSel === i ? ' class="sel"' : '')));
+  return '<div style="height:100%;display:flex;flex-direction:column;gap:var(--zd-gap)">' +
+    '<div style="flex:1 1 auto;min-height:0;overflow:auto">' + TBL([
+      { h: 'pid', r: 1 }, { h: 'task' }, { h: 'st' },
+      { h: 'cpu', r: 1, o: 'opt1' }, { h: 'mem', r: 1, o: 'opt1' },
+      { h: 'time', r: 1, o: 'opt2' }, { h: 'core', r: 1, o: 'opt2' }
+    ], rows) + '</div>' +
+    '<div style="display:flex;gap:var(--zd-gap);flex-wrap:wrap">' +
+      '<span class="btn" data-act="toast" data-arg="reap">reap zombie</span>' +
+      '<span class="btn opt1" data-act="toast" data-arg="renice">renice 61</span>' +
+    '</div></div>';
+};
+
+R.regs = () => {
+  const rows = REGS.map(r => TR([
+    r[0], { t: r[1], c: 'r opt1' }, { t: r[2], c: 'r' }, { t: r[3], c: 'opt2' }
+  ]));
+  return '<div class="scroll">' + TBL([
+    { h: 'register' }, { h: 'offset', r: 1, o: 'opt1' },
+    { h: 'value', r: 1 }, { h: 'decode', o: 'opt2' }
+  ], rows) + '</div>';
+};
+
+/* THE TYPE STORY IS THE DIRECTION'S OWN RECEIPT. Three baked atlases, four
+   registers, and R3 -> R4 shown at the exact sizes the focused head steps
+   between so the claim "one real atlas step, no resampling" is inspectable. */
+R.type = () => {
+  const specimens = [
+    ['R1', '8x16 cell · mono role face · caps + 1.4 px tracking', 'r1', 'MASTHEAD FOLIO KICKER LABEL STATE'],
+    ['R2', '8x16 cell · proportional aa face · mixed case', 'r2', 'The deck line, set only when the story is set.'],
+    ['R3', '16x32 cell · story head, unset', 'r3', 'Kernel log'],
+    ['R4', '24x48 cell · story head, SET · one real step from R3', 'r4', 'KERNEL LOG']
+  ];
+  return '<div class="scroll">' + specimens.map(s =>
+    '<div style="border-bottom:1px solid var(--zd-rule-hair);padding:var(--zd-gap) 0">' +
+      '<div class="r1 k3">' + s[0] + ' · ' + s[1] + '</div>' +
+      '<div class="' + s[2] + '">' + s[3] + '</div>' +
+    '</div>').join('') +
+    sect('what the shell may ask for') +
+    kv('sizes in this file', '4 registers on 3 cells') +
+    kv('upscaled glyphs', '0') +
+    kv('runtime rasteriser', 'none. all three are baked.') +
+    kv('tracking', 'fb_text_role does not track. cost noted.') +
+    '</div>';
+};
+
+/* THE MAKE-UP STORY. The band model, visible and editable, which is the one
+   thing no other direction in this family has to explain. */
+R.make = () => {
+  const p = page();
+  let out = '<div class="scroll">';
+  p.forEach((b, i) => {
+    const m = measures(b.st.length, S.cols);
+    out += sect('band ' + (i + 1) + ' · ' + b.h + ' of 9 units · measures ' + (m.join(' / ') || 'open'));
+    if (!b.st.length) out += '<div class="r1 k3" style="padding:var(--zd-gap) 0">THIS SPACE STANDS OPEN</div>';
+    b.st.forEach((id, k) => {
+      out += '<div class="kv" data-act="rank" data-arg="' + id + '">' +
+        '<span class="k">' + (k === 0 ? word('LEAD') : k + 1) + '</span>' +
+        '<span style="font-family:var(--zd-sans);font-size:var(--zd-r2);font-weight:700;color:var(--zd-ink-0)">' + APP[id].name + '</span>' +
+        '<span class="v">' + m[k] + ' col' +
+        '<span class="opt1"> · ' + (S.set === id ? 'deck set' : 'deck open') + '</span></span></div>';
+    });
+  });
+  out += sect('scope of a re-make');
+  out += kv('on open', S.hold ? 'nothing moves. held.' : 'band 1 only');
+  out += kv('bands untouched', S.hold ? String(p.length) : String(p.length - 1));
+  out += kv('stories that jump', S.hold ? '0' : String(Math.max(0, p[0].st.length - 1)));
+  out += '<div style="margin-top:var(--zd-pad);display:flex;gap:var(--zd-gap);flex-wrap:wrap">' +
+    '<span class="btn" data-act="hold">' + (S.hold ? 'release the make-up' : 'hold the make-up') + '</span>' +
+    '<span class="btn opt1" data-act="toast" data-arg="remake">re-make band 1</span></div>';
+  return out + '</div>';
+};
+
+/* ============================================================ settings == */
+const UI_STEPS   = [0.9, 1.0, 1.1, 1.25];
+const COL_STEPS  = [10, 12, 14, 16];
+const BAND_STEPS = [2, 3, 4];
+const LEAD_STEPS = [0, 1, 2, 3];
+const MAR_STEPS  = [8, 12, 16, 24];
+function slider(name, steps, val, fmt){
+  const i = Math.max(0, steps.indexOf(val));
+  const p = steps.length === 1 ? 0 : i / (steps.length - 1);
+  let stops = '';
+  steps.forEach((s, k) => {
+    stops += '<i class="stop" style="left:' + (k / (steps.length - 1) * 100) + '%"></i>';
+  });
+  return '<div class="kv" style="border-bottom:0;padding-bottom:0">' +
+      '<span class="k">' + name + '</span><span class="v">' + (fmt ? fmt(val) : val) + '</span></div>' +
+    '<div class="sl" data-slider="' + name + '"><span class="rail"></span>' + stops +
+      '<i class="knob" style="left:calc(' + (p * 100) + '% - 1px)"></i></div>';
+}
+function tgRow(label, key, note){
+  return '<div class="tg" data-toggle="' + key + '"><span class="lb">' + label + '</span>' +
+    '<span class="nt opt1">' + note + '</span>' +
+    '<span class="st">' + word(S[key] ? 'ON' : 'OFF') + '</span></div>';
+}
+R.set = () => {
+  const tabs = ['stock', 'make-up', 'type', 'proof'];
+  let out = '<div style="height:100%;display:flex;flex-direction:column">' +
+    '<div class="seg" data-seg="tab">' + tabs.map((t, i) =>
+      '<span class="' + (S.setTab === i ? 'on' : '') + '" data-arg="' + i + '">' + t + '</span>').join('') +
+    '</div><div style="flex:1 1 auto;min-height:0;overflow:auto">';
+
+  if (S.setTab === 0) {
+    out += sect('stock');
+    out += '<div class="seg" data-seg="stock" style="margin-bottom:var(--zd-gap)">' +
+      '<span class="' + (S.theme === 'light' ? 'on' : '') + '" data-arg="0">newsprint</span>' +
+      '<span class="' + (S.theme === 'dark' ? 'on' : '') + '" data-arg="1">composing stone</span></div>';
+    out += '<div class="r2 k3">' + (S.theme === 'light'
+      ? 'Groundwood buff, L* 85.3. Ink never reaches black; INK_0 is 12.22:1, not 21:1.'
+      : 'Cool slate, L* 10.0. The marks are type metal, capped below paper white so a body of them does not bloom.') + '</div>';
+    out += sect('rules and tint');
+    out += tgRow('column rules', 'colrule', 'the CUT between two abutting stories');
+    out += tgRow('zebra', 'zebra', 'INK_0 at 5.5% on alternate table rows');
+    out += tgRow('deck always set', 'deckall', 'fills every story deck, not just the set one');
+    out += tgRow('caret blink', 'blink', '500 ms, the only motion in the system');
+    out += sect('the whole palette, at size');
+    out += '<div style="display:flex;border:1px solid var(--zd-rule-cut)">' +
+      [['--zd-page', 'PAGE'], ['--zd-box', 'BOX'], ['--zd-patch', 'PATCH']].map(g =>
+        '<div style="flex:1 1 0;background:var(' + g[0] + ');padding:var(--zd-gap)">' +
+          '<div class="r1 k2">' + g[1] + '</div>' +
+          '<div class="r1 k3">L* ' + tokLstar(g[0]) + '</div>' +
+          [['--zd-ink-0', '0'], ['--zd-ink-1', '1'], ['--zd-ink-2', '2'], ['--zd-ink-3', '3']].map(k =>
+            '<div style="font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(' + k[0] + ')">' +
+              'INK_' + k[1] + ' ' + tokRatio(k[0], g[0]) + ':1</div>').join('') +
+        '</div>').join('') + '</div>';
+    out += '<div class="r2 k3" style="margin-top:var(--zd-gap)">Every ink is held against BOX, the darkest text bearing ground, not against the page. ' +
+      'Checking against the page is what lets a 4.13:1 mark ship.</div>';
+    out += sect('what has no control here');
+    out += kv('accent hue', 'none. state is the word.');
+    out += kv('radius', '0. a page has no corners.');
+    out += kv('shadow / glow / blur', 'none. no primitive is called.');
+    out += kv('chromatic tokens', '0 in both ladders.');
+  } else if (S.setTab === 1) {
+    out += sect('make-up');
+    out += tgRow('hold', 'hold', 'freezes make-up. new stories take the last rank.');
+    out += slider('columns', COL_STEPS, S.cols);
+    out += slider('bands', BAND_STEPS, page().length);
+    out += slider('lead steal', LEAD_STEPS, S.lead, v => v + ' col');
+    out += slider('trim margin', MAR_STEPS, S.margin, v => v + ' dp');
+    out += sect('live measure of band 1');
+    out += kv('stories', String(page()[0].st.length));
+    out += kv('measures', measures(page()[0].st.length, S.cols).join(' / ') || 'open');
+    out += kv('lead measure', String(measures(page()[0].st.length, S.cols)[0] || 0) + ' of ' + S.cols);
+    out += kv('scope of a re-make', S.hold ? '0 bands' : '1 band of ' + page().length);
+  } else if (S.setTab === 2) {
+    out += sect('type');
+    out += slider('ui scale', UI_STEPS, S.ui, v => v.toFixed(2) + ' x');
+    out += sect('the register ladder');
+    out += '<div class="r1">R1 · MASTHEAD FOLIO KICKER · 8x16</div>';
+    out += '<div class="r2">R2 the deck line and prose · 8x16 proportional</div>';
+    out += '<div class="r3">R3 story head, unset · 16x32</div>';
+    out += '<div class="r4">R4 set · 24x48</div>';
+    out += sect('cost against fb.c');
+    out += kv('atlases needed', '3. exactly what is baked.');
+    out += kv('upscaled glyphs', '0');
+    out += kv('primitives outside fb.c', 'none');
+    out += kv('letter-spacing', 'CSS gives it free. fb_text_role does not.');
+  } else {
+    out += sect('the ladder, read live off :root');
+    const names = ['--zd-page', '--zd-box', '--zd-patch', '--zd-ink-0', '--zd-ink-1',
+                   '--zd-ink-2', '--zd-ink-3', '--zd-rule-hair', '--zd-rule-cut'];
+    const roles = ['ground, the only one', 'tint block, darkest text ground',
+                   'the pasted-in patch', 'head, region rule', 'body', 'secondary',
+                   'quiet, the floor', 'inside a story', 'between two stories'];
+    out += TBL([{ h: 'token' }, { h: 'hex', o: 'opt1' }, { h: 'role', o: 'opt2' },
+                { h: 'on page', r: 1 }, { h: 'on box', r: 1, o: 'opt1' }],
+      names.map((n, i) => TR([
+        n.replace('--zd-', '').toUpperCase(),
+        { t: tokHex(n), c: 'opt1' },
+        { t: roles[i], c: 'opt2' },
+        { t: tokRatio(n, '--zd-page'), c: 'r' },
+        { t: tokRatio(n, '--zd-box'), c: 'r opt1' }
+      ])));
+    out += sect('grounds, L*');
+    out += kv('page', tokLstar('--zd-page'));
+    out += kv('box', tokLstar('--zd-box'));
+    out += kv('patch', tokLstar('--zd-patch'));
+    out += sect('the focus jump, measured');
+    out += kv('head rule unset', tokRatio('--zd-rule-hair', '--zd-page') + ':1, 1 px');
+    out += kv('head rule set', tokRatio('--zd-rule-region', '--zd-page') + ':1, 3 px');
+    out += kv('head register', 'R3 22 px to R4 33 px, one atlas step');
+    out += kv('deck', '24 dp of reserved air, filled');
+    out += sect('the masthead guard');
+    out += kv('nodes walked', String(S.guard.walked));
+    out += kv('permitted fills', String(S.guard.fills) + ' of 1');
+    out += kv('violations', S.guard.bad.length ? word('FAIL') + ' ' + S.guard.bad.length : word('OK') + ' 0');
+    if (S.guard.bad.length) {
+      out += '<div class="r2" style="color:var(--zd-ink-0)">' + S.guard.bad.join('; ') + '</div>';
+    }
+    out += '<div style="margin-top:var(--zd-gap)"><span class="btn" data-act="plant">' +
+      (S.planted ? 'remove the planted widget' : 'plant a status glyph in the masthead') + '</span></div>';
+    out += '<div class="r2 k3" style="margin-top:var(--zd-gap)">A written law nobody ran is a guess with a citation. ' +
+      'Plant the glyph and the guard names it.</div>';
+  }
+  return out + '</div></div>';
+};
+
+/* ================================================================ index == *
+ * INDEX is the full page app index AND the proof sheet of both pages. It is
+ * not a grid of tiles: it is two miniature MADE-UP PAGES, so what you see in
+ * the overview is the same make-up you will get back, at 1/6 scale.
+ */
+function indexOn(){ return $('#index').classList.contains('on'); }
+function miniPage(ws){
+  const p = S.pages[ws];
+  const m = [];
+  let acc = 0;
+  const bandTop = [0];
+  p.forEach(b => { acc += b.h; bandTop.push(acc / 9 * 100); });
+  let out = '';
+  p.forEach((b, bi) => {
+    const ms = measures(b.st.length, S.cols);
+    let c = 0;
+    b.st.forEach((id, i) => {
+      const x = c / S.cols * 100, w = ms[i] / S.cols * 100;
+      c += ms[i];
+      out += '<div class="ms' + (i === 0 ? ' lead' : '') + (S.set === id && ws === S.ws ? ' set' : '') +
+        '" data-ovpick="' + id + '" data-ovws="' + ws + '"' +
+        ' style="left:' + x + '%;top:' + bandTop[bi] + '%;width:' + w + '%;height:' +
+        (bandTop[bi + 1] - bandTop[bi]) + '%"><i></i><span>' + APP[id].name + '</span></div>';
+    });
+  });
+  if (!out) out = '<span class="r1 k3" style="position:absolute;left:8px;top:8px">THIS PAGE STANDS OPEN</span>';
+  return out;
+}
+function renderIndex(){
+  let h = '<div class="ihd">' +
+    '<div class="r4">index</div>' +
+    '<div class="mast-rule" style="margin:6px 0"></div>' +
+    '<div class="r1 k2">TWO PAGES · ' + APPS.length + ' STORIES AVAILABLE · CLICK A MINIATURE TO RAISE IT · CLICK A NAME TO MAKE IT UP</div>' +
+    '</div><div class="ibody">';
+  [1, 2].forEach(ws => {
+    h += '<div class="icol"><div class="r1 k3" style="margin-bottom:6px">PAGE ' + pad2(ws) +
+      ' · ' + allOnPage(ws).length + ' STORIES · ' + S.pages[ws].length + ' BANDS' +
+      (S.held[ws].length ? ' · ' + S.held[ws].length + ' HELD OVER' : '') + '</div>' +
+      '<div class="mini' + (ws === S.ws ? ' on' : '') + '" data-ovfield="' + ws + '">' + miniPage(ws) + '</div></div>';
+  });
+  const secs = {};
+  APPS.forEach(a => { (secs[a.sec] = secs[a.sec] || []).push(a); });
+  h += '<div class="icol"><div class="r1 k3" style="margin-bottom:6px">THE INDEX</div>' +
+    '<div class="ixlist" style="grid-template-columns:1fr">';
+  Object.keys(secs).forEach(k => {
+    h += '<div class="r1 k3" style="padding:6px 8px 2px;border-bottom:1px solid var(--zd-rule-cut)">' + k + '</div>';
+    secs[k].forEach(a => {
+      const st = onPage(a.id) ? 'ON PAGE' : (S.held[S.ws].indexOf(a.id) >= 0 ? 'HELD' : '');
+      h += '<div class="ixrow" data-launch="' + a.id + '"><span class="n">' +
+        pad2(APPS.indexOf(a) + 1) + '</span><span class="t">' + a.name + '</span>' +
+        '<span class="s">' + (st || a.kick.toUpperCase()) + '</span></div>';
+    });
+  });
+  h += '</div></div></div>';
+  $('#index').innerHTML = h;
+}
+function showIndex(on){
+  $('#index').classList.toggle('on', on);
+  if (on) renderIndex();
+}
+
+/* ============================================================== palette == */
+const CMDS = [];
+APPS.forEach((a, i) => CMDS.push({
+  t: 'make up ' + a.name.toLowerCase(), d: a.kick,
+  kb: i < 9 ? 'alt ' + (i + 1) : '', run: () => raise(a.id)
+}));
+CMDS.push(
+  { t: 'hold the make-up', d: 'freeze the page', kb: 'ctrl h', run: () => toggleHold() },
+  { t: 'open the index', d: 'both pages, every story', kb: 'ctrl space', run: () => setScene('overview') },
+  { t: 'lock the page', d: 'the edition is put to bed', kb: 'ctrl l', run: () => setScene('lock') },
+  { t: 'kill the set story', d: 'remove it from the page', kb: 'ctrl w', run: () => { if (S.set) doKill(S.set); } },
+  { t: 'run the set story full page', d: 'one story, twelve columns', kb: 'ctrl f', run: () => { if (S.set) doFull(S.set); } },
+  { t: 'promote the set story', d: 'one rank toward the lead', kb: ']', run: () => { if (S.set) { promote(S.set); layout(); } } },
+  { t: 'demote the set story', d: 'one rank away from the lead', kb: '[', run: () => { if (S.set) { demote(S.set); layout(); } } },
+  { t: 'go to page 02', d: 'the second workspace', kb: 'ctrl 2', run: () => setWs(2) },
+  { t: 'change the stock', d: 'newsprint or composing stone', kb: 'shift d', run: () => setStock(S.theme === 'dark' ? 'light' : 'dark', true) },
+  { t: 'pull a proof', d: 'both pages, one sheet', kb: '', run: () => toast('printed', 'proof queued, 2 pages, 1 sheet, 600 dpi') }
+);
+function paletteResults(){
+  const q = S.pq.toLowerCase().trim();
+  if (!q) return CMDS.slice(0, 8);
+  return CMDS.filter(c => (c.t + ' ' + c.d).toLowerCase().indexOf(q) >= 0).slice(0, 8);
+}
+function renderPalette(){
+  const rs = paletteResults();
+  S.psel = clamp(S.psel, 0, Math.max(0, rs.length - 1));
+  $('#pq').textContent = S.pq;
+  $('#pcount').textContent = rs.length + ' OF ' + CMDS.length;
+  $('#presults').innerHTML = rs.map((c, i) =>
+    '<div class="prow' + (i === S.psel ? ' on' : '') + '" data-pi="' + i + '">' +
+      '<span class="n">' + pad2(i + 1) + '</span><span class="t">' + c.t + '</span>' +
+      '<span class="d opt1">' + c.d + '</span><span class="kb">' + (c.kb || '') + '</span></div>').join('') ||
+    '<div class="prow"><span class="n">--</span><span class="t">nothing set</span></div>';
+}
+function showPalette(on){
+  $('#palette').classList.toggle('on', on);
+  if (on) renderPalette();
+}
+function runPalette(){
+  const rs = paletteResults();
+  const c = rs[S.psel];
+  showPalette(false);
+  if (c) c.run();
+}
+
+/* ================================================================= lock == *
+ * THE EDITION IS PUT TO BED. The page is not blurred and it is not hidden
+ * behind a scrim: it is replaced by the front page of a locked edition, which
+ * is a masthead, one huge folio number and the colophon. Nothing else.
+ */
+function renderLock(){
+  /* The real masthead and folio line are still standing above and below this
+     overlay, so the lock does NOT repeat the wordmark. It is one story run
+     full page: kicker, head, deck, and the table that follows it. */
+  $('#lock').innerHTML =
+    '<div class="lmast">' +
+      '<div class="r1 k2">THE EDITION IS PUT TO BED · SEAT0 TTY1 · CLICK OR PRESS ENTER TO RESUME</div>' +
+      '<div class="mast-rule" style="margin:6px 0"></div></div>' +
+    '<div class="lbig">' +
+      '<div class="huge">' + hhmmss(S.clock).slice(0, 5) + '</div>' +
+      '<div class="r3">Saturday 25 August 2026</div>' +
+      '<div class="r2 k2" style="margin-bottom:16px">' + allOnPage(1).length + ' stories standing on page 01, ' +
+        allOnPage(2).length + ' on page 02. The make-up survives the lock; nothing is re-made on resume.</div>' +
+      '<div class="lgrid">' +
+        '<div class="lcol"><div class="r1 k3">STANDING ON PAGE 01</div>' +
+          allOnPage(1).map((id, i) => '<div class="r2 k1">' + (i === 0 ? 'LEAD · ' : '') + APP[id].name + '</div>').join('') + '</div>' +
+        '<div class="lcol"><div class="r1 k3">STANDING ON PAGE 02</div>' +
+          allOnPage(2).map((id, i) => '<div class="r2 k1">' + (i === 0 ? 'LEAD · ' : '') + APP[id].name + '</div>').join('') + '</div>' +
+        '<div class="lcol"><div class="r1 k3">MACHINE</div>' +
+          '<div class="r2 k1">up ' + hhmmss(S.up) + '</div>' +
+          '<div class="r2 k1">load ' + S.load.toFixed(2) + '</div>' +
+          '<div class="r2 k1">memory ' + S.memPct + '% of 15.6 GiB</div>' +
+          '<div class="r2 k1">241690 kHz, 59.998 Hz</div>' +
+          '<div class="r2 k1">0 B on the heap</div></div>' +
+        '<div class="lcol"><div class="r1 k3">LAST OFF THE STONE</div>' +
+          KLOG.slice(-5).map(l => '<div class="r2 k1">' + l[0] + ' ' + l[2] + ' ' + l[3] + '</div>').join('') + '</div>' +
+      '</div>' +
+      /* THE PROOF. A locked edition shows its own front page, held. This is
+         the same miniPage() the INDEX draws, so what is on the stone and what
+         comes back on resume are the same object, not two descriptions. */
+      '<div class="lproof"><div class="r1 k3">PAGE ' + pad2(S.ws) +
+        ', HELD ON THE STONE · ' + page().length + ' BANDS · MEASURES ' +
+        measures(page()[0].st.length, S.cols).join(' / ') + '</div>' +
+        '<div class="mini">' + miniPage(S.ws) + '</div></div>' +
+    '</div>' +
+    '<div class="lfoot"><div class="r1 k3">THE MAKE-UP IS HELD · NO STORY IS RE-MADE ON RESUME · PRESS ENTER</div></div>';
+}
+function showLock(on){
+  $('#lock').classList.toggle('on', on);
+  if (on) renderLock();
+}
+
+/* =============================================================== toasts == */
+const TOAST_MS = 4200, TOAST_MAX = 3;
+function toast(title, body){
+  const box = $('#toasts');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = '<div class="tt">' + title + '</div><div class="tb">' + body + '</div>';
+  box.appendChild(el);
+  while (box.children.length > TOAST_MAX) box.removeChild(box.firstChild);
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, TOAST_MS);
+}
+
+/* ================================================================ menus == */
+function showMenu(el, x, y, items, head){
+  el.innerHTML = (head ? '<div class="mh">' + head + '</div>' : '') +
+    items.map((it, i) => '<div class="mi" data-mi="' + i + '"><span class="a">' + it[0] +
+      '</span><span class="b">' + (it[1] || '') + '</span></div>').join('');
+  el.classList.add('on');
+  const w = $('#os').getBoundingClientRect();
+  el.style.left = Math.min(x, w.width - el.offsetWidth - 8) + 'px';
+  el.style.top = Math.min(y, w.height - el.offsetHeight - 8) + 'px';
+}
+function hideMenus(){ $('#ctxmenu').classList.remove('on'); $('#stmenu').classList.remove('on'); }
+
+/* ================================================================= acts == */
+function raise(id){
+  if (!onPage(id)) {
+    const b = makeUp(id);
+    S.set = id;
+    layout();
+    toast(S.hold ? 'held' : 'made up',
+      S.hold ? APP[id].name + ' took the last rank of band ' + (b + 1) + '. nothing demoted.'
+             : APP[id].name + ' takes the lead of band 1. ' + Math.max(0, page()[0].st.length - 1) +
+               ' stories demoted, ' + Math.max(0, page().length - 1) + ' bands untouched.');
+  } else {
+    S.set = id;
+    layout();
+  }
+}
+function doSet(id){ S.set = id; layout(); }
+function doKill(id){
+  const b = killStory(id);
+  S.held[S.ws] = S.held[S.ws].filter(x => x !== id);
+  layout();
+  toast('killed', APP[id].name + ' off the page. band ' + (b + 1) + ' re-made, ' +
+    Math.max(0, page().length - 1) + ' bands untouched.');
+}
+function doHold(id){
+  const b = holdOver(id);
+  layout();
+  toast('held over', APP[id].name + ' held over to a later edition. band ' + (b + 1) + ' re-made.');
+}
+function doFull(id){
+  if (S.full === id) { S.full = null; layout(); toast('restored', APP[id].name + ' back to its module'); }
+  else { S.full = id; S.set = id; layout(); toast('full page', APP[id].name + ' runs the whole page, ' + S.cols + ' columns'); }
+}
+function toggleHold(){
+  S.hold = !S.hold;
+  layout(); redraw('set'); redraw('make');
+  toast(S.hold ? 'held' : 'released',
+    S.hold ? 'make-up frozen. a new story takes the last rank and nothing demotes.'
+           : 'make-up live. a new story takes the lead of its band.');
+}
+function setWs(n){
+  S.ws = n;
+  const live = allOnPage();
+  S.set = live.indexOf(S.set) >= 0 ? S.set : (live[0] || null);
+  S.full = null;
+  layout();
+  toast('page ' + pad2(n), live.length + ' stories, ' + page().length + ' bands, ' +
+    S.held[n].length + ' held over');
+}
+
+/* ================================================================ tick === */
+function walk(v, lo, hi, amp){
+  v += (Math.random() - 0.5) * amp;
+  return clamp(v, lo, hi);
+}
+function tick(){
+  S.t++; S.clock++; S.up++;
+  S.cpu = S.cpu.map(v => Math.round(walk(v, 4, 96, 16)));
+  S.memPct = Math.round(walk(S.memPct, 48, 88, 3));
+  S.load = walk(S.load, 0.08, 2.6, 0.18);
+  S.rx = walk(S.rx, 4, 420, 44);
+  S.tx = walk(S.tx, 1, 180, 18);
+  const agg = Math.round(S.cpu.reduce((a, b) => a + b, 0) / 4);
+  S.hist.cpu.push(agg); S.hist.cpu.shift();
+  S.hist.net.push(clamp(S.rx / 4, 1, 100)); S.hist.net.shift();
+  S.hist.mem.push(S.memPct); S.hist.mem.shift();
+  renderFolio();
+  ['mon', 'net', 'clock', 'proc'].forEach(id => { if (onPage(id) && (!S.full || S.full === id)) redraw(id); });
+  if (S.set && DECK[S.set]) {
+    const el = $('.story[data-id="' + S.set + '"] .dk span');
+    if (el) el.textContent = DECK[S.set]();
+  }
+  if ($('#lock').classList.contains('on')) renderLock();
+}
+
+/* =============================================================== events == */
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  if (!t.closest('.menu')) hideMenus();
+
+  if ($('#lock').classList.contains('on')) {
+    if (t.closest('#lock')) { setScene('desktop'); toast('resumed', 'the edition is off the stone again'); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    const pr = t.closest('.prow');
+    if (pr && pr.getAttribute('data-pi') !== null) { S.psel = Number(pr.getAttribute('data-pi')); runPalette(); return; }
+    if (!t.closest('.stick')) showPalette(false);
+    return;
+  }
+  if (indexOn()) {
+    const pick = t.closest('[data-ovpick]');
+    if (pick) {
+      S.ws = Number(pick.getAttribute('data-ovws'));
+      showIndex(false); S.scene = 'desktop';
+      doSet(pick.getAttribute('data-ovpick'));
+      return;
+    }
+    const lau = t.closest('[data-launch]');
+    if (lau) { const id = lau.getAttribute('data-launch'); showIndex(false); S.scene = 'desktop'; raise(id); return; }
+    const fld = t.closest('[data-ovfield]');
+    if (fld) { showIndex(false); S.scene = 'desktop'; setWs(Number(fld.getAttribute('data-ovfield'))); return; }
+    if (!t.closest('.ihd')) { showIndex(false); S.scene = 'desktop'; }
+    return;
+  }
+
+  /* masthead. THE ONLY CLICK TARGETS ARE SET WORDS. */
+  const rz = t.closest('[data-raise]');
+  if (rz) { raise(rz.getAttribute('data-raise')); return; }
+  if (t.closest('[data-index]')) { setScene('overview'); return; }
+
+  /* folio line */
+  if (t.closest('#holdbtn')) { toggleHold(); return; }
+  const wsn = t.closest('.wsn');
+  if (wsn) { setWs(Number(wsn.getAttribute('data-ws'))); return; }
+
+  /* a story */
+  const st = t.closest('.story');
+  if (st) {
+    const id = st.getAttribute('data-id');
+    const mk = t.closest('.marks [data-act]');
+    if (mk) {
+      const a = mk.getAttribute('data-act');
+      if (a === 'set')  { doSet(id); return; }
+      if (a === 'over') { doHold(id); return; }
+      if (a === 'full') { doFull(id); return; }
+      if (a === 'kill') { doKill(id); return; }
+    }
+    if (S.set !== id) doSet(id);
+    handleAction(id, t);
+    const hd = t.closest('.hd');
+    if (hd && !t.closest('.marks')) startRerank(ev, id, st);
+    return;
+  }
+});
+
+document.addEventListener('contextmenu', ev => {
+  if ($('#lock').classList.contains('on') || indexOn()) return;
+  const os = $('#os').getBoundingClientRect();
+  const st = ev.target.closest('.story');
+  const inPage = ev.target.closest('#pagewrap');
+  if (!inPage) return;
+  ev.preventDefault();
+  const x = ev.clientX - os.left, y = ev.clientY - os.top;
+  if (st) {
+    const id = st.getAttribute('data-id');
+    const b = bandOf(id);
+    showMenu($('#stmenu'), x, y, [
+      ['set the deck', 'click'],
+      ['promote one rank', ']'],
+      ['demote one rank', '['],
+      ['send to band ' + ((b + 1) % page().length + 1), 'shift b'],
+      ['run full page', 'ctrl f'],
+      ['hold over', 'ctrl o'],
+      ['kill the story', 'ctrl w']
+    ], APP[id].name);
+    $('#stmenu')._id = id;
+  } else {
+    showMenu($('#ctxmenu'), x, y, [
+      ['make up a shell', 'alt 1'],
+      ['set a command', 'ctrl k'],
+      ['open the index', 'ctrl space'],
+      [S.hold ? 'release the make-up' : 'hold the make-up', 'ctrl h'],
+      [S.colrule ? 'drop the column rules' : 'rule the columns', 'ctrl r'],
+      ['lock the page', 'ctrl l'],
+      ['change the stock', 'shift d']
+    ], 'page ' + pad2(S.ws));
+  }
+});
+$('#ctxmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi'); if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  hideMenus();
+  [() => raise('shell'), () => { S.pq = ''; S.psel = 0; showPalette(true); },
+   () => setScene('overview'), () => toggleHold(),
+   () => { S.colrule = !S.colrule; applyBodyClasses(); redraw('set');
+           toast('column rules', S.colrule ? 'CUT restored between abutting stories' : 'dropped. the page is one field.'); },
+   () => setScene('lock'), () => setStock(S.theme === 'dark' ? 'light' : 'dark', true)][i]();
+});
+$('#stmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi'); if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const id = $('#stmenu')._id;
+  hideMenus();
+  const b = bandOf(id);
+  [() => doSet(id),
+   () => { promote(id); layout(); toast('promoted', APP[id].name + ' to rank ' + (rankOf(id) + 1) + ' of band ' + (b + 1)); },
+   () => { demote(id); layout(); toast('demoted', APP[id].name + ' to rank ' + (rankOf(id) + 1) + ' of band ' + (b + 1)); },
+   () => { moveToBand(id, (b + 1) % page().length); layout();
+           toast('moved', APP[id].name + ' takes the lead of band ' + (bandOf(id) + 1) + '. two bands re-made.'); },
+   () => doFull(id), () => doHold(id), () => doKill(id)][i]();
+});
+
+function handleAction(id, t){
+  const node = t.closest('[data-act], [data-toggle], [data-seg]');
+  if (!node) return;
+  if (node.hasAttribute('data-toggle')) {
+    const k = node.getAttribute('data-toggle');
+    S[k] = !S[k];
+    applyBodyClasses();
+    if (k === 'hold') { toggleHold(); S.hold = S.hold; return; }
+    layout();
+    toast(k, S[k] ? 'on' : 'off');
+    return;
+  }
+  const seg = t.closest('[data-seg]');
+  if (seg && t.closest('[data-arg]')) {
+    const av = Number(t.closest('[data-arg]').getAttribute('data-arg'));
+    if (seg.getAttribute('data-seg') === 'stock') { setStock(av ? 'dark' : 'light', true); return; }
+    S.setTab = av; redraw('set'); return;
+  }
+  const act = node.getAttribute('data-act'), arg = node.getAttribute('data-arg');
+  if (act === 'file') { S.fileSel = Number(arg); redraw('files'); redraw('edit'); return; }
+  if (act === 'proc') { S.procSel = Number(arg); redraw('proc'); return; }
+  if (act === 'calc') { calcKey(arg); redraw('calc'); return; }
+  if (act === 'rank') { doSet(arg); return; }
+  if (act === 'hold') { toggleHold(); return; }
+  if (act === 'plant') {
+    S.planted = !S.planted;
+    layout();
+    const bad = S.guard.bad;
+    toast(bad.length ? 'refused' : 'clean',
+      bad.length ? 'masthead guard: ' + bad.join('; ') + '. the band is not a top bar.'
+                 : 'masthead guard: ' + S.guard.walked + ' nodes, 1 permitted fill, 0 violations.');
+    return;
+  }
+  if (act === 'toast') {
+    const M = {
+      build:  ['make', 'zlos.elf relinked, text 218432 data 30720 bss 1441792'],
+      proof:  ['printed', 'proof queued, 2 pages, 1 sheet, 600 dpi'],
+      stat:   ['stat', '1 extent, contiguous, generation 3, crc verified'],
+      reap:   ['reaped', 'pid 70 zlfmt removed from the table'],
+      renice: ['renice', 'pid 61 soak moved to nice 10'],
+      remake: ['re-made', 'band 1 only. ' + Math.max(0, page().length - 1) + ' bands untouched.']
+    }[arg] || ['ok', arg];
+    toast(M[0], M[1]);
+    return;
+  }
+}
+function calcKey(k){
+  if (k === 'clr') { S.calcAcc = '0'; return; }
+  if (k === 'eq')  { S.calcAcc = String(parseInt(S.calcAcc, 10) || 0); return; }
+  if (/^[0-9]$/.test(k)) { S.calcAcc = ((S.calcAcc === '0' ? '' : S.calcAcc) + k).slice(0, 12); return; }
+  const n = parseInt(S.calcAcc, 10) || 0;
+  if (k === 'div') S.calcAcc = String(Math.floor(n / 2));
+  if (k === 'mul') S.calcAcc = String(n * 2);
+  if (k === 'add') S.calcAcc = String(n + 1);
+  if (k === 'sub') S.calcAcc = String(n - 1);
+}
+
+/* ======================================================= drag to rerank == *
+ * A story cannot be dragged to a free position, because a page is composed,
+ * not stacked. Dragging a head moves the story to another RANK or another
+ * BAND, and a caret shows where it will land. That is the whole gesture.
+ */
+let DRAG = null;
+function startRerank(ev, id, el){
+  if (S.full) return;
+  DRAG = { id: id, el: el, x0: ev.clientX, y0: ev.clientY, live: false };
+  document.addEventListener('mousemove', dragMove);
+  document.addEventListener('mouseup', dragUp);
+}
+function dragMove(e){
+  if (!DRAG) return;
+  if (!DRAG.live) {
+    if (Math.abs(e.clientX - DRAG.x0) + Math.abs(e.clientY - DRAG.y0) < 6) return;
+    DRAG.live = true;
+    DRAG.el.classList.add('drag');
+  }
+  const pg = $('#page').getBoundingClientRect();
+  const x = e.clientX - pg.left, y = e.clientY - pg.top;
+  let b = 0;
+  for (let i = 0; i < page().length; i++) if (y >= GEO.bandY[i]) b = i;
+  const st = page()[b].st.filter(s => s !== DRAG.id);
+  const m = measures(st.length + 1, S.cols);
+  let acc = 0, slot = st.length;
+  for (let i = 0; i < st.length + 1; i++) {
+    const mid = GEO.colX[Math.min(S.cols, acc)] + (GEO.colX[Math.min(S.cols, acc + m[i])] - GEO.colX[Math.min(S.cols, acc)]) / 2;
+    if (x < mid) { slot = i; break; }
+    acc += m[i];
+  }
+  DRAG.band = b; DRAG.slot = slot;
+  let cx = 0;
+  for (let i = 0; i < slot; i++) cx += m[i];
+  const c = $('#caretline');
+  c.classList.add('on');
+  c.style.left = (GEO.colX[Math.min(S.cols, cx)] + $('#page').offsetLeft - 1) + 'px';
+  c.style.top = (GEO.bandY[b] + $('#page').offsetTop) + 'px';
+  c.style.width = '3px';
+  c.style.height = (GEO.bandY[b + 1] - GEO.bandY[b]) + 'px';
+  const dz = $('#dropzone');
+  dz.classList.add('on');
+  dz.style.left = $('#page').offsetLeft + 'px';
+  dz.style.top = (GEO.bandY[b] + $('#page').offsetTop) + 'px';
+  dz.style.width = GEO.W + 'px';
+  dz.style.height = (GEO.bandY[b + 1] - GEO.bandY[b]) + 'px';
+}
+function dragUp(){
+  document.removeEventListener('mousemove', dragMove);
+  document.removeEventListener('mouseup', dragUp);
+  $('#caretline').classList.remove('on');
+  $('#dropzone').classList.remove('on');
+  if (!DRAG) return;
+  const d = DRAG; DRAG = null;
+  d.el.classList.remove('drag');
+  if (!d.live || d.band === undefined) return;
+  const from = bandOf(d.id);
+  const p = page();
+  p[from].st = p[from].st.filter(s => s !== d.id);
+  p[d.band].st.splice(clamp(d.slot, 0, p[d.band].st.length), 0, d.id);
+  normBands(S.ws);
+  layout();
+  toast('made up', APP[d.id].name + ' to rank ' + (rankOf(d.id) + 1) + ' of band ' + (d.band + 1) +
+    '. ' + (from === d.band ? '1 band' : '2 bands') + ' re-made, ' +
+    (page().length - (from === d.band ? 1 : 2)) + ' untouched.');
+}
+
+/* ============================================================ keyboard == */
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if ($('#lock').classList.contains('on')) {
+    if (k === 'Enter' || k === 'Escape') { setScene('desktop'); toast('resumed', 'the edition is off the stone again'); ev.preventDefault(); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); ev.preventDefault(); return; }
+    if (k === 'Enter') { runPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowDown') { S.psel = Math.min(S.psel + 1, paletteResults().length - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    if (k.length === 1 && !ev.ctrlKey && !ev.metaKey) { S.pq += k; S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    return;
+  }
+  if (ev.shiftKey && (k === 'D' || k === 'd')) { setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'k' || k === 'K')) { S.pq = ''; S.psel = 0; showPalette(true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && k === ' ') { setScene(indexOn() ? 'desktop' : 'overview'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'l' || k === 'L')) { setScene('lock'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'h' || k === 'H')) { toggleHold(); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'r' || k === 'R')) { S.colrule = !S.colrule; applyBodyClasses(); redraw('set'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'w' || k === 'W')) { if (S.set) doKill(S.set); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'f' || k === 'F')) { if (S.set) doFull(S.set); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'o' || k === 'O')) { if (S.set) doHold(S.set); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === '1' || k === '2')) { setWs(Number(k)); ev.preventDefault(); return; }
+  if (k === ']') { if (S.set) { promote(S.set); layout(); } ev.preventDefault(); return; }
+  if (k === '[') { if (S.set) { demote(S.set); layout(); } ev.preventDefault(); return; }
+  if (ev.altKey && /^[1-9]$/.test(k)) {
+    const live = allOnPage();
+    const id = live[Number(k) - 1] || APPS[Number(k) - 1].id;
+    raise(id); ev.preventDefault(); return;
+  }
+  if (k === 'Escape') { if (indexOn()) setScene('desktop'); hideMenus(); }
+});
+
+/* ============================================================= sliders == */
+let SL = null;
+document.addEventListener('mousedown', ev => {
+  const s = ev.target.closest('[data-slider]');
+  if (!s) return;
+  SL = s; setSlider(ev);
+});
+document.addEventListener('mousemove', ev => { if (SL) setSlider(ev); });
+document.addEventListener('mouseup', () => { SL = null; });
+function setSlider(ev){
+  const name = SL.getAttribute('data-slider');
+  const r = SL.getBoundingClientRect();
+  const p = clamp((ev.clientX - r.left) / r.width, 0, 1);
+  const steps = name === 'ui scale' ? UI_STEPS : name === 'columns' ? COL_STEPS
+    : name === 'bands' ? BAND_STEPS : name === 'lead steal' ? LEAD_STEPS : MAR_STEPS;
+  const v = steps[Math.round(p * (steps.length - 1))];
+  if (name === 'ui scale')       { if (v === S.ui) return; S.ui = v; applyUI(); }
+  else if (name === 'columns')   { if (v === S.cols) return; S.cols = v; }
+  else if (name === 'bands')     { if (v === page().length) return; setBandCount(v); }
+  else if (name === 'lead steal'){ if (v === S.lead) return; S.lead = v; }
+  else                           { if (v === S.margin) return; S.margin = v; applyUI(); }
+  layout();
+}
+function applyUI(){
+  document.documentElement.style.setProperty('--ui', String(S.ui));
+  document.documentElement.style.setProperty('--zd-margin', 'calc(' + S.margin + 'px * var(--ui))');
+}
+function applyBodyClasses(){
+  document.body.classList.toggle('norule', !S.colrule);
+  document.body.classList.toggle('zebra', S.zebra);
+  document.body.classList.toggle('deckall', S.deckall);
+  document.body.classList.toggle('blinkon', S.blink);
+}
+
+/* ================================================================ stock == *
+ * Two primitive ladders, one set of role names. data-theme is the ONLY
+ * switch: no rule weight, no metric, no register and no radius differs.
+ */
+const STOCK = {
+  light: { name: 'newsprint', other: 'composing stone',
+    pitch: 'the desktop as a front page that has been made up. no window frames, ' +
+           'stories abutting across shared rules, hierarchy by rank.',
+    toast: ['newsprint', 'groundwood buff L* 85.3, ink stops at 12.22:1, zero chromatic ink'] },
+  dark:  { name: 'composing stone', other: 'newsprint',
+    pitch: 'the same page made up on the stone. cool slate, and the marks are ' +
+           'type metal, capped below paper white so a body of them does not bloom.',
+    toast: ['composing stone', 'cool slate L* 10.0, METAL_0 #E9E7DF, the patch reverses sign'] }
+};
+function applyTheme(){
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = STOCK[S.theme].pitch;
+  renderThemeTog();
+}
+function renderThemeTog(){
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-stock="light">newsprint</span>' +
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-stock="dark">stone</span>' +
+    '<span class="thint">shift d</span>';
+}
+function hashName(){ return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setStock(t, announce){
+  const next = t === 'dark' ? 'dark' : 'light';
+  if (next === S.theme && announce) return;
+  S.theme = next;
+  applyTheme(); renderLinks();
+  redraw('set'); redraw('type');
+  if (indexOn()) renderIndex();
+  if ($('#lock').classList.contains('on')) renderLock();
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    toast(STOCK[S.theme].toast[0], STOCK[S.theme].toast[1]);
+  }
+}
+function renderLinks(){
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENE_NAMES.map(n => '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  markLinks(S.scene);
+}
+function markLinks(name){
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === name));
+}
+
+/* =============================================================== scenes == */
+const SCENE_NAMES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function clearPage(){
+  S.pages = { 1: [{ h: 9, st: [] }], 2: [{ h: 9, st: [] }] };
+  S.held = { 1: [], 2: [] };
+  S.set = null; S.full = null;
+  showIndex(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+  $$('.story').forEach(e => e.remove());
+}
+function setScene(name, push){
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  if (SCENE_NAMES.indexOf(name) < 0) { name = 'desktop'; dark = false; }
+  S.scene = name;
+  S.theme = dark ? 'dark' : 'light';
+  applyTheme(); renderLinks();
+  if (push !== false && location.hash.slice(1) !== hashName()) {
+    history.replaceState(null, '', '#' + hashName());
+  }
+  markLinks(name);
+  showIndex(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+
+  if (name === 'desktop' || name === 'overview' || name === 'palette' || name === 'lock') {
+    S.pages = freshPages(); S.held = { 1: [], 2: [] };
+    S.ws = 1; S.cols = 12; S.lead = 1; S.hold = false; S.full = null;
+    S.set = 'shell';
+  } else if (name === 'files') {
+    clearPage(); S.ws = 1; S.cols = 12; S.lead = 1;
+    S.pages[1] = [{ h: 5, st: ['files', 'edit'] }, { h: 4, st: ['hex', 'disk'] }];
+    S.fileSel = 1; S.set = 'files';
+  } else if (name === 'monitor') {
+    clearPage(); S.ws = 1; S.cols = 12; S.lead = 1;
+    S.pages[1] = [{ h: 5, st: ['mon', 'net'] }, { h: 4, st: ['proc', 'log', 'clock'] }];
+    S.set = 'mon';
+  } else if (name === 'settings') {
+    clearPage(); S.ws = 1; S.cols = 12; S.lead = 2;
+    S.pages[1] = [{ h: 6, st: ['set', 'type'] }, { h: 3, st: ['make', 'sys'] }];
+    S.setTab = 0; S.set = 'set';
+  }
+  layout();
+
+  if (name === 'overview') { S.scene = 'overview'; showIndex(true); }
+  else if (name === 'palette') { S.pq = 'make'; S.psel = 0; showPalette(true); }
+  else if (name === 'lock') { showLock(true); }
+  else if (name === 'desktop') {
+    toast('made up', '8 stories on page 01 in 3 bands, measures ' +
+      measures(page()[0].st.length, S.cols).join('/') + ', lead is ' + APP[page()[0].st[0]].name.toUpperCase());
+  } else if (name === 'files') {
+    toast('selected', fileSel()[0] + ' ' + fileSel()[1] + ', set in the EDITOR story');
+  } else if (name === 'monitor') {
+    toast('sampling', 'monitor and network at 1 Hz, 72 s of history, mean ruled');
+  } else if (name === 'settings') {
+    toast('design.h', 'every toggle and slider below changes the page you are looking at');
+  }
+}
+$('#themetog').addEventListener('mousedown', ev => {
+  const t = ev.target.closest('[data-stock]');
+  if (t) { ev.preventDefault(); setStock(t.getAttribute('data-stock'), true); }
+});
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop', false));
+window.addEventListener('resize', () => {
+  layout();
+  if (indexOn()) renderIndex();
+  if ($('#lock').classList.contains('on')) renderLock();
+});
+
+/* ================================================================ start == */
+applyBodyClasses(); applyUI(); applyTheme();
+setScene(location.hash.slice(1) || 'desktop', false);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

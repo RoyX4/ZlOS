@@ -1816,6 +1816,20 @@ int browser_link_at(int cx, int cy)
      * so there is no second copy to drift. Same argument as ui.c's single
      * place() function. */
     int ox = view_x, oy = view_y;
+    /* THE VIEWPORT, WHICH THE DRAW CLIPS TO AND THIS DID NOT.
+     *
+     * browser_draw rejects any run outside the viewport before painting it
+     * (`if (ry + r->h < cy || ry > cy + ch) continue;`). This walks the same run
+     * array with the same origin and had no equivalent test, so it returned the
+     * first run whose rect contained the point WHEREVER that rect was - and a
+     * scrolled-away link sitting under the status strip is exactly such a rect.
+     * Clicking the status strip navigated somewhere.
+     *
+     * Same fault as the Settings pane's: a draw that clips and a hit test that
+     * does not are two answers to "where is this", and only one of them is on
+     * screen. */
+    if (cy < oy || cy >= oy + view_h) return -1;
+    if (cx < ox) return -1;
     for (int i = 0; i < lay_count(); i++) {
         const struct lay_run *r = lay_at(i);
         if (r->link < 0) continue;

@@ -1,0 +1,281 @@
+{
+  "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
+  "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY",
+  "build_identity": "9aeb5f46dffa99a1072a38b224380857f14c7e33fd1e6cd42603d3eb2968fd28",
+  "route": "native-uefi64",
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "fdd955bc58933d2616a7f495cfb619aaac6577f477b90ce5669ee2d85cb93f68"
+  },
+  "boot_log_sha256": "fc29e051cddbf575491fd6cd6d31de45068a3418c06c9ae3b567af5ceff8c971",
+  "harness": {
+    "path": "kernel/tools/checks/verify-efi.sh",
+    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+  },
+  "implementation": [
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "142801cd87b614c9c70ea4df999ece5de5aff1d3ac496e920b0e2274630725b3"
+    },
+    {
+      "path": "kernel/src/core/process_memory.h",
+      "sha256": "427295bb63ee6e893c8166148eec6980c1f77ab705b5a7dce85d9e83870e4832"
+    },
+    {
+      "path": "kernel/src/core/process_memory.c",
+      "sha256": "b9a874c4139b613224ee74546e2b63c8ff6a2ac3faeca108f13986c49f0a2b63"
+    },
+    {
+      "path": "kernel/tests/host/processmemorytest.c",
+      "sha256": "6e538516ef96987fcec1b503768bce955fcabc34ff52bfd8722993f80483fc6b"
+    },
+    {
+      "path": "kernel/src/core/pmm.h",
+      "sha256": "5c7db078c9fb7f4dd09d6de90869a4ba5e14f66197a0f63d75075b4e311bb2fb"
+    },
+    {
+      "path": "kernel/src/core/pmm.c",
+      "sha256": "7f2add8d308258d8108b3299f8a5fd1b18660fa21b49d4a96885b1c7dc5c8d83"
+    },
+    {
+      "path": "kernel/tests/host/pmmtest.c",
+      "sha256": "321a135b2bc7585ef45109b317b672d7927dd99b1ffb0f9dbfd06a4da0f872ed"
+    },
+    {
+      "path": "kernel/src/core/anon_memory.h",
+      "sha256": "ed2c24adc62af909c535713eb35f794ff407559a855e127b023963c315db64e8"
+    },
+    {
+      "path": "kernel/src/core/anon_memory.c",
+      "sha256": "5415297acc8c30530cd63fd13f953292c597835374ed3ac6e1b27f72b29a2c1f"
+    },
+    {
+      "path": "kernel/tests/host/anonmemorytest.c",
+      "sha256": "55c3ef2d7e0adf840d40d4b1cc468456223b5bbdff60b1a519fb253d7a5dea35"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_syscalls.json",
+      "sha256": "b7ad9c0a9567aec99e4c9d0a4203c5eb40312e9a6cf1fef267249729a4f701f5"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_syscalls_generated.h",
+      "sha256": "16a8d11cb53e04cecdedd7b80c50aa6f1f2957101760153e0eac299d67ba9f6a"
+    },
+    {
+      "path": "kernel/src/arch/x86/idt.c",
+      "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e"
+    },
+    {
+      "path": "kernel/boot/gdt64.c",
+      "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf"
+    },
+    {
+      "path": "kernel/docs/architecture/system/user-process-abi.md",
+      "sha256": "2f905f4fa179d8ee5590d6a538a68499c0268c7fbcc7c20ccf4bae1c97b1707e"
+    }
+  ],
+  "host_receipt": {
+    "path": "kernel/tests/host/test-run-receipt.json",
+    "sha256": "1d3222407337d5ecdb6a8ac838c19391a68fda24412e63eea1c14cc7f5248c69",
+    "targets": {
+      "processmemorytest": {
+        "checks": 191
+      },
+      "anonmemorytest": {
+        "checks": 243
+      }
+    }
+  },
+  "assertions": [
+    {
+      "id": "ring3-syscall-lifecycle",
+      "marker": "ring 3 64: u1 <- iretq/int80/iretq, 6 syscalls, process exited, kernel alive",
+      "processes": 1,
+      "syscalls": 6,
+      "entry": "iretq",
+      "syscall_gate": "int 0x80",
+      "returned_to_kernel": true
+    },
+    {
+      "id": "unknown-syscall-admission",
+      "marker": "syscall ABI: zero/gap/sign-bit/max refused with ENOSYS",
+      "abi_version": 1,
+      "probes": [
+        0,
+        25,
+        9223372036854775808,
+        18446744073709551615
+      ],
+      "result": "ENOSYS"
+    },
+    {
+      "id": "anonymous-reserve-commit-release",
+      "marker": "anonymous memory: M <- reserve/commit zero-fill, cross-page copy and release passed",
+      "pages": 2,
+      "reserved_has_frame": false,
+      "commit_zero_filled": true,
+      "cross_page_copy_admitted": true,
+      "released_copy_refused": true
+    },
+    {
+      "id": "reserved-anonymous-page-fault",
+      "marker": "<- reserved anonymous page stayed absent; sibling V exited",
+      "offender_vector": 14,
+      "page_fault_error": 4,
+      "fault_address": "anonymous_base",
+      "reserved_pte": "absent",
+      "sibling_trace": "V",
+      "sibling_exited": true
+    },
+    {
+      "id": "released-anonymous-page-fault",
+      "marker": "<- released anonymous page faulted exactly; sibling R exited",
+      "offender_vector": 14,
+      "page_fault_error": 4,
+      "fault_address": "anonymous_base",
+      "released_pte": "absent",
+      "sibling_trace": "R",
+      "sibling_exited": true,
+      "frame_reclaimed": true
+    },
+    {
+      "id": "privilege-and-user-copy-boundary",
+      "marker": "ring 3 hostile: cli GP, kernel/device PF, crossing pointer refused; kernel alive",
+      "privileged_instruction_vector": 13,
+      "kernel_mapping_vector": 14,
+      "device_mapping_vector": 14,
+      "crossing_pointer_refused_before_dereference": true,
+      "kernel_survived": true
+    },
+    {
+      "id": "separate-address-space-resume",
+      "marker": "<- two PML4 processes yielded/resumed AB12 and exited independently",
+      "processes": 2,
+      "trace": "AB12",
+      "separate_pml4_roots": true,
+      "separate_user_stacks": true,
+      "separate_kernel_stacks": true
+    },
+    {
+      "id": "offender-only-fault-containment",
+      "marker": "<- one process GP-faulted; its sibling ran and exited",
+      "offender_vector": 13,
+      "sibling_trace": "K",
+      "sibling_exited": true
+    },
+    {
+      "id": "lower-stack-guard-fault-containment",
+      "marker": "<- lower stack guard PF error 6 at exact address; sibling G exited",
+      "offender_vector": 14,
+      "page_fault_error": 6,
+      "fault_address": "user_base+4096+2048",
+      "guard_pte": "absent",
+      "sibling_trace": "G",
+      "sibling_exited": true,
+      "kernel_survived": true
+    },
+    {
+      "id": "guarded-supervisor-tss-stacks",
+      "marker": "<- two guarded supervisor TSS stacks bounded through syscall/preempt/fault paths",
+      "processes": 2,
+      "pages_per_stack": 2,
+      "lower_guard_pte": "absent",
+      "leaf_permissions": "supervisor-read-write-no-execute",
+      "tss_rsp0_selected": true,
+      "paths": [
+        "syscall",
+        "timer-preemption",
+        "fault"
+      ],
+      "high_water_limit_bytes": 8192,
+      "observed_high_water_bytes": {
+        "slot0": 1536,
+        "slot1": 776
+      }
+    },
+    {
+      "id": "process-memory-accounting",
+      "marker": "<- process memory accounting: fixed/anonymous quotas and owner totals passed",
+      "fixed_owner_count": 2,
+      "fixed_limit_pages_per_owner": 16,
+      "anonymous_owner_count": 2,
+      "anonymous_limit_pages_per_owner": 32,
+      "owner_totals_after_release": 0,
+      "owner_high_water_bounded": true,
+      "owner_refusals": 0,
+      "metadata_owner_sum_invariant": true
+    },
+    {
+      "id": "process-frame-reclamation",
+      "marker": "<- process-owned page tables/code/stacks reclaimed; PMM baseline restored",
+      "frames_per_process": 8,
+      "owned_resources": [
+        "PML4",
+        "PDPT",
+        "PD",
+        "PT",
+        "code",
+        "user-stack",
+        "kernel-stack-low",
+        "kernel-stack-high"
+      ],
+      "failure_atomic_acquire": true,
+      "two_processes_disjoint": true,
+      "baseline_restored": true
+    }
+  ],
+  "source_contracts": {
+    "process_slots": 2,
+    "user_code": "read-execute",
+    "user_stack": "read-write-no-execute",
+    "lower_stack_guard_pte": "absent",
+    "kernel_stack_pages": 2,
+    "kernel_stack": "supervisor-read-write-no-execute",
+    "lower_kernel_stack_guard_pte": "absent",
+    "tss_rsp0": "process-private virtual kernel-stack top",
+    "return_order": "switch to permanent kernel stack before restoring kernel CR3",
+    "inherited_kernel_and_device_mappings": "supervisor-only",
+    "physical_frame_owner": "one typed PMM owner per process slot",
+    "physical_frames_per_process": 8,
+    "physical_frame_limit_per_process_owner": 16,
+    "anonymous_frame_limit_per_process_owner": 32,
+    "replacement": "allocate complete successor before releasing predecessor",
+    "reclamation": "preflight all frame owners before release",
+    "copy_validation": "complete fixed or committed-anonymous range before first byte",
+    "anonymous_window_pages": 32,
+    "anonymous_first_pte": 6,
+    "anonymous_states": [
+      "free",
+      "reserved",
+      "committed",
+      "broken"
+    ],
+    "anonymous_commit": "allocate and zero all frames before atomic PTE publication",
+    "anonymous_reclamation": "atomic unmap before owner-checked PMM release",
+    "hardware_pte_bits": "accessed and dirty accepted without weakening ownership checks",
+    "syscall_numbers": {
+      "abi_version": 1,
+      "first": 1,
+      "last": 24,
+      "dispatch": "generated unsigned admission",
+      "unknown_result": "ENOSYS"
+    }
+  },
+  "known_gaps": [
+    "fixed two-process diagnostic rather than persistent process lifecycle services",
+    "no SMEP or SMAP enablement receipt",
+    "kernel-stack guards are selected and use-observed but not overflow-fault-injected",
+    "the emergency IST stack has no guard page",
+    "copy admission covers the fixed code/stack layout rather than arbitrary mapped regions",
+    "anonymous allocation is a fixed 32-page window without a virtual-area allocator or demand paging",
+    "owner accounting is not yet unified across services, caches, pinned memory, DMA or surfaces",
+    "the typed PMM owner is not a per-allocation origin or call-site provenance ledger",
+    "ABI version 1 has no compatibility, deprecation or migration tooling",
+    "no current physical-hardware user-process receipt"
+  ],
+  "evidence_ceiling": "exact current native-UEFI64 QEMU artifact plus source-bound fixed-layout and bounded kernel-stack-use contracts; not a general process service, stable compatibility promise, or physical-hardware qualification",
+  "generator": {
+    "path": "kernel/tools/checks/write-user-process-receipt.py",
+    "sha256": "ea771aaeb954e1d0629e3a6e683a26eb77dc7c48ceeb2da1680189d89c413289"
+  }
+}

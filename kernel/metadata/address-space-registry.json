@@ -1,0 +1,398 @@
+{
+  "schema": "zlos.address-space-registry.v1",
+  "result": "PASS_CURRENT_GENERATED_NON_OVERLAP_WITH_DYNAMIC_USER_TEMPLATE",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "contract": {
+    "path": "kernel/src/arch/x86/address_space_contract.json",
+    "sha256": "867f608be03604404b3e5ded9db39c36ea3ada5c553a6f6663dc226f2f5839e7"
+  },
+  "physical": {
+    "minimum_bytes": 1073741824,
+    "minimum_mib": 1024,
+    "regions": [
+      {
+        "id": "kernel-image",
+        "category": "kernel",
+        "owner": "linker",
+        "start": 1048576,
+        "end": 12582912,
+        "bytes": 11534336,
+        "range": "0x0000000000100000..0x0000000000c00000"
+      },
+      {
+        "id": "raw-boot-stack-reservation",
+        "category": "stack",
+        "owner": "raw boot",
+        "start": 12582912,
+        "end": 14680064,
+        "bytes": 2097152,
+        "range": "0x0000000000c00000..0x0000000000e00000"
+      },
+      {
+        "id": "program-arena",
+        "category": "heap",
+        "owner": "arena.c",
+        "start": 14680064,
+        "end": 31457280,
+        "bytes": 16777216,
+        "range": "0x0000000000e00000..0x0000000001e00000"
+      },
+      {
+        "id": "zl-low-shared-reservation",
+        "category": "shared",
+        "owner": "kernel.zl",
+        "start": 33554432,
+        "end": 50331648,
+        "bytes": 16777216,
+        "range": "0x0000000002000000..0x0000000003000000"
+      },
+      {
+        "id": "decoded-image-arena",
+        "category": "shared",
+        "owner": "png.c/browser.c",
+        "start": 50331648,
+        "end": 54525952,
+        "bytes": 4194304,
+        "range": "0x0000000003000000..0x0000000003400000"
+      },
+      {
+        "id": "edid-scratch",
+        "category": "device",
+        "owner": "intel.c",
+        "start": 54525952,
+        "end": 54530048,
+        "bytes": 4096,
+        "range": "0x0000000003400000..0x0000000003401000"
+      },
+      {
+        "id": "virtio-network",
+        "category": "device",
+        "owner": "virtio_net.c",
+        "start": 67108864,
+        "end": 68157440,
+        "bytes": 1048576,
+        "range": "0x0000000004000000..0x0000000004100000"
+      },
+      {
+        "id": "browser-storage",
+        "category": "shared",
+        "owner": "browser.c",
+        "start": 83886080,
+        "end": 100663296,
+        "bytes": 16777216,
+        "range": "0x0000000005000000..0x0000000006000000"
+      },
+      {
+        "id": "framebuffer-back",
+        "category": "shared",
+        "owner": "fb.c",
+        "start": 134217728,
+        "end": 176160768,
+        "bytes": 41943040,
+        "range": "0x0000000008000000..0x000000000a800000"
+      },
+      {
+        "id": "ap-stack-reservation",
+        "category": "stack",
+        "owner": "smp trampoline",
+        "start": 176160768,
+        "end": 184549376,
+        "bytes": 8388608,
+        "range": "0x000000000a800000..0x000000000b000000"
+      },
+      {
+        "id": "scheduler-stack-reservation",
+        "category": "stack",
+        "owner": "sched.c",
+        "start": 184549376,
+        "end": 192937984,
+        "bytes": 8388608,
+        "range": "0x000000000b000000..0x000000000b800000"
+      },
+      {
+        "id": "i2c-hid",
+        "category": "device",
+        "owner": "i2c_hid.c",
+        "start": 192937984,
+        "end": 197132288,
+        "bytes": 4194304,
+        "range": "0x000000000b800000..0x000000000bc00000"
+      },
+      {
+        "id": "gpu-ring",
+        "category": "device",
+        "owner": "gpuring.c",
+        "start": 197132288,
+        "end": 201326592,
+        "bytes": 4194304,
+        "range": "0x000000000bc00000..0x000000000c000000"
+      },
+      {
+        "id": "blur-cache",
+        "category": "shared",
+        "owner": "fb.c",
+        "start": 201326592,
+        "end": 218103808,
+        "bytes": 16777216,
+        "range": "0x000000000c000000..0x000000000d000000"
+      },
+      {
+        "id": "nvme",
+        "category": "device",
+        "owner": "nvme.c",
+        "start": 218103808,
+        "end": 234881024,
+        "bytes": 16777216,
+        "range": "0x000000000d000000..0x000000000e000000"
+      },
+      {
+        "id": "xhci",
+        "category": "device",
+        "owner": "xhci.c",
+        "start": 234881024,
+        "end": 251658240,
+        "bytes": 16777216,
+        "range": "0x000000000e000000..0x000000000f000000"
+      },
+      {
+        "id": "virtio-gpu",
+        "category": "device",
+        "owner": "virtio_gpu.c",
+        "start": 251658240,
+        "end": 268435456,
+        "bytes": 16777216,
+        "range": "0x000000000f000000..0x0000000010000000"
+      },
+      {
+        "id": "kernel-heap",
+        "category": "heap",
+        "owner": "heap.c",
+        "start": 268435456,
+        "end": 335544320,
+        "bytes": 67108864,
+        "range": "0x0000000010000000..0x0000000014000000"
+      },
+      {
+        "id": "dynamic-physical-pages",
+        "category": "dynamic",
+        "owner": "pmm.c",
+        "start": 335544320,
+        "end": 1073741824,
+        "bytes": 738197504,
+        "range": "0x0000000014000000..0x0000000040000000"
+      }
+    ]
+  },
+  "user_slot_template": {
+    "pml4_slots": {
+      "first": 1,
+      "last": 254,
+      "stride": 549755813888
+    },
+    "regions": [
+      {
+        "id": "user-code",
+        "category": "user",
+        "permissions": "read-execute",
+        "start_offset": 0,
+        "end_offset": 4096,
+        "bytes": 4096,
+        "range": "0x0000000000000000..0x0000000000001000"
+      },
+      {
+        "id": "lower-stack-guard",
+        "category": "guard",
+        "permissions": "absent",
+        "start_offset": 4096,
+        "end_offset": 8192,
+        "bytes": 4096,
+        "range": "0x0000000000001000..0x0000000000002000"
+      },
+      {
+        "id": "user-stack",
+        "category": "stack",
+        "permissions": "read-write-no-execute",
+        "start_offset": 8192,
+        "end_offset": 12288,
+        "bytes": 4096,
+        "range": "0x0000000000002000..0x0000000000003000"
+      },
+      {
+        "id": "kernel-stack-guard",
+        "category": "guard",
+        "permissions": "absent",
+        "start_offset": 12288,
+        "end_offset": 16384,
+        "bytes": 4096,
+        "range": "0x0000000000003000..0x0000000000004000"
+      },
+      {
+        "id": "kernel-stack",
+        "category": "stack",
+        "permissions": "supervisor-read-write-no-execute",
+        "start_offset": 16384,
+        "end_offset": 24576,
+        "bytes": 8192,
+        "range": "0x0000000000004000..0x0000000000006000"
+      },
+      {
+        "id": "anonymous-memory",
+        "category": "user",
+        "permissions": "reserved-absent-or-read-write-no-execute",
+        "start_offset": 24576,
+        "end_offset": 155648,
+        "bytes": 131072,
+        "range": "0x0000000000006000..0x0000000000026000"
+      }
+    ],
+    "inherited_mapping": "kernel and fixed device mappings remain supervisor-only"
+  },
+  "counts": {
+    "physical_regions": 19,
+    "user_template_regions": 6,
+    "source_assertions": 24,
+    "categories": 8
+  },
+  "categories": [
+    "device",
+    "dynamic",
+    "guard",
+    "heap",
+    "kernel",
+    "shared",
+    "stack",
+    "user"
+  ],
+  "source_assertions": [
+    {
+      "path": "kernel/boot/link.ld",
+      "sha256": "f34f6150836ed57409cd6449a53fa5d20cd5bc146fdd215f154555c4f3ccfdf2",
+      "asserted_pattern": "ASSERT\\(__kernel_end <= 0x00C00000"
+    },
+    {
+      "path": "kernel/src/arch/x86/memmap.h",
+      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "asserted_pattern": "#define LO_ARENA +0x00E00000UL"
+    },
+    {
+      "path": "kernel/src/arch/x86/memmap.h",
+      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "asserted_pattern": "#define HI_HEAP +0x10000000UL"
+    },
+    {
+      "path": "kernel/src/arch/x86/memmap.h",
+      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "asserted_pattern": "#define HI_PMM +0x14000000UL"
+    },
+    {
+      "path": "kernel/src/arch/x86/memmap.h",
+      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "asserted_pattern": "#define HI_TOP +0x40000000UL"
+    },
+    {
+      "path": "kernel/src/core/heap.c",
+      "sha256": "2f5ede5e2fe6cfd610df93d2336b2e9423e7c44af0e8f6935c55b1b707ca2bd4",
+      "asserted_pattern": "#define HEAP_BYTES +0x04000000UL"
+    },
+    {
+      "path": "kernel/src/core/pmm.h",
+      "sha256": "2a433acd02e8fab3fa28b0adbf80f7b4e18bcbd5b2121f2804bfb17570a90661",
+      "asserted_pattern": "#define PMM_DYNAMIC_FLOOR +\\(\\(pmm_u64\\)HI_PMM\\)"
+    },
+    {
+      "path": "kernel/src/core/process_memory.h",
+      "sha256": "427295bb63ee6e893c8166148eec6980c1f77ab705b5a7dce85d9e83870e4832",
+      "asserted_pattern": "#define PROCESS_MEMORY_PAGE_COUNT +8U"
+    },
+    {
+      "path": "kernel/src/core/anon_memory.h",
+      "sha256": "ed2c24adc62af909c535713eb35f794ff407559a855e127b023963c315db64e8",
+      "asserted_pattern": "#define ANON_MEMORY_PAGE_COUNT +32U"
+    },
+    {
+      "path": "kernel/src/core/sched.c",
+      "sha256": "d110c6c3fb7b31010155a8fc46efd44561273f7aa74449467e2f0b678205c394",
+      "asserted_pattern": "#define STACK_BASE +\\(\\(unsigned int\\)HI_SCHED\\)"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "for \\(int i = 1; i < 255; i\\+\\+\\)"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "u64 base = \\(u64\\)\\(unsigned\\)slot << 39;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "pt\\[0\\] = .*U64_P \\| U64_U;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "PTE 1 is intentionally absent"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "pt\\[2\\] = .*U64_W \\| U64_U \\| U64_NX;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "user_stack_top = base \\+ 3 \\* 4096ULL;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "PTE 3 is intentionally absent"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "pt\\[4\\] = .*U64_W \\| U64_NX;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "pt\\[5\\] = .*U64_W \\| U64_NX;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "kernel_stack_top = base \\+ 6 \\* 4096ULL;"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "#define U64_ANON_PTE_FIRST +6U"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "asserted_pattern": "&pt\\[U64_ANON_PTE_FIRST\\], U64_P \\| U64_W \\| U64_U \\| U64_NX"
+    },
+    {
+      "path": "kernel/src/arch/x86/paging.c",
+      "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
+      "asserted_pattern": "#define PML4_FIRST +1"
+    },
+    {
+      "path": "kernel/src/arch/x86/paging.c",
+      "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
+      "asserted_pattern": "#define PML4_LAST +255"
+    }
+  ],
+  "known_gaps": [
+    "the zl-low shared reservation is an envelope; check-memmap.sh owns internal buffer sizes",
+    "dynamic user virtual bases depend on a free PML4 slot at runtime",
+    "the registry does not prove page-table mutation rollback",
+    "the registry is source/build evidence, not QEMU or physical execution"
+  ],
+  "generator": {
+    "path": "kernel/tools/generators/gen-address-space-registry.py",
+    "sha256": "d0124a6757123da454dd193fcb9ef75ebcaf6bd1c224122fc37764f1e56d1fa0"
+  }
+}

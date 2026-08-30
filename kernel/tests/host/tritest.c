@@ -37,6 +37,9 @@ void fb3d_set_clip(int x0, int y0, int x1, int y1);
 void fb3d_tri(int x0, int y0, int x1, int y1, int x2, int y2, unsigned int rgb);
 void fb3d_poly(const int *xs, const int *ys, int n, unsigned int rgb);
 void fb_cube_filled(int cx, int cy, int size, int angle, unsigned int base);
+void fb3d_mesh_filled(int kind, int cx, int cy, int size, int angle, unsigned int base);
+int  fb3d_mesh_verts(int kind);
+int  fb3d_mesh_tris(int kind);
 
 void idt_set_pointer_bounds(int w, int h) { (void)w; (void)h; }
 void input_set_bounds(int w, int h)        { (void)w; (void)h; }  /* fb.c pushes it; no input.c in this harness */
@@ -188,6 +191,86 @@ int main(void)
     printf("  %-46s %s  (%d px outside)\n", "the tiled path honours fb3d's clip",
            escaped ? "FAIL" : "ok  ", escaped);
     if (escaped) fails++;
+
+    /* ---- THE FOUR MESHES ------------------------------------------------
+     * The Renderer pane used to PRINT "mesh cylinder - 44 tris - 24 verts" for
+     * solids the kernel could not draw. The figures were right and nothing
+     * could have disagreed with them, which is the whole defect. fb3d now
+     * builds the geometry and counts it off the same tables it fills from, so
+     * the counts are checkable here rather than only readable on a screen.
+     *
+     * THE EXPECTED PAIRS ARE NOT COPIES OF THE OLD CAPTION. They are what the
+     * solids are: a cube is 6 quads (12 triangles) on 8 corners; a square
+     * pyramid is 4 sides and a quad base (6) on 5; an octahedron is 8 faces on
+     * 6; a twelve-sided cylinder is 12 skirt quads and two twelve-gon caps
+     * (12*2 + 2*10 = 44) on two rings of 12. Written out that way so a wrong
+     * table fails against the geometry rather than against a memory of it. */
+    fb3d_set_clip(0, 0, W - 1, H - 1);
+    cl_x0 = 0; cl_y0 = 0; cl_x1 = W - 1; cl_y1 = H - 1;
+    printf("\n");
+    {
+        static const char *nm[4] = { "cube", "pyramid", "octahedron", "cylinder" };
+        static const int ev[4] = { 8, 5, 6, 24 };     /* vertices */
+        static const int et[4] = { 12, 6, 8, 44 };    /* triangles */
+        int cov[4];
+        for (int k = 0; k < 4; k++) {
+            int v = fb3d_mesh_verts(k), t = fb3d_mesh_tris(k);
+            int ok = (v == ev[k] && t == et[k]);
+            printf("  mesh %-10s counts                        %s  (%d tris, %d verts)\n",
+                   nm[k], ok ? "ok  " : "FAIL", t, v);
+            if (!ok) fails++;
+        }
+        /* AND IT ACTUALLY DRAWS. A count that is right about a solid nothing
+         * fills is the same fault one layer down, so each kind is rasterised
+         * and its coverage counted. Every one must mark pixels, and no two may
+         * mark the SAME pixels - identical coverage would mean the kind
+         * argument is being ignored, which is exactly how a four-way picker
+         * ends up changing nothing. */
+        for (int k = 0; k < 4; k++) {
+            fb_fill_px(0, 0, W, H, 0);
+            fb3d_mesh_filled(k, W / 2, H / 2, 120, 0, 0x00FFFFFF);
+            int n = 0;
+            for (int i = 0; i < W * H; i++) n += fb_get_px(i % W, i / W) ? 1 : 0;
+            cov[k] = n;
+            int ok = n > 1000;
+            printf("  mesh %-10s draws                         %s  (%d px)\n",
+                   nm[k], ok ? "ok  " : "FAIL", n);
+            if (!ok) fails++;
+        }
+        int same = 0;
+        for (int i = 0; i < 4; i++)
+            for (int j = i + 1; j < 4; j++)
+                if (cov[i] == cov[j]) same++;
+        printf("  the four are four different solids            %s  (%d identical pairs)\n",
+               same ? "FAIL" : "ok  ", same);
+        if (same) fails++;
+        /* ROTATION MOVES THE PICTURE. The Renderer spins; a mesh that ignored
+         * `angle` would sit still under a yaw readout that keeps counting. */
+        fb_fill_px(0, 0, W, H, 0);
+        fb3d_mesh_filled(3, W / 2, H / 2, 120, 0, 0x00FFFFFF);
+        snap(snap_a);
+        fb_fill_px(0, 0, W, H, 0);
+        fb3d_mesh_filled(3, W / 2, H / 2, 120, 37, 0x00FFFFFF);
+        snap(snap_b);
+        int moved = 0;
+        for (int i = 0; i < W * H; i++) if (snap_a[i] != snap_b[i]) moved++;
+        printf("  37 degrees of yaw changes it                 %s  (%d px moved)\n",
+               moved > 500 ? "ok  " : "FAIL", moved);
+        if (moved <= 500) fails++;
+        /* AND IT STAYS INSIDE fb3d's CLIP, like every other path in this file.
+         * A near corner under perspective projects far outside the window. */
+        fb3d_set_clip(300, 200, 500, 400);
+        fb_fill_px(0, 0, W, H, 0);
+        fb3d_mesh_filled(0, W / 2, H / 2, 260, 21, 0x00FFFFFF);
+        int out = 0;
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+                if (fb_get_px(x, y) && (x < 300 || x > 500 || y < 200 || y > 400)) out++;
+        printf("  the mesh path honours fb3d's clip            %s  (%d px outside)\n",
+               out ? "FAIL" : "ok  ", out);
+        if (out) fails++;
+        fb3d_set_clip(0, 0, W - 1, H - 1);
+    }
 
     /* ---- speed. The reason tiles exist at all. ---- */
     fb3d_set_clip(0, 0, W - 1, H - 1);

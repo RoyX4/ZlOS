@@ -362,6 +362,26 @@
 #define ZD_TITLE_INK_KO    ZD_KNOCK_INK /* reversed out of the knockout     */
 #define ZD_TITLE_INK_OFF   ZD_TEXT_3    /* unfocused                        */
 #define ZD_WINCTL          22      /* the control's width; it is full-height */
+/* .cbtn's glyph is `<svg width="11" height="11" ...>` (proto:2282-2284) - HALF
+ * the cell. The controls were drawn at 24dp, so the glyph box was wider than
+ * the 22dp cell holding it and the centring arithmetic went negative. */
+#define ZD_WINCTL_GLYPH    11
+/* THE HEADER'S TWO MARGINS, from .hdr's own padding in the prototype:
+ *   .hdr { padding: 0 calc(6px * var(--ui)) 0 calc(11px * var(--ui)) }
+ * The left one was already being drawn (as an uncited UI_S3, the same number by
+ * coincidence); the right one was never spelled at all, so the control cluster
+ * sat flush against the inside face of the ring while the title kept its
+ * margin - an asymmetry the header is not supposed to have. */
+/* .wbody's OWN box, from `padding: 6px 9px 6px; gap: 5px` (proto:711-712).
+ * The foot band and the client area both inherit their horizontal extent from
+ * it, and both were reaching for ZD_PAD - the generic 10dp spacing step, which
+ * belongs to no .wbody or .sband rule. One dp per side, everywhere the body
+ * meets the plate. */
+#define ZD_BODY_PX          9      /* .wbody padding-left / padding-right */
+#define ZD_BODY_PY          6      /* .wbody padding-top / padding-bottom */
+#define ZD_BODY_GAP         5      /* .wbody row gap                      */
+#define ZD_HDR_PL          11      /* .hdr padding-left  */
+#define ZD_HDR_PR           6      /* .hdr padding-right */
 #define ZD_WINCTL_INK      ZD_TEXT_3
 #define ZD_WINCTL_RULE     ZD_CUT  /* the 1px rule to its left               */
 #define ZD_CLOSE_HOVER_BG  ZD_VERM
@@ -388,6 +408,13 @@
 #define ZD_R_BOLT    0
 #define ZD_R_CHIP    2
 #define ZD_R_INSET   4
+/* THE RESIZE GRIP'S BOX. `.grip { width: calc(15px * var(--ui)); height:
+ * calc(15px * var(--ui)) }` at proto:726-727. wm.c used UI_S3 - 12dp, a
+ * spacing step with no citation behind it - because this token did not exist.
+ * A grip drawn three design pixels small is not a disaster; a grip whose size
+ * is a spacing step is a size nobody can check. */
+#define ZD_GRIP     15
+
 #define ZD_R_PLATE   9
 
 /* the vermilion focus bar. 3dp is the shipped value and it is a slider. */
@@ -482,25 +509,18 @@
 #define ZD_MS_TRAVEL  160
 #define ZD_MS_SETTLE  240
 
-/* the named animation slots, mapped onto the three durations above. They keep
- * their names so wm.c's timeline keeps compiling; there are three values here,
- * not ten, and that is the point. */
-#define ZD_MS_WIN       ZD_MS_TRAVEL   /* window open / close                */
-#define ZD_MS_POP       ZD_MS_RISE     /* menus, chips, tiles                */
-#define ZD_MS_POP_FAST  ZD_MS_RISE
-#define ZD_MS_POP_SLOW  ZD_MS_RISE
+/* The live timeline roles, mapped onto the three durations above. Ordinary
+ * window open/close are cuts and carry no duration of their own. */
 #define ZD_MS_PRESS     ZD_MS_RISE     /* a button taking a press            */
 #define ZD_MS_OV        ZD_MS_TRAVEL   /* overlays, modals                   */
-#define ZD_MS_TOAST     ZD_MS_TRAVEL
-#define ZD_MS_PULSE     ZD_MS_SETTLE   /* "activating" - one settle, not a   */
-#define ZD_MS_PULSE_SLOW ZD_MS_SETTLE  /* forever loop. see below.           */
+#define ZD_MS_TOAST     ZD_MS_RISE     /* proto:966 rise keyframe             */
+#define ZD_MS_PULSE     ZD_MS_SETTLE   /* activating: one settle, not a loop */
 
 /* THE INFINITE PULSE IS DELETED. A machine that breathes at rest is decoration
  * and it costs a repaint every frame forever. ZD_MS_SWEEP, the 7s wallpaper
  * sweep, goes with it: the raking light does not move, because a lamp in a
- * room does not move. Both names survive at their old values ONLY so a call
- * site that still references them compiles; the alpha floor is 255, i.e. the
- * pulse does not dip, i.e. it does nothing. */
+ * room does not move. The alpha floor stays 255, i.e. the deleted pulse does
+ * not dip and cannot animate a reading. */
 #define ZD_MS_SWEEP   7000
 #define ZD_PULSE_FLOOR 255
 
@@ -559,18 +579,12 @@
  * disagrees with one of those, the one above wins.
  */
 
-/* the button. PRESSWORK has no pills: a control is a rectangle with a 1px
- * ZD_CUT ring and an inset 1px ZD_LIT top run, radius ZD_R_CHIP. The three
- * size names survive; the radii all resolve to the chip. */
-#define ZD_PILL_SM_PY    3
-#define ZD_PILL_SM_PX    9
-#define ZD_PILL_SM_R     ZD_R_CHIP
-#define ZD_PILL_MD_PY    6
-#define ZD_PILL_MD_PX   13
-#define ZD_PILL_MD_R     ZD_R_CHIP
-#define ZD_PILL_LG_PY    7
-#define ZD_PILL_LG_PX   15
-#define ZD_PILL_LG_R     ZD_R_CHIP
+/* the button. proto:758-760 defines one 22dp control with 10dp horizontal
+ * padding; SM and MD have shipped callers and differ only in their text rung.
+ * There is no second geometry ladder in the authority. */
+#define ZD_BUTTON_H     22
+#define ZD_BUTTON_PX    10
+#define ZD_BUTTON_R     ZD_R_CHIP
 
 /* the segmented control - one 1px ZD_CUT ring around the set, 1px ZD_CUT
  * between items, no gap and no inner radius. A segmented control is a switch
@@ -602,7 +616,13 @@
 #define ZD_TOOLBAR_GAP   8      /* == ZD_GAP     */
 #define ZD_STATUS_H     20      /* == ZD_BAND_H  */
 #define ZD_STATUS_PX    10
-#define ZD_STATUS_GAP   12
+/* proto:721 is `gap: calc(10px * var(--ui))`. grep for 'gap: calc(12px' over
+ * the authority hits once, on #overview .ohead, which is not this. Its
+ * neighbours here carry citations - `== ZD_BAND_H`, `== ZD_GAP` - and this one
+ * did not, which is the class wm.c names at its own :3106: "An uncited
+ * constant that is nearly right is the hardest kind to notice." Three gutters
+ * cost 6 dp a band at ui 1, all taken off the run before `ws NN`. */
+#define ZD_STATUS_GAP   10      /* proto:721 */
 
 /* column header + list row.
  *
@@ -702,34 +722,47 @@
 
 /* cards and key/value */
 #define ZD_CARD_R       ZD_R_INSET
-#define ZD_CARD_PY      10      /* == ZD_PAD */
-#define ZD_CARD_PX      10
+#define ZD_CARD_PY       6      /* proto:748 */
+#define ZD_CARD_PX       8
 #define ZD_CARD_HEAD_H  20      /* == ZD_BAND_H */
-#define ZD_KV_H         20
-#define ZD_KV_GAP       16
+#define ZD_KV_H         19      /* proto:795 */
+#define ZD_KV_GAP        8
+#define ZD_KV_KEY_W     132     /* proto:799 */
 
 /* overlays. The menu, the modal and the toast are the three things genuinely
  * off the plane, so these are the only widgets that carry ZD_LIFT. */
-#define ZD_MENU_W      220
-#define ZD_MENU_PAD      4
+/* proto:939 is `min-width: calc(214px * var(--ui))`. grep for '220px' over
+ * the authority returns nothing, and uikit.c's sole reader then HALVED it -
+ * `imax(w, DP(ZD_MENU_W) / 2)` - so the real floor was 110, about half the
+ * stated minimum, from an uncited divide under an uncited constant. */
+#define ZD_MENU_W      214
+/* proto:939-942 is the complete .menu rule and declares NO padding. What
+ * makes its rows sit flush is `overflow: hidden` against the 1 px border,
+ * and proto:950's `.mi:last-child { border-bottom: 0 }` only makes sense on
+ * a flush list. The tree painted a 4 dp frame of bare ZD_FLOAT and inset
+ * every row by it. */
+#define ZD_MENU_PAD      0
 #define ZD_MENU_R       ZD_R_INSET
 #define ZD_MENU_ITEM_H  26      /* == ZD_ROW_H */
 #define ZD_MENU_ITEM_PY  7
-#define ZD_MENU_ITEM_PX 10
+/* proto:948. With the 4 dp frame above this compounded to a 14 dp indent. */
+#define ZD_MENU_ITEM_PX 11
 #define ZD_MENU_ITEM_R  ZD_R_BOLT
 #define ZD_MENU_GAP     14
 #define ZD_MODAL_W     334
 #define ZD_MODAL_R      ZD_R_PLATE
 #define ZD_MODAL_HEAD_H 28      /* == ZD_TITLE_H - a modal has a header too */
 #define ZD_MODAL_FOOT_H 40
-#define ZD_TOAST_W     300
+#define ZD_TOAST_W     340      /* .toast { width: calc(340px * var(--ui)) } */
 #define ZD_TOAST_R      ZD_R_INSET
-#define ZD_TOAST_PY     10
-#define ZD_TOAST_PX     10
-#define ZD_TOAST_GAP     8
+#define ZD_TOAST_PY_T    6      /* proto:963-964 */
+#define ZD_TOAST_PY_B    7
+#define ZD_TOAST_PX     11
+#define ZD_TOAST_PL     14
+#define ZD_TOAST_GAP     8      /* #toasts { gap: var(--zd-gap) } */
 #define ZD_TOAST_ICON   20
 #define ZD_TOAST_ICON_R ZD_R_CHIP
-#define ZD_TOAST_MS   4200      /* auto-dismiss */
+#define ZD_TOAST_MS   8000      /* auto-dismiss - toast() setTimeout 8000 */
 #define ZD_TOAST_MAX     3
 
 /* chart. An instrument: ZD_STEEL, square ends, ruled grid in ZD_TEXT_INERT. */
@@ -841,9 +874,30 @@
 #define ZD_BLUR_GLOW_A  0
 #define ZD_BLUR_GLOW_B  0
 
-/* The one shadow, in the shape wm.c already asks for. */
-#define ZD_SHADOW_DY    ZD_LIFT_DY
-#define ZD_SHADOW_BLUR  ZD_LIFT_BLUR
+/* THERE ARE TWO SHADOWS IN THE AUTHORITY, NOT ONE.
+ *
+ * ZD_LIFT_DY/ZD_LIFT_BLUR above (5/13) belong to the DRAGGED PLATE and to
+ * nothing else - `.win.drag { box-shadow: 0 calc(5px * var(--ui))
+ * calc(13px * var(--ui)) var(--zd-lift) }` at proto:643, one selector, one
+ * rule.
+ *
+ * The three OFF-PLANE objects carry a different pair, and all three carry the
+ * same one: `box-shadow: 0 calc(6px * var(--ui)) calc(14px * var(--ui))
+ * var(--zd-lift)` - the palette sheet (proto:897), the menu (proto:942) and
+ * the toast (proto:965). Six and fourteen, written three times.
+ *
+ * This block used to alias ZD_SHADOW_* to the dragged pair and export nothing
+ * for the off-plane one, so every off-plane site in the tree either used the
+ * plate's 5/13 (uikit.c's popover, modal and toast; wm.c's notify toast) or
+ * invented a multiplier to get away from it - wm.c's chrome_shadow scaled the
+ * plate pair by 3/2 and drew a modal at 7/19. Seven and nineteen appear
+ * NOWHERE in the authority. The aliases had no readers at all, so a name that
+ * would have been read was never offered.
+ *
+ * Both pairs are now named after what wears them, which is the only way a
+ * reader can tell they were meant to differ. */
+#define ZD_OFFPLANE_DY    6   /* design px - proto:897, :942, :965 */
+#define ZD_OFFPLANE_BLUR 14   /* design px - the same three */
 #define ZD_SHADOW_ALPHA 55      /* percent - ZD_LIFT_A as a percentage */
 
 #endif /* ZL_DESIGN_H */

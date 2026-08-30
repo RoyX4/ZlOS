@@ -38,6 +38,8 @@ ROUTE_INPUTS = (
     "tools/generators/gen-app-manifest.py",
     "tools/generators/gen-build-identity.py",
     "tools/generators/gen-boot-media-ids.py",
+    "tools/generators/gen-user-syscalls.py",
+    "src/arch/x86/user_syscalls.json",
     "tools/reproducible_time.c",
 )
 

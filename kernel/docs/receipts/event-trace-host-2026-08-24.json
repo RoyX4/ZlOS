@@ -1,7 +1,7 @@
 {
   "schema": "zlos.event-trace-host-receipt.v1",
   "result": "PASS_HOST_CORE_TARGET_UNINTEGRATED",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
   "source_identities": {
     "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
     "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
@@ -33,7 +33,7 @@
       {
         "id": "host-asan-ubsan",
         "exit_code": 0,
-        "artifact_sha256": "b428b0f9478fb29125b26888014c5c30006e685d6d4f9cbd3b0ed278514285ec"
+        "artifact_sha256": "d96a981734f2180a3c1bf5a6449a0286a42173276868ad817c523399c6b3b343"
       },
       {
         "id": "bios-raw-ilp32",
@@ -43,7 +43,7 @@
       {
         "id": "uefi-llp64",
         "exit_code": 0,
-        "artifact_sha256": "7c924ffe8eb09a1f5e32533bd600bb5265e7d65de32ab97492f35e703f213d70"
+        "artifact_sha256": "c5fae08ac9a63f8b5112e454abb3c443f1d8fe17ac85320a610c432f4a0bc48f"
       }
     ]
   },

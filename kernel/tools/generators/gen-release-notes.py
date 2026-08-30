@@ -243,7 +243,7 @@ def known_issues(docs: dict[str, dict]) -> list[dict]:
         {
             "id": "ISSUE-005", "severity": "OPEN_GAP",
             "feature_ids": ["EV-016", "EV-022"],
-            "summary": "Visual assets are not bound to the current build.",
+            "summary": "Current-build visual coverage is incomplete.",
             "facts": {
                 "assets": visual["counts"]["assets"],
                 "current_build_bound": visual["counts"]["current_build_bound"],

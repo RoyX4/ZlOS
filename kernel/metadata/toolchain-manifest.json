@@ -1,8 +1,8 @@
 {
   "schema": "zlos.toolchain-manifest.v1",
   "result": "PASS_WITH_OPEN_PORTABILITY_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
-  "dependency_lock_sha256": "971ba76a6dc75147246c0602d2d447e54c752f80edd12a345f38421b3366255c",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "dependency_lock_sha256": "a394ae73386983afaabbca4788ab653b8a9544f2aefe707d0353171fb1a3c3e2",
   "environment": {
     "CC": "UNSET_EFFECTIVE_GCC",
     "forbidden_variables": [
@@ -20,8 +20,8 @@
   "tools": [
     {
       "name": "zl-compiler",
-      "invoked_path": "/home/roy/Documents/repos/zl-linux-presswork-close/compile",
-      "resolved_path": "/home/roy/Documents/repos/zl-linux-presswork-close/compile",
+      "invoked_path": "/home/roy/Documents/repos/zl-linux-906-program/compile",
+      "resolved_path": "/home/roy/Documents/repos/zl-linux-906-program/compile",
       "bytes": 47824,
       "sha256": "316ce3ceaa85cfb3f049c33c4588dad4795e3dc8b66fd4f56f3bca3633de5ec2",
       "version": "repository-built archived zl-to-C compiler; byte identity is authoritative"

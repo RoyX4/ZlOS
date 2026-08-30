@@ -1,0 +1,63 @@
+{
+  "schema": "zlos.address-space-contract.v1",
+  "minimum_physical_bytes": "0x40000000",
+  "physical_regions": [
+    {"id": "kernel-image", "category": "kernel", "owner": "linker", "start": "0x00100000", "end": "0x00c00000"},
+    {"id": "raw-boot-stack-reservation", "category": "stack", "owner": "raw boot", "start": "0x00c00000", "end": "0x00e00000"},
+    {"id": "program-arena", "category": "heap", "owner": "arena.c", "start": "0x00e00000", "end": "0x01e00000"},
+    {"id": "zl-low-shared-reservation", "category": "shared", "owner": "kernel.zl", "start": "0x02000000", "end": "0x03000000"},
+    {"id": "decoded-image-arena", "category": "shared", "owner": "png.c/browser.c", "start": "0x03000000", "end": "0x03400000"},
+    {"id": "edid-scratch", "category": "device", "owner": "intel.c", "start": "0x03400000", "end": "0x03401000"},
+    {"id": "virtio-network", "category": "device", "owner": "virtio_net.c", "start": "0x04000000", "end": "0x04100000"},
+    {"id": "browser-storage", "category": "shared", "owner": "browser.c", "start": "0x05000000", "end": "0x06000000"},
+    {"id": "framebuffer-back", "category": "shared", "owner": "fb.c", "start": "0x08000000", "end": "0x0a800000"},
+    {"id": "ap-stack-reservation", "category": "stack", "owner": "smp trampoline", "start": "0x0a800000", "end": "0x0b000000"},
+    {"id": "scheduler-stack-reservation", "category": "stack", "owner": "sched.c", "start": "0x0b000000", "end": "0x0b800000"},
+    {"id": "i2c-hid", "category": "device", "owner": "i2c_hid.c", "start": "0x0b800000", "end": "0x0bc00000"},
+    {"id": "gpu-ring", "category": "device", "owner": "gpuring.c", "start": "0x0bc00000", "end": "0x0c000000"},
+    {"id": "blur-cache", "category": "shared", "owner": "fb.c", "start": "0x0c000000", "end": "0x0d000000"},
+    {"id": "nvme", "category": "device", "owner": "nvme.c", "start": "0x0d000000", "end": "0x0e000000"},
+    {"id": "xhci", "category": "device", "owner": "xhci.c", "start": "0x0e000000", "end": "0x0f000000"},
+    {"id": "virtio-gpu", "category": "device", "owner": "virtio_gpu.c", "start": "0x0f000000", "end": "0x10000000"},
+    {"id": "kernel-heap", "category": "heap", "owner": "heap.c", "start": "0x10000000", "end": "0x14000000"},
+    {"id": "dynamic-physical-pages", "category": "dynamic", "owner": "pmm.c", "start": "0x14000000", "end": "0x40000000"}
+  ],
+  "user_slot_template": {
+    "pml4_slots": {"first": 1, "last": 254, "stride": "0x8000000000"},
+    "regions": [
+      {"id": "user-code", "category": "user", "permissions": "read-execute", "start_offset": "0x0000", "end_offset": "0x1000"},
+      {"id": "lower-stack-guard", "category": "guard", "permissions": "absent", "start_offset": "0x1000", "end_offset": "0x2000"},
+      {"id": "user-stack", "category": "stack", "permissions": "read-write-no-execute", "start_offset": "0x2000", "end_offset": "0x3000"},
+      {"id": "kernel-stack-guard", "category": "guard", "permissions": "absent", "start_offset": "0x3000", "end_offset": "0x4000"},
+      {"id": "kernel-stack", "category": "stack", "permissions": "supervisor-read-write-no-execute", "start_offset": "0x4000", "end_offset": "0x6000"},
+      {"id": "anonymous-memory", "category": "user", "permissions": "reserved-absent-or-read-write-no-execute", "start_offset": "0x6000", "end_offset": "0x26000"}
+    ],
+    "inherited_mapping": "kernel and fixed device mappings remain supervisor-only"
+  },
+  "source_assertions": [
+    {"path": "kernel/boot/link.ld", "pattern": "ASSERT\\(__kernel_end <= 0x00C00000"},
+    {"path": "kernel/src/arch/x86/memmap.h", "pattern": "#define LO_ARENA +0x00E00000UL"},
+    {"path": "kernel/src/arch/x86/memmap.h", "pattern": "#define HI_HEAP +0x10000000UL"},
+    {"path": "kernel/src/arch/x86/memmap.h", "pattern": "#define HI_PMM +0x14000000UL"},
+    {"path": "kernel/src/arch/x86/memmap.h", "pattern": "#define HI_TOP +0x40000000UL"},
+    {"path": "kernel/src/core/heap.c", "pattern": "#define HEAP_BYTES +0x04000000UL"},
+    {"path": "kernel/src/core/pmm.h", "pattern": "#define PMM_DYNAMIC_FLOOR +\\(\\(pmm_u64\\)HI_PMM\\)"},
+    {"path": "kernel/src/core/process_memory.h", "pattern": "#define PROCESS_MEMORY_PAGE_COUNT +8U"},
+    {"path": "kernel/src/core/anon_memory.h", "pattern": "#define ANON_MEMORY_PAGE_COUNT +32U"},
+    {"path": "kernel/src/core/sched.c", "pattern": "#define STACK_BASE +\\(\\(unsigned int\\)HI_SCHED\\)"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "for \\(int i = 1; i < 255; i\\+\\+\\)"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "u64 base = \\(u64\\)\\(unsigned\\)slot << 39;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "pt\\[0\\] = .*U64_P \\| U64_U;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "PTE 1 is intentionally absent"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "pt\\[2\\] = .*U64_W \\| U64_U \\| U64_NX;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "user_stack_top = base \\+ 3 \\* 4096ULL;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "PTE 3 is intentionally absent"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "pt\\[4\\] = .*U64_W \\| U64_NX;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "pt\\[5\\] = .*U64_W \\| U64_NX;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "kernel_stack_top = base \\+ 6 \\* 4096ULL;"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "#define U64_ANON_PTE_FIRST +6U"},
+    {"path": "kernel/src/arch/x86/usermode.c", "pattern": "&pt\\[U64_ANON_PTE_FIRST\\], U64_P \\| U64_W \\| U64_U \\| U64_NX"},
+    {"path": "kernel/src/arch/x86/paging.c", "pattern": "#define PML4_FIRST +1"},
+    {"path": "kernel/src/arch/x86/paging.c", "pattern": "#define PML4_LAST +255"}
+  ]
+}

@@ -1823,6 +1823,41 @@ void fb_shade(int x, int y, int w, int h, int num, int den)
         }
 }
 
+/* MIX A RECTANGLE TOWARD A COLOUR, num/den of the way. This is not fb_shade.
+ *
+ * fb_shade multiplies each channel toward BLACK; the prototype's scrim is
+ *
+ *     color-mix(in srgb, var(--zd-cut) 78%, transparent)
+ *
+ * which lays 78% of ZD_CUT over what is underneath. ZD_CUT is #0A0300 - nearly
+ * black but WARM, and the warmth is the point: the whole ladder is built on a
+ * warm ground and a neutral scrim reads as a different material laid over it.
+ *
+ * The two also disagree in strength, not only in hue. shade(5,8) keeps 62.5%
+ * of each pixel; the scrim keeps 22%. So the shipped overlay was roughly half
+ * the specified darkness AND the wrong colour, which is why the windows behind
+ * the palette stayed legible enough to compete with it. */
+void fb_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den)
+{
+    if (den <= 0) return;
+    if (num < 0) num = 0;
+    if (num > den) num = den;
+    int tr = (int)((rgb >> 16) & 0xFF);
+    int tg = (int)((rgb >> 8)  & 0xFF);
+    int tb = (int)( rgb        & 0xFF);
+    int keep = den - num;
+    for (int yy = y; yy < y + h; yy++)
+        for (int xx = x; xx < x + w; xx++) {
+            if ((unsigned)xx >= fb_w || (unsigned)yy >= fb_h) continue;
+            unsigned int c = fb_get_px(xx, yy);
+            int r = ((int)((c >> 16) & 0xFF) * keep + tr * num) / den;
+            int g = ((int)((c >> 8)  & 0xFF) * keep + tg * num) / den;
+            int b = ((int)( c        & 0xFF) * keep + tb * num) / den;
+            put_pixel((unsigned)xx, (unsigned)yy,
+                      ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b);
+        }
+}
+
 /* a soft drop shadow, offset down-right of a window's footprint. No gaussian
  * blur on a CPU - instead, nested darkening passes from the outside in: a
  * pixel near the window edge is inside every pass (darkest), one far out is
@@ -3629,6 +3664,38 @@ extern const int icons_n;
  * Now each scale reads the atlas that was RASTERIZED for it. Only a scale
  * neither atlas covers (3x and up, which F4's fractional UI scale will want)
  * resamples - and it interpolates rather than copies, from the 48x48 set. */
+/* AN ICON AT A SIZE THE CALLER CHOOSES.
+ *
+ * fb_icon24 cannot do this: its size is not a parameter, and it FLOORS at
+ * ICON_W - `if (dst < ICON_W) dst = ICON_W` - so it can never draw smaller than
+ * 24 device pixels whatever the caller wants. That floor is why the window
+ * controls were drawn at 24dp inside a 22dp cell: the glyph box was WIDER than
+ * the cell it sat in, and the centring arithmetic went negative.
+ *
+ * The authority draws these at 11dp - `.cbtn`'s svg is width="11" height="11"
+ * (proto:2282-2284) in a 22dp cell, half the cell's width. More than a
+ * two-fold difference, on the three controls that appear on every window.
+ *
+ * No floor here, and one bilinear resample rather than nearest-neighbour, for
+ * the same reason fb_icon24 gives: fractional desktop scaling must not turn
+ * glyphs into blocks. The two native atlas sizes are still used directly when
+ * the request lands on one of them.
+ */
+void fb_icon_dp(int px, int py, int n, int dp, unsigned int fg)
+{
+    if (n < 0 || n >= icons_n || dp <= 0) return;
+    int dst = (dp * ui_scale_q8 + 128) / 256;
+    if (dst < 1) dst = 1;
+
+    if (dst == ICON_W)  { blend_cov(px, py, &icons24[n][0][0], ICON_W,  ICON_H,  fg); return; }
+    if (dst == ICON2_W) { blend_cov(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, fg); return; }
+
+    if (dst < 36)
+        blend_cov_scaled(px, py, &icons24[n][0][0], ICON_W, ICON_H, dst, dst, fg);
+    else
+        blend_cov_scaled(px, py, &icons48[n][0][0], ICON2_W, ICON2_H, dst, dst, fg);
+}
+
 void fb_icon24(int px, int py, int n, unsigned int fg)
 {
     if (n < 0 || n >= icons_n) return;

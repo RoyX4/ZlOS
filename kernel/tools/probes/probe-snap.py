@@ -20,7 +20,7 @@ Step 3 is the one that catches a preview that merely draws something: a
 constant rectangle, or one computed from the window instead of the pointer,
 passes 1 and 2 and fails 3.
 """
-import os, subprocess, sys, tempfile
+import os, re, subprocess, sys, tempfile
 
 PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.abspath(os.path.join(PROBE_DIR, "..", ".."))
@@ -80,23 +80,46 @@ def main():
     fails = []
     try:
         ser, qmp = Serial(ser_path), Qmp(qmp_path)
-        if not ser.wait("ready.", 240)[0]:
+        ok, boot_log = ser.wait("ready.", 240)
+        if not ok:
             print("never booted"); return 1
-        ser.wait(PROMPT, 60)
+        got, more = ser.wait(PROMPT, 60)
+        boot_log += more
         ser.drain(1.5)
+        boot_log += ser.buf
 
         base = shot(qmp, tmp, "base")
         W, H = base.size
-        print(f"booted {W}x{H}")
-        ui = 2 if W >= 1400 else 1
         settle = ser.drain
 
         os.makedirs(SHOTS, exist_ok=True)
 
-        # The shell window is opened at boot at UI_S6 from the top-left, so its
-        # title bar is a few pixels in and a half-title-height down. Grabbing
-        # anywhere on the title bar starts a GRAB_MOVE.
-        grab_x, grab_y = 200 * ui, 40 * ui + TITLE_H * ui // 2
+        # THE TITLE BAR IS READ OFF THE COMPOSITOR, NOT COMPUTED FROM A GUESSED
+        # ui SCALE.
+        #
+        # This said `ui = 2 if W >= 1400 else 1` and then placed the grab at
+        # 40*ui + TITLE_H*ui//2. At 1920x1200 that is y=108 - and this machine
+        # composes 1920x1200 at ui 1, where the terminal's title bar is at
+        # y=57. So the grab landed in the terminal's BODY, no drag started, no
+        # preview was ever drawn, and steps 1 and 3 reported a missing preview
+        # for a preview that was never asked for. The screenshot the probe
+        # saves shows the window sitting unmoved, which is what finally said so.
+        #
+        # wm_report prints every window's title-bar rectangle at boot
+        # (kernel.zl:10965) precisely so a probe does not have to recompute the
+        # layout in Python - probe-files-click.py already reads it. Taking it
+        # from there means a change to the boot composition, the title height
+        # or the ui scale moves this probe with it instead of past it.
+        wins = re.findall(
+            r"wm: win (\d+) title (\d+),(\d+) (\d+)x(\d+) client", boot_log)
+        if not wins:
+            print("no wm: win lines on the console - cannot locate a title bar")
+            return 1
+        # the widest one: the shell, and the one with the most bar to grab
+        tw = max(wins, key=lambda m: int(m[3]))
+        tx, ty, tbw, tbh = int(tw[1]), int(tw[2]), int(tw[3]), int(tw[4])
+        grab_x, grab_y = tx + tbw // 3, ty + tbh // 2
+        print(f"booted {W}x{H}; grabbing win {tw[0]} title bar at {grab_x},{grab_y}")
 
         # THE REFERENCE FRAME IS THE HARD PART. A drag moves the window, so
         # comparing "pointer at the edge" against "pointer in the middle"

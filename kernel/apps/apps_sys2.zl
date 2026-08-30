@@ -106,9 +106,9 @@ fn s2_thresh(v, lim) { if v > lim { return ui_ink(S2_IK_WARN) }  return ui_ink(S
 fn s2_strip_h(aw, n, minw) {
     u = ui()
     sch = 14 * u + ui_th(S2_SM) + 2 * u + ui_th(S2_MD)
-    cols = aw / (minw * u)
+    cols = idiv(aw, minw * u)                 # idiv: a column COUNT, bounds a loop
     if cols < 1 { cols = 1 }
-    rows = (n + cols - 1) / cols
+    rows = idiv(n + cols - 1, cols)           # idiv: a row COUNT, bounds a loop
     # the gap is DP(1), not 1: it is 1 px at ui 1 and 2 px at ui 2, and hard-
     # coding the 1 would have drifted this strip a row-count of pixels away
     # from where ui_stat_end() says it ends on a 4K panel.
@@ -128,128 +128,348 @@ fn s2_strip_h(aw, n, minw) {
 # filters select on what this machine really did at boot. The timestamps are
 # fixed, as the reference's are - nothing records a per-subsystem boot time.
 # ==============================================================================
-KL_N = 14
-kl_filter = 0                       # 0 all, 1 warnings, 2 errors
+KL_MAXCOL = 200                    # term.c TERM_COLS
+KL_SUBMAX = 16                     # a colon past here is prose, not a prefix
+# THE REFERENCE'S LAYOUT, not a mono dump. R.log in the prototype is a header
+# line, a four-column table, a rule, a detail well and a band - and the level is
+# a WORD beside a coloured dot rather than the message being tinted, which is
+# what lets the message column carry ink of its own.
+#
+# Columns are the reference's percentages: time 13, level 14, subsys 12, message
+# 61. Time is right-aligned, as the reference marks it with `r: 1`.
+# The cell modes: size in the low byte, 256 right-aligns, 512 is the mono face.
 
-fn kl_time(i) {
-    if i == 0 { return 2 }
-    if i == 1 { return 11 }
-    if i == 2 { return 17 }
-    if i == 3 { return 34 }
-    if i == 4 { return 48 }
-    if i == 5 { return 63 }
-    if i == 6 { return 95 }
-    if i == 7 { return 140 }
-    if i == 8 { return 182 }
-    if i == 9 { return 214 }
-    if i == 10 { return 260 }
-    if i == 11 { return 298 }
-    if i == 12 { return 331 }
-    return 372
-}
+# ---- THE LOG IS READ NOW, NOT WRITTEN ---------------------------------------
+#
+# This pane used to draw FOURTEEN FIXED ROWS. kl_time() returned 2, 11, 17, 34,
+# 48, 63, 95, 140 - hand-written boot timestamps - and kl_msg() returned
+# hand-written messages, all presented as this machine's kernel log. A whole
+# pane of fiction shaped exactly like measurement, in a system whose entire
+# argument is that its instruments are read. It even printed "ring 14 records -
+# 0 dropped", asserting a loss figure about a ring that was not a ring.
+#
+# The real thing was already in the tree. term_putc is tee'd from every kernel
+# print, so term.c's scrollback holds what this machine actually said, in the
+# order it said it - the same text the Terminal window shows. term_lines() and
+# term_ch() expose it.
+#
+# zllog cannot serve this and it is worth writing down why, so nobody goes
+# looking: it is a telemetry emitter to a host - counters and structured events
+# - with no stored message text and no read-back of any kind.
+#
+# WHAT THE REFERENCE HAS THAT THIS CANNOT FILL: a per-record timestamp and a
+# per-record level. Neither is recorded. term_putc stores characters, not
+# records, so there is no time and no severity to read, and deriving a level by
+# looking for words like "fail" would be guessing dressed as parsing. Those two
+# columns are gone rather than filled with something plausible. The subsystem
+# column IS derivable and is kept: this kernel prints "zlfs: ...", "xhci: ..."
+# and so on, so the text before the first colon is read out of the line itself.
 
-fn kl_msg(i) {
-    if i == 0 { return "multiboot: entry, 32-bit protected mode" }
-    if i == 1 { return "gdt: flat 4 GiB code and data segments" }
-    if i == 2 { return "idt: 256 gates, PIC remapped to 0x20" }
-    if i == 3 { return "cpu: cpuid leaves read, features latched" }
-    if i == 4 { return "apic: local APIC enabled" }
-    if i == 5 { return "smp: application processors started" }
-    if i == 6 { return "pci: configuration space enumerated" }
-    if i == 7 { return "fb: linear framebuffer mapped, 32 bpp" }
-    if i == 8 { return "xhci: usb host controller claimed" }
-    if i == 9 { return "input: keyboard and pointer attached" }
-    if i == 10 { return "nvme: namespace 1 identified" }
-    if i == 11 { return "virtio-net: link negotiated" }
-    if i == 12 { return "rtc: cmos clock read" }
-    return "wm: compositor up, desktop composed"
-}
-
-# 0 info, 1 warning, 2 error - the reference's 'i' / 'w' / 'e'.
-fn kl_kind(i) {
-    if i == 4 { if apic_on() != 0 { return 0 }  return 1 }
-    if i == 5 { if smp_n() > 1 { return 0 }  return 1 }
-    if i == 6 { if pci_count() > 0 { return 0 }  return 2 }
-    if i == 8 { if usb_ok() != 0 { return 0 }  return 1 }
-    if i == 10 { if nv_ok() != 0 { return 0 }  return 1 }
-    if i == 11 { if net_ok() != 0 { return 0 }  return 1 }
-    if i == 12 { if rtc_ok() != 0 { return 0 }  return 1 }
-    return 0
-}
-
-fn kl_kindcol(k) {
-    if k == 2 { return ui_ink(S2_IK_BAD) }
-    if k == 1 { return ui_ink(S2_IK_WARN) }
-    return ui_ink(S2_IK_INFO)
-}
-
-# The reference's filter, verbatim: all, or k !== 'i', or k === 'e'.
-fn kl_shown(i) {
-    if kl_filter == 0 { return 1 }
-    k = kl_kind(i)
-    if kl_filter == 1 { if k != 0 { return 1 }  return 0 }
-    if k == 2 { return 1 }
-    return 0
-}
-
-fn kl_count() {
+# How many characters this line holds.
+fn kl_len(line) {
     n = 0
-    i = 0
-    while i < KL_N { n = n + kl_shown(i)  i = i + 1 }
-    return n
+    while n < KL_MAXCOL {
+        if term_ch(line, n) == 0 { return n }
+        n = n + 1
+    }
+    return KL_MAXCOL
 }
 
-fn kl_ui(ax, ay, aw, ah, dm) {
-    u = ui()
-    tbh = ui_tb_h()
-    sbh = ui_sb_h()
+# Where the subsystem prefix ends, or -1 when the line has no prefix. Only a
+# colon inside the first KL_SUBMAX columns counts - a colon later in the line is
+# part of the message ("magic is 0x0: expected...") and splitting on it would
+# invent a subsystem out of prose.
+fn kl_colon(line) {
+    n = 0
+    lim = kl_len(line)
+    if lim > KL_SUBMAX { lim = KL_SUBMAX }
+    while n < lim {
+        if term_ch(line, n) == 58 { return n }
+        n = n + 1
+    }
+    return 0 - 1
+}
 
-    # the segmented filter, centred in a top toolbar (S3's container bar)
-    ui_tb(ax, ay, aw, tbh, 0)
-    sw = ui_seg_w("All|Warnings|Errors", S2_MD)
-    sh = ui_seg_h(S2_MD)
-    if sw > aw - 16 * u { sw = aw - 16 * u }
-    got = ui_seg(ax + (aw - sw) / 2, ay + (tbh - sh) / 2, sw, sh, "All|Warnings|Errors", kl_filter, S2_MD)
+# THE LEVEL, READ OFF THE LINE. -1 when the line carries no tag.
+#
+# ok_line / info_line / warn_line (kernel.zl:3261-3296) all emit the same
+# shape: two spaces, '[', a SIX-character tag, ']', a space, then the message.
+# So the tag is at fixed columns 3..8 and the brackets at 2 and 9, and this is
+# a read rather than a parse - which is the only reason the pane can have a
+# level column at all.
+#
+# THE PREDECESSOR CLASSIFIED BY ROW INDEX. kl_kind returned a level from
+# `i == 4` meaning apic, `i == 5` meaning smp - positions in the fourteen fixed
+# rows this pane stopped drawing when it was rewritten to read term.c's real
+# ring. Applied to that ring, line 4 is not apic. It and its eight dead
+# neighbours are gone; this reads the line the pane is actually showing.
+KL_LV_OK   = 0
+KL_LV_INFO = 1
+KL_LV_WARN = 2
 
-    # the log body - S14.2. Timestamp column is 56 design px wide and RIGHT
-    # aligned, which is why it is drawn from its right edge back.
-    py = ay + tbh
-    ph = ah - tbh - sbh
-    ui_mono(ax, py, aw, ph, S2_PANEL_LOG)
-    lh = ui_mono_h(S2_PANEL_LOG)
-    tsr = ax + 10 * u + 56 * u
-    mx = ax + 10 * u + 65 * u
-    cy = py + 6 * u
-    i = 0
-    while i < KL_N {
-        if kl_shown(i) == 1 {
-            if cy + lh <= py + ph {
-                ui_txtn(tsr - ui_tnw(kl_time(i), S2_MD, S2_MONO), cy, kl_time(i), ui_ink(S2_IK_T6), S2_MD, S2_MONO)
-                ui_txt(mx, cy, kl_msg(i), kl_kindcol(kl_kind(i)), S2_MD, S2_MONO)
-                cy = cy + lh
-            }
-        }
+# WHICH LEVELS THE PANE SHOWS. 0 every line, 1 tagged WARN only.
+#
+# The predecessor had three settings and a classifier keyed to row indices that
+# no longer exist. Two is what this log can honestly offer: it has three tags
+# and no error level, so "warnings and worse" and "warnings" are the same set.
+kl_only_warn = 0
+
+fn kl_line_shown(line) {
+    if kl_only_warn == 0 { return 1 }
+    if kl_level(line) == KL_LV_WARN { return 1 }
+    return 0
+}
+
+fn kl_level(line) {
+    if term_ch(line, 2) != 91 { return 0 - 1 }        # '['
+    if term_ch(line, 9) != 93 { return 0 - 1 }        # ']'
+    kli = 3
+    while kli < 9 {
+        klc = term_ch(line, kli)
+        if klc == 79 { return KL_LV_OK }              # O of OK
+        if klc == 73 { return KL_LV_INFO }            # I of INFO
+        if klc == 87 { return KL_LV_WARN }            # W of WARN
+        kli = kli + 1
+    }
+    return 0 - 1
+}
+
+fn kl_level_name(lv) {
+    if lv == KL_LV_OK { return "OK" }
+    if lv == KL_LV_INFO { return "INFO" }
+    if lv == KL_LV_WARN { return "WARN" }
+    return ""
+}
+
+fn kl_level_col(lv) {
+    if lv == KL_LV_WARN { return ui_ink(S2_IK_WARN) }
+    if lv == KL_LV_OK { return ui_ink(S2_IK_OK) }
+    return ui_ink(S2_IK_T5)
+}
+
+# WHERE THE MESSAGE STARTS. A tagged line's prefix is eleven columns wide and
+# repeating it in the message column would print the tag twice.
+fn kl_body_from(line) {
+    if kl_level(line) < 0 { return 0 }
+    return 11
+}
+
+# Draw characters [from, to) of a real scrollback line.
+fn kl_chars(x, y, line, from, to, col) {
+    cx = x
+    i = from
+    while i < to {
+        c = term_ch(line, i)
+        if c > 32 { char_aa(cx, y, c, col) }
+        cx = cx + cell_w()
         i = i + 1
     }
+    return cx
+}
 
-    # the status bar - S6. "N of M messages", assembled from measured pieces
-    # because zl has no runtime strings to concatenate.
+fn kl_lines() { return term_lines() }
+
+# THE EMPTY RING IS ITS OWN CASE, and it has to be tested before either clamp.
+#
+# This read `if s >= kl_lines() { return kl_lines() - 1 }` first. With an empty
+# ring that is `0 >= 0`, and it returned kl_lines() - 1 = -1: an out-of-range
+# line index, produced in a language with no bounds checking, handed straight to
+# kl_chars and kl_len as a row number.
+#
+# Reordering the two clamps does NOT fix it - that was the first diagnosis and
+# it is wrong. For every input the two orders agree: with lines == 0 the swapped
+# form tests s < 0 (false, s is 0) and then s >= 0, returning -1 again. The two
+# conditions are mutually exclusive whenever lines > 0. The defect is a missing
+# case, not a misordered one, and only the guard below removes it.
+#
+# It is reachable twice: the shell's `clear` builtin and the Console pane's
+# Reset pill both call term_clear(), which sets s_live = 0. It never faulted
+# because term_ch() range-checks its own argument in C - so the out-of-range
+# index was absorbed on the far side of the language boundary and rendered a
+# byte-identical empty well. That is a latent index surviving on somebody
+# else's check, which is exactly the shape that stops being harmless the day
+# the accessor is inlined or replaced.
+#
+# kl_scroll's clamp two hundred lines down already writes the guard this way.
+fn kl_sel_clamped() {
+    if kl_lines() < 1 { return 0 }
+    s = kl_sel()
+    if s >= kl_lines() { return kl_lines() - 1 }
+    if s < 0 { return 0 }
+    return s
+}
+
+# `dm` is declared and unused, exactly as it was before this rewrite. Two call
+# sites pass it and one reads the return value, so the signature stays; dropping
+# it here would have been a five-line change to three files for a parameter
+# nobody reads. Left as found rather than tidied, and named so the next reader
+# does not go looking for its meaning.
+fn kl_ui(ax, ay, aw, ah, dm) {
+    u = ui()
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    sbh = ui_sb_h()
+    hdh = 30 * u
+
+    # ---- the head -----------------------------------------------------------
+    ui_caps(ax + 10 * u, ay + 6 * u, "SYSTEM LOG", theme(TH_TEXT_2), S2_SM)
+    hx2 = ax + 10 * u + ui_capsw("SYSTEM LOG", S2_SM) + 12 * u
+    ui_txtn(hx2, ay + 6 * u, kl_lines(), theme(TH_TEXT_HI), S2_SM, 0)
+    hx2 = hx2 + ui_tnw(kl_lines(), S2_SM, 0) + 4 * u
+    ui_txt(hx2, ay + 6 * u, "lines", theme(TH_TEXT_DIM), S2_SM, 0)
+    # THE RING IS DESCRIBED, NOT ITS LOSSES. "0 dropped" was asserted about a
+    # ring that did not exist; this one is real and DOES drop - its capacity is
+    # read from term.c rather than repeated here
+    # and wraps - but nothing counts what fell off the back, so the honest thing
+    # is to say how deep it is and not to claim a figure for what it lost.
+    klrw = ui_tw("scrollback ring, ", S2_SM, 0) + ui_tnw(term_rows(), S2_SM, 0) + ui_tw(" rows, newest held", S2_SM, 0)
+    klrx = ax + aw - 10 * u - klrw
+    ui_txt(klrx, ay + 6 * u, "scrollback ring, ", theme(TH_TEXT_DIM), S2_SM, 0)
+    klrx = klrx + ui_tw("scrollback ring, ", S2_SM, 0)
+    ui_txtn(klrx, ay + 6 * u, term_rows(), theme(TH_TEXT_DIM), S2_SM, 0)
+    klrx = klrx + ui_tnw(term_rows(), S2_SM, 0)
+    ui_txt(klrx, ay + 6 * u, " rows, newest held", theme(TH_TEXT_DIM), S2_SM, 0)
+
+    # ---- the table ----------------------------------------------------------
+    ty2 = ay + hdh
+    # THE AUTHORITY'S COLUMNS. proto R.log declares four - time 13%, level 14%,
+    # subsys 12%, message 61% - and this drew two. The six constants that named
+    # those percentages were still in this file, read by nothing, which is what
+    # led to the four-column table in the first place.
+    #
+    # TIME IS NOT ONE OF THEM AND IS NOT INVENTED. The predecessor's kl_time
+    # returned hand-written boot timestamps - 2, 11, 17, 34 - and term.c's ring
+    # carries no per-line timestamp at all, so there is nothing to read. A
+    # column headed `time` over a figure this machine does not have is the
+    # invented-figure fault the whole round is about, so the pane carries the
+    # three it CAN read and says so in its header rather than printing a fourth.
+    ui_grid("70|110|*")
+    ui_colhead(ax, ty2, aw, "level|subsys|message", 0 - 1, 0)
+    ty2 = ty2 + ui_colhead_h()
+    rowh = ui_growh()
+    wellh = 46 * u
+    limit = ay + ah - sbh - wellh - 8 * u
+
+    # IT SHOWED THE OLDEST TWELVE LINES OF A HUNDRED AND SIXTY.
+    #
+    # The loop walked i = 0 upward and stopped when the rows ran out, with no
+    # offset and no scroll - so the pane showed the first dozen lines of the
+    # boot and NEVER the newest, which in a log is the half you opened it for.
+    # term.c's ring holds 160 and this window fits about twelve.
+    #
+    # The rows still read downward, oldest to newest, because that is the order
+    # things happened. What changed is WHICH twelve: the window is anchored to
+    # the END of the ring and kl_scroll walks it backwards from there. Order
+    # within the view and position of the view are two different questions and
+    # the old code answered only the first.
+    # AN EARLIER COMMENT HERE CLAIMED THIS ROW NEVER HIGHLIGHTED, because `/`
+    # was float. It is not, in the compiled kernel - see the idiv note at the
+    # top of kernel.zl - so kl_fit was already integral and the selection
+    # failure described here was inferred, not seen. idiv is harmless and
+    # stays; the story does not.
+    kl_fit = idiv(limit - ty2, rowh)
+    if kl_fit < 1 { kl_fit = 1 }
+    kl_first = kl_lines() - kl_fit - kl_scroll
+    if kl_first < 0 { kl_first = 0 }
+    i = kl_first
+    shown = 0
+    sel = kl_sel_clamped()
+    while i < kl_lines() {
+        # THE FILTER IS APPLIED HERE, WHICH IS WHERE THE PREDECESSOR'S WAS NOT.
+        # kl_shown existed, read kl_filter, and was called only by a kl_count
+        # that nothing called - so the setting was live, readable, and had no
+        # effect on a single pixel. This test is in the draw loop.
+        if kl_line_shown(i) == 0 { i = i + 1 } else {
+        if ty2 + rowh <= limit {
+            if ui_grow(ax, ty2, aw, shown, sel == i) == 1 { kl_hit = i }
+            cy2 = ty2 + (rowh - ui_th(S2_SM)) / 2
+            # THE LEVEL COLUMN, read off the line's own tag.
+            lv = kl_level(i)
+            if lv >= 0 {
+                ui_txt(ui_gspanx(ax, aw, 0) + 4 * u, cy2, kl_level_name(lv), kl_level_col(lv), S2_SM, 0)
+            }
+            # ...and the message starts AFTER the tag, so it is not printed
+            # twice. An untagged line starts at column 0 as before.
+            body = kl_body_from(i)
+            col = kl_colon(i)
+            if col >= body {
+                kl_chars(ui_gspanx(ax, aw, 1) + 4 * u, cy2, i, body, col, theme(TH_TEXT_2))
+                kl_chars(ui_gspanx(ax, aw, 2) + 4 * u, cy2, i, col + 2, kl_len(i), theme(TH_TEXT_HI))
+            } else {
+                kl_chars(ui_gspanx(ax, aw, 2) + 4 * u, cy2, i, body, kl_len(i), theme(TH_TEXT_HI))
+            }
+            ty2 = ty2 + rowh
+            shown = shown + 1
+        }
+        i = i + 1
+        }
+    }
+
+    # AN EMPTY RESULT IS A STATEMENT, NOT A BLANK.
+    #
+    # On a healthy machine this filter matches NOTHING - a clean QEMU boot emits
+    # ten OK lines, one INFO and zero WARN - and a pane that just goes blank is
+    # indistinguishable from one that is broken. That is the failure mode this
+    # repo's own gates keep hitting: silence reads as success, or as breakage,
+    # and nothing on screen says which.
+    #
+    # So it says which, and it says how many lines it looked at.
+    if shown == 0 {
+        if kl_only_warn == 1 {
+            klez = ty2 + 10 * u
+            ui_txt(ax + 14 * u, klez, "no lines in the ring are tagged WARN", theme(TH_TEXT_HI), S2_SM, 0)
+            ui_txt(ax + 14 * u, klez + 18 * u, "this machine has not reported a degraded condition. searched ", theme(TH_TEXT_DIM), S2_SM, 0)
+            klex = ax + 14 * u + ui_tw("this machine has not reported a degraded condition. searched ", S2_SM, 0)
+            ui_txtn(klex, klez + 18 * u, kl_lines(), theme(TH_TEXT_2), S2_SM, 0)
+            ui_txt(klex + ui_tnw(kl_lines(), S2_SM, 0), klez + 18 * u, " lines.", theme(TH_TEXT_DIM), S2_SM, 0)
+        }
+    }
+
+    # ---- the rule, and the selected line in full ----------------------------
+    wy = ay + ah - sbh - wellh
+    fill_rgb(ax + 10 * u, wy - 6 * u, aw - 20 * u, 1, theme(TH_CUT))
+    ui_mono(ax + 10 * u, wy, aw - 20 * u, wellh - 6 * u, S2_PANEL_LOG)
+    kl_chars(ax + 20 * u, wy + 10 * u, sel, 0, kl_len(sel), theme(TH_TEXT_HI))
+
+    # ---- the band -----------------------------------------------------------
     sy = ay + ah - sbh
     ui_sb(ax, sy, aw, sbh)
     ty = s2_cy(sy, sbh, S2_SM)
     tx = ax + 11 * u
-    n = kl_count()
-    ui_txtn(tx, ty, n, theme(TH_TEXT_DIM), S2_SM, 0)
-    tx = tx + ui_tnw(n, S2_SM, 0)
+    ui_txtn(tx, ty, shown, theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tnw(shown, S2_SM, 0)
     ui_txt(tx, ty, " of ", theme(TH_TEXT_DIM), S2_SM, 0)
     tx = tx + ui_tw(" of ", S2_SM, 0)
-    ui_txtn(tx, ty, KL_N, theme(TH_TEXT_DIM), S2_SM, 0)
-    tx = tx + ui_tnw(KL_N, S2_SM, 0)
-    ui_txt(tx, ty, " messages", theme(TH_TEXT_DIM), S2_SM, 0)
-    return got
+    ui_txtn(tx, ty, kl_lines(), theme(TH_TEXT_DIM), S2_SM, 0)
+    tx = tx + ui_tnw(kl_lines(), S2_SM, 0)
+    # ONLY ASK FOR MORE ROOM WHEN ROOM IS SHORT. "7 of 7 lines fit - make the
+    # window taller" is advice against a problem the reader does not have, and a
+    # pane that asks for something it does not need teaches people to ignore it
+    # when it does.
+    # SAY WHERE THE VIEW IS, not just how much of it fits. "12 of 160" alone
+    # does not tell you whether you are looking at the start or the end, and
+    # this pane is anchored to the end.
+    if shown < kl_lines() { ui_txt(tx, ty, " lines, newest last", theme(TH_TEXT_DIM), S2_SM, 0) } else { ui_txt(tx, ty, " lines", theme(TH_TEXT_DIM), S2_SM, 0) }
+    return kl_hit
 }
+kl_sel_row = 0
+# HOW FAR BACK FROM THE NEWEST LINE THE VIEW SITS. 0 is the tail.
+kl_scroll = 0
+# The line a click landed on, or -1. kl_ui returns it and kl_apply stores it -
+# the same two-pass shape every other pane in this file uses.
+kl_hit = 0 - 1
+fn kl_sel() { return kl_sel_row }
+fn kl_sel_is(i) { if i == kl_sel_row { return 1 }  return 0 }
 
-fn kl_apply(g) { kl_filter = g  return 0 }
+# THE SECOND PASS. kl_ui returns the line a click landed on; this stores it, so
+# the detail well below the rule shows the line the user picked rather than line
+# 0 forever. kl_sel_row was declared, read twice, and ASSIGNED NOWHERE IN THE
+# TREE - so row 0 was highlighted permanently and the well never changed. The
+# whole selection existed except for the part that sets it.
+fn kl_apply(g) {
+    if g >= 0 { kl_sel_row = g }
+    kl_hit = 0 - 1
+    return 0
+}
 
 # ==============================================================================
 # 41  RENDERER - 352 x 326
@@ -271,11 +491,59 @@ rd_wire = 1
 rd_yaw = 0
 rd_last = 0 - 1
 
-fn rd_meshline(m) {
-    if m == 0 { return "mesh cube - 12 tris - 8 verts" }
-    if m == 1 { return "mesh pyramid - 6 tris - 5 verts" }
-    if m == 2 { return "mesh octa - 8 tris - 6 verts" }
-    return "mesh cylinder - 44 tris - 24 verts"
+# WHICH MODE, and whether it is one this renderer has. rd_wire selects; the
+# rasteriser only fills, so "wireframe" names a path that does not exist yet and
+# the line says so rather than letting the button imply it does.
+# SHORT ENOUGH NOT TO CLIP. The first version returned "  - wireframe not
+# implemented, drawing shaded", which the default window cut to "  - wireframe"
+# - asserting exactly the opposite of what it says. A sentence that becomes a
+# lie when truncated is worse than the shorter true one.
+fn rd_modeline() {
+    if rd_wire == 1 { return "  - shaded" }
+    return "  - shaded (no wireframe path)"
+}
+
+# THE COUNTS ARE READ OFF THE SOLID THAT IS DRAWN, NOT WRITTEN BESIDE IT.
+#
+# This returned four whole sentences - "mesh cylinder - 44 tris - 24 verts" and
+# three like it - for meshes the kernel did not have. The canvas under them was
+# a single flat fill, so a four-way picker changed four figures about four
+# absent objects, in the numeric slot next to two readings that are real probes
+# (rd_gpuline actually asks intel_ok and gpu_present).
+#
+# The figures were not even wrong. 12/8, 6/5, 8/6 and 44/24 are what a cube, a
+# square pyramid, an octahedron and a twelve-sided cylinder have. The fault was
+# that nothing in the tree could DISAGREE with them - which is the whole
+# difference between a figure and a caption.
+#
+# fb3d.c now builds all four and draws them; mesh_tris and mesh_verts walk the
+# same vertex and face tables the rasteriser walks. A face of n indices is n-2
+# triangles, counted the way it is filled. So the caption cannot drift from the
+# picture: change the geometry and both move together, and a mesh that fails to
+# draw reports its own counts rather than a remembered pair.
+fn rd_meshname(m) {
+    if m == 0 { return "cube" }
+    if m == 1 { return "pyramid" }
+    if m == 2 { return "octa" }
+    return "cylinder"
+}
+
+fn rd_meshline_draw(x, y, m, ink) {
+    rdx = x
+    ui_txt(rdx, y, "mesh ", ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw("mesh ", S2_SM, S2_MONO)
+    ui_txt(rdx, y, rd_meshname(m), ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw(rd_meshname(m), S2_SM, S2_MONO)
+    ui_txt(rdx, y, " - ", ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw(" - ", S2_SM, S2_MONO)
+    ui_txtn(rdx, y, mesh_tris(m), ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tnw(mesh_tris(m), S2_SM, S2_MONO)
+    ui_txt(rdx, y, " tris - ", ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw(" tris - ", S2_SM, S2_MONO)
+    ui_txtn(rdx, y, mesh_verts(m), ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tnw(mesh_verts(m), S2_SM, S2_MONO)
+    ui_txt(rdx, y, " verts", ink, S2_SM, S2_MONO)
+    return rdx + ui_tw(" verts", S2_SM, S2_MONO) - x
 }
 
 # glInfoText, and it is a real probe rather than a caption.
@@ -298,9 +566,41 @@ fn rd_ui(ax, ay, aw, ah, dm) {
     lh = ui_mono_h(S2_PANEL_TERM)
     ox = ax + 10 * u
     oy = ay + 9 * u
-    ui_txt(ox, oy, rd_meshline(rd_mesh), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    # THE MODE IS PRINTED, so the toggle has a reader outside itself.
+    #
+    # rd_wire had exactly four occurrences in the tree: its declaration, its own
+    # label, the pill's fill kind, and the line that flips it. Every one of them
+    # was the control describing itself - pressing it changed the word on the
+    # button and nothing else in the system. A toggle whose only effect is its
+    # own caption is a caption.
+    #
+    # The renderer draws a filled mesh and has no wireframe path, so the switch
+    # cannot change the picture; what it CAN honestly do is state which mode is
+    # selected beside the mesh it applies to, and say that one of them is not
+    # implemented. That is a smaller claim than the button was making.
+    rd_mw = rd_meshline_draw(ox, oy, rd_mesh, ui_ink(S2_IK_T6))
+    ui_txt(ox + rd_mw, oy, rd_modeline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
     ui_txt(ox, oy + lh, "-- us/draw - software pipeline", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
     ui_txt(ox, oy + 2 * lh, rd_gpuline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
+
+    # THE SOLID, ON THE CANVAS THAT USED TO BE A FLAT FILL. Only under dm == 1:
+    # rd_ui is called a second time with dm == 0 purely to hit-test the
+    # toolbar, and drawing there would paint the mesh once per click.
+    #
+    # cube_clip is the RASTERISER's own clip and it has to be this canvas. The
+    # window scissor already stops ink reaching the chrome, but a near corner
+    # under perspective projects far outside the box, and clipping a span is
+    # cheaper than discovering it at the screen edge.
+    if dm == 1 {
+        rdcy = oy + 3 * lh + 6 * u
+        rdch = ay + ch - rdcy - 8 * u
+        if rdch > 24 * u {
+            cube_clip(ax, rdcy, ax + aw, rdcy + rdch)
+            rdsz = aw / 5
+            if rdch / 3 < rdsz { rdsz = rdch / 3 }
+            mesh3d(rd_mesh, ax + aw / 2, rdcy + rdch / 2, rdsz, rd_yaw, ui_ink(S2_IK_HI))
+        }
+    }
 
     ty = ay + ah - tbh
     ui_tb(ax, ty, aw, tbh, 1)
@@ -377,8 +677,35 @@ fn rd_tick(win) {
 # and pushes the ASCII column off the end. Four-byte groups are 35 characters,
 # and the row comes to 514 px inside a 548 px content box.
 # ==============================================================================
-HX_BASE = 0x100000                  # where boot.S is loaded; always mapped
-hx_page = 0
+hx_off = 0
+
+# HOW MANY ROWS AND HOW BIG A PAGE, FROM THE CLIENT HEIGHT.
+#
+# The header printed "256 B/page", the chips stepped by 256, and the loop drew
+# whatever fitted - eight rows, 128 bytes, at the shipped geometry. Three
+# numbers for one fact, none of them agreeing, and the one in the reference's
+# computed-value slot was the written one.
+#
+# Both take the same client height the body is laid out from, so the caption,
+# the cursor and the loop cannot disagree again.
+fn hx_bodyh(ah) { return ah - ui_tb_h() - ui_sb_h() - ui_colhead_h() }
+fn hx_rows(ah) {
+    hr = idiv(hx_bodyh(ah) - 7 * ui(), ui_mono_h(S2_PANEL_HEX))   # idiv: a row COUNT, bounds the page
+    if hr < 1 { return 1 }
+    return hr
+}
+fn hx_pagesz(ah) { return hx_rows(ah) * 16 }
+fn hx_maxoff(ah) {
+    hm = kernel_end() - kernel_start() - hx_pagesz(ah)
+    if hm < 0 { return 0 }
+    return hm
+}
+fn hx_clamp(ah) {
+    if hx_off < 0 { hx_off = 0 }
+    hm = hx_maxoff(ah)
+    if hx_off > hm { hx_off = hm }
+    return hx_off
+}
 
 fn hx_ui(ax, ay, aw, ah, dm) {
     u = ui()
@@ -386,6 +713,7 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     tbh = ui_tb_h()
     sbh = ui_sb_h()
     hit = 0 - 1
+    hx_clamp(ah)
 
     # ---- the header row: label, path/size well, three page chips ----------
     ui_tb(ax, ay, aw, tbh, 0)
@@ -393,9 +721,20 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     ui_txt(lx, s2_mcy(ay, tbh), "offset", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     lx = lx + ui_tw("offset", S2_SM, S2_MONO) + 6 * u
 
-    w0 = ui_chip_w("+0")
-    w1 = ui_chip_w("+256")
-    w2 = ui_chip_w("+512")
+    # MEASURE WHAT IS DRAWN. These measured "+0", "+256" and "+512" - the three
+    # fixed chips this pane had before it became a page cursor - and none of
+    # those strings appears anywhere in it any more. So the two chips sat in
+    # slots about four characters too wide, the gaps between them were wrong,
+    # and the well to their left was sized from cx0, which was further left than
+    # anything needed it to be: a stale measurement pushes every element it
+    # anchors, not just itself.
+    #
+    # The third slot holds the offset readout rather than a chip, so it is
+    # measured as the number it is - the same way the " B/page" figure above
+    # already flushes itself.
+    w0 = ui_chip_w("<")
+    w1 = ui_chip_w(">")
+    w2 = ui_tnw(hx_off, S2_MD, S2_MONO)
     chh = ui_chip_h()
     chy = ay + (tbh - chh) / 2
     cx2 = ax + aw - 8 * u - w2
@@ -410,26 +749,68 @@ fn hx_ui(ax, ay, aw, ah, dm) {
         # the hairline follows the curve instead of cutting it - ui.c's rule.
         if dm == 1 { rrect(lx, wy, ww, wh, 11 * u, ui_ink(S2_IK_SURF5)) }
         if dm == 1 { rrect(lx + 1, wy + 1, ww - 2, wh - 2, 11 * u - 1, ui_ink(S2_IK_SURF1)) }
-        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "/dev/kmem", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
-        ui_txt(lx + ww - 9 * u - ui_tw("256 B/page", S2_MD, S2_MONO), s2_mcy(wy, wh), "256 B/page", ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+        # NOT "/dev/kmem". There is no /dev on this system - zlfs has no device
+        # nodes at all - so that label named a path nobody can open and implied
+        # a Unix indirection that does not exist here. What this pane actually
+        # reads is the linker-bounded loaded image, straight through peek8.
+        # Saying so is both true and more useful: it tells the reader what they
+        # are looking at without retyping the link address.
+        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "physical loaded kernel image", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
+        # "256 B/page" WAS WRITTEN AND THE PANE DELIVERS WHAT IT CAN DRAW.
+        # Eight rows of sixteen bytes is 128 at the shipped geometry, not 256,
+        # and the number sits in the slot the reference fills with a computed
+        # value - so it reads as measured. It is measured now: rows times
+        # sixteen, from the same function the loop and the chips use.
+        hx_bw = ui_tnw(hx_pagesz(ah), S2_MD, S2_MONO) + ui_tw(" B/page", S2_MD, S2_MONO)
+        ui_txtn(lx + ww - 9 * u - hx_bw, s2_mcy(wy, wh), hx_pagesz(ah), ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+        ui_txt(lx + ww - 9 * u - hx_bw + ui_tnw(hx_pagesz(ah), S2_MD, S2_MONO), s2_mcy(wy, wh), " B/page", ui_ink(S2_IK_T5), S2_MD, S2_MONO)
     }
-    if ui_chip(cx0, chy, "+0", hx_page == 0) == 1 { hit = 0 }
-    if ui_chip(cx1, chy, "+256", hx_page == 1) == 1 { hit = 1 }
-    if ui_chip(cx2, chy, "+512", hx_page == 2) == 1 { hit = 2 }
+    # THREE FIXED CHIPS ADDRESSED 768 BYTES OF A WHOLE ADDRESS SPACE, and only
+    # 384 of those were ever drawn. They also stepped by 256 while the pane
+    # showed 128, so "+256" skipped a page. The chips are a PAGE CURSOR now -
+    # back, forward, and the current offset - so the whole image is walkable
+    # instead of the first three pages of it.
+    # THE PAGE TEST DISABLES, IT DOES NOT ACTIVATE.
+    #
+    # This passed the old page index as ui_chip's ACTIVE argument, which uikit.c
+    # forwards to ctl_state - and ctl_state returns UI_ST_ON before it tests
+    # hover or press, so pill_face paints the chip with UI_COLOR_KNOCK, the KO
+    # edge and reversed-out ink. Off page 0 the back chip therefore latched
+    # into the SELECTION face, read as a toggle, and stopped responding to the
+    # pointer; the forward chip on the next line passes a literal 0 and renders
+    # correctly, which is why the pair looked like two different controls.
+    # proto:1783-1784 draws both as plain buttons.
+    if ui_chip_st(cx0, chy, "<", 0, hx_off == 0) == 1 { hit = 0 }
+    if ui_chip_st(cx1, chy, ">", 0, hx_off >= hx_maxoff(ah)) == 1 { hit = 1 }
+    ui_txtn(cx2, chy + 4 * u, hx_off, ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+
+    # ---- the column header, as the reference has it -------------------------
+    # R.hex is a TBL of offset / bytes / ascii at 16, 62 and 22 percent, and the
+    # head is what makes three runs of monospace read as three columns rather
+    # than as one wide line. The tracks are design units: 8 hex digits, then the
+    # remainder for the bytes, then 16 characters and the two rules around them.
+    ui_grid("74|*|150")
+    ui_colhead(ax, ay + tbh, aw, "offset|bytes|ascii", 0 - 1, 0)
 
     # ---- the rows ---------------------------------------------------------
-    py = ay + tbh
-    ph = ah - tbh - sbh
+    py = ay + tbh + ui_colhead_h()
+    ph = ah - tbh - sbh - ui_colhead_h()
     ui_mono(ax, py, aw, ph, S2_PANEL_HEX)
     lh = ui_mono_h(S2_PANEL_HEX)
     bx = ax + 9 * u
     hx0 = bx + 8 * cw + 13 * u
     as0 = hx0 + 35 * cw + 13 * u
+    # HOW MANY ROWS FIT, COMPUTED ONCE. This looped `while r < 16` with the body
+    # guarded on the row fitting AND `by = by + lh` INSIDE that guard - so once
+    # a row stopped fitting, by never advanced, every remaining iteration
+    # re-tested the same failing condition and drew nothing. The loop ran
+    # sixteen times to draw eight. The 16 is ds-reference.html's "16 bytes per
+    # row" confused with a row count.
     by = py + 7 * u
     r = 0
-    while r < 16 {
+    while r < hx_rows(ah) {
         if by + lh <= py + ph {
-            addr = HX_BASE + hx_page * 256 + r * 16
+            addr = kernel_start() + hx_off + r * 16
             if dm == 1 { ac_draw_base(bx, by, addr, 8, 16, ui_ink(S2_IK_DIM)) }
             if dm == 1 { char_aa(as0, by, 124, ui_ink(S2_IK_DIM)) }
             if dm == 1 { char_aa(as0 + 17 * cw, by, 124, ui_ink(S2_IK_DIM)) }
@@ -457,12 +838,30 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     tx = ax + 9 * u
     ui_txt(tx, ty, "kernel image - live memory - offset 0x", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     tx = tx + ui_tw("kernel image - live memory - offset 0x", S2_SM, S2_MONO)
-    if dm == 1 { ac_draw_base(tx, ty, hx_page * 256, 4, 16, ui_ink(S2_IK_T5)) }
+    # THE STRIDE IS hx_pagesz(ah), NOT 256. The pane's page size became a
+    # function of the window height when the viewer learned to fill its well -
+    # the header, the row loop and the B/page readout were all converted - and
+    # this one multiplication was left behind. The status bar therefore printed
+    # an offset that was correct only at the one window height where the well
+    # happened to hold sixteen rows, and drifted further from the address in
+    # the rows above it at every other size. `ah` is in scope here; it is the
+    # same value the loop three lines up paged with.
+    if dm == 1 { ac_draw_base(tx, ty, hx_off, 4, 16, ui_ink(S2_IK_T5)) }
     ui_txt(ax + aw - 9 * u - ui_tw("16 bytes/row - read only", S2_SM, S2_MONO), ty, "16 bytes/row - read only", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     return hit
 }
 
-fn hx_apply(g) { hx_page = g  return 0 }
+# THE CHIPS ARE A CURSOR NOW, so the hit is a direction and not a page number.
+# The old three fixed offsets became back and forward steps. Clamp at zero and
+# at the linker-exported end of the loaded image, so resize can change the page
+# size without changing which byte the cursor names or walking into unmapped
+# memory.
+fn hx_apply(g, ah) {
+    if g == 0 { hx_off = hx_off - hx_pagesz(ah) }
+    if g == 1 { hx_off = hx_off + hx_pagesz(ah) }
+    hx_clamp(ah)
+    return 0
+}
 
 # ==============================================================================
 # 43  FRAMEBUFFER - 600 x 420
@@ -507,7 +906,12 @@ fn fbv_ui(ax, ay, aw, ah, dm) {
     pk = S2_BTN_P
     if fbv_on == 1 { pk = S2_BTN_N }
     if ui_pill(ax + 10 * u, py, pw, ph, fbv_label(), S2_MD, pk, 0) == 1 { hit = 0 }
-    ui_txt(ax + 10 * u + pw + 8 * u, s2_mcy(ty, tbh), "32 bpp - software raster - no gpu blitter", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    # THE DEPTH IS READ. This was the literal "32 bpp"; fb_bpp() is the value
+    # fb_setup was handed by the bootloader, and the rest of the sentence is
+    # still true by construction - there is no blitter in this kernel.
+    fbx = ax + 10 * u + pw + 8 * u
+    ui_txtn(fbx, s2_mcy(ty, tbh), fb_bpp(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    ui_txt(fbx + ui_tnw(fb_bpp(), S2_SM, S2_MONO), s2_mcy(ty, tbh), " bpp - software raster - no gpu blitter", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
     return hit
 }
 
@@ -536,6 +940,11 @@ fn fbv_tick(win) {
 cn_run = 1
 cn_scan = 0
 cn_last = 0 - 1
+# HOW DARK A SCANLINE IS. 40/255 on the canvas ground: deep enough to read as a
+# raster at arm's length, shallow enough that text drawn over it later is still
+# text. It is one number and it is here rather than inline so the effect can be
+# tuned without hunting the loop.
+CN_SCAN_A = 40
 
 fn cn_runlabel() { if cn_run == 1 { return "Pause tty" }  return "Resume tty" }
 
@@ -547,12 +956,43 @@ fn cn_ui(ax, ay, aw, ah, dm) {
     hit = 0 - 1
 
     s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+    # THE SCANLINES ARE DRAWN. cn_scan had exactly three occurrences in the
+    # tree - its declaration, the pill's own fill kind, and the line that flips
+    # it - so pressing Scanlines changed the colour of the button and nothing
+    # else on the screen. That is the rd_wire signature, one pane over, and it
+    # is the same fix: give the flag a reader outside its own label.
+    #
+    # A raster line is ONE PIXEL EVERY TWO at ui scale 1 and two every four at
+    # scale 2, which is what stepping by 2*u and drawing u gets - a fixed 1 px
+    # line would vanish into a hairline on a scaled display and stop being the
+    # effect it is named for.
+    if dm == 1 {
+        if cn_scan == 1 {
+            cnr = ay
+            while cnr < ay + ch {
+                blend(ax, cnr, aw, u, theme(TH_BG), CN_SCAN_A)
+                cnr = cnr + 2 * u
+            }
+        }
+    }
 
     ui_stat(ax, ay + ch, aw, 84)
-    ui_statn("CELLS WRITTEN", con_cols() * con_rows(), theme(TH_TEXT))
+    # "CELLS WRITTEN" WAS THE SCREEN'S SIZE, NOT A COUNT. con_cols() * con_rows()
+    # is the text grid - fixed for the whole session once the mode is set - so
+    # this printed 18000 on the first frame and 18000 for ever, under a label
+    # that reads as a running total. A machine that had printed nothing at all
+    # still showed 18000.
+    #
+    # Nothing in this kernel counts cells written, and adding a counter to the
+    # console's hot path to satisfy a caption would be the tail wagging the dog.
+    # The grid IS worth showing, so it is shown under the label it deserves.
+    ui_statn("CONSOLE COLS", con_cols(), theme(TH_TEXT))
     ui_statn("COMMANDS PARSED", term_cmd(), theme(TH_TEXT))
     ui_statn("UNSUPPORTED", term_bad(), s2_thresh(term_bad(), 0))
-    ui_statn("SCROLLBACK", con_rows(), theme(TH_TEXT_DIM))
+    # SCROLLBACK WAS ALSO THE SCREEN, con_rows() - the number of rows VISIBLE,
+    # not the number retained. term.c keeps a real ring and term_lines() reports
+    # how much of it is live, which is the figure this label was promising.
+    ui_statn("SCROLLBACK", term_lines(), theme(TH_TEXT_DIM))
     ui_statn("BLIT US", wm_us(), s2_thresh(wm_us(), 16000))
     ui_stat_end()
 
@@ -618,6 +1058,68 @@ fn cn_tick(win) {
 # ==============================================================================
 ft_zoom = 1                         # index into 2x|3x|4x|6x
 
+# WHICH ATLAS IS THE CONSOLE'S CELL. Not a constant: index 0 is the 8x16 cell
+# and index 1 is 16x32, so the answer moves with the ui scale. Matching on the
+# cell's own dimensions asks the question the caption is asking - "the atlas
+# these glyphs come from" - rather than assuming which one that is today.
+fn fa_atlas_here() {
+    fah_i = 0
+    while fah_i < atlas_n() {
+        if atlas_w(fah_i) == cell_w() {
+            if atlas_h(fah_i) == cell_h() { return fah_i }
+        }
+        fah_i = fah_i + 1
+    }
+    return 0
+}
+
+# THE ATLAS, DRAWN. The canvas was a flat fill with a four-segment zoom picker
+# over it, and ft_zoom had four occurrences in the whole tree: its declaration,
+# the picker's own selected index, and the line that writes it. Nothing scaled
+# because nothing was drawn to scale - the pane named after a font atlas showed
+# no glyphs at all.
+#
+# It could not: char_aa draws at the console cell and nothing else, and ui_txt
+# needs a STRING, which zl cannot build from a byte value. fb_glyph_scaled has
+# been in fb.c the whole time and was not bound. It is now, as char_sc, and the
+# zoom picker's 2x / 3x / 4x / 6x are the scales it passes.
+#
+# 95 glyphs, FONT_FIRST (space, 32) to FONT_LAST - the printable ASCII range
+# the atlas actually holds, which is the same 95 the caption reports from
+# atlas_g(). Rows wrap on the canvas width, and the loop stops when it runs out
+# of canvas rather than drawing off the bottom.
+FT_FIRST = 32
+FT_LAST  = 126
+
+fn ft_scale() {
+    if ft_zoom == 0 { return 2 }
+    if ft_zoom == 1 { return 3 }
+    if ft_zoom == 2 { return 4 }
+    return 6
+}
+
+fn ft_atlas(ax, ay, aw, ch) {
+    fau = ui()
+    fasc = ft_scale()
+    facw = cell_w() * fasc
+    fach = cell_h() * fasc
+    fax0 = ax + 12 * fau
+    fay0 = ay + 12 * fau
+    facols = idiv(aw - 24 * fau, facw)
+    if facols < 1 { return 0 }
+    fac = FT_FIRST
+    fai = 0
+    while fac <= FT_LAST {
+        fax = fax0 + (fai - idiv(fai, facols) * facols) * facw
+        fay = fay0 + idiv(fai, facols) * fach
+        if fay + fach > ay + ch - 12 * fau { return 0 }
+        char_sc(fax, fay, fac, fasc, ui_ink(S2_IK_HI))
+        fai = fai + 1
+        fac = fac + 1
+    }
+    return 0
+}
+
 fn ft_ui(ax, ay, aw, ah, dm) {
     u = ui()
     tbh = ui_tb_h()
@@ -625,6 +1127,7 @@ fn ft_ui(ax, ay, aw, ah, dm) {
     hit = 0 - 1
 
     s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+    if dm == 1 { ft_atlas(ax, ay, aw, ch) }
 
     ty = ay + ah - tbh
     ui_tb(ax, ty, aw, tbh, 1)
@@ -637,12 +1140,27 @@ fn ft_ui(ax, ay, aw, ah, dm) {
     gg = ui_seg(lx, ty + (tbh - gh) / 2, gw, gh, "2x|3x|4x|6x", ft_zoom, S2_SM)
     if gg >= 0 { hit = gg }
 
-    nw = ui_tw("95 glyphs - ", S2_SM, S2_MONO) + ui_tnw(cell_w(), S2_SM, S2_MONO) + ui_tw("x", S2_SM, S2_MONO) + ui_tnw(cell_h(), S2_SM, S2_MONO) + ui_tw(" cell - bitmap atlas", S2_SM, S2_MONO)
+    # 95 WAS A LITERAL between two measured numbers - cell_w() and cell_h() are
+    # read, and the glyph count sat between them looking exactly as measured as
+    # they are.
+    #
+    # And atlas_g takes an INDEX. My first attempt called it with none, which
+    # the new check-nativeargs guard rejected on the very next build - the
+    # native reads a[0] and would have got a zero the caller never supplied.
+    #
+    # WHICH atlas is not a constant either: 0 is the 8x16 cell and 1 is 16x32,
+    # so it depends on the ui scale. fa_atlas_here finds the one whose cell
+    # matches the console's, which is the atlas this line is describing.
+    nw = ui_tnw(atlas_g(fa_atlas_here()), S2_SM, S2_MONO) + ui_tw(" glyphs - ", S2_SM, S2_MONO) + ui_tnw(cell_w(), S2_SM, S2_MONO) + ui_tw("x", S2_SM, S2_MONO) + ui_tnw(cell_h(), S2_SM, S2_MONO) + ui_tw(" cell - bitmap atlas", S2_SM, S2_MONO)
     nx = ax + aw - 11 * u - nw
     if nx > lx + gw + 8 * u {
         ny = s2_mcy(ty, tbh)
-        ui_txt(nx, ny, "95 glyphs - ", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
-        nx = nx + ui_tw("95 glyphs - ", S2_SM, S2_MONO)
+        ui_txtn(nx, ny, atlas_g(fa_atlas_here()), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        nx = nx + ui_tnw(atlas_g(fa_atlas_here()), S2_SM, S2_MONO)
+        ui_txt(nx, ny, " glyphs - ", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        # ...AND THE ADVANCE. Removing the literal took its `nx = nx + ...`
+        # with it, so the cell dimensions were overprinted on the word.
+        nx = nx + ui_tw(" glyphs - ", S2_SM, S2_MONO)
         ui_txtn(nx, ny, cell_w(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
         nx = nx + ui_tnw(cell_w(), S2_SM, S2_MONO)
         ui_txt(nx, ny, "x", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
@@ -699,18 +1217,24 @@ fn sys2_mono(id) {
 # window that is the right shape in the wrong box scores wrong however it
 # looks.
 fn sys2_w(id) {
-    if id == APP_KLOG { return 544 }
+    # KLOG and HEXV take the PROTOTYPE's rects. They were added to reg_w in
+    # apps_registry.zl and never reached: reg_w is consulted only by reg_new's
+    # four generic wm_open lines, whose id bands stop short of sys2's range, so
+    # these two apps opened from sys2_new out of this table the whole time and
+    # the tree held two disagreeing sizes for one id. The registry's copies are
+    # deleted; these are the live ones.
+    if id == APP_KLOG { return 620 }
     if id == APP_REND { return 352 }
-    if id == APP_HEXV { return 566 }
+    if id == APP_HEXV { return 620 }
     if id == APP_FBUF { return 600 }
     if id == APP_TTY  { return 616 }
     if id == APP_FONT { return 564 }
     return 480
 }
 fn sys2_h(id) {
-    if id == APP_KLOG { return 320 }
+    if id == APP_KLOG { return 400 }
     if id == APP_REND { return 326 }
-    if id == APP_HEXV { return 340 }
+    if id == APP_HEXV { return 420 }
     if id == APP_FBUF { return 420 }
     if id == APP_TTY  { return 396 }
     if id == APP_FONT { return 396 }
@@ -785,6 +1309,22 @@ fn sys2_draw(id, ax, ay, aw, ah) {
 # app_draw was given - so the widget sequence lays out identically and a
 # control is hit exactly where it was drawn.
 fn sys2_event(id, win, ety, ecode, ex, ey) {
+    # THE WHEEL, for the one pane in this file with more rows than it can show.
+    # kl_scroll counts BACKWARDS from the newest line, so a notch up walks into
+    # the history and a notch down returns to the tail - and it is clamped so it
+    # can neither run past the oldest line nor lift the view off the end.
+    # Without this kl_scroll would be a variable nothing writes, which is the
+    # same dead-control shape this file's own comment warns about below.
+    if ety == 5 {
+        if id != APP_KLOG { return 0 }
+        kl_scroll = kl_scroll + ecode
+        if kl_scroll < 0 { kl_scroll = 0 }
+        kl_max = kl_lines() - 1
+        if kl_max < 0 { kl_max = 0 }
+        if kl_scroll > kl_max { kl_scroll = kl_max }
+        wm_dmg(win)
+        return 1
+    }
     if ety != 4 { return 0 }
     if band(ecode, 1) == 0 { return 0 }
     ui_begin(wm_cx(win), wm_cy(win), wm_cw(win), wm_ch(win), 1, ex, ey, 1)
@@ -798,7 +1338,7 @@ fn sys2_event(id, win, ety, ecode, ex, ey) {
     if g < 0 { return 0 }
     if id == APP_KLOG { kl_apply(g) }
     if id == APP_REND { rd_apply(g) }
-    if id == APP_HEXV { hx_apply(g) }
+    if id == APP_HEXV { hx_apply(g, wm_ch(win)) }
     if id == APP_FBUF { fbv_apply(g) }
     if id == APP_TTY  { cn_apply(g) }
     if id == APP_FONT { ft_apply(g) }

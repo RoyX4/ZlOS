@@ -19,7 +19,11 @@ REQUIRED_SNIPPETS = (
     'run "wrapper inventory write"',
     'run "wrapper inventory check"',
     'python3 tools/checks/check-build-contract.py --selftest',
+    'run "host dependency lock write"',
     'python3 tools/generators/gen-dependency-lock.py --check --selftest',
+    'run "offline dependency archive receipt refresh"',
+    'python3 tools/checks/verify-dependency-archives.py --receipt-check --selftest',
+    'run "license/provenance truth write"',
     'python3 tools/generators/gen-license-registry.py --check --selftest',
     'run "build input identity"',
     'run "toolchain manifest write"',
@@ -31,11 +35,15 @@ REQUIRED_SNIPPETS = (
     'run "kernel ELF permissions"',
     'run "SOURCES recovery selftest"',
     'run "SOURCES coverage"',
-    'run "host test inventory"',
+    'run "host test inventory write"',
+    'run "host test inventory check"',
     'run "host tests execute"',
     'run "host benchmark receipt"',
+    'run "host build benchmark receipt"',
     'run "zl call sites"',
     'run "zl generated dispatch"',
+    'run "address-space registry write"',
+    'run "address-space registry check"',
     'run "memory map"',
     'run "memory map mutation"',
     'run "memory-map mirrors"',
@@ -56,14 +64,21 @@ REQUIRED_SNIPPETS = (
     'tools/checks/verify-clock.sh tools/checks/verify-net.sh',
     'run "final canonical ISO"',
     'run "CPU fault capture QEMU"',
+    'run "CPU fault capture native UEFI64 QEMU"',
+    'run "CPU GP error-code capture native UEFI64 QEMU"',
+    'run "CPU double-fault IST capture native UEFI64 QEMU"',
     'run "app routes QEMU"',
     'run "rail register QEMU"',
     'python3 tools/probes/probe-rail.py --no-build',
     'run "47-app lifecycle QEMU"',
     'run "Run route QEMU"',
     'python3 tools/probes/probe-run.py --no-build',
+    'run "page-table QEMU receipt check"',
+    'run "physical allocator QEMU receipt check"',
     'run "application evidence registry write"',
     'run "application evidence registry check"',
+    'run "hardware receipt plan write"',
+    'run "hardware receipt plan check"',
     'run "artifact and boot-route registry write"',
     'run "artifact and boot-route registry check"',
     'run "final build graph artifact rebind write"',
@@ -73,6 +88,13 @@ REQUIRED_SNIPPETS = (
     'run "adversarial registry write"',
     'run "adversarial registry check"',
     'run "host benchmark receipt check"',
+    'run "host build benchmark receipt check"',
+    'run "performance regression registry write"',
+    'run "performance regression registry check"',
+    'run "current visual receipt write"',
+    'run "visual golden registry write"',
+    'run "current visual receipt check"',
+    'run "visual golden registry check"',
     'run "visual evidence registry write"',
     'run "visual evidence registry check"',
     'run "accessibility proof registry write"',
@@ -93,12 +115,22 @@ REQUIRED_SNIPPETS = (
     'run "provenance viewer check"',
     'run "joined evidence registry write"',
     'run "joined evidence registry check"',
+    'run "906 feature status write"',
+    'run "906 feature status check"',
+    'run "906 partial closure write"',
+    'run "906 partial closure check"',
+    'run "906 master program"',
 )
 
 OPTIONAL_AUTHORITY = re.compile(
     r'\[ -[fx] "\$WT/kernel/(?!SOURCES)[^"\n]+" \](?:\s*\\\s*)?(?:&&)?'
 )
 OPTIONAL_BOOT = re.compile(r'\[ -x "\$WT/kernel/\$g" \] \|\| continue')
+HOST_BUILD_BENCHMARK_GUARD = re.compile(
+    r'run "host benchmark receipt".*?until guard; do sleep 30; done\s*'
+    r'run "host build benchmark receipt"',
+    re.S,
+)
 
 
 def failures(source: str, verify_net: str | None = None) -> list[str]:
@@ -113,6 +145,8 @@ def failures(source: str, verify_net: str | None = None) -> list[str]:
         errors.append("kernel authority is hidden behind an existence guard")
     if OPTIONAL_BOOT.search(source):
         errors.append("named boot script can be skipped when absent")
+    if not HOST_BUILD_BENCHMARK_GUARD.search(source):
+        errors.append("host build benchmark lacks its own quiet-host admission guard")
     if "python3 tools/probes/probe-net.py --fetch" not in verify_net:
         errors.append("network boot gate does not use the synchronized fetch probe")
     if ".NEq" in verify_net:
@@ -179,8 +213,37 @@ def selftest(source: str) -> None:
         "deleted-final-graph-rebind",
     )
     expect_failure(
+        source.replace(
+            'run "physical allocator QEMU receipt check"',
+            '# removed physical allocator receipt check',
+            1,
+        ),
+        "deleted-physical-allocator-receipt-check",
+    )
+    expect_failure(
         source.replace('run "rail register QEMU"', '# removed rail gate', 1),
         "deleted-rail-gate",
+    )
+    expect_failure(
+        source.replace(
+            'run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest\n'
+            '# The frame benchmark can occupy the host long enough for another task to\n'
+            '# resume. Admit the independently measured build distribution separately.\n'
+            'until guard; do sleep 30; done\n'
+            'run "host build benchmark receipt"',
+            'run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest\n'
+            'run "host build benchmark receipt"',
+            1,
+        ),
+        "deleted-host-build-benchmark-guard",
+    )
+    expect_failure(
+        source.replace(
+            'run "CPU double-fault IST capture native UEFI64 QEMU"',
+            '# removed double-fault IST gate',
+            1,
+        ),
+        "deleted-double-fault-gate",
     )
     expect_failure(
         source,
@@ -208,7 +271,9 @@ def selftest(source: str) -> None:
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
         "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
-        "deleted-final-graph-rebind, deleted-rail-gate, deleted-synchronized-network-fetch, "
+        "deleted-final-graph-rebind, deleted-physical-allocator-receipt-check, "
+        "deleted-rail-gate, deleted-double-fault-gate, "
+        "deleted-synchronized-network-fetch, "
         "restored-network-command-race, masked-final-exit and masked-child-failure"
     )
 

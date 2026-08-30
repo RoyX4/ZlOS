@@ -93,6 +93,16 @@ missing=0
 for d in $DOCS; do
     # Only paths that look like real repo files: a/b.ext with a known extension.
     # Deliberately narrow - a wide regex turns prose into false positives.
+    # Directories the doc tells you to cd into. A runnable block that opens
+    # with `cd kernel` means every path after it is relative to kernel/, and
+    # that is true regardless of where the doc itself lives - which the
+    # dirname rule below cannot see. HANDOFF-APP-PARITY.md sits at the repo
+    # root, says `cd kernel`, and had two correct paths reported as missing
+    # for exactly this reason. A guard that cries wolf on a doc somebody just
+    # corrected teaches people to skip its real findings, so it is worth the
+    # extra grep.
+    cds=$(grep -ohE '^[[:space:]]*cd [A-Za-z0-9_./-]+' "$d" 2>/dev/null \
+          | sed -E 's/^[[:space:]]*cd //' | sort -u)
     for ref in $(grep -ohE "$REPO_REF" "$d" 2>/dev/null | sed -E 's/^[^A-Za-z0-9_.-]//' | sort -u); do
         # A path in kernel/HANDOFF.md is relative to kernel/, not the repo
         # root. Accept either resolution before calling it missing.
@@ -100,6 +110,11 @@ for d in $DOCS; do
             || { [[ "$d" == kernel/* ]] && [ -e "kernel/$ref" ]; }; then
             continue
         fi
+        found_via_cd=0
+        for base in $cds; do
+            if [ -e "$base/$ref" ]; then found_via_cd=1; break; fi
+        done
+        [ "$found_via_cd" -eq 1 ] && continue
         # A clean checkout deliberately lacks ignored generated files. Docs may
         # describe those outputs without requiring somebody to build them first.
         if git check-ignore -q "$ref" 2>/dev/null \

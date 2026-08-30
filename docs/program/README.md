@@ -8,9 +8,9 @@ as a small MVP. Delivery is staged only because later capabilities depend on
 earlier ones.
 
 It is a specification and status system, not 906 implemented features. The
-current checked-in status snapshot records 906 rows: 877 planned and unproved,
-22 partial, and 7 proved for their explicitly bounded contracts. Those labels
-must be refreshed from evidence before they are treated as current.
+current checked-in status snapshot records exactly 906 rows. Its generated
+`FEATURE-STATUS.json` is the numerical maturity authority; those labels must be
+refreshed from evidence before they are treated as current.
 
 The program covers:
 
@@ -99,14 +99,14 @@ slice. Do not assume this date-stamped baseline remains current.
 
 The locally verified batch already includes retained client and shell surfaces,
 bounded damage/occlusion, deadline-aware pacing, a bounded block cache, named
-crash-consistent zlfs files, two isolated cooperative Ring-3 processes, bounded
+crash-consistent zlfs files, a bounded two-process preemptive Ring-3 gate, bounded
 PID IPC, virtio-net and e1000 with DHCP/DNS/TCP/TLS, persistent browser state,
 and opt-in Intel blitter fallback. BIOS and native UEFI application exercises
 were 32/32 in the cited receipt.
 
 Those are migration assets, not excuses to mark the complete contracts done.
-Notably still open are timer preemption, a general user window/input ABI,
-capability handles and typed IPC, service/process migration, physical I219 and
+Notably still open are a general per-CPU scheduler, a general user window/input
+ABI, capability handles and typed IPC, service/process migration, physical I219 and
 Intel promotion, broad driver coverage, browser process isolation, audio,
 package/app process boundaries and the in-zlOS toolchain.
 

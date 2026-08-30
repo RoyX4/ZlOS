@@ -52,6 +52,9 @@ void fb_blur_free(int slot);
 void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a);
 void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_icon24(int px, int py, int n, unsigned int fg);
+/* The same atlas at a size the caller picks. fb_icon24 floors at ICON_W and so
+ * physically cannot draw the window controls at the size the authority uses. */
+void fb_icon_dp(int px, int py, int n, int dp, unsigned int fg);
 void fb_text_aa(int px, int py, const char *s, unsigned int fg);
 /* Titles are LABELS, not console text, so they take the proportional path.
  * That is the single change docs/desktop/desktop-look.md item 4 asks for at this layer. */
@@ -165,6 +168,7 @@ void zllog_frame_observe(unsigned input_us, unsigned tick_us,
 int         notify_tick(unsigned now);
 int         notify_active(void);
 const char *notify_text(void);
+const char *notify_body(void);
 int         notify_post(const char *text, unsigned ticks);
 void        notify_rect(int sw, int sh, int reserve_bot, int scale,
                         int *x, int *y, int *w, int *h);
@@ -200,6 +204,27 @@ void snap_rect(int z, int sw, int sh, int reserve_top, int reserve_bot,
 int  snap_release(int win, int *x, int *y, int *w, int *h);
 int  snap_key_zone(int win, int dir);
 int  snap_state(int win);
+
+/* TWO QUESTIONS, NOT ONE, and collapsing them bolted down half the desktop.
+ *
+ * Maximised is a QUESTION rather than a stored flag - the snap system owns the
+ * rect and the truth, so anything that needs to know asks it. That much was
+ * right. But the first version of this asked `snap_state(win) != SNAP_NONE`,
+ * and snap.c has SEVEN non-zero states: LEFT, RIGHT, MAX, TL, TR, BL and BR.
+ * So dragging a window to the left edge made win_maxed() true, and the radius
+ * reader below gave it ZD_R_BOLT - square corners and full-bleed runs on all
+ * four edges - for a plate sitting on visible ground down its whole right side.
+ *
+ * The authority has no such state: .win.max is applied by maxWin() alone, and
+ * a half-snapped window in the prototype keeps its radius.
+ *
+ * win_snapped answers "is the snap system holding this rect" - which is what
+ * the restore path and the control glyph want. win_maxed answers "does this
+ * plate touch every edge" - which is what the radius wants. They are different
+ * questions and only one of them is about corners. */
+#define SNAP_MAX  3                    /* snap.c SNAP_MAX */
+static int win_snapped(int win) { return snap_state(win) != SNAP_NONE; }
+static int win_maxed(int win)   { return snap_state(win) == SNAP_MAX; }
 void snap_note_moved(int win);
 void snap_note_closed(int win);
 void snap_reset(void);
@@ -251,12 +276,38 @@ static void snap_preview_draw(int rx0, int ry0, int rx1, int ry1)
                rx0, ry0, rx1, ry1, &x, &y, &w, &h)) return;
     const struct ui_theme *t = ui_theme();
     fb_clip(x, y, w, h);
-    fb_rrect_blend(snap_preview_x + UI_S1(t), snap_preview_y + UI_S1(t),
-                   snap_preview_w - 2 * UI_S1(t), snap_preview_h - 2 * UI_S1(t),
-                   t->radius, t->accent, 34);
+    /* THIS WAS THE LARGEST VERMILION AREA ON THE DESKTOP, BY A WIDE MARGIN.
+     *
+     * Both of these blends were t->accent - an inner rrect at alpha 34 and the
+     * whole rect at 82 - so a half-screen snap flooded half the screen with the
+     * overprint. proto:124-128 gives ZD_VERM exactly four jobs ("the focus bar
+     * and register mark, the one primary action per view, the crop marks, the
+     * datum mark on the memory ruler") and then states the rule that keeps two
+     * inks on warm graphite from reading as decoration: "vermilion never fills
+     * an area wider than the focus bar except one button per view"
+     * (proto:129-131). This file repeats that rule for the focus bar at
+     * :2894-2904 and broke it here.
+     *
+     * THERE IS NO SNAP PREVIEW IN THE AUTHORITY AT ALL - grep for snap, ghost
+     * or preview over presswork-prototype.html returns nothing related - so
+     * nothing licenses a fifth vermilion job, let alone the biggest one.
+     *
+     * What it becomes is what a plate about to exist looks like: the knockout
+     * as a wash, the occlusion edge as its boundary, and vermilion kept for
+     * the 3dp bar down the left - the SAME mark a focused plate carries, at
+     * the SAME width, which is the one use the rule already allows. The zone
+     * still reads instantly and the budget is intact. */
     fb_rrect_blend(snap_preview_x, snap_preview_y,
                    snap_preview_w, snap_preview_h, t->radius,
-                   t->accent, 82);
+                   t->knock, 96);
+    fb_rrect_blend(snap_preview_x + UI_S1(t), snap_preview_y + UI_S1(t),
+                   snap_preview_w - 2 * UI_S1(t), snap_preview_h - 2 * UI_S1(t),
+                   t->radius, t->edge_over, 70);
+    /* the focus bar's own width, down the left edge - ZD_SEL_BAR_W, the one
+     * width vermilion is allowed to fill */
+    fb_fill_blend(snap_preview_x, snap_preview_y + t->radius,
+                  UI_DP(t, ZD_FOCUS_BAR),
+                  snap_preview_h - 2 * t->radius, t->accent, 220);
 }
 
 /* ---- input.c ------------------------------------------------------------- */
@@ -294,6 +345,24 @@ unsigned int input_event_seq(void);
  * a character", and `code >= KEY_NONCHAR` is the test for "this key has no
  * character". A partial copy of a table cannot carry a rule. */
 #include "keycodes.h"
+
+/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
+ *
+ * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
+ * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
+ * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
+ * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
+ * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
+ * maximised window was drawn from x = 0 straight over the launcher.
+ *
+ * Numbers that describe the shell belong to the theme, which is where the
+ * shell reads them from too; two copies of 48 in two files is how the first
+ * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
+ * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
+ * scaled by the same q8 as everything else here. */
+#define RESERVE_TOP(t)   ((t)->strip_h)
+#define RESERVE_BOT(t)   ((t)->foot_h)
+#define RESERVE_LEFT(t)  ((t)->rail_w)
 
 unsigned int idt_ticks(void);
 /* cpu.c. The TSC has been readable since cpu.c was written and nothing in the
@@ -382,9 +451,20 @@ struct win {
      * readout that must not re-set itself sixty times a second. See
      * band_us_latch() for the cadence and why the shell cache needs it. */
     unsigned app_us, band_us, band_us_tick;
-    /* maximise/restore. The saved rect is only meaningful while maxed. */
-    int  maxed;
-    int  sav_x, sav_y, sav_w, sav_h;
+    /* MAXIMISE IS THE SNAP SYSTEM'S, and these fields were the evidence that
+     * it used to be something else. `maxed` was READ three times and WRITTEN
+     * nowhere in the tree; sav_x/sav_y/sav_w/sav_h had no references at all
+     * outside this declaration. wm_toggle_max is one line - it calls
+     * wm_snap_key(win, SK_UP or SK_DOWN) - and snap owns the saved rect, which
+     * is why restore works and wmtest_feel's "doing it again RESTORES the exact
+     * rect" passes.
+     *
+     * The three reads were not harmless. Each guarded a real difference a
+     * maximised window is supposed to show - a bolt radius instead of a plate
+     * radius, a different glyph on the control, and a cache-key bit - and each
+     * tested a field that is always zero, so none of them ever fired. The
+     * branches were right and had no input. win_maxed() is that input, derived
+     * from the state that actually changes. */
     /* WHICH WORKSPACE. A window is on exactly one, and a workspace is not a
      * second z-order: the stack is global and unchanged, and `ws` is a filter
      * applied at the three places that ask "can this window be seen" -
@@ -469,6 +549,7 @@ static app_event_fn hook_event;
 static app_tick_fn  hook_tick;
 static desk_draw_fn hook_desk;
 static overlay_draw_fn hook_overlay;      /* above the windows AND the toast */
+static win_menu_fn hook_win_menu;         /* a right-press over a window     */
 extern int userwin_is_app(int app) __attribute__((weak));
 extern void userwin_draw_app(int app, int x, int y, int w, int h, int focused)
     __attribute__((weak));
@@ -525,6 +606,8 @@ static void app_draw_dispatch(int win, int app, int x, int y, int w, int h,
  * and never will be. */
 static desk_click_fn hook_desk_click;
 static desk_key_fn   hook_desk_key;
+static can_close_fn  hook_can_close;
+static overlay_click_fn hook_overlay_click;
 
 static void client_surface_free(int win)
 {
@@ -930,6 +1013,13 @@ void wm_damage(int x, int y, int w, int h)
  * fb.c is the vocabulary and is deliberately not edited. */
 #define SHADOW_OFF(t)   (UI_DP((t), ZD_LIFT_DY))
 #define SHADOW_SOFT(t)  (UI_DP((t), ZD_LIFT_BLUR))
+/* THE OFF-PLANE PAIR IS A DIFFERENT PAIR, NOT A MULTIPLE OF THIS ONE. The
+ * palette sheet, the menu and the toast all carry 6dp/14dp in the authority
+ * (proto:897, :942, :965); the dragged plate carries 5dp/13dp (proto:643).
+ * The two sites below used `off * 3 / 2` on the plate pair, which is 7/19 -
+ * a figure that is in no document. See design.h's ZD_OFFPLANE_* block. */
+#define OFFPLANE_OFF(t)  (UI_DP((t), ZD_OFFPLANE_DY))
+#define OFFPLANE_SOFT(t) (UI_DP((t), ZD_OFFPLANE_BLUR))
 
 /* ELEVATION MAKES THE SHADOW A VARIABLE, AND THAT IS A TRAP.
  *
@@ -959,7 +1049,7 @@ static int shadow_reach(int win)
 {
     const struct ui_theme *t = ui_theme();
     int off = SHADOW_OFF(t), soft = SHADOW_SOFT(t);
-    if (wins[win].flags & WF_MODAL) { off = off * 3 / 2; soft = soft * 3 / 2; }
+    if (wins[win].flags & WF_MODAL) { off = OFFPLANE_OFF(t); soft = OFFPLANE_SOFT(t); }
     return off + soft;          /* the LIFTED size; at rest there is none */
 }
 
@@ -1012,8 +1102,6 @@ void wm_damage_win(int win)
  *
  * WHAT EACH KIND IS, and which are drawn rather than merely stored:
  *
- *   ANIM_OPEN    scale from 82% to 100%   - the window open (was `anim`)
- *   ANIM_CLOSE   scale from 100% to 82%   - its mirror
  *   ANIM_PRESS   scale 100 -> 96 -> 100   - zpress, a control acknowledging
  *   ANIM_PULSE   opacity 0 -> 40 -> 0     - zpulse, attention without motion
  *   ANIM_FADE    opacity 0 -> 100         - zov/zpop/ztoast, the opacity fades
@@ -1025,19 +1113,26 @@ void wm_damage_win(int win)
 #define ANIM_MAX 8
 
 #define ANIM_NONE   0
-#define ANIM_OPEN   1
-#define ANIM_CLOSE  2
 #define ANIM_PRESS  3
 #define ANIM_PULSE  4
 #define ANIM_FADE   5
+/* THE FOCUS CHANGE, WHICH WAS A CUT AND WAS NOT SUPPOSED TO BE.
+ *
+ * design.h on ZD_MS_RISE: "the load-bearing half of the focus signal. A CUT
+ * (0ms) was offered and REFUSED: the knockout is a full value flip and cutting
+ * it makes the whole screen twitch."
+ *
+ * wm_focus invalidated and damaged and nothing else, so the flip happened in
+ * one frame - the refused option, shipped. The prototype transitions six
+ * properties on this change; this animates the one that carries it, the
+ * header band, over RISE. */
 
 /* THE FURNITURE IDS. Negative, so they cannot collide with a window index, and
  * named, so a reader of a wm_anim_at() call can tell what is animating. wm.c
- * keeps -1 and -2 for the two things it draws itself; everything at or below
+ * keeps -1 for the toast it draws itself; everything at or below
  * WM_FX_USER belongs to the policy layer, which is the only code that knows
  * where a dock tile is. ui.h publishes the same three. */
 #define WM_FX_TOAST  (-1)      /* ztoast, the notification's entry     */
-#define WM_FX_GHOST  (-2)      /* ANIM_CLOSE, the closing window       */
 #define WM_FX_USER   (-16)     /* kernel.zl's, -16 and downward        */
 
 /* Durations are wall-clock ticks, not frame counts. The old four-step tables
@@ -1057,26 +1152,68 @@ void wm_damage_win(int win)
  * symmetric, and that is a choice rather than a measurement. */
 #define MS_TO_TICKS(ms) (((ms) + 5) / 10)
 
+/* THE DURATIONS COME FROM design.h NOW, AND THERE ARE THREE VALUES.
+ *
+ * These read ease.h's EASE_MS_*, whose own comment says they are "exactly as
+ * the reference states them" and cites ds-reference.html - the SUPERSEDED
+ * predecessor. Its scheme had ten durations: 200, 100, 250, 1000, 2600, 160,
+ * 160, 7000.
+ *
+ * design.h replaced that with three - RISE 90, TRAVEL 160, SETTLE 240 - and
+ * maps ZD_MS_PRESS / ZD_MS_OV / ZD_MS_PULSE / ZD_MS_TOAST onto them. Ordinary
+ * window open and close have no transform and therefore no duration.
+ *
+ * wm.c never took them up. The mapping was written, the old header stayed
+ * wired, and every animation in the compositor has been running on the
+ * predecessor's numbers since - a press acknowledging in 250 ms where the
+ * design says 90, a window opening in 200 where it says 160. Intent written
+ * down and never connected is this repo's most repeated failure and this is
+ * another instance of it. */
 static const unsigned char anim_ticks[] = {
     /* NONE  */ 0,
-    /* OPEN  */ MS_TO_TICKS(EASE_MS_WIN),     /* zwin   200 ms */
-    /* CLOSE */ MS_TO_TICKS(EASE_MS_WIN),     /* no reference counterpart */
-    /* PRESS */ MS_TO_TICKS(EASE_MS_PRESS),   /* zpress 250 ms */
-    /* PULSE */ MS_TO_TICKS(EASE_MS_PULSE),   /* zpulse 1000 ms */
-    /* FADE  */ MS_TO_TICKS(EASE_MS_OV),      /* zov/ztoast 160 ms */
+    /* 1 unused: PRESSWORK has no window-open transform */ 0,
+    /* 2 unused: PRESSWORK has no window-close transform */ 0,
+    /* PRESS */ MS_TO_TICKS(ZD_MS_PRESS),     /* RISE    90 */
+    /* PULSE */ MS_TO_TICKS(ZD_MS_PULSE),     /* SETTLE 240 */
+    /* FADE  */ MS_TO_TICKS(ZD_MS_OV),        /* TRAVEL 160 */
+    /* FOCUS */ MS_TO_TICKS(ZD_MS_RISE),      /* RISE    90 */
+    /* TOAST */ MS_TO_TICKS(ZD_MS_TOAST),     /* RISE    90 */
 };
 
-/* Which curve each animation runs on. ds-reference.html lines 14-20: only the
- * window open gets the bespoke cubic-bezier; the pops and fades are ease-out
- * and the pulse is ease-in-out. Using one curve for all five - which is what
- * this file did - is what made every animation feel like the same animation. */
+/* ONE CURVE. THE COMMENT THAT USED TO BE HERE ARGUED THE OPPOSITE AND CITED
+ * THE SUPERSEDED DOCUMENT TO DO IT.
+ *
+ * It read: "ds-reference.html lines 14-20: only the window open gets the
+ * bespoke cubic-bezier; the pops and fades are ease-out and the pulse is
+ * ease-in-out. Using one curve for all five - which is what this file did - is
+ * what made every animation feel like the same animation."
+ *
+ * The authority says the opposite, in as many words. presswork-prototype.html
+ * declares `--ease: cubic-bezier(0.200, 0.850, 0.300, 1.000)` (proto:209)
+ * under the heading "Graphite's three durations, ONE CURVE" (proto:203-209),
+ * and every transition and animation in the file uses `var(--ease)` - nine of
+ * them, at proto:456, 602, 609, 612, 658, 663, 815, 846 and 966. Counted, not
+ * asserted: grep for cubic-bezier over that file returns exactly one, and the
+ * only other timing functions in it are three `linear`s that are
+ * linear-gradients and one `steps(1)` on the caret blink, which is a two-state
+ * flip rather than an easing.
+ *
+ * The durations beside this table had ALREADY been migrated to design.h's
+ * three, and the comment above them names this failure by name - "intent
+ * written down and never connected". The curve table was the other half of the
+ * same migration and was left on the predecessor's scheme.
+ *
+ * EASE_LINEAR stays on NONE, which has no duration and therefore no curve;
+ * giving it EASE_WIN would be a curve for an animation that does not run. */
 static const unsigned char anim_curve[] = {
     /* NONE  */ EASE_LINEAR,
-    /* OPEN  */ EASE_WIN,
-    /* CLOSE */ EASE_WIN,
-    /* PRESS */ EASE_STD,
-    /* PULSE */ EASE_IN_OUT,
-    /* FADE  */ EASE_OUT,
+    /* 1 unused */ EASE_LINEAR,
+    /* 2 unused */ EASE_LINEAR,
+    /* PRESS */ EASE_WIN,
+    /* PULSE */ EASE_WIN,
+    /* FADE  */ EASE_WIN,
+    /* FOCUS */ EASE_WIN,
+    /* TOAST */ EASE_WIN,
 };
 
 /* THE ID IS NOT ALWAYS A WINDOW.
@@ -1114,6 +1251,26 @@ static int anim_start(int id, int kind, int x, int y, int w, int h)
             anim_damage(&anims[i]);
             return 1;
         }
+    /* FOCUS NEVER TAKES THE LAST SLOTS.
+     *
+     * The table is eight slots shared by every window and every piece of
+     * furniture, and a focus change starts TWO animations - the window gaining
+     * it and the one losing it. Adding that made focus the most frequent
+     * animation in the system, and it promptly starved a fade: wmtest's
+     * "the alpha really is partial" failed because ANIM_FADE was refused a slot
+     * and never ran, so the window drew opaque. The file's own comment two
+     * hundred lines up describes this hazard from the other direction, when an
+     * open animation that had "previously been REFUSED for want of a slot" got
+     * one and outvoted a fade.
+     *
+     * A focus transition is the cheapest thing here to lose - it degrades to
+     * the cut it replaced, which is what shipped until today - and a fade or an
+     * open degrading is a visible fault. So focus keeps two slots free for
+     * them. */
+    int free_slots = 0;
+    for (int i = 0; i < ANIM_MAX; i++) if (!anims[i].kind) free_slots++;
+    if (kind == ANIM_FOCUS && free_slots <= 2) return 0;
+
     for (int i = 0; i < ANIM_MAX; i++) {
         if (anims[i].kind) continue;
         anims[i].win = id;
@@ -1140,12 +1297,6 @@ static void anim_cancel(int id)
         if (anims[i].kind && anims[i].win == id) anims[i].kind = ANIM_NONE;
 }
 
-static void anim_cancel_kind(int id, int kind)
-{
-    for (int i = 0; i < ANIM_MAX; i++)
-        if (anims[i].kind == kind && anims[i].win == id) anims[i].kind = ANIM_NONE;
-}
-
 /* Start one. Returns 0 and says so if every slot is busy - the same refusal
  * discipline as wm_open's WM_MAX, and for the same reason: a silently dropped
  * animation is a UI that is intermittently unresponsive for no visible cause. */
@@ -1168,8 +1319,37 @@ int wm_anim_at(int id, int kind, int x, int y, int w, int h)
  * moving. The reference's zwin is 74% of the way there at the same point -
  * hosttest/easetest.c prints both numbers side by side. That single difference
  * is most of why the two desktops feel unalike in motion. */
+/* Two colours, p thousandths of the way from a to b. Integer, per channel, no
+ * float in the drawing path - the same rule fb_mix follows. */
+static unsigned blend_rgb(unsigned a, unsigned b, int p)
+{
+    if (p < 0) p = 0;
+    if (p > 1000) p = 1000;
+    int q = 1000 - p;
+    unsigned r = ((((a >> 16) & 0xFF) * q) + (((b >> 16) & 0xFF) * p)) / 1000;
+    unsigned g = ((((a >> 8)  & 0xFF) * q) + (((b >> 8)  & 0xFF) * p)) / 1000;
+    unsigned c = ((( a        & 0xFF) * q) + (( b        & 0xFF) * p)) / 1000;
+    return (r << 16) | (g << 8) | c;
+}
+
 static int anim_progress(int win, int kind)
 {
+    /* MOTION OFF means every RUNNING transition is already finished. It does
+     * NOT mean every query answers "finished".
+     *
+     * The first version returned 1000 unconditionally, and -1 is how this
+     * function says "no such animation" - so with motion off every caller was
+     * told every animation was complete, including ones that had never started.
+     * chrome_header gates on `focused || fp >= 0`, so the focus fill ran for
+     * UNFOCUSED windows and erased the struck top run on all of them.
+     *
+     * The shortcut still has to answer the existence question; it only skips
+     * the easing. */
+    if (!ui_motion_get()) {
+        for (int i = 0; i < ANIM_MAX; i++)
+            if (anims[i].kind == kind && anims[i].win == win) return 1000;
+        return -1;
+    }
     for (int i = 0; i < ANIM_MAX; i++)
         if (anims[i].kind == kind && anims[i].win == win) {
             unsigned elapsed = idt_ticks() - anims[i].start;
@@ -1210,6 +1390,8 @@ int wm_anim_running(int win)
 int wm_anim_alpha(int win)
 {
     int p = anim_progress(win, ANIM_FADE);
+    if (p >= 0) return 48 + 207 * p / 1000;
+    p = anim_progress(win, ANIM_TOAST);
     if (p >= 0) return 48 + 207 * p / 1000;
     p = anim_progress(win, ANIM_PULSE);
     if (p >= 0) {
@@ -1258,9 +1440,9 @@ static void anim_tick(void)
     for (int i = 0; i < ANIM_MAX; i++) {
         if (!anims[i].kind) continue;
         anim_damage(&anims[i]);
-        /* AN ANIMATION NEVER CHANGES WINDOW LIFETIME. It was tempting to have
-         * ANIM_CLOSE call wm_close() when it finishes, so a closing window
-         * shrinks away; that would make "the window closed" depend on a free
+        /* AN ANIMATION NEVER CHANGES WINDOW LIFETIME. The removed close effect
+         * called wm_close() only when its timeline finished; that made
+         * "the window closed" depend on a free
          * animation slot, and wm_anim() is allowed to refuse. A window that
          * sometimes does not close when every slot is busy is a far worse bug
          * than a window that closes without a flourish. The timeline draws;
@@ -1286,26 +1468,24 @@ int  wm_anim_enabled(void) { return anim_on; }
  * opaque. Both are pure reads - nothing here starts, stops or damages. */
 int wm_anim_progress(int id, int kind) { return anim_progress(id, kind); }
 
-/* ---- the two INFINITE animations ------------------------------------------
- * zpulse (1s / 2.6s) and zsweep (7s) are `infinite` in the reference, and an
- * infinite entry in a fixed array of eight NEVER FREES ITS SLOT - two of them
- * and a quarter of the timeline is gone for the life of the boot, which shows
- * up later as "the UI stopped animating after a while".
- *
- * They do not need a slot. An animation with no beginning and no end is a pure
- * function of the clock, so it is computed on demand and stores nothing at
- * all. That is also why it cannot be refused, and why turning animations off
- * is the only thing that stops it.
- *
- * Returns an opacity 0..255. The floor is the reference's own .55, so this
- * never returns less than 140 - a pulse that reached zero would be a blink. */
+/* The slot-free one-second steps(1) clock used by the caret. */
 int wm_pulse(int period_ms)
 {
     if (!anim_on) return 255;
     unsigned d = (unsigned)MS_TO_TICKS(period_ms);
     if (!d) d = 1;
-    int p = (int)((idt_ticks() % d) * 1000u / d);
-    return 255 * ease_pulse(p) / 1000;
+    return (idt_ticks() % d) < (d + 1u) / 2u ? 255 : 0;
+}
+
+static struct { int live, x, y, w, h; unsigned seen, phase; } caret_watch;
+
+void wm_caret_watch(int x, int y, int w, int h)
+{
+    caret_watch.live = w > 0 && h > 0;
+    caret_watch.x = x; caret_watch.y = y;
+    caret_watch.w = w; caret_watch.h = h;
+    caret_watch.seen = idt_ticks();
+    caret_watch.phase = (caret_watch.seen / 50u) & 1u;
 }
 
 /* How big window `win` should be DRAWN this frame, in THOUSANDTHS.
@@ -1316,25 +1496,12 @@ int wm_pulse(int period_ms)
  * frame lands, and it is visible as a jump. Thousandths throughout, matching
  * ease.h, so no unit conversion happens at a call site.
  *
- * ONE MECHANISM. The open scale used to be a counter in the window struct and
- * the timeline was a second thing beside it that nothing triggered - so wm.c
- * carried two animation systems, one of which never ran. wm_open() starts an
- * ANIM_OPEN now and this reads it, which means the open scale and every other
- * kind share a code path and a bug in one is a bug you can actually see.
+ * PRESSWORK has no window open/close transform. This scale is therefore only
+ * the finite press acknowledgement used by controls.
  */
 static int anim_permille(int win)
 {
-    /* THE OPEN SCALE WAS 82%. The reference's is 96.5% - ds-reference.html
-     * line 15, `scale(.965)`. 82% is a window that leaps at you from a sixth
-     * of its size; 96.5% is a window that is essentially already there and
-     * settles. Same duration, same curve, completely different gesture. */
-    int p = anim_progress(win, ANIM_OPEN);
-    if (p >= 0)
-        return EASE_WIN_FROM_SCALE + (1000 - EASE_WIN_FROM_SCALE) * p / 1000;
-    p = anim_progress(win, ANIM_CLOSE);
-    if (p >= 0)
-        return 1000 - (1000 - EASE_WIN_FROM_SCALE) * p / 1000;
-    p = anim_progress(win, ANIM_PRESS);
+    int p = anim_progress(win, ANIM_PRESS);
     if (p >= 0) return ease_press_scale(p);
     return 1000;
 }
@@ -1346,37 +1513,6 @@ static int anim_permille(int win)
  * what keeps kernel.zl's dock on the reference's curve and duration without
  * kernel.zl knowing what a cubic-bezier is. */
 int wm_anim_scale(int id) { return anim_permille(id); }
-
-/* ---- the closing window's GHOST -------------------------------------------
- * ANIM_CLOSE has existed since the timeline was written, anim_permille has
- * always known how to shrink for it, and NOTHING EVER STARTED ONE. The reason
- * is in anim_tick above: a closing window cannot be drawn by the repaint's
- * z-order walk, because by the time there is anything to draw it is no longer
- * in the z-order - and keeping it there until the animation finished would
- * make "the window closed" depend on a free animation slot, which that comment
- * refuses to allow and is right to refuse.
- *
- * So the window closes IMMEDIATELY, exactly as before, and what shrinks is a
- * GHOST: a rectangle and a colour. It is not in `wins`, not in the z-order,
- * not hit-testable, has no app and receives no events. Nothing can ask it a
- * question. If the timeline refuses the animation the ghost is simply never
- * armed and the window vanishes without a flourish, which is the right way for
- * decoration to fail.
- *
- * ONE ghost, not WM_MAX of them. Closing two windows inside 200 ms and seeing
- * only the second shrink is not a defect anybody can perceive, and an array
- * here would be more state with a lifetime - the thing this file is trying to
- * have less of. */
-static struct { int live, x, y, w, h, reach; } ghost;
-
-static void ghost_clear(void)
-{
-    if (!ghost.live) return;
-    ghost.live = 0;
-    wm_damage(ghost.x - ghost.reach, ghost.y - ghost.reach,
-              ghost.w + 2 * ghost.reach, ghost.h + 2 * ghost.reach);
-    anim_cancel(WM_FX_GHOST);
-}
 
 /* ---- zsweep ---------------------------------------------------------------
  * ds-reference.html:66 - a band 34% of the screen tall, filled with
@@ -1466,15 +1602,6 @@ static void anim_rect(int win, int *x, int *y, int *w, int *h)
     *x = W->x + (W->w - *w) / 2;
     *y = W->y + (W->h - *h) / 2;
 
-    /* zwin is `scale(.965) translateY(10px)`: the window does not only grow,
-     * it RISES the last 10 px into place. Dropping the translate leaves a
-     * scale-only pop, which is the animation this file already had. The offset
-     * is scaled with the UI so it is 10 design pixels, not 10 device ones. */
-    int op = anim_progress(win, ANIM_OPEN);
-    if (op >= 0) {
-        int dy = EASE_WIN_FROM_DY * ui_metric(UI_METRIC_SCALE_Q8) / 256;
-        *y += dy - dy * op / 1000;
-    }
 }
 
 /* ---- z-order ------------------------------------------------------------- */
@@ -1621,7 +1748,13 @@ static int band_h_of(int fh, int flags)
 {
     const struct ui_theme *t = ui_theme();
     if (flags & WF_NOCHROME) return 0;
-    int bh = UI_DP(t, ZD_STATUS_H) + 1;
+    /* BORDER-BOX, like .hdr. `.sband { height: var(--zd-band-h); border-top:
+     * 1px }` with --zd-band-h 20dp means 20dp TOTAL with the rule inside it;
+     * this added a row for the rule on top of the full height, so the band was
+     * 21dp. Identical to the header's fault two commits ago, in the element at
+     * the other end of the plate - both from reading a CSS height as content
+     * when the sheet sets box-sizing: border-box globally. */
+    int bh = t->band_h;
     if (fh - t->title_h - 2 - bh < UI_DP(t, ZD_STATUS_H)) return 0;
     return bh;
 }
@@ -1651,11 +1784,29 @@ static void client_of(int fx, int fy, int fw, int fh, int flags,
      * that is not cosmetic - the app can never paint over the focus bar. The
      * shell layer is composited BEFORE the client, so without this the bar
      * would be drawn and then two thirds of it immediately overwritten. */
+    /* THE CLIENT MUST MOVE WITH THE CHROME, and two commits ago it did not.
+     *
+     * Making .hdr border-box put its foot rule at row fy + th, and floating the
+     * foot band up by .wbody's 6dp bottom padding freed rows at the other end -
+     * and client_of was left computing the old rectangle for both. The shell is
+     * composited BEFORE the client, so the app won: its first row painted over
+     * the header's knockout edge, and its last rows painted over the foot
+     * band's rule and into the band itself, five rows at scale 1 and eleven at
+     * scale 2.
+     *
+     * That is the cost of a geometry with two readers: moving one is a change,
+     * moving one of two is a bug, and the chrome and the client are the two
+     * readers most likely to be edited apart.
+     *
+     * The header owns rows fy+1 .. fy+th inclusive, so the client starts after
+     * it. The band, when there is one, floats ZD_BODY_PY above the ring, so the
+     * client stops that much earlier. */
     int bl = (flags & WF_NOCHROME) ? 0 : 1 + t->focus_bar;
+    int bpy = bh ? UI_DP(t, ZD_BODY_PY) : 0;
     *x = fx + bl;
-    *y = fy + th;
+    *y = fy + th + 1;
     *w = fw - bl - b;
-    *h = fh - th - b - bh;
+    *h = fh - th - 1 - b - bh - bpy;
     if (*w < 0) *w = 0;
     if (*h < 0) *h = 0;
 }
@@ -1703,11 +1854,11 @@ void wm_init(void)
     nwd = 0;
     focus_win = -1;
     ws_cur = 1;
-    /* THE TIMELINE IS STATE AND wm_init MEANS "none of it happened". A ghost
-     * or a running press left over from a previous session would be drawn over
+    /* THE TIMELINE IS STATE AND wm_init MEANS "none of it happened". A
+     * running press left over from a previous session would be drawn over
      * a window table that no longer contains what it is a picture of. */
     for (int i = 0; i < ANIM_MAX; i++) anims[i].kind = ANIM_NONE;
-    ghost.live = 0;
+    caret_watch.live = 0;
     sweep_last_top = 0;
     snap_reset();
     snap_preview_zone = 0;
@@ -1720,6 +1871,8 @@ void wm_init(void)
 
 void wm_desk_click(desk_click_fn f) { hook_desk_click = f; }
 void wm_desk_key(desk_key_fn f)     { hook_desk_key = f; }
+void wm_can_close(can_close_fn f)   { hook_can_close = f; }
+void wm_overlay_click(overlay_click_fn f) { hook_overlay_click = f; }
 
 void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
 {
@@ -1731,6 +1884,68 @@ void wm_hooks(app_draw_fn d, app_event_fn e, app_tick_fn t, desk_draw_fn desk)
  * layers this desktop had", and widening the signature would edit every one of
  * them to pass 0 and prove nothing. */
 void wm_overlay(overlay_draw_fn f) { hook_overlay = f; }
+void wm_win_menu(win_menu_fn f) { hook_win_menu = f; }
+
+/* ---- A WINDOW, BOX-FILTERED INTO A TILE -------------------------------------
+ * The prototype's activities grid does not draw placeholders. Each tile is the
+ * window's own content at scale - it clones the .wbody and scales the clone -
+ * so the overview answers "which window is that" by showing it rather than by
+ * naming it. A tile with an empty body would be a picture of a preview.
+ *
+ * zlOS had no way to do this. fb_surface_blit is 1:1, and every box filter in
+ * this tree - the icon atlas, the fonts - runs OFFLINE in a generator and ships
+ * as a table. This is the first one that runs at draw time.
+ *
+ * IT READS THE RETAINED CLIENT SURFACE, which is what makes it cheap enough to
+ * be worth doing: `client_px` is already the window's last painted content, so
+ * a thumbnail costs no app code, no re-entry into zl, and nothing that can
+ * recurse. A window whose surface is not valid is skipped rather than faked -
+ * an app that has never painted has nothing to show, and inventing something
+ * would be the same lie as a placeholder.
+ *
+ * Integer box filter: destination pixel (x, y) is the average of the source
+ * block it covers. No floats - this is the drawing path. The empty-block guard
+ * (sx1 <= sx0) matters when the tile is LARGER than the source in an axis,
+ * which happens to a very small window in a wide grid.
+ *
+ * fb_fill_px at 1x1 rather than a direct framebuffer write, because it is the
+ * one that honours the scissor - and this is drawn from the overlay layer,
+ * where the scissor is the damage rectangle. */
+int wm_thumb(int win, int dx, int dy, int dw, int dh)
+{
+    if (win < 0 || win >= WM_MAX) return 0;
+    struct win *W = &wins[win];
+    if (!(W->flags & WF_OPEN) || !W->client_px || !W->client_valid) return 0;
+    if (dw <= 0 || dh <= 0 || W->client_w <= 0 || W->client_h <= 0) return 0;
+
+    for (int y = 0; y < dh; y++) {
+        int sy0 = (int)((long long)y * W->client_h / dh);
+        int sy1 = (int)((long long)(y + 1) * W->client_h / dh);
+        if (sy1 <= sy0) sy1 = sy0 + 1;
+        if (sy1 > W->client_h) sy1 = W->client_h;
+        for (int x = 0; x < dw; x++) {
+            int sx0 = (int)((long long)x * W->client_w / dw);
+            int sx1 = (int)((long long)(x + 1) * W->client_w / dw);
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            if (sx1 > W->client_w) sx1 = W->client_w;
+            unsigned long r = 0, g = 0, b = 0, n = 0;
+            for (int sy = sy0; sy < sy1; sy++) {
+                const unsigned int *row = W->client_px + (unsigned long)sy * W->client_w;
+                for (int sx = sx0; sx < sx1; sx++) {
+                    unsigned int px = row[sx];
+                    r += (px >> 16) & 0xFFu;
+                    g += (px >> 8) & 0xFFu;
+                    b += px & 0xFFu;
+                    n++;
+                }
+            }
+            if (!n) continue;
+            fb_fill_px(dx + x, dy + y, 1, 1,
+                       (unsigned int)(((r / n) << 16) | ((g / n) << 8) | (b / n)));
+        }
+    }
+    return 1;
+}
 
 static void title_copy(char *dst, const char *src)
 {
@@ -1889,10 +2104,6 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         focus_win = i;
         window_surfaces_prepare(i);
         wm_lifecycle("open", i, app, wins[i].generation, nz);
-        /* A refusal here degrades gracefully: every slot busy means the window
-         * opens without a flourish, which is the right way for an animation to
-         * fail. */
-        if (anim_on) wm_anim(i, ANIM_OPEN);   /* Settings can turn this off */
         wm_damage_win(i);
         zlt_operation_result(ZLLOG_SUB_DISPLAY, operation_id,
                              ZLLOG_OP_WINDOW_OPEN, i, 0u, (unsigned)app);
@@ -1919,30 +2130,12 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
  * declared with the routing, further down. */
 static void wm_drop_grab(int win);
 
-/* Close it, and shrink a ghost of it away. THE GESTURE form of wm_close.
- *
- * The split is deliberate. wm_close() is called by teardown loops, by policy
- * reshuffling windows, and by wm_init-adjacent code that wants the table empty
- * - none of which is a moment anybody is watching, and all of which would look
- * wrong animated. The ✕ box, Ctrl+W and dismissing a modal are the three
- * places a HUMAN closed something, and those are the three callers of this. */
+/* Gesture and programmatic close share the same immediate lifetime change.
+ * PRESSWORK defines no open/close transform; the only window transition is
+ * the RISE border/header focus change. */
 void wm_close_fx(int win)
 {
-    if (!wm_is_open(win)) return;
-    int visible = win_visible(win);
-    int gx = wins[win].x, gy = wins[win].y;
-    int gw = wins[win].w, gh = wins[win].h;
-    int reach = shadow_reach(win);
     wm_close(win);
-    if (!anim_on || !visible) return;
-    ghost_clear();                       /* at most one; the newer wins */
-    /* The rectangle is the SETTLED one plus its shadow reach: the ghost only
-     * ever shrinks inside it, so this is the largest thing that has to be
-     * erased on the frame the animation ends. */
-    if (!wm_anim_at(WM_FX_GHOST, ANIM_CLOSE, gx - reach, gy - reach,
-                    gw + 2 * reach, gh + 2 * reach)) return;
-    ghost.live = 1;  ghost.reach = reach;
-    ghost.x = gx;    ghost.y = gy;    ghost.w = gw;  ghost.h = gh;
 }
 
 void wm_close(int win)
@@ -2049,6 +2242,14 @@ void wm_focus(int win)
      * correctness. Move/raise still retain content, which is the hot path. */
     if (wm_is_open(old)) { wm_invalidate_shell(old); wm_invalidate_client(old); }
     if (wm_is_open(win)) { wm_invalidate_shell(win); wm_invalidate_client(win); }
+    /* BOTH ENDS OF THE FLIP ANIMATE. The one gaining focus rises into the
+     * knockout and the one losing it falls back out, so the pair reads as one
+     * movement rather than as two independent twitches. The comment above has
+     * always said "both title bars change"; now both of them do it over time.
+     * The stale half of that comment - "the old loses its HUE and underline" -
+     * describes the predecessor's coloured header, not this knockout. */
+    if (wm_is_open(old)) wm_anim(old, ANIM_FOCUS);
+    if (wm_is_open(win)) wm_anim(win, ANIM_FOCUS);
 }
 
 void wm_minimize(int win)
@@ -2093,15 +2294,65 @@ void wm_set_modal(int win, int on)
      * or a caller that re-asserts modality every frame restarts the fade every
      * frame and the overlay never finishes appearing.
      *
-     * ANIM_OPEN is cancelled first. wm_open started one a moment ago and a
-     * modal is not a window that grows - the reference gives it zov, which is
-     * a fade from scale(1.03), the opposite direction. Two scale animations on
-     * one id would also both be read by anim_permille, and the first match
-     * wins, so the fade would be drawn at the open animation's size. */
+     * A modal gets the pop/fade directly; ordinary windows have no entry
+     * transform in the authority. */
     if (on && !was) {
-        anim_cancel_kind(win, ANIM_OPEN);
         if (anim_on) wm_anim(win, ANIM_FADE);
     }
+}
+
+/* THE RAIL MUST NEVER BE COVERED, and nothing enforced it.
+ *
+ * The prototype states this as its rule 1 and clamps in layout():
+ *
+ *     x = Math.max(0, Math.min(x, Math.max(0, fw - 120)));
+ *     y = Math.max(0, Math.min(y, Math.max(0, fh - 60)));
+ *
+ * where fw/fh are the FIELD - the desk inside the rail, below the strip and
+ * above the foot. wm_move assigned x and y verbatim, wm_open stored them
+ * verbatim, and route_mouse's GRAB_MOVE passed a raw pointer delta straight
+ * through. So a window could be dragged fully over the rail, over the raster
+ * strip, over the foot, or to negative coordinates with NO ROUTE BACK - the
+ * title bar you would grab to drag it home is the first part to go under.
+ *
+ * The only reserve anything respected was inside snap_to_rect, so a SNAPPED
+ * window sat beside the rail correctly while a dragged one covered it: two
+ * behaviours for one edge, and only the unused one written down.
+ *
+ * 120 and 60 are the prototype's own - enough of the window must stay on the
+ * field to grab it by - in design px there and here. */
+/* THE INVARIANT IS "A WINDOW ON THE FIELD STAYS ON IT", not "every window is
+ * forced onto the field". The difference is not pedantry, it is three failing
+ * assertions: wmtest_feel runs ui_theme_init(2), so on its 1280x800 screen the
+ * rail alone is 340 px, and the window it opens at x=200 legitimately starts
+ * underneath it. A clamp that pulls any window into the field teleports that
+ * one on its first drag and breaks the exact-move check - punishing the test
+ * for a state the real desktop never reaches, since wm_open there goes through
+ * desk_x() which already clears the rail.
+ *
+ * So the lower bound is min(field edge, where the window already is): a window
+ * inside cannot leave, and one that began outside is free to stay where it is
+ * or move further in. That is the rule the prototype's layout() is expressing
+ * and the one that keeps the rail reachable. */
+static void clamp_to_field(int *x, int *y, int cur_x, int cur_y)
+{
+    const struct ui_theme *t = ui_theme();
+    int fx = RESERVE_LEFT(t);
+    int fy = RESERVE_TOP(t);
+    int fw = (int)fb_pxw() - fx;
+    int fh = (int)fb_pxh() - fy - RESERVE_BOT(t);
+    int maxx = fx + fw - UI_DP(t, 120);
+    int maxy = fy + fh - UI_DP(t, 60);
+    if (maxx < fx) maxx = fx;
+    if (maxy < fy) maxy = fy;
+    if (fx > cur_x) fx = cur_x;
+    if (fy > cur_y) fy = cur_y;
+    if (maxx < cur_x) maxx = cur_x;
+    if (maxy < cur_y) maxy = cur_y;
+    if (*x < fx) *x = fx;
+    if (*y < fy) *y = fy;
+    if (*x > maxx) *x = maxx;
+    if (*y > maxy) *y = maxy;
 }
 
 void wm_move(int win, int x, int y)
@@ -2232,6 +2483,17 @@ enum title_control { TITLE_CLOSE = 0, TITLE_MAXIMIZE = 1, TITLE_MINIMIZE = 2 };
 /* How wide the three-control cluster is, together. The title's safe margin and
  * the tab strip's available width both need it, and two copies of `3 * 22` is
  * how a title ends up running under a close box at one UI scale only. */
+/* THE CLUSTER'S INSIDE FACE, PUBLISHED ONCE. Three places need it: the rect of
+ * each control, and the two hard stops that keep the title run and the module
+ * code clear of it. When the cluster moved left by .hdr's 6dp right padding,
+ * only the first of the three moved - so the intended 8dp gutter between the
+ * title and the controls silently became 2dp, and the comment above each stop
+ * went on describing the old arithmetic. Three copies of one edge is three
+ * chances to update two of them. */
+static int title_controls_w(const struct ui_theme *t);
+static int title_cluster_x(const struct win *W, const struct ui_theme *t)
+{ return W->x + W->w - 1 - UI_DP(t, ZD_HDR_PR) - title_controls_w(t); }
+
 static int title_controls_w(const struct ui_theme *t)
 {
     return 3 * UI_DP(t, ZD_WINCTL);
@@ -2388,11 +2650,24 @@ static void title_control_rect(const struct win *W, int which,
     const struct ui_theme *t = ui_theme();
     int cw = UI_DP(t, ZD_WINCTL);
     *w = cw;
-    *h = t->title_h - 2;
+    /* THE FULL CONTENT BOX. With .hdr border-box its content is title_h - 1
+     * (28dp total, 1px border-bottom), and `.ctl { align-self: stretch }` with
+     * .cbtn stretching inside it makes each cell that whole height. This was
+     * title_h - 2, left over from when the header was laid out from the ring
+     * row, so the cells were a row short of the band they sit in and the hover
+     * plate stopped one pixel above the groove. */
+    *h = t->title_h - 1;
     if (*h < 1) *h = 1;
     /* which == TITLE_CLOSE is the rightmost cell, and the cluster grows
-     * leftward from the inside face of the plate's right ring column. */
-    *x = W->x + W->w - 1 - (which + 1) * cw;
+     * leftward from the header's CONTENT-box right edge - which is the plate's
+     * padding-box right minus .hdr's 6dp right padding, not the inside face of
+     * the ring. Growing from the ring itself was the old behaviour and it left
+     * the close box touching the frame while the title kept an 11dp margin on
+     * the other side. Both margins are now the same document's numbers. */
+    /* TITLE_MINIMIZE == 2 is the LEFTMOST cell, so it sits at the cluster's
+     * inside face and the others step right from it. Byte-identical to the
+     * arithmetic this replaces; it just goes through the one owner now. */
+    *x = title_cluster_x(W, t) + (TITLE_MINIMIZE - which) * cw;
     *y = W->y + 1;
 }
 
@@ -2463,7 +2738,11 @@ static void chrome_shadow(int win, int focused)
     if (!modal && !win_lifted(win)) return;
     anim_rect(win, &W->x, &W->y, &W->w, &W->h);
     int off  = SHADOW_OFF(t), soft = SHADOW_SOFT(t);
-    if (modal) { off = off * 3 / 2; soft = soft * 3 / 2; }
+    /* A MODAL IS OFF-PLANE; A DRAGGED PLATE IS NOT. Both cast, and the
+     * authority gives them different pairs - not the same pair times a
+     * number. `off * 3 / 2` read as a deliberate elevation and was arithmetic
+     * on a figure that belongs to the other object. */
+    if (modal) { off = OFFPLANE_OFF(t); soft = OFFPLANE_SOFT(t); }
 
     fb_shadow(W->x, W->y, W->w, W->h, off, soft);
 }
@@ -2502,13 +2781,59 @@ static void chrome_seat(const struct win *W, int r, int focused, int over)
     fb_rrect(W->x, W->y, W->w, W->h, r, over ? t->edge_over : t->border);
     fb_rrect(W->x + 1, W->y + 1, W->w - 2, W->h - 2, ri, t->panel);
 
-    int run_w = W->w - 2 * r;
+    /* THE RUNS LIE ON THE PANEL, ONE PIXEL INSIDE THE RING - not on it.
+     *
+     * They were painted at row W->y and column W->x, straight over the ring
+     * drawn two lines above, so the plate lost its boundary along its whole top
+     * edge and its whole left edge. The comment that justified it claimed
+     * ".trun/.lrun are absolutely positioned at the border box's edge". They are
+     * not: `.win` carries `border: 1px solid var(--zd-cut)` (proto:601) and an
+     * absolutely positioned box is laid out against its containing block's
+     * PADDING edge (CSS 2.1 10.1), so `.trun{top:0}` and `.lrun{left:0}`
+     * (proto:607,610) sit one pixel inside the border, on the panel.
+     *
+     * That is also the only reading that makes sense of what they are FOR. A
+     * struck highlight is light catching the top of a raised surface; painting
+     * it over the surface's own edge deletes the edge and leaves the highlight
+     * floating with nothing to be the top of. */
+    /* WITH THE KNOCKOUT OFF, BOTH OF THESE RULES CHANGE, AND NEITHER DID.
+     *
+     * ui_knockout_set is a live control and ui.c remaps the four knockout roles
+     * "rule for rule" against `body.nokock`. Two of the authority's fallback
+     * rules are in this function and were not carried over:
+     *
+     *   proto:691  body.nokock .win.focus .trun { background: var(--zd-lit) }
+     *   proto:692  body.nokock .win.focus .lrun { top: var(--zd-r-plate) }
+     *
+     * They are not decoration. With the knockout off theme.knock becomes
+     * ZD_FOCUS_WASH 0x47403C, which is 1.3681:1 on the plate AND the same value
+     * as the header band directly beneath the run - so the focused plate's
+     * struck run was drawn in a colour indistinguishable from what it lies on
+     * and vanished. That is the whole point of proto:691: once the header is a
+     * wash rather than an ink plate, the run has headroom again and must be
+     * drawn in ZD_LIT.
+     *
+     * And the grazed run started below the header unconditionally, costing the
+     * focused window the top 28dp of its left edge - 56 at ui 2 - for a header
+     * that is no longer a different material. proto:692 gives it back to the
+     * plate's own corner radius.
+     *
+     * The knockout being ON is still the shipped default and neither line
+     * changes there; this is the state the switch exists to reach. */
+    int knock_on = ui_knockout_get();
+    /* THE PADDING BOX IN X TOO. The note above makes exactly this argument for
+     * y and left x on the ring's coordinates: `left: r` (proto:607) is
+     * W->x + 1 + r and the width is W->w - 2 - 2r. At r = ZD_R_BOLT = 0 on a
+     * maximised plate the run's ends landed on the ring's own columns. The
+     * lrun beside it was already correct. */
+    int run_w = W->w - 2 - 2 * r;
     if (run_w > 0)
-        fb_fill_px(W->x + r, W->y, run_w, 1, focused ? t->knock : t->lit);
+        fb_fill_px(W->x + 1 + r, W->y + 1, run_w, 1,
+                   (focused && knock_on) ? t->knock : t->lit);
 
-    int ly = W->y + ((focused && chrome) ? t->title_h : r);
-    int lh = (W->y + W->h - r) - ly;
-    if (lh > 0) fb_fill_px(W->x, ly, 1, lh, t->litsoft);
+    int ly = W->y + 1 + ((focused && chrome && knock_on) ? t->title_h : r);
+    int lh = (W->y + W->h - 1 - r) - ly;
+    if (lh > 0) fb_fill_px(W->x + 1, ly, 1, lh, t->litsoft);
 }
 
 /* THE KNOCKOUT, and it is the entire focus signal.
@@ -2536,7 +2861,7 @@ static void chrome_seat(const struct win *W, int r, int focused, int over)
  * is rounded at the top to the plate's inner radius - a square band inside a
  * radius-9 plate reads as two shapes that do not fit each other, and at this
  * value it would also be a light square poking out of a dark corner. */
-static void chrome_header(const struct win *W, int r, int focused)
+static void chrome_header(const struct win *W, int win, int r, int focused)
 {
     const struct ui_theme *t = ui_theme();
     int ix = W->x + 1, iw = W->w - 2;
@@ -2558,16 +2883,54 @@ static void chrome_header(const struct win *W, int r, int focused)
      *
      * hh is the header height this window can actually afford. Everything
      * below is derived from it rather than from the theme. */
+    /* BORDER-BOX. The prototype sets `* { box-sizing: border-box }` (proto:325)
+     * and .hdr is `height: var(--zd-title-h)` with `border-bottom: 1px`
+     * (proto:653,657) - so title_h is the TOTAL: 27 rows of ground plus the
+     * groove. As a flex child of .win it starts at the padding edge, row y+1.
+     *
+     * This treated row y as belonging to the header, so the fill was one row
+     * short and the groove one row high. The comment rationalised it as "row y
+     * is the merged top run above", which is the same mistake the two runs make
+     * one function over: the runs are inside the padding box too. */
     int hh = t->title_h;
-    if (hh > W->h) hh = W->h;
-    int foot = W->y + hh - 1;
+    if (hh > W->h - 2) hh = W->h - 2;
+    int foot = W->y + hh;
     if (iw <= 0 || hh < 2) return;
-    if (focused) {
+    /* THE BAND IS INTERPOLATED WHILE ANIM_FOCUS RUNS.
+     *
+     * A focus change used to be one frame: the header went from the plate's own
+     * ground to the full knockout in a single step. design.h calls that the
+     * refused option in as many words - "A CUT (0ms) was offered and REFUSED:
+     * the knockout is a full value flip and cutting it makes the whole screen
+     * twitch."
+     *
+     * Both directions are handled here, which is why the unfocused arm draws at
+     * all now: a window LOSING focus interpolates from knock back to panel, and
+     * without this it would snap out while the other rose in. */
+    /* THE INDEX IS PASSED, BECAUSE W IS NOT IN wins[].
+     *
+     * This read `anim_progress((int)(W - wins), ANIM_FOCUS)` under a comment
+     * asserting "W points into wins[], so its index is the offset". It does
+     * not: chrome_shell takes a local copy first - `struct win Wa = wins[win];
+     * struct win *W = &Wa;` - and passes &Wa, a stack object. The difference
+     * between a stack address and a static array is not an index, it was never
+     * in [0, WM_MAX), anim_progress never matched, and the focus animation this
+     * commit's own message called its headline feature HAS NEVER RUN. A comment
+     * asserting a fact about memory layout, wrong, in the file that keeps
+     * catching exactly that. */
+    int fp = anim_progress(win, ANIM_FOCUS);
+    if (focused || fp >= 0) {
         int ri = r > 0 ? r - 1 : 0;
-        /* rows y+1 .. y+hh-2; row y is the merged top run above, row
-         * y+hh-1 is the groove below, so the band is exactly hh */
-        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 2, ri,
-                          t->knock, t->knock);
+        unsigned band = t->knock;
+        if (fp >= 0) {
+            int mix = focused ? fp : 1000 - fp;
+            band = blend_rgb(t->panel, t->knock, mix);
+        } else if (!focused) {
+            band = t->panel;
+        }
+        /* rows y+1 .. y+hh-1, with the groove at y+hh: border-box, so the
+         * ground is hh-1 rows and the 1px border completes the declared hh. */
+        fb_rrect_grad_top(ix, W->y + 1, iw, hh - 1, ri, band, band);
     }
     fb_fill_px(ix, foot, iw, 1, focused ? t->ko_edge : t->border);
 }
@@ -2591,7 +2954,13 @@ static void chrome_focus_bar(const struct win *W, int r, int focused)
 {
     const struct ui_theme *t = ui_theme();
     if (!focused || (W->flags & WF_NOCHROME)) return;
-    int bw = t->focus_bar, by = W->y + t->title_h;
+    /* THE PADDING EDGE, NOT THE RING. `.fbar` (proto:705) is positioned against
+     * `.win`'s padding box, so `top: var(--zd-title-h)` is W->y + 1 + title_h -
+     * the row AFTER the header's groove at W->y + hh. chrome_header was
+     * converted to border-box and says so at its own :2969; this was not, and
+     * chrome_shell calls the two in sequence, so the accent overwrote the first
+     * focus_bar pixels of ko_edge on every focused window. */
+    int bw = t->focus_bar, by = W->y + 1 + t->title_h;
     int bh = W->h - t->title_h - 1 - r;
     if (bw > W->w - 2) bw = W->w - 2;
     if (bw > 0 && bh > 0) fb_fill_px(W->x + 1, by, bw, bh, t->accent);
@@ -2649,17 +3018,23 @@ static void chrome_focus_bar(const struct win *W, int r, int focused)
  * painting. Two functions would be two copies of the same six advances, and
  * the first time one of them gained a field the code would start landing in
  * the wrong place on windows with a subtitle only. */
-static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
+static int chrome_title_run(int win, const struct win *W, int focused, int hh, int draw)
 {
     const struct ui_theme *t = ui_theme();
     /* the prototype's `.hdr` is 11dp of padding inside a 1px ring, which is
      * 12dp from the plate's outer edge - one step of the spacing scale, and
      * the same left margin the module grid's own columns use */
-    int x = W->x + UI_S3(t);
+    /* ZD_HDR_PL, .hdr's own padding-left. This was UI_S3, a generic 12dp
+     * spacing step that happened to sit next to the right answer without being
+     * it - the prototype says 11dp (proto:655) and the header is one pixel per
+     * ui-unit further in than the document it is copying. An uncited constant
+     * that is nearly right is the hardest kind to notice, because nothing looks
+     * broken; it just is not the same drawing. */
+    int x = W->x + 1 + UI_DP(t, ZD_HDR_PL);
     int gut = UI_DP(t, ZD_GAP);
     /* the cluster's inside face, less one gutter, is the hard stop for
      * everything on this line */
-    int stop = W->x + W->w - 1 - title_controls_w(t) - gut;
+    int stop = title_cluster_x(W, t) - gut;
 
     unsigned ink_dim = focused ? t->knock_ink2 : t->text_dim;
     /* ZD_TITLE_INK. The name is ZD_TEXT_2 at rest - 7.8606:1 on the plate -
@@ -2667,6 +3042,12 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
      * the whole reason the name reads as the name. This drew the title at
      * text_dim, i.e. at the same value as its own qualifiers. */
     unsigned ink_ttl = focused ? t->knock_ink : t->text_2;
+    int fp = anim_progress(win, ANIM_FOCUS);
+    if (fp >= 0) {
+        int mix = focused ? fp : 1000 - fp;
+        ink_dim = blend_rgb(t->text_dim, t->knock_ink2, mix);
+        ink_ttl = blend_rgb(t->text_2, t->knock_ink, mix);
+    }
 
     int cy_mono = W->y + (hh - fb_cell_h()) / 2;
     int cy_ttl  = W->y + (hh - ui_text_h(UI_MD)) / 2;
@@ -2677,7 +3058,17 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
         r[0] = (char)('0' + W->reg / 10);
         r[1] = (char)('0' + W->reg % 10);
         r[2] = 0;
-        if (draw && x + 2 * cw <= stop) fb_text_aa(x, cy_mono, r, ink_dim);
+        /* WITH THE KNOCKOUT OFF, THIS NUMBER IS THE ONLY ACCENT LEFT.
+         *
+         * proto:684 is `body.nokock .win.focus .hdr .reg { color:
+         * var(--zd-verm) }`, and it is the one nokock rule that does NOT send
+         * its element to ZD_TEXT_3. ui.c remaps knock_ink2 to text_3 under
+         * knock-off, which is right for .sub (proto:686) and .crd (proto:687)
+         * and wrong here: once the header is a wash rather than an ink plate,
+         * the register mark is the whole of the focus signal that remains. */
+        unsigned ink_reg = ink_dim;
+        if (focused && !ui_knockout_get()) ink_reg = t->accent;
+        if (draw && x + 2 * cw <= stop) fb_text_aa(x, cy_mono, r, ink_reg);
         x += 2 * cw + gut;
     }
 
@@ -2764,9 +3155,9 @@ static void chrome_module(int win, int focused)
         tab_rect(win, W->ntab - 1, &tx, &ty, &tw, &th);
         x = tx + (W->x - wins[win].x) + tw + gut;
     } else {
-        x = chrome_title_run(W, focused, hh, 0);
+        x = chrome_title_run(win, W, focused, hh, 0);
     }
-    int stop = W->x + W->w - 1 - title_controls_w(t) - gut;
+    int stop = title_cluster_x(W, t) - gut;
 
     char code[16];
     module_code(win, code, (int)sizeof code);
@@ -2833,10 +3224,19 @@ static void chrome_band(const struct win *W, int focused, int bh)
     const struct ui_theme *t = ui_theme();
     (void)focused;                 /* the band is on the PLATE in both states */
     if (bh <= 1) return;
-    int ry = W->y + W->h - 1 - bh;          /* the rule; the ring owns the last row */
-    /* client_of()'s left inset, spelled the same way so the two cannot drift,
-     * plus the body's own ZD_PAD */
-    int pad = UI_DP(t, ZD_PAD);
+    /* .sband IS THE LAST CHILD OF .wbody, NOT THE LAST ROW OF THE PLATE.
+     * .wbody pads 6dp at the foot (proto:711), so 6dp of ground shows BELOW the
+     * band and the band never touches the ring. This put its last row at
+     * W->y + W->h - 2, flush against the frame, which reads as a band welded to
+     * the plate rather than one sitting inside it.
+     *
+     * The inset is .wbody's 9dp for the same reason, not ZD_PAD's 10. The
+     * comment that used to sit here derived the right number off the rendered
+     * reference - "one 9dp body inset on each side" - and then reached for the
+     * generic spacing step anyway. A derivation nobody applied is not a
+     * measurement, it is a note. */
+    int ry = W->y + W->h - 1 - UI_DP(t, ZD_BODY_PY) - bh;
+    int pad = UI_DP(t, ZD_BODY_PX);
     int ix = W->x + 1 + t->focus_bar + pad;
     int iw = W->w - 2 - t->focus_bar - 2 * pad;
     if (iw <= 0) return;
@@ -2848,7 +3248,12 @@ static void chrome_band(const struct win *W, int focused, int bh)
     int gap = UI_DP(t, ZD_STATUS_GAP);
     int x = ix;
     int stop = ix + iw;
-    int grip = W->x + W->w - 1 - UI_S3(t);
+    /* ZD_GRIP, NOT UI_S3, and for the same reason chrome_shell already uses it:
+     * the grip is DRAWN 15 dp square and this clamped the band's run against
+     * 12, so the run stopped six pixels INSIDE the mark it exists to avoid.
+     * Walked at ui 1 with r = 9, the drawn grip spans W->x+W->w-19..-5 over
+     * rows W->y+W->h-19..-5 and the band occupies rows -27..-8; they overlap. */
+    int grip = W->x + W->w - 1 - UI_DP(t, ZD_GRIP);
     if (stop > grip) stop = grip;
     if (stop <= x) return;
 
@@ -2890,9 +3295,28 @@ static void chrome_band(const struct win *W, int focused, int bh)
      * meant to be the untracked caption this drew. The note that used to sit
      * here deferred the tracking "for the reason chrome_title gives", and
      * chrome_title tracks now, so there is no reason left. */
-    int lw = ui_caps_w("APP US", UI_SM);
+    /* THE THREE RUNGS THE AUTHORITY ATTACHES TO THIS BAND.
+     *
+     * proto:724 is `body.nous .sband .us { display: none }` and proto:717-719
+     * gives `repaint_pixels` as the second rung. This drew band_us
+     * unconditionally, and wm.c physically could not see the mode - ui.c
+     * exported the knockout, the occlusion edge, motion and tracking, and not
+     * this. So the switch moved and two of its three positions did nothing
+     * here.
+     *
+     * `repaint` is the client area in kilopixels, which is what the register
+     * rail and the System Monitor both mean by it. */
+    int mode = ui_us_get();
+    if (mode == 2) return;
+    const char *cap = mode ? "REPAINT" : "APP US";
+    int lw = ui_caps_w(cap, UI_SM);
     char v[16];
     unsigned u = W->band_us;
+    if (mode == 1) {
+        int cw2, ch2, cx2, cy2;
+        client_of(W->x, W->y, W->w, W->h, W->flags, &cx2, &cy2, &cw2, &ch2);
+        u = (unsigned)(cw2 * ch2 / 1000);
+    }
     if (u > 999999u) u = 999999u;
     int n = 0;
     char rev[8];
@@ -2900,10 +3324,13 @@ static void chrome_band(const struct win *W, int focused, int bh)
     while (u && n < 6) { rev[n++] = (char)('0' + (int)(u % 10u)); u /= 10u; }
     int k = 0;
     while (n > 0) v[k++] = rev[--n];
-    v[k++] = ' '; v[k++] = 'u'; v[k++] = 's'; v[k] = 0;
+    v[k++] = ' ';
+    if (mode == 1) { v[k++] = 'k'; v[k++] = 'p'; v[k++] = 'x'; }
+    else           { v[k++] = 'u'; v[k++] = 's'; }
+    v[k] = 0;
     int vw = k * cw;
     if (x + lw + UI_S1(t) + vw > stop) return;
-    ui_caps(x, by + (bhh - ui_text_h(UI_SM)) / 2, "APP US", t->text_dim, UI_SM);
+    ui_caps(x, by + (bhh - ui_text_h(UI_SM)) / 2, cap, t->text_dim, UI_SM);
     fb_text_aa(x + lw + UI_S1(t), cy, v, t->text_hi);
 }
 
@@ -2916,13 +3343,15 @@ static void chrome_shell(int win, int focused)
     /* ZD_R_BOLT. A maximised window is BOLTED DOWN: it has no ground to sit on
      * at any edge, so it has no corner to round and its runs go full width and
      * full height. Radius in PRESSWORK encodes how much an object can move. */
-    int r = W->maxed ? UI_DP(t, ZD_R_BOLT) : t->radius;
+    int r = win_maxed(win) ? UI_DP(t, ZD_R_BOLT) : t->radius;
 
-    chrome_seat(W, r, focused, win_over_below(win));
+    /* the occlusion edge, switchable: off falls back to the plain ring, which
+     * is what the reference's `.win.over` rule does when it is not applied */
+    chrome_seat(W, r, focused, ui_over_get() && win_over_below(win));
 
     if (W->flags & WF_NOCHROME) return;
 
-    chrome_header(W, r, focused);
+    chrome_header(W, win, r, focused);
     chrome_focus_bar(W, r, focused);
     chrome_band(W, focused, band_h_of(W->h, W->flags));
 
@@ -2971,7 +3400,7 @@ static void chrome_shell(int win, int focused)
          * centre its text below its own foot. */
         int hh = t->title_h;
         if (hh > W->h) hh = W->h;
-        if (hh >= 2) (void)chrome_title_run(W, focused, hh, 1);
+        if (hh >= 2) (void)chrome_title_run(win, W, focused, hh, 1);
     }
 
     /* One window-control component, three actions. Shared geometry keeps the
@@ -2999,7 +3428,15 @@ static void chrome_shell(int win, int focused)
          * plate - so both switch to the knockout's own secondary at 4.6965:1,
          * which is what the prototype's .win.focus .hdr .cbtn rule does. */
         unsigned ink  = focused ? t->knock_ink2 : t->text_dim;
-        unsigned rule = focused ? t->knock_ink2 : t->border;
+        /* THE RULE HALF DOES NOT SURVIVE THE REMAP, AND THE INK HALF DOES.
+         *
+         * proto:688 sends `border-left-color` back to var(--zd-cut) under
+         * body.nokock; only the COLOR goes to text_3. Left as it was, a
+         * knock_ink2 rule remapped to ZD_TEXT_3 computes 6.68:1 on ZD_BASE
+         * where the authority asks for a 1.47:1 groove - three bright bars
+         * across the quietest band on the plate, which is the opposite of what
+         * proto:693-694 spends that band on. */
+        unsigned rule = (focused && ui_knockout_get()) ? t->knock_ink2 : t->border;
         if (over) {
             /* HOVER FILLS, AND THE CLOSE BOX CANNOT BE RED ON THE KNOCKOUT.
              * On the plate, close takes the overprint with theme.ink_on over
@@ -3023,9 +3460,21 @@ static void chrome_shell(int win, int focused)
         if (over && (last_btn & 1))
             fb_fill_blend(bx, by, bw, bh, t->cut, 48);
         int glyph = b == TITLE_CLOSE ? 13 :
-                    (b == TITLE_MINIMIZE ? 22 : (wins[win].maxed ? 24 : 23));
-        fb_icon24(bx + (bw - UI_DP(t, 24)) / 2,
-                  by + (bh - UI_DP(t, 24)) / 2, glyph, ink);
+                    /* win_snapped, not win_maxed: the button RESTORES from
+                     * any snap state - wm_toggle_max sends SK_DOWN whenever
+                     * snap_state is not SNAP_NONE - so the restore glyph has
+                     * to appear for a half-snapped window too. Only the corner
+                     * radius cares specifically about SNAP_MAX. */
+                    (b == TITLE_MINIMIZE ? 22 : (win_snapped(win) ? 24 : 23));
+        /* ZD_WINCTL_GLYPH, not 24. The authority's .cbtn svg is 11x11 in a
+         * 22dp cell - the glyph is half the cell's width. At 24dp the box was
+         * two dp WIDER than the cell it was being centred in, so the centring
+         * term went negative and the glyph overhung on both sides at every
+         * scale. The comment that used to defend this measured the INK's extent
+         * and concluded it did not cross the cell - which is true and is not
+         * the same claim as the glyph being the right size. */
+        int gd = UI_DP(t, ZD_WINCTL_GLYPH);
+        fb_icon_dp(bx + (bw - gd) / 2, by + (bh - gd) / 2, glyph, ZD_WINCTL_GLYPH, ink);
     }
 
     /* THE RESIZE GRIP, drawn. A corner you cannot see is a corner nobody finds,
@@ -3036,27 +3485,65 @@ static void chrome_shell(int win, int focused)
      * it does not compete with the close box, which is the only other thing on
      * a window frame that does something. */
     {
-        int gs = UI_S3(t);
-        int gx = W->x + W->w - gs, gy = W->y + W->h - gs;
-        int step = gs / 4;
+        /* ZD_GRIP, NOT UI_S3. `.grip` is 15dp square (proto:726-727); UI_S3 is
+         * 12 and is a spacing step with nothing behind it - there was no
+         * ZD_GRIP to read, so a number that was nearly right got used. */
+        int gs = UI_DP(t, ZD_GRIP);
         /* theme.surf_7 is ZD_TEXT_INERT, 2.5213:1 on the plate - STRUCTURE
          * ONLY, and the grip is structure rather than a glyph, which is why it
          * is allowed the rung that must never carry text. It used to take
          * theme.title_off when unfocused; under PRESSWORK title_off IS the
          * plate, so that grip would have been drawn base-on-base and vanished
          * entirely. A remapped token turning a mark invisible is exactly the
-         * failure mode a role-based palette is supposed to make findable. */
-        unsigned ink = focused ? t->text_dim : t->surf_7;
+         * failure mode a role-based palette is supposed to make findable.
+         *
+         * ONE INK IN BOTH STATES. proto:2287 strokes var(--zd-text-inert) and
+         * has no focused variant; `focused ? text_dim : surf_7` brightened the
+         * grip on the focused plate, which is the plate whose focus is already
+         * carried by a knocked-out header and a 3dp bar. A third focus signal
+         * on the corner is the budget PRESSWORK spends elsewhere. */
+        unsigned ink = t->surf_7;
+
+        /* THE GRIP WAS DRAWN OUTSIDE THE PLATE IT BELONGS TO.
+         *
+         * It anchored to the FRAME corner - W->x + W->w - gs - and the plate is
+         * a rounded rect one pixel inside that, drawn by chrome_seat at
+         * (W->x+1, W->y+1, W->w-2, W->h-2) with radius r-1. The frame's own
+         * corner pixel is OUTSIDE the shape, nothing clips, and fb_line blends
+         * into whatever pixel it is handed. Walked against the corner circle at
+         * ui 1: thirteen of eighteen grip pixels landed on the wallpaper or on
+         * the window underneath.
+         *
+         * The authority gets the clip for free - `.grip` sits inside `.win`,
+         * which carries overflow:hidden and border-radius (proto:598-603) - and
+         * this renderer has a RECTANGULAR scissor and no rounded one. So the
+         * box is moved instead of clipped: its bottom-right is placed where the
+         * corner's own diagonal meets the arc, and a square extending up-left
+         * from a point ON the arc is entirely inside it, because every step
+         * up-left moves toward the centre.
+         *
+         * 181/256 is 1/sqrt(2) to four places (0.70703 against 0.70711), which
+         * is where the diagonal crosses a circle of radius ri. */
+        int ri = r - 1; if (ri < 0) ri = 0;
+        int px1 = W->x + W->w - 2, py1 = W->y + W->h - 2;   /* the plate's last pixel */
+        int inset = ri - (ri * 181) / 256;
+        int gx1 = px1 - inset, gy1 = py1 - inset;
+        int gx = gx1 - gs + 1, gy = gy1 - gs + 1;
         /* Three rules PARALLEL TO THE CORNER'S DIAGONAL, stepping inward. The
          * first attempt drew them all at the same offset with different
          * lengths, which merges into a single L-bracket - it renders, and it
          * reads as a border artefact rather than as a grip. Only looking at it
-         * showed that. */
-        if (step > 0)
-            for (int i = 1; i <= 3; i++) {
-                int d = i * step;
-                fb_line(gx + gs - d, gy + gs - 1, gx + gs - 1, gy + gs - d, ink);
-            }
+         * showed that.
+         *
+         * THE THREE OFFSETS ARE THE AUTHORITY'S, not a quarter-step ladder.
+         * proto:2288 draws `M14 5 L5 14  M14 9 L9 14  M14 1 L1 14` in a 15-unit
+         * box: the rules meet the box's right and bottom edges at 1, 5 and 9.
+         * The old i*gs/4 ladder put them at 4, 8 and 12 - a different mark. */
+        for (int i = 0; i < 3; i++) {
+            int k = UI_DP(t, 1 + 4 * i);
+            if (k >= gs) continue;
+            fb_line(gx + k, gy1, gx1, gy + k, ink);
+        }
     }
 }
 
@@ -3066,7 +3553,12 @@ static unsigned int shell_state_key(int win, int focused)
     key |= (unsigned int)(wins[win].flags & (WF_MODAL | WF_NOCHROME)) << 1;
     key ^= (unsigned int)(wins[win].tab & 0x0f) << 8;
     key ^= (unsigned int)(wins[win].ntab & 0x0f) << 12;
-    key ^= (unsigned int)(wins[win].maxed ? 1 : 0) << 16;
+    /* Both questions go in the key: the glyph follows win_snapped and the
+     * radius follows win_maxed, so a cache keyed on only one of them serves a
+     * stale plate whenever the other changes alone - which is exactly what a
+     * drag-to-edge does. */
+    key ^= (unsigned int)(win_snapped(win) ? 1 : 0) << 16;
+    key ^= (unsigned int)(win_maxed(win) ? 1 : 0) << 17;
     int over_any = 0;
     for (int b = TITLE_CLOSE; b <= TITLE_MINIMIZE; b++) {
         int x, y, w, h;
@@ -3088,7 +3580,20 @@ static unsigned int shell_state_key(int win, int focused)
      *
      * Missing either is the quiet kind of bug: the screen looks nearly right
      * and only disagrees with itself after a particular sequence of moves. */
-    key ^= (unsigned int)(win_over_below(win) ? 1 : 0) << 25;
+    /* THE SWITCH IS PART OF THE STATE, not just the predicate. chrome_seat is
+     * handed `ui_over_get() && win_over_below(win)`, and this keyed on the
+     * predicate alone - so turning the occlusion edge off changed the argument
+     * and not the key, the retained shell surface was reused unchanged, and the
+     * new Settings switch appeared to do nothing at all.
+     *
+     * Key on what the drawing function is actually given. A cache key that
+     * omits an input is a cache that serves the wrong picture, and it looks
+     * exactly like a dead control - which is what this was reported as. */
+    key ^= (unsigned int)((ui_over_get() && win_over_below(win)) ? 1 : 0) << 25;
+    /* ...and the other two switches, for the same reason: both change how every
+     * plate is composited and neither was in the key. */
+    key ^= (unsigned int)(ui_motion_get() ? 1 : 0) << 26;
+    key ^= (unsigned int)(ui_track_get()  ? 1 : 0) << 27;
     key ^= (unsigned int)(win_lifted(win) ? 1 : 0) << 26;
     /* NOTHING THE FOOT BAND OR THE TITLE LINE PRINTS IS IN THIS KEY, and that
      * is a decision rather than an omission. This key is an ENUMERATION of
@@ -3179,23 +3684,6 @@ static int shell_compose(int win, int focused,
                                  sw, sh, sx, sy);
 }
 
-/* THE DESKTOP'S FURNITURE, TAKEN FROM THE THEME RATHER THAN RETYPED.
- *
- * These were UI_DP((t), 48) and UI_DP((t), 72), and the comment justifying them
- * cited kernel.zl's TOPBAR_H and dock_y(). Both of those symbols are gone: the
- * shell no longer has a top bar or a dock. It has a 30dp raster strip on the
- * top edge, a 46dp foot on the bottom, and - the one that actually broke - a
- * 170dp REGISTER RAIL down the LEFT, which nothing here reserved at all. A
- * maximised window was drawn from x = 0 straight over the launcher.
- *
- * Numbers that describe the shell belong to the theme, which is where the
- * shell reads them from too; two copies of 48 in two files is how the first
- * pair went stale without anything noticing. ZD_RAIL_W / ZD_STRIP_H /
- * ZD_FOOT_H are the tokens, theme.rail_w / .strip_h / .foot_h are already
- * scaled by the same q8 as everything else here. */
-#define RESERVE_TOP(t)   ((t)->strip_h)
-#define RESERVE_BOT(t)   ((t)->foot_h)
-#define RESERVE_LEFT(t)  ((t)->rail_w)
 
 /* Where the toast sits. The foot is desktop furniture drawn by hook_desk and
  * wm.c does not know how tall it is, so this asks for the same reserve every
@@ -3220,14 +3708,12 @@ static void toast_rect(int *x, int *y, int *w, int *h)
 }
 
 /* How far a toast still has to RISE, in device pixels.
- * ztoast is `from{opacity:0;transform:translateY(10px)}` - ds-reference.html
- * line 20 - so it comes up ten design pixels as it fades in, the same gesture
- * zwin makes and the same constant. */
+ * proto:966 starts the toast four design pixels low and resolves it over RISE. */
 static int toast_dy(void)
 {
     const struct ui_theme *t = ui_theme();
     int dy = EASE_TOAST_FROM_DY * t->scale;
-    int p = anim_progress(WM_FX_TOAST, ANIM_FADE);
+    int p = anim_progress(WM_FX_TOAST, ANIM_TOAST);
     if (p < 0) return 0;
     return dy - dy * p / 1000;
 }
@@ -3256,7 +3742,7 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     if (!isect(x, y, x + w, y + h, rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) {
         /* the shadow reaches outside the panel, exactly as a window's does */
         const struct ui_theme *ts = ui_theme();
-        int reach = SHADOW_OFF(ts) + SHADOW_SOFT(ts);
+        int reach = OFFPLANE_OFF(ts) + OFFPLANE_SOFT(ts);
         if (!isect(x - reach, y - reach, x + w + reach, y + h + reach,
                    rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch)) return;
     }
@@ -3271,43 +3757,45 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
     fb_clip(cx, cy, cw, ch);
 
     const struct ui_theme *t = ui_theme();
-    fb_shadow(x, y, w, h, SHADOW_OFF(t), SHADOW_SOFT(t));
+    /* THE TOAST IS THE THIRD OFF-PLANE OBJECT (proto:965), so it wears the
+     * off-plane pair like the other two - not the dragged plate's. */
+    fb_shadow(x, y, w, h, OFFPLANE_OFF(t), OFFPLANE_SOFT(t));
     fb_rrect(x, y, w, h, t->radius, t->border);
     fb_rrect(x + 1, y + 1, w - 2, h - 2, t->radius - 1, t->panel_hi);
-    /* one accent stripe down the left edge: the same "this is the one
-     * saturated colour" rule the focused title bar follows */
-    fb_fill_px(x + 1, y + 1, UI_S1(t) / 2, h - 2, t->accent);
+    /* THE BAR IS --zd-focus-bar WIDE, WHICH IS THE FOCUS BAR'S OWN WIDTH.
+     * `.toast .bar { width: var(--zd-focus-bar) }` - the same 3dp the focused
+     * plate uses, because it is the same signal. This drew UI_S1(t)/2, which
+     * is 2dp: a third narrower than the thing it is quoting. */
+    fb_fill_px(x + 1, y + 1, t->focus_bar, h - 2, t->accent);
 
+    /* TITLE AND BODY, WHICH IS WHAT A TOAST IS.
+     *
+     * The prototype's toast is two lines - the title says what happened, the
+     * body says the measurement or the reason - and all sixteen it can raise
+     * use both. This drew one centred line, so a toast could say "knockout on"
+     * or it could say what that means, never both, and the second half is the
+     * half worth reading.
+     *
+     * Left padding is 14dp because the bar occupies the first 3 and the text
+     * must clear it - `.toast { padding-left: calc(14px * var(--ui)) }`. With
+     * no body the title still centres, exactly as before, so every existing
+     * caller looks unchanged. */
     int th = fb_text_prop_h();
-    fb_text_prop(x + UI_S3(t), y + (h - th) / 2, msg, t->text);
+    const char *body = notify_body();
+    int tx = x + UI_DP(t, 14);
+    if (!body) {
+        fb_text_prop(tx, y + (h - th) / 2, msg, t->text);
+    } else {
+        int pad = UI_DP(t, 6);
+        fb_text_prop(tx, y + pad, msg, t->text);
+        fb_text_prop(tx, y + pad + th + UI_DP(t, 2), body, t->text_2);
+    }
 
     if (stash >= 0) {
         fb_clip(cx, cy, cw, ch);
         fb_stash_blend(stash, cx, cy, 255 - alpha);
         fb_blur_free(stash);
     }
-}
-
-/* ---- the ghost, and the sweep, both drawn by wm_repaint ------------------- */
-static void ghost_draw(int rx0, int ry0, int rx1, int ry1)
-{
-    if (!ghost.live) return;
-    int p = anim_progress(WM_FX_GHOST, ANIM_CLOSE);
-    if (p < 0) { ghost.live = 0; return; }    /* anim_tick already damaged it */
-
-    /* wm_anim_scale, not a second copy of the shrink: ANIM_CLOSE's curve and
-     * end point live in anim_permille and this reads them. */
-    int s = wm_anim_scale(WM_FX_GHOST);
-    int w = ghost.w * s / 1000, h = ghost.h * s / 1000;
-    int x = ghost.x + (ghost.w - w) / 2, y = ghost.y + (ghost.h - h) / 2;
-    int cx, cy, cw, ch;
-    if (!isect(x, y, x + w, y + h, rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch))
-        return;
-    fb_clip(cx, cy, cw, ch);
-    const struct ui_theme *t = ui_theme();
-    /* It fades as it shrinks. A ghost that stayed opaque to the last frame
-     * pops out of existence, which is the thing the animation exists to stop. */
-    fb_rrect_blend(x, y, w, h, t->radius, t->panel, 255 - 255 * p / 1000);
 }
 
 static void sweep_draw(int rx0, int ry0, int rx1, int ry1)
@@ -3541,14 +4029,7 @@ void wm_repaint(void)
             }
         }
 
-        /* The closing window's ghost goes where the window would have been in
-         * the walk above - on top of everything behind it. It is drawn after
-         * the loop rather than inside it because it is not IN the loop's list:
-         * it left the z-order the instant it was closed. */
-        phase_started = paint_begin();
-        ghost_draw(rx0, ry0, rx1, ry1);
-
-        /* ...and the toast on top of all of them, still inside this damage
+        /* The toast sits on top of all windows, still inside this damage
          * rectangle. Added, not woven in: the loop above is unchanged. */
         toast_draw(rx0, ry0, rx1, ry1);
 
@@ -3557,8 +4038,8 @@ void wm_repaint(void)
          * repaint costs the menu and not the screen.
          *
          * RESTORE THE SCISSOR FIRST - the window loop above narrows it to each
-         * window's frame and then to its client, and leaves it there. ghost_draw
-         * and toast_draw survive that because each sets its own clip; an
+         * window's frame and then to its client, and leaves it there. toast_draw
+         * survives that because it sets its own clip; an
          * overlay that does not would be clipped to whichever window happened
          * to be painted last. That is not a hypothetical: the command palette
          * drew only across the Terminal, and the System Monitor beside it
@@ -3679,11 +4160,26 @@ static int in_resize_grip(int win, int x, int y)
        corner-square in_grip() this replaced, which had the guard where the
        edge-band version did not */
     if (wins[win].flags & WF_NOCHROME) return 0;
-    int e = RESIZE_EDGE(t);
+    /* A CORNER, NOT TWO EDGES - which is what this function's own neighbour
+     * at :4290 already says, and what the drawn mark has always been.
+     *
+     * It returned `(x >= rx - e) || (y >= by - e)` with e = RESIZE_EDGE = 8 dp,
+     * so an 8 dp column down the WHOLE right edge and an 8 dp strip along the
+     * WHOLE bottom never reached the client - 16 px each at ui 2, crossing any
+     * scrollbar gutter and the entire status band. The authority has no edge
+     * hit test at all: `.grip` is a 15 dp corner square (proto:725-726) and
+     * proto:2851-2852 is the only resize entry point.
+     *
+     * The file contradicted itself about this - :4205 said edges, :4290 says
+     * "A corner, not an edge" - and the DRAWN grip matches :4290. The hit test
+     * is now the drawn square, so what you can grab is what you can see.
+     *
+     * ZD_GRIP, not RESIZE_EDGE: the same token chrome_shell draws with, so the
+     * two cannot drift. */
+    int g = UI_DP(t, ZD_GRIP);
     int rx = wins[win].x + wins[win].w, by = wins[win].y + wins[win].h;
-    /* inside the window, within `e` of the right OR bottom edge */
     if (x < wins[win].x || y < wins[win].y || x >= rx || y >= by) return 0;
-    return (x >= rx - e) || (y >= by - e);
+    return (x >= rx - g) && (y >= by - g);
 }
 
 /* Where tab `i` sits in the title bar. Drawing and hit-testing BOTH call this,
@@ -3721,7 +4217,11 @@ static int in_titlebar(int win, int x, int y)
 {
     const struct ui_theme *t = ui_theme();
     if (wins[win].flags & WF_NOCHROME) return 0;
-    return y >= wins[win].y && y < wins[win].y + t->title_h &&
+    /* Rows y+1 .. y+title_h inclusive, matching what chrome_header paints and
+     * what client_of now leaves alone. `< y + title_h` stopped one row short of
+     * the header's own foot rule, which is a row the header owns and drags
+     * from - a one-pixel dead stripe along the bottom of every title bar. */
+    return y >= wins[win].y && y <= wins[win].y + t->title_h &&
            x >= wins[win].x && x < wins[win].x + wins[win].w;
 }
 
@@ -3834,10 +4334,27 @@ static void wm_toggle_max(int win)
     wm_snap_key(win, snap_state(win) == SNAP_NONE ? SK_UP : SK_DOWN);
 }
 
+/* THE SAME TOGGLE, REACHABLE FROM zl. The window menu's "maximise" row needs
+ * it, and SK_UP / SK_DOWN / SNAP_NONE are all private to this file - binding
+ * the raw wm_snap_key would mean hand-copying three constants into the runtime,
+ * which is the class of mistake this tree keeps finding. One wrapper instead,
+ * so the menu row and a double-click cannot land in different states. */
+void wm_max_toggle(int win) { wm_toggle_max(win); }
+
+/* IS THIS PLATE OVER ANOTHER ONE? The chrome has asked this since the occluder
+ * was written; the window menu's row 5 stated the answer as a literal because
+ * nothing published it. Same shape as the row below it, which stated the focus
+ * state until wm_focus() was read instead. */
+int wm_over_below(int win) { return wm_is_open(win) ? win_over_below(win) : 0; }
+
 static void route_mouse(int x, int y, int btn)
 {
     int down = (btn & 1) && !(last_btn & 1);
     int up   = !(btn & 1) && (last_btn & 1);
+    /* Bit 1 is the right button - ui.h states the PS/2 mask where it explains
+     * why the double-click bit had to go at bit 8. Read BEFORE last_btn is
+     * overwritten, like down and up, so this is an edge and not a level. */
+    int rdown = (btn & 2) && !(last_btn & 2);
     last_btn = btn;
     ptr_x = x; ptr_y = y;
 
@@ -3857,7 +4374,16 @@ static void route_mouse(int x, int y, int btn)
     /* 1. POINTER GRAB */
     if (pgrab >= 0) {
         if (grab_drag == GRAB_MOVE) {
-            wm_move(pgrab, x - grab_dx, y - grab_dy);
+            /* CLAMPED HERE, NOT IN wm_move. The first attempt put it inside
+             * wm_move and broke six wmtest_feel assertions at once - maximise,
+             * restore, Super+Down and the snap round-trip all place windows
+             * PROGRAMMATICALLY through the same function, and a restore that
+             * cannot return a window to the exact rect it came from is not a
+             * restore. The prototype clamps in layout(), which runs on the
+             * user's interaction; this is that path and nothing else. */
+            int mx = x - grab_dx, my = y - grab_dy;
+            clamp_to_field(&mx, &my, wins[pgrab].x, wins[pgrab].y);
+            wm_move(pgrab, mx, my);
             snap_preview_set(snap_zone_for_point(x, y,
                                                  (int)fb_pxw(), (int)fb_pxh()));
         } else if (grab_drag == GRAB_RESIZE) {
@@ -3897,6 +4423,25 @@ static void route_mouse(int x, int y, int btn)
         return;
     }
 
+    /* 0. AN OVERLAY OUTRANKS EVERYTHING BELOW IT.
+     *
+     * After the pointer-grab block above, so a drag already in flight still
+     * finishes; before modal_win(), so an overlay covers the start menu too.
+     * Every event goes here, not only presses - a release that leaked through
+     * would end up starting or ending a drag on a window the user cannot even
+     * see, which is exactly what used to happen when the window menu was open
+     * on top of the window it belongs to.
+     *
+     * The keyboard has followed this rule since desk_key was wired; the pointer
+     * simply never did, and no hit test for any overlay surface existed in the
+     * tree to make it possible.
+     *
+     * `down` rather than btn is passed deliberately: btn is a LEVEL, so a row
+     * would re-run on every frame the button stayed held. down is the press
+     * edge, computed at the top of this function beside up and rdown for
+     * exactly this reason. last_btn is already stored up there. */
+    if (hook_overlay_click && hook_overlay_click(x, y, down)) return;
+
     int m = modal_win();
     int hit = wm_at(x, y);
 
@@ -3916,11 +4461,25 @@ static void route_mouse(int x, int y, int btn)
         if (hook_desk_click) hook_desk_click(x, y, btn);
         return;
     }
+    /* THE WINDOW'S MENU, before the left button's three destinations. It does
+     * not focus or raise: the prototype's first item IS "bring to front", so
+     * doing it on the way in would make that row a no-op describing something
+     * that already happened. */
+    if (rdown && hook_win_menu) { hook_win_menu(hit, x, y); return; }
     if (down) {
         wm_focus(hit);
         wm_raise(hit);
         int dbl = is_double(hit, x, y);
-        if (in_closebox(hit, x, y)) { wm_close_fx(hit); return; }
+        /* THE APP IS ASKED FIRST. There was no close hook anywhere in this
+         * OS - wm.c had no app_close callback and kernel.zl defined only
+         * app_tick - so this line used to destroy an editor holding unsaved
+         * text with no toast, no confirm and no trace. The next open re-read
+         * the file from disk and the edits were simply gone. The pane
+         * advertised the loss in its own footer one frame before it happened. */
+        if (in_closebox(hit, x, y)) {
+            if (hook_can_close && !hook_can_close(hit)) return;
+            wm_close_fx(hit); return;
+        }
         if (in_title_control(hit, TITLE_MAXIMIZE, x, y)) { wm_toggle_max(hit); return; }
         if (in_title_control(hit, TITLE_MINIMIZE, x, y)) { wm_minimize(hit); return; }
         /* DOUBLE-CLICK THE TITLE BAR TO MAXIMISE, again to restore. Checked
@@ -4038,14 +4597,67 @@ static void route_key(int type, int code, int mods)
      * routing it to whichever app has focus would mean every app had to know
      * about the start menu. MOD_SUPER has been tracked since input.c was
      * written and used for nothing at all. */
-    if (type == EV_KEY_DOWN && code == KEY_SUPER) {
-        if (hook_desk_key) hook_desk_key(code, mods);
-        return;
+    /* AN OVERLAY IS MODAL TO THE KEYBOARD, and the desk says so by consuming.
+     *
+     * Only Super, Escape and F1 were offered to the desk, which is why the
+     * palette could be opened and then not driven: its arrows, its Enter and
+     * every character typed into it went to whichever window had focus behind
+     * it. ov_active() exists in kernel.zl for exactly this question and had
+     * ZERO READERS.
+     *
+     * The desk is offered every key now and answers 1 only when it took one.
+     *
+     * WHICH KEYS THOSE ARE HAS GROWN, and the comment here said three when it
+     * had become six. With no overlay up the desk claims Super, Escape and F1
+     * as before, AND Ctrl+G, Ctrl+K and Ctrl+L, which the field menu advertises
+     * as global shortcuts and the prototype binds globally too. That is the
+     * intended behaviour - a desktop shortcut that only works when no window
+     * has focus is not a desktop shortcut - but it does mean a focused window
+     * no longer sees those three control codes, and saying "the terminal still
+     * gets its characters" without that qualification was no longer true.
+     * Everything else still falls through untouched. */
+    /* ONE LOGICAL PRESS, ONE OFFER. This read `EV_KEY_DOWN || EV_CHAR`, which
+     * offered a PS/2 press to the desk TWICE and made every desk toggle a net
+     * no-op on real hardware.
+     *
+     * The reason is one line in input.c:412 - `if (!key && ch) key = ch;`. A
+     * letter has no sc_special() keycode, so its EV_KEY_DOWN is BACKFILLED with
+     * the character. Ctrl+G therefore pushes EV_KEY_DOWN code 7 AND EV_CHAR
+     * code 7 (input.c:436-437), the same number down both, and desk_key ran
+     * `desk_grid_on = 1 - desk_grid_on` on each - back to where it started,
+     * with two toasts, the second announcing the state it had just left.
+     *
+     * NO PROBE IN THIS TREE COULD SEE IT. Every probe-*.py drives COM1, and the
+     * serial path pushes EV_CHAR alone and says so at input.c:851 ("EV_CHAR
+     * ONLY, DELIBERATELY"). The bug existed exclusively on the wire no test
+     * harness uses, which is the whole reason it survived being "verified".
+     *
+     * The split below is by CODE SPACE, not by event type, because that is
+     * what actually distinguishes the two: keycodes are >= 0x100 (KEY_ESC,
+     * KEY_F1, KEY_SUPER, the arrows) and reach us only as EV_KEY_DOWN, since
+     * sc_extended() sets ch = 0. Characters are < 0x100 and are authoritative
+     * on EV_CHAR down both wires. Neither key is now offered twice, and the
+     * serial ESC (27, a character) still arrives - which is why the separate
+     * EV_CHAR-27 arm that used to sit below is gone rather than kept. */
+    if (type == EV_KEY_DOWN && code >= 0x100) {
+        if (hook_desk_key && hook_desk_key(code, mods)) return;
+    }
+    if (type == EV_CHAR && code < 0x100) {
+        if (hook_desk_key && hook_desk_key(code, mods)) return;
+    }
+    if (type == EV_KEY_DOWN && (code == KEY_SUPER || code == KEY_ESC || code == KEY_F1)) {
+        /* Super is the desktop's whether or not anything wanted it. Escape and
+         * F1 fall through to the focused window when no overlay took them - the
+         * editor's Escape still saves and closes. */
+        if (code == KEY_SUPER) return;
     }
     /* Ctrl+W closes. Closing is the close box or Ctrl+W - NEVER "press any
      * key", which is the phrase this whole rewrite exists to delete. */
     if (type == EV_CHAR && code == 23) {        /* Ctrl+W */
-        if (focus_win >= 0) wm_close_fx(focus_win);
+        if (focus_win >= 0) {
+            if (hook_can_close && !hook_can_close(focus_win)) return;
+            wm_close_fx(focus_win);
+        }
         return;
     }
     int m = modal_win();
@@ -4155,6 +4767,21 @@ static unsigned int frame_delta_us(unsigned int start, unsigned int end,
 }
 
 int wm_frame_us(void)  { return (int)frame_us; }
+
+/* The per-window figure. app_us has been measured per window since the two
+ * rdtsc in app_draw_dispatch went in, and until now NOTHING COULD READ IT:
+ * the value was written into wins[win].app_us every frame and no accessor
+ * existed in any .c, .h or .zl in the tree. So the settings pane printed
+ * wm_frame_us() under the label "THIS PANE, LAST DRAW" - the whole
+ * compositor's frame, every window's work, presented as one pane's cost -
+ * while the comment above that row asserted it was the per-window number.
+ * A measurement that exists but cannot be read is indistinguishable from one
+ * that was never taken, and it stays that way until someone reads the slot. */
+int wm_win_us(int win)
+{
+    if (!wm_is_open(win)) return 0;
+    return (int)wins[win].app_us;
+}
 int wm_peak_us(void)   { return (int)frame_peak_us; }
 int wm_late(void)      { return (int)frame_late; }
 int wm_lost(void)      { return (int)frame_lost; }
@@ -4203,6 +4830,18 @@ void wm_frame(void)
     unsigned int now = idt_ticks();
     unsigned int frame_started_tick = now;
     last_tick = now;
+    if (caret_watch.live) {
+        if (!ui_motion_get() || now - caret_watch.seen > 100u) {
+            caret_watch.live = 0;
+        } else {
+            unsigned phase = (now / 50u) & 1u;
+            if (phase != caret_watch.phase) {
+                caret_watch.phase = phase;
+                wm_damage(caret_watch.x, caret_watch.y,
+                          caret_watch.w, caret_watch.h);
+            }
+        }
+    }
     /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
      * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
      * shadowed each other on the same name. One timer. */
@@ -4225,6 +4864,21 @@ void wm_frame(void)
      * on the app's. See band_us_latch. */
     band_us_latch();
 
+    /* THE DESK TICKS EVEN WITH NOTHING OPEN. The loop below is the only
+     * per-frame hook the policy layer has, and it is gated twice over - on a
+     * window existing at all, and on that window not being minimised. Anything
+     * the policy layer clocked from inside it therefore STOPPED whenever the
+     * desktop was empty: the raster ring took no samples while the compositor
+     * kept painting frames and kept counting them, so the plot and the ADVANCE
+     * figure beside it drifted apart by exactly the frames composited while the
+     * desk was clear - and the wall clock stopped asking for its own block back.
+     *
+     * A desk-wide tick is passed id -1 and win -1, which no app can be, so the
+     * policy layer branches on it at the top of app_tick and every window arm
+     * below stays untouched. Its return is ignored: it draws nothing and owns
+     * no client rect to invalidate. */
+    if (hook_tick) hook_tick(-1, -1);
+
     if (hook_tick)
         for (int i = 0; i < nz; i++)
             if (!(wins[zorder[i]].flags & WF_MINIMIZED) &&
@@ -4239,20 +4893,20 @@ void wm_frame(void)
         int tx, ty, tw, th;
         toast_rect(&tx, &ty, &tw, &th);
         const struct ui_theme *t = ui_theme();
-        int reach = SHADOW_OFF(t) + SHADOW_SOFT(t);
+        int reach = OFFPLANE_OFF(t) + OFFPLANE_SOFT(t);
         /* The rectangle has to cover the RISE as well as the panel: ztoast
-         * starts ten design pixels low, so a toast damaged at its settled
+         * starts four design pixels low, so a toast damaged at its settled
          * height leaves its first frames' bottom edge on the wallpaper. */
         int rise = EASE_TOAST_FROM_DY * t->scale;
         wm_damage(tx - reach, ty - reach,
                   tw + 2 * reach, th + 2 * reach + rise);
-        /* ztoast: .16s ease-out, opacity 0->1 with translateY(10px)->0.
+        /* Toast entry: RISE, opacity 0->1 with translateY(4px)->0.
          * notify_tick returns 1 for an arrival AND for a retirement; only an
          * arrival has something to animate, and notify_active() is what tells
          * them apart. Refusal is graceful - the toast is simply already
          * there, which is what it did before this existed. */
         if (anim_on && notify_active())
-            wm_anim_at(WM_FX_TOAST, ANIM_FADE, tx - reach, ty - reach,
+            wm_anim_at(WM_FX_TOAST, ANIM_TOAST, tx - reach, ty - reach,
                        tw + 2 * reach, th + 2 * reach + rise);
     }
 

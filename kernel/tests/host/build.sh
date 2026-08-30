@@ -56,6 +56,9 @@ echo "built ./palette       (run: ./palette)"
 gcc $HOST_INCLUDES -O2 -Wall -Wextra -o easetest easetest.c ../../src/graphics/ui/ease.c -lm
 echo "built ./easetest      (run: ./easetest)"
 
+gcc $HOST_INCLUDES -O2 -Wall -Wextra -o retest retest.c
+echo "built ./retest        (run: ./retest)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered
@@ -433,6 +436,30 @@ echo "built ./boot_state_test (run: ./boot_state_test)"
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -o heaptest heaptest.c ../../src/core/heap.c
 echo "built ./heaptest      (run: ./heaptest)"
 
+# The physical-frame allocator parses the sealed boot map but keeps its policy
+# in a host-testable core. The host seam replaces only the final page zeroing;
+# range admission, ownership, exhaustion and release are the shipping source.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
+    -o pmmtest pmmtest.c ../../src/core/pmm.c ../../src/core/boot/boot_handover.c
+echo "built ./pmmtest       (run: ./pmmtest)"
+
+# Process address spaces consume eight PMM-owned frames: four table levels,
+# code, user stack and two kernel-stack pages. Drive allocation rollback at
+# every short-pool boundary and exact two-process reclamation on the host.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
+    -o processmemorytest processmemorytest.c ../../src/core/process_memory.c \
+    ../../src/core/pmm.c ../../src/core/boot/boot_handover.c
+echo "built ./processmemorytest (run: ./processmemorytest)"
+
+# Anonymous process memory keeps virtual reservation separate from physical
+# commitment. Exercise OOM at every short-pool position, PTE collisions,
+# transaction rollback, zero/reuse, foreign ownership and holey teardown.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
+    -o anonmemorytest anonmemorytest.c ../../src/core/anon_memory.c \
+    ../../src/arch/x86/page_table_txn.c ../../src/core/pmm.c \
+    ../../src/core/boot/boot_handover.c
+echo "built ./anonmemorytest (run: ./anonmemorytest)"
+
 # The CPU-fault record, before the interrupt entry. This links crash.c itself,
 # not a model, and ASan/UBSan guard the one formatter that runs after the kernel
 # has already failed and therefore cannot safely fail a second time.
@@ -448,6 +475,13 @@ echo "built ./crashtest     (run: ./crashtest)"
 # off-by-one hands a device an address one page out.
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -o pagingtest pagingtest.c ../../src/arch/x86/paging.c
 echo "built ./pagingtest    (run: ./pagingtest)"
+
+# Page-table mutation itself is a transaction even though a host process cannot
+# load CR3. This drives the exact core used by paging.c across a full 512-entry
+# range and forces every nth write, flush and readback failure to roll back.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -o pagetxntest \
+    pagetxntest.c ../../src/arch/x86/page_table_txn.c
+echo "built ./pagetxntest   (run: ./pagetxntest)"
 
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -ffunction-sections -fdata-sections \
     -Wl,--gc-sections -o memtypetest memtypetest.c ../../src/arch/x86/cpu.c
@@ -473,6 +507,14 @@ echo "built ./exectest      (run: ./exectest)"
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../../src/fs/fs.c
 echo "built ./fstest        (run: ./fstest)"
+
+# The ustar the Archive Manager writes, read back by the SHELL'S OWN tar. A
+# test that parses back the layout its own writer just emitted agrees with
+# itself by construction; `tar -tvf` does not. Same -Wall -Wextra as fstest,
+# for the same reason - this one writes files.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
+    -o tartest tartest.c ../../src/fs/fs.c ../../src/fs/tar.c
+echo "built ./tartest       (run: ./tartest)"
 gcc $HOST_INCLUDES -O2 -no-pie -w -o blocktest blocktest.c
 echo "built ./blocktest     (run: ./blocktest)"
 

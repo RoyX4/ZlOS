@@ -26,7 +26,9 @@ Bounded launchers for QEMU and local kernel exercises.
 ## Direct tracked contents
 
 - `run-benchmarks.py`
+- `run-build-benchmark.py`
 - `run-host-tests.py`
+- `run-visual-receipt.py`
 - `run-vm.sh`
 - `trace-qemu.sh`
 - `try.sh`

@@ -70,8 +70,17 @@ def validate(value: dict) -> None:
         raise ValueError("accessibility open gaps were hidden")
     if len(value.get("build_identity", "")) != 64 or len(value.get("host_test_receipt_sha256", "")) != 64:
         raise ValueError("accessibility evidence identity missing")
-    if value.get("visual_registry", {}).get("current_build_bound") != 0:
-        raise ValueError("unearned current visual focus proof")
+    visual_path = METADATA / "visual-registry.json"
+    visual = json.loads(visual_path.read_text())
+    expected_visual_binding = {
+        "path": "kernel/metadata/visual-registry.json",
+        "sha256": sha256(visual_path),
+        "current_build_bound": visual["counts"]["current_build_bound"],
+    }
+    if value.get("visual_registry") != expected_visual_binding:
+        raise ValueError("visual registry binding drift")
+    if value["counts"]["current_build_bound_qemu_workflows"] != 0:
+        raise ValueError("unearned current-build accessibility workflow proof")
 
 
 def build() -> dict:
@@ -142,7 +151,7 @@ def selftest(value: dict) -> None:
     mutations["target-overclaim"] = target
     visual = copy.deepcopy(value)
     visual["visual_registry"]["current_build_bound"] = 46
-    mutations["unearned-visual-proof"] = visual
+    mutations["visual-binding-drift"] = visual
     caught = []
     for name, mutated in mutations.items():
         try:

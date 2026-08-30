@@ -8,48 +8,48 @@
     "boot-media-ids.json": {
       "bytes": 484,
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "25af6198c6e3d01855cefce5e879ce71c2dd9e6369af2cc29777926d0e350184"
+      "sha256": "af904d4607ca6ca74a7ff123d1e3339524f646e3e5c5a146b0c7c97b73b0c1fd"
     },
     "kernel.elf": {
-      "bytes": 6493832,
+      "bytes": 6516856,
       "path": "kernel/kernel.elf",
-      "sha256": "4eb06c9b2e9092c9da743184dcd288833c572d14b54481e40a636c0d6f0e5b98"
+      "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1"
     },
     "kernel64.elf": {
-      "bytes": 3335312,
+      "bytes": 3370832,
       "path": "kernel/kernel64.elf",
-      "sha256": "cf5cec3f07b2b871c474e049c17ca9955bedb20213db0b97c5c274adb3030da1"
+      "sha256": "15877f83912895bcb2d3cd09b341afb88aeec5cb45f4965b9da288880df16521"
     },
     "kernel_raw.elf": {
-      "bytes": 6493676,
+      "bytes": 6516700,
       "path": "kernel/kernel_raw.elf",
-      "sha256": "a556a6bf790dabbca985e104d4e46045355054454a3bc5b8c37e9b972c4cca65"
+      "sha256": "fc9e4aa37de9ed7b813a3caed12286914012c79e6866deebe6e09eeb41009050"
     },
     "zlOS-usb.img": {
       "bytes": 138412032,
       "path": "kernel/zlOS-usb.img",
-      "sha256": "7ad982c17875d533d68dce4551f3060656f6b161abb02b8bdf39d93a02749875"
+      "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9"
     },
     "zlOS.img": {
       "bytes": 8389120,
       "path": "kernel/zlOS.img",
-      "sha256": "d9cfa162fc0e9064d48d86df14e231b0f366e623df65f722ec2b4a269cf961e5"
+      "sha256": "3cabdfb8af476225d4456da37bf65915c86ea0b960824a0c84805585ec319ce3"
     },
     "zlOS.iso": {
-      "bytes": 31635456,
+      "bytes": 31660032,
       "path": "kernel/zlOS.iso",
-      "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5"
+      "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7"
     },
     "zlOS64.iso": {
-      "bytes": 28477440,
+      "bytes": 28512256,
       "path": "kernel/zlOS64.iso",
-      "sha256": "e124b6667de1d98493d3737c5647e9c87f1b9e7377f35a0a442d1661a72d258b"
+      "sha256": "379e9dffd08ee5efc24265dc1c4dc451b3876090cce7f4c3af60612918f72322"
     }
   },
   "build_identity": {
-    "dirty": false,
-    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
-    "id": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+    "dirty": true,
+    "head": "3777678c0247862177eceb1c4f35e2402839d029",
+    "id": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
     "schema": "zlos.build-input-identity.v1"
   },
   "evidence": "two independent executions of every listed build recipe produced byte-identical artifacts",
@@ -63,7 +63,7 @@
   "result": "PASS",
   "schema": "zlos.reproducible-build-receipt.v1",
   "source_files_sha256": {
-    "build-identity.json": "c35d13de187623a6a2605f795bd6f2e6227ed421160a764d9dca9f1ae4fa2b52",
+    "build-identity.json": "c5c97f8e2eea5177a44d3df780323f25900367b0eb04b34b532098332b920712",
     "check-reproducible-build.py": "513067e69682e7c446d55f48cde7b4dfb2d38dcbc1993a2cef952b0030d4e209"
   },
   "weakest_link": "byte reproducibility does not by itself prove bootability, runtime behavior, compiler diversity, or physical-hardware behavior"

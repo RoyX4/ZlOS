@@ -25,6 +25,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 
 ## Direct tracked contents
 
+- `anonmemorytest.c`
 - `apps53.py`
 - `arenatest.c`
 - `blocktest.c`
@@ -86,15 +87,20 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `modeset_test.c`
 - `msctest.c`
 - `nettest.c`
+- `pagetxntest.c`
 - `pagingtest.c`
 - `palette.c`
 - `parsestat.c`
+- `pmmtest.c`
 - `pngtest.c`
+- `processmemorytest.c`
+- `retest.c`
 - `rtctest.c`
 - `run-all.sh`
 - `runtest.c`
 - `settingstest.c`
 - `systest.c`
+- `tartest.c`
 - `tcptest.c`
 - `termwrap.c`
 - `test-inventory.json`
@@ -107,6 +113,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `trace_event.h`
 - `tritest.c`
 - `uitest.c`
+- `user-syscalls-test.sh`
 - `walltest.c`
 - `wmbench.c`
 - `wmshot.c`

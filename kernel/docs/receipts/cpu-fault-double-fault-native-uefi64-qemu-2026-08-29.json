@@ -1,0 +1,76 @@
+{
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9"
+  },
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "crash_line": "ZLCRASH v=3 bytes=240 bits=64 regmask=0x000000000000ffff vec=8 haserr=1 err=0x0000000000000000 ip=0x000000003cf4c095 cs=0x0000000000000008 flags=0x0000000000010046 sp=0x0000000000000000 ss=0x0000000000000000 cr2=0xfffffffffffffff8 handlersp=0x000000003d0dbd10 stacklo=0x000000003d0d7dc0 stackhi=0x000000003d0dbdc0 ax=0x0000000000000000 bx=0x000000003fe569e0 cx=0x000000003d0c1f26 dx=0x000000003d0c1f19 si=0x000000003fe56600 di=0x000000003fe57750 bp=0x000000003fe57c00 rsp=0x0000000000000000 r8=0x0000000000000000 r9=0x0000000000000000 r10=0x000000003d0c1f27 r11=0x0000000000000067 r12=0x000000003fe57bf0 r13=0x000000003fe57c10 r14=0x000000003fe574e0 r15=0x000000003fe57a30 checksum=0x9e32d56f01df1d09 END\n",
+  "crash_line_sha256": "6f775bb42ddcc2c64ad33e265a8e095935289bfad3691cb7cf91a47a7efb630a",
+  "evidence": "QEMU target execution of the exact current artifact; architectural vector/error shape, pre-prologue registers, bounded schema, checksum and halted state independently verified; the double-fault case additionally binds serial handler SP and QEMU halted RSP to IST1",
+  "fault_case": "double-fault",
+  "guest_halted_after_record": true,
+  "halted_cpu": {
+    "register_dump_sha256": "18b475b89059248874e7ad9df4bb38192194f220c4d59a062b4e197c73e2dcbb",
+    "rsp": 1024310176
+  },
+  "kernel": {
+    "path": "kernel/ZLOS.EFI",
+    "sha256": "37611a475a5c77ce952177d2fe28c06168a0050228969a11fede56c96af90a92"
+  },
+  "kernel_symbol_ip": null,
+  "record": {
+    "ax": 0,
+    "bits": 64,
+    "bp": 1072004096,
+    "bx": 1071999456,
+    "bytes": 240,
+    "checksum": 11399408279577632009,
+    "cr2": 18446744073709551608,
+    "cs": 8,
+    "cx": 1024204582,
+    "di": 1072002896,
+    "dx": 1024204569,
+    "emergency_stack_high": 1024310720,
+    "emergency_stack_low": 1024294336,
+    "error": 0,
+    "flags": 65606,
+    "handler_sp": 1024310544,
+    "has_error": 1,
+    "ip": 1022673045,
+    "r10": 1024204583,
+    "r11": 103,
+    "r12": 1072004080,
+    "r13": 1072004112,
+    "r14": 1072002272,
+    "r15": 1072003632,
+    "r8": 0,
+    "r9": 0,
+    "register_mask": 65535,
+    "register_sp": 0,
+    "si": 1071998464,
+    "sp": 0,
+    "ss": 0,
+    "vector": 8,
+    "version": 3
+  },
+  "result": "PASS",
+  "route": "native-uefi64-qemu",
+  "runtime_symbol_binding": {
+    "address": null,
+    "mechanism": "architecturally undefined for #DF",
+    "register": null
+  },
+  "schema": "zlos.cpu-fault-qemu-receipt.v3",
+  "source_sha256": {
+    "freestanding/runtime_kernel.c": "44a98e4017ae78b9ec6d759548b56a63faf1eb22054d5027bcca8b7c91145e80",
+    "kernel/boot/gdt64.c": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+    "kernel/src/arch/x86/idt.c": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+    "kernel/src/core/crash.c": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+    "kernel/src/core/crash.h": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
+    "kernel/src/graphics/windowing/term.c": "617113fcae29504aa6cd210dce1d1367cb97906f034f8db9a8287b61b2c5f481",
+    "kernel/src/kernel.zl": "c69681f274758145bd3b96de96c1486d44f141a32b09d50cc2932ed4f30aa9c8",
+    "kernel/tools/checks/verify-crash.py": "d76a8606998ff5ca717b62deff4b77678f0446b5129896e644cecec4dc05ef23"
+  },
+  "trigger": "page fault on unusable RSP through typed crashdftest diagnostic",
+  "weakest_link": "the exercised matrix remains bounded; stack unwinding, durable dump storage, recovery policy and physical fault injection remain unimplemented"
+}

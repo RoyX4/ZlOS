@@ -1,0 +1,33 @@
+{
+  "schema": "zlos.user-syscalls.v1",
+  "abi_version": 1,
+  "architecture": "x86_64",
+  "mechanism": "int 0x80",
+  "unknown_result": "ENOSYS",
+  "entries": [
+    {"number": 1, "constant": "U64_SYS_WRITE", "name": "write"},
+    {"number": 2, "constant": "U64_SYS_GETPID", "name": "getpid"},
+    {"number": 3, "constant": "U64_SYS_EXIT", "name": "exit"},
+    {"number": 4, "constant": "U64_SYS_COPY", "name": "copy-check"},
+    {"number": 5, "constant": "U64_SYS_TIME", "name": "time"},
+    {"number": 6, "constant": "U64_SYS_YIELD", "name": "yield"},
+    {"number": 7, "constant": "U64_SYS_OPEN", "name": "open"},
+    {"number": 8, "constant": "U64_SYS_READ", "name": "read"},
+    {"number": 9, "constant": "U64_SYS_WRITEF", "name": "write-file"},
+    {"number": 10, "constant": "U64_SYS_CLOSE", "name": "close"},
+    {"number": 11, "constant": "U64_SYS_INFO", "name": "info"},
+    {"number": 12, "constant": "U64_SYS_REMOVE", "name": "remove"},
+    {"number": 13, "constant": "U64_SYS_RENAME", "name": "rename"},
+    {"number": 14, "constant": "U64_SYS_SYNC", "name": "sync"},
+    {"number": 15, "constant": "U64_SYS_SEND", "name": "send"},
+    {"number": 16, "constant": "U64_SYS_RECV", "name": "receive"},
+    {"number": 17, "constant": "U64_SYS_FROM", "name": "sender"},
+    {"number": 18, "constant": "U64_SYS_WIN_OPEN", "name": "window-open"},
+    {"number": 19, "constant": "U64_SYS_WIN_PRESENT", "name": "window-present"},
+    {"number": 20, "constant": "U64_SYS_WIN_POLL", "name": "window-poll"},
+    {"number": 21, "constant": "U64_SYS_WIN_CLOSE", "name": "window-close"},
+    {"number": 22, "constant": "U64_SYS_ANON_RESERVE", "name": "anonymous-reserve"},
+    {"number": 23, "constant": "U64_SYS_ANON_COMMIT", "name": "anonymous-commit"},
+    {"number": 24, "constant": "U64_SYS_ANON_RELEASE", "name": "anonymous-release"}
+  ]
+}
