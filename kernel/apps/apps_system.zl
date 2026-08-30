@@ -364,7 +364,12 @@ fn ca_btn_label(i) {
     if i == 0 { return "7" }  if i == 1 { return "8" }  if i == 2 { return "9" }  if i == 3 { return "/" }
     if i == 4 { return "4" }  if i == 5 { return "5" }  if i == 6 { return "6" }  if i == 7 { return "*" }
     if i == 8 { return "1" }  if i == 9 { return "2" }  if i == 10 { return "3" }  if i == 11 { return "-" }
-    if i == 12 { return "C" }  if i == 13 { return "0" }  if i == 14 { return "=" }  return "+"
+    # proto:1793 puts '0' at index 12 and '.' at 13, so the bottom row reads
+    # `0 . = +`. This had C at 12 and 0 at 13, and the comment defending it
+    # asserted the reference has '.' at index 12 - it has '0'. The
+    # decimal-point reasoning was sound and belongs on index 13; the two
+    # entries were simply swapped.
+    if i == 12 { return "0" }  if i == 13 { return "C" }  if i == 14 { return "=" }  return "+"
 }
 fn ca_btn_press(i) {
     if i == 0 { ca_digit(7)  return 0 }

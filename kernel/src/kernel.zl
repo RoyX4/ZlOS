@@ -539,7 +539,13 @@ fn field_h() { return px_h() - field_y() - foot_h() }
 # register band is a FIXED height, and the register band is what is left - which
 # is the only arrangement where the clock is at the bottom of the screen on a
 # 600-tall panel and on a 1440-tall one without a second table.
-RAIL_IDENT_H = 58                # 11 pad + the 24 dp identity line + 15 + 7
+# 57, NOT 58. The comment's own terms - 11 pad + the 24 dp identity line +
+# 15 + 7 - sum to 57, and proto:424 with proto:349/198 and proto:352/196 give
+# the same under border-box. All three sibling blocks reconcile exactly; this
+# one was 1 dp out at ui 1 and 2 at ui 2, and everything below the identity
+# rode on it: rail_sect_y, the rule under REGISTER, rail_top_h, rail_reg_y
+# and the whole register band.
+RAIL_IDENT_H = 57                # 11 pad + the 24 dp identity line + 15 + 7
 RAIL_SECT_H  = 26                # a section caption: 7 + 15 + 4
 RAIL_STAT_H  = 63                # 3 + three 19 dp reading rows + 3
 RAIL_CLOCK_H = 54                # 5 + the 24 dp HH:MM + 15 + 10
@@ -2921,6 +2927,17 @@ fn draw_foot_ruler() {
     rdw = rdc * cw
     bw = fw - (bx - fx) - pad_d() - rdw - 9 * u
     bh = 11 * u
+    # THE BAR IS CENTRED IN ITS ROW, NOT PINNED TO ITS TOP.
+    #
+    # ry is the foot's CONTENT top - proto:562's 3 dp padding behind the 2 dp
+    # border - and the 11 dp bar was filled from it directly. proto:563-565
+    # centres an 11 dp bar in a 17 dp `align-items: center` row, which is 3 dp
+    # down. At ui 1 the bar sat at 5..16 instead of 8..19, so its four edges,
+    # the region walk below and the datum overshoot all rode high, and the gap
+    # to the slug's hairline read 8 dp where the authority gives 5.
+    #
+    # The label and the readout are already within a pixel and are not moved.
+    ry = ry + 3 * u
     tot = ruler_total()
     if bw > 0 and tot > 0 {
         fill_rgb(bx, ry, bw, bh, theme(TH_SURF_WELL))
@@ -7681,10 +7698,16 @@ fn open_syspane() {
         wm_setfocus(syspane_win)  wm_raise(syspane_win)  return 1
     }}
     syspane_measure()
-    # 560 x 620 design px is the height the fourteen graded rows need on top of
-    # the cards and the six inventory rows; anything shorter and sys_body says
-    # on screen how many rows it had room for rather than quietly truncating.
-    syspane_win = wm_open(APP_SYSPANE, "System", desk_x(96), desk_y(56), 560 * op_u, 620 * op_u)
+    # proto:1555 gives register 10 the rect p[380, 90, 600, 470].
+    #
+    # This opened 560 x 620 at 96, 56, with a reason: "the height the fourteen
+    # graded rows need ... anything shorter and sys_body says on screen how many
+    # rows it had room for rather than quietly truncating." That reason is real
+    # and it is also the argument for taking the authority's rect - the pane
+    # ALREADY reports what it could not fit, so a shorter window costs a
+    # sentence on screen rather than a silent loss, and the table this comment
+    # defends is the same table the authority sized its own window around.
+    syspane_win = wm_open(APP_SYSPANE, "System", desk_x(380), desk_y(90), 600 * op_u, 470 * op_u)
     if syspane_win < 0 { return 0 }
     wm_report(syspane_win)
     return 1
@@ -7695,7 +7718,11 @@ fn open_typepane() {
     if typepane_win >= 0 { if wm_open_p(typepane_win) == 1 {
         wm_setfocus(typepane_win)  wm_raise(typepane_win)  return 1
     }}
-    typepane_win = wm_open(APP_TYPEPANE, "Type", desk_x(140), desk_y(96), 600 * ot_u, 520 * ot_u)
+    # proto:1559 gives register 14 the rect p[340, 180, 560, 400]. The tree
+    # opened 600 x 520 at 140, 96 with nothing said about why - and register 09
+    # CLOCKS matches its own row exactly, which is what shows the table was
+    # applied and these were missed rather than overruled.
+    typepane_win = wm_open(APP_TYPEPANE, "Type", desk_x(340), desk_y(180), 560 * ot_u, 400 * ot_u)
     if typepane_win < 0 { return 0 }
     wm_report(typepane_win)
     return 1
@@ -12161,7 +12188,10 @@ fn ov_menu_haskey(i) {
 # test existed: writing one meant copying four calculations, and a copied
 # calculation is a second answer waiting to disagree with the first.
 OV_MENU_ROWH = 20
-OV_MENU_SEPH = 7
+# proto:955's .msep is 2 dp of ZD_LIT. At 7 this inflated ov_menu_h and
+# ov_menu_row_at as well, so the field menu's three separators made it 15 dp
+# taller than the authority's and displaced every row below the first.
+OV_MENU_SEPH = 2
 OV_MENU_HEADH = 20
 
 fn ov_menu_h() {
@@ -12563,7 +12593,11 @@ fn ov_draw_menu(u) {
     mi = 0
     while mi < ov_menu_rows() {
         if ov_menu_sep(mi) == 1 {
-            fill_rgb(mx + 8 * u, ry + seph / 2, mw - 16 * u, 1, theme(TH_CUT))
+            # ZD_LIT AT 2 dp, FULL WIDTH. proto:955 is
+            # `.msep { height: calc(2px * var(--ui)); background: var(--zd-lit) }`
+            # and this drew ZD_CUT at 1 dp inset by 8 - the opposite end of the
+            # same ladder, at half the weight, short at both ends.
+            fill_rgb(mx, ry + seph / 2 - RULE_H * u / 2, mw, RULE_H * u, theme(TH_LIT))
             ry = ry + seph
         } else {
             tc = theme(TH_TEXT_HI)
@@ -12861,7 +12895,10 @@ fn ov_draw_activities(u) {
 # draws eleven bullets, which is a mock of a typed secret; nothing has been
 # typed here and there is no authentication behind it. The field and its caret
 # are drawn - they say what the surface is for - and the bullets are not.
-OV_LOCK_W = 460
+# proto:934 is `width: calc(660px * var(--ui))` and every measurement on the
+# sheet derives from this one. 460 carried no reason, unlike OV_SHEET_W a few
+# hundred lines up where 580 is cited and the value it replaced is named.
+OV_LOCK_W = 660
 fn ov_draw_lock(u) {
     lw = OV_LOCK_W * u
     lh = 250 * u

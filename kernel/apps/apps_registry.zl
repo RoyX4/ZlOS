@@ -215,7 +215,11 @@ fn reg_w(id) {
     # one. Their prototype rects now live in sys2_w/sys2_h and sys3_w/sys3_h.
     if id == APP_CALC       { return 360 }
     if id == APP_CLOCK      { return 540 }
-    if id == APP_SYSINFO    { return 600 }
+    # 620, not 600. Register 13 routes to APP_SYSINFO, and proto:1558 gives
+    # `regs` p[260, 60, 620, 470] - this was the SYSTEM app's 600, taken before
+    # the register table was re-pointed at this app and never re-read against
+    # the row it now serves.
+    if id == APP_SYSINFO    { return 620 }
     # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
     # UTILS and GAME_APPS arrays. They were not before: twenty of these
     # apps carried a size picked when the app was written, and the errors

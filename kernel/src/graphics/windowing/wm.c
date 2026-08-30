@@ -2912,9 +2912,14 @@ static void chrome_seat(const struct win *W, int r, int focused, int over)
      * The knockout being ON is still the shipped default and neither line
      * changes there; this is the state the switch exists to reach. */
     int knock_on = ui_knockout_get();
-    int run_w = W->w - 2 * r;
+    /* THE PADDING BOX IN X TOO. The note above makes exactly this argument for
+     * y and left x on the ring's coordinates: `left: r` (proto:607) is
+     * W->x + 1 + r and the width is W->w - 2 - 2r. At r = ZD_R_BOLT = 0 on a
+     * maximised plate the run's ends landed on the ring's own columns. The
+     * lrun beside it was already correct. */
+    int run_w = W->w - 2 - 2 * r;
     if (run_w > 0)
-        fb_fill_px(W->x + r, W->y + 1, run_w, 1,
+        fb_fill_px(W->x + 1 + r, W->y + 1, run_w, 1,
                    (focused && knock_on) ? t->knock : t->lit);
 
     int ly = W->y + 1 + ((focused && chrome && knock_on) ? t->title_h : r);
@@ -3040,7 +3045,13 @@ static void chrome_focus_bar(const struct win *W, int r, int focused)
 {
     const struct ui_theme *t = ui_theme();
     if (!focused || (W->flags & WF_NOCHROME)) return;
-    int bw = t->focus_bar, by = W->y + t->title_h;
+    /* THE PADDING EDGE, NOT THE RING. `.fbar` (proto:705) is positioned against
+     * `.win`'s padding box, so `top: var(--zd-title-h)` is W->y + 1 + title_h -
+     * the row AFTER the header's groove at W->y + hh. chrome_header was
+     * converted to border-box and says so at its own :2969; this was not, and
+     * chrome_shell calls the two in sequence, so the accent overwrote the first
+     * focus_bar pixels of ko_edge on every focused window. */
+    int bw = t->focus_bar, by = W->y + 1 + t->title_h;
     int bh = W->h - t->title_h - 1 - r;
     if (bw > W->w - 2) bw = W->w - 2;
     if (bw > 0 && bh > 0) fb_fill_px(W->x + 1, by, bw, bh, t->accent);

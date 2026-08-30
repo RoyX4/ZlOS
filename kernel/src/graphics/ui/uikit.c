@@ -1904,7 +1904,10 @@ int ui_menu_w(const char *items)
         w = imax(w, ui_text_w(buf, UI_MD, 0));
     }
     w += 2 * DP(ZD_MENU_ITEM_PX) + 2 * DP(ZD_MENU_PAD) + DP(ZD_MENU_GAP);
-    return imax(w, DP(ZD_MENU_W) / 2);
+    /* THE FLOOR IS THE AUTHORITY'S MINIMUM, NOT HALF OF IT. proto:939 gives
+     * `min-width: calc(214px * var(--ui))`; the `/ 2` here was uncited and put
+     * the real floor at 110. */
+    return imax(w, DP(ZD_MENU_W));
 }
 
 int ui_menu_h(const char *items)
