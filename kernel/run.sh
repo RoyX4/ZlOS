@@ -8,7 +8,7 @@
 # line - which means you type into this terminal, not into the QEMU window.
 # That is the one thing a keyboard driver would fix.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 ./build.sh >/dev/null
 
@@ -16,6 +16,7 @@ cd "$(dirname "$0")"
 # hand-run boot got qemu's 128 MiB default and behaved differently from every
 # gate - the high-RAM map above 128 MiB was simply absent. check-ram.sh fails if
 # this and HI_TOP ever disagree.
+# shellcheck disable=SC2054 # QEMU suboptions use comma-separated single args.
 COMMON=(-kernel kernel.elf
         -m 1G
         -device isa-debug-exit,iobase=0xf4,iosize=0x04

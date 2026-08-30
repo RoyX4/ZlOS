@@ -2,7 +2,7 @@
 
 **Status:** proposal — **BLOCKED, do not start**
 **Author:** language/compiler design pass, 2026-07-31
-**Scope:** a new backend `kernelgen.c` (forked from `nativegen.c`), a small set of
+**Scope:** a new backend `kernelgen.c` (forked from `src/backends/native/nativegen.c`), a small set of
 privileged-instruction intrinsics, and a separate verification harness
 `verify_kernel.ps1`. No existing engine, no existing file, and **no part of
 `verify.ps1`** is touched by this work. No code is changed by this document.
@@ -11,7 +11,7 @@ privileged-instruction intrinsics, and a separate verification harness
 
 ## 0. TL;DR — and the ordering, stated honestly up front
 
-`OVERNIGHT_CAMPAIGN.md` says of W6: *"Freestanding + no-libc + structs + raw
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` says of W6: *"Freestanding + no-libc + structs + raw
 memory make this possible, not before."* That sentence is correct and this
 document does not soften it.
 
@@ -19,9 +19,9 @@ document does not soften it.
 
 | Missing thing | Where it must come from | Today |
 |---|---|---|
-| raw memory (`peek8/16/32/64`, `poke*`, pointer arithmetic) | **W5** | `peek`/`poke` are in the `SIMULATED[]` stub list, `interp.c:190` — they print a message and do nothing |
+| raw memory (`peek8/16/32/64`, `poke*`, pointer arithmetic) | **W5** | `peek`/`poke` are in the `SIMULATED[]` stub list, `src/runtime/interp.c:190` — they print a message and do nothing |
 | structs with a fixed, known memory layout | **W5** | nothing; there is no aggregate type at all |
-| freestanding output (no CRT, own entry, own section layout) | **W5** | closest thing is `nativert.c` → kernel32-only, which is *not* the same as no-OS |
+| freestanding output (no CRT, own entry, own section layout) | **W5** | closest thing is `src/backends/native/nativert.c` → kernel32-only, which is *not* the same as no-OS |
 | port I/O + privileged instructions (`in`/`out`/`lgdt`/`lidt`/`cli`/`hlt`) | **W6, specified here (§7)** | nothing |
 
 What *does* exist, and is real groundwork rather than a hand-wave:
@@ -30,13 +30,13 @@ What *does* exist, and is real groundwork rather than a hand-wave:
   and byte-level appenders (`u8/u16/u32/u64/pad/ustr`). A UEFI application is a
   PE32+ file. **`pe_min.zl` is ~90% of a UEFI image writer already** (§3.2 lists
   the exact deltas — there are five of them).
-- **`nativegen.c`'s `write_pe()`** does the same thing in C, with a computed
+- **`src/backends/native/nativegen.c`'s `write_pe()`** does the same thing in C, with a computed
   section layout, and is what a kernel backend should fork.
-- **`nativegen.c` is already an exact-int64 engine.** `N_NUMBER` goes through
+- **`src/backends/native/nativegen.c` is already an exact-int64 engine.** `N_NUMBER` goes through
   `atoll(n->text)` (l.142), *not* through a double, and every operator is a GPR
   instruction (`add`/`sub`/`imul`/`cqo;idiv`, l.98-102). This matters enormously
   and is the subject of §2.
-- **`nativert.c`** proves the discipline that makes hand-assembly survivable —
+- **`src/backends/native/nativert.c`** proves the discipline that makes hand-assembly survivable —
   `call_to()` / `jz_fwd()` / `land()` compute every displacement instead of
   hand-counting it (its own lesson #2). The kernel backend inherits that or it
   will not work.
@@ -44,7 +44,7 @@ What *does* exist, and is real groundwork rather than a hand-wave:
 **The design.** Boot **UEFI, not legacy BIOS** (§3 — the deciding argument is
 that the repo's PE writer *is* a UEFI writer, and that a BIOS boot sector would
 require a 16-bit encoder zl does not have and would never otherwise need). Fork
-**`nativegen.c`** (unboxed i64), not `nativeval.c` (boxed, needs a heap), because
+**`src/backends/native/nativegen.c`** (unboxed i64), not `src/backends/native/nativeval.c` (boxed, needs a heap), because
 the kernel subset *is* the integer subset. Add **six intrinsic builtins** for
 port I/O and a handful of privileged instructions. Ship in this order:
 UEFI hello → serial → GDT → ExitBootServices + own paging → IDT → physical page
@@ -63,7 +63,7 @@ per-item and does not round anything down.
 
 ## 1. What a freestanding kernel target needs that user-mode does not
 
-`nativert.c` already produces an executable that imports nothing but kernel32.
+`src/backends/native/nativert.c` already produces an executable that imports nothing but kernel32.
 It is tempting to call that "freestanding." It is not. Five things change when
 there is no OS at all.
 
@@ -80,13 +80,13 @@ disappears. Concretely, in the current codebase:
 | program exit | `ExitProcess` | `cli; hlt` loop (there is nothing to exit *to*) |
 | `zl_read`/`zl_write_file` | `CreateFileA` etc. | nothing in v1. No filesystem. Cut. |
 
-The good news: only the **sink** of `emit_print_int` (nativegen.c:296) changes.
+The good news: only the **sink** of `emit_print_int` (src/backends/native/nativegen.c:296) changes.
 Its itoa loop is arithmetic and stays byte-for-byte identical. That is the
 single biggest piece of reuse available.
 
 ### 1.2 There is no heap until you write one — and the compiler must know that
 
-The boxed backend (`nativeval.c`) emits a `zl_alloc` call for every string, every
+The boxed backend (`src/backends/native/nativeval.c`) emits a `zl_alloc` call for every string, every
 list, and every `+` that stringifies. In a kernel, before `pmm_init()` returns,
 **an allocation is a triple fault.** There is no way to make that safe by
 convention.
@@ -128,7 +128,7 @@ with locals in its frame." §5.3 covers the global-storage change that forces.
 
 `write_pe()` hardcodes `.text` at RVA 0x1000, `.idata` after it, and *asserts*
 `idata_rva == 0x2000` — bailing with "program too big for the simple 1-page
-layout" (nativegen.c:431). A kernel image is bigger than one page. The layout has
+layout" (src/backends/native/nativegen.c:431). A kernel image is bigger than one page. The layout has
 to become computed, with at least:
 
 ```
@@ -148,7 +148,7 @@ image at an address other than `ImageBase`.** So:
 
 `nativegen` already obeys this for string literals (`sfix[]` patches RIP-relative
 `lea` displacements, l.474-479) and for imports (`emit_call_import`). The audit
-item is `nativeval.c`'s globals, which are reached through a runtime-held
+item is `src/backends/native/nativeval.c`'s globals, which are reached through a runtime-held
 `G_BASE` pointer into the VirtualAlloc arena — that indirection is exactly what
 must be replaced with `[rip+disp]` into `.bss` (§5.3).
 
@@ -165,7 +165,7 @@ silent corruption, not an exception. `pe_min.zl` writes `SizeOfStackReserve =
 
 > **Rule K2: no large stack frames.** The 128 KiB page-allocator bitmap (§8) and
 > the 4 KiB IDT go in `.bss`, never in a frame. `kernelgen` should refuse any
-> function whose computed `frame` (nativegen.c:455) exceeds, say, 4 KiB.
+> function whose computed `frame` (src/backends/native/nativegen.c:455) exceeds, say, 4 KiB.
 
 ---
 
@@ -175,7 +175,7 @@ Kernel code is made of 64-bit bit patterns: descriptors, page-table entries,
 MSRs, physical addresses. zl's number is a `double`, which is exact only to
 2^53. That looks fatal. It mostly is not, and the reason is worth writing down.
 
-**`nativegen.c` never converts a literal to a double.** Line 142:
+**`src/backends/native/nativegen.c` never converts a literal to a double.** Line 142:
 
 ```c
 case N_NUMBER: {
@@ -185,7 +185,7 @@ case N_NUMBER: {
 
 and every operator is a GPR instruction on `rax`/`rcx` (l.98-102). So in the
 nativegen lineage, arithmetic is **exact int64 end to end**. The kernel target
-inherits that for free. This is the strongest single reason to fork `nativegen.c`
+inherits that for free. This is the strongest single reason to fork `src/backends/native/nativegen.c`
 rather than anything else.
 
 The sharp edges that remain, and the calls:
@@ -244,7 +244,7 @@ Five changes. This is the whole port.
 ```
 1. Subsystem:  3 (WINDOWS_CUI)  ->  10 (EFI_APPLICATION)
    pe_min.zl:87   pe = u16(pe, 3)      ->  pe = u16(pe, 10)
-   nativegen.c:389  pu16(opt+68,3)     ->  pu16(opt+68,10)
+   src/backends/native/nativegen.c:389  pu16(opt+68,3)     ->  pu16(opt+68,10)
 
 2. Delete the .idata section entirely, and data directories [1] (import)
    and [12] (IAT). UEFI has no dynamic linking. Everything you can call
@@ -261,7 +261,7 @@ Five changes. This is the whole port.
 
 4. NumberOfSections 2 -> 5 (.text .rodata .data .bss .reloc), and
    SizeOfImage / SizeOfHeaders recomputed. write_pe()'s hardcoded
-   "idata_rva must be 0x2000" assertion (nativegen.c:431) is deleted and
+   "idata_rva must be 0x2000" assertion (src/backends/native/nativegen.c:431) is deleted and
    replaced with a computed layout.
 
 5. AddressOfEntryPoint points at efi_main, whose contract is
@@ -488,7 +488,7 @@ that looks like a hardware fault. The rules:
 
 ### 5.3 Globals must move to `.bss`
 
-`nativeval.c` puts globals in the first `nglobals*8` bytes of the VirtualAlloc
+`src/backends/native/nativeval.c` puts globals in the first `nglobals*8` bytes of the VirtualAlloc
 arena and reaches them through a runtime `G_BASE` pointer (its l.38-41). There is
 no VirtualAlloc. The kernel backend keeps `nativeval`'s `gnames[]` /
 `global_index()` / `register_global()` machinery but changes the *storage*:
@@ -496,7 +496,7 @@ no VirtualAlloc. The kernel backend keeps `nativeval`'s `gnames[]` /
 - Reserve `nglobals*8` bytes at the start of `.bss`.
 - A global read becomes `mov rax,[rip+disp32]`, a write `mov [rip+disp32],rax`,
   with `disp32` backpatched exactly like `sfix[]` does for string literals
-  (nativegen.c:474-479).
+  (src/backends/native/nativegen.c:474-479).
 
 That is RIP-relative, so Rule K1 holds and the image stays relocatable. It is
 also *faster* than the arena indirection, which is a pleasant accident.
@@ -532,7 +532,7 @@ bits. No exactness problem here.
 
 Hex literals: writing `0x8E` and `0xFFFF` is not optional for this kind of code.
 `lex_number` accepts decimal only. **Add `0x` hex literal lexing** — a ~15-line
-change to `lexer.c` — and it benefits every other wave too. This is the only
+change to `src/frontend/lexer.c` — and it benefits every other wave too. This is the only
 core-language change W6 asks for, and it must be scheduled as a serial,
 alone-on-the-repo change per the campaign's rule 2.
 
@@ -718,7 +718,7 @@ literals, and nothing else. It could be prototyped ahead of the rest.
 
 ### 7.3 Wiring it to `print`
 
-`emit_print_int` (nativegen.c:296) is an itoa loop that ends in
+`emit_print_int` (src/backends/native/nativegen.c:296) is an itoa loop that ends in
 `GetStdHandle`+`WriteFile`. `emit_print_str` (l.341) is the same shape. In
 `kernelgen.c`, **only the sink changes**: replace the `WriteFile` tail with a
 `call serial_write(buf, len)` that loops `serial_putc`. The digit-extraction
@@ -825,7 +825,7 @@ arena. **That design is reused verbatim** with one substitution: the arena comes
 from `pmm_alloc_contig(N)` instead of `VirtualAlloc`. Everything downstream —
 `zl_alloc`, the 8-byte rounding, "no free, a run is short-lived" — is unchanged.
 
-That substitution is also the moment the *boxed* backend (`nativeval.c`) becomes
+That substitution is also the moment the *boxed* backend (`src/backends/native/nativeval.c`) becomes
 usable in a kernel, which is the bridge from W6 to W7's "a shell written in zl."
 Worth noting; not worth building in W6.
 
@@ -839,8 +839,8 @@ assume evenings-and-weekends, not full-time.
 | # | Stage | Deliverable | Honest size |
 |---|---|---|---|
 | **0** | **W5 lands** | raw memory, structs, freestanding output | **months. This is the real cost.** |
-| 0b | Hex literals in `lexer.c` | `0x8E` lexes | an afternoon, but **serial, alone**, and `verify.ps1` must stay green |
-| 1 | `kernelgen.c` forked from `nativegen.c`; UEFI PE (§3.2); `efi_main` stashes rcx/rdx; `ConOut->OutputString("hi")`; QEMU+OVMF loop | **"hi" on the QEMU console** | **a weekend** |
+| 0b | Hex literals in `src/frontend/lexer.c` | `0x8E` lexes | an afternoon, but **serial, alone**, and `verify.ps1` must stay green |
+| 1 | `kernelgen.c` forked from `src/backends/native/nativegen.c`; UEFI PE (§3.2); `efi_main` stashes rcx/rdx; `ConOut->OutputString("hi")`; QEMU+OVMF loop | **"hi" on the QEMU console** | **a weekend** |
 | 2 | `outb`/`inb` intrinsics; serial driver (§7); `print` retargeted to serial | `print(42)` appears in your terminal | **a weekend** |
 | 3 | GDT + `lgdt` intrinsic with the CS reload (§4) | still prints after reloading CS — proof the descriptors are right | **an afternoon** |
 | 4 | Page tables in `.bss` (§5.1); GetMemoryMap; ExitBootServices retry loop; load CR3 | prints *after* EBS, on your own paging | **a week.** The retry loop and the "no calls between GetMemoryMap and EBS" rule will each cost a session |
@@ -880,7 +880,9 @@ red gate. So:
 ```powershell
 # build the image, drop it on the synthetic ESP, boot it headless,
 # capture serial, diff against the golden transcript, always time out.
-.\kernelgen.exe tests\kernel\k01_hello.zl          # -> esp\EFI\BOOT\BOOTX64.EFI
+.\kernelgen.exe tests\kernel\k01_examples/examples/examples/hello.zl
+R100
+R100          # -> esp\EFI\BOOT\BOOTX64.EFI
 $p = Start-Process qemu-system-x86_64 -PassThru -ArgumentList `
      '-bios','OVMF.fd','-drive','format=raw,file=fat:rw:esp', `
      '-serial','file:out.txt','-display','none','-no-reboot'

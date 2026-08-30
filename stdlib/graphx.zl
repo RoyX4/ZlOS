@@ -19,27 +19,27 @@
 
 # Successors of gxNode: every `to` of an edge leaving gxNode.
 fn gx_succ(gxEdges, gxNode) {
-  gxOut = []
-  for gxE in gxEdges {
-    if gxE[0] == gxNode {
-      gxOut = push(gxOut, gxE[1])
+    gxOut = []
+    for gxE in gxEdges {
+        if gxE[0] == gxNode {
+            gxOut = push(gxOut, gxE[1])
+        }
     }
-  }
-  return gxOut
+    return gxOut
 }
 
 # Undirected neighbours of gaNode: both ends of any edge touching it.
 fn gx_adj(gaEdges, gaNode) {
-  gaOut = []
-  for gaE in gaEdges {
-    if gaE[0] == gaNode {
-      gaOut = push(gaOut, gaE[1])
+    gaOut = []
+    for gaE in gaEdges {
+        if gaE[0] == gaNode {
+            gaOut = push(gaOut, gaE[1])
+        }
+        if gaE[1] == gaNode {
+            gaOut = push(gaOut, gaE[0])
+        }
     }
-    if gaE[1] == gaNode {
-      gaOut = push(gaOut, gaE[0])
-    }
-  }
-  return gaOut
+    return gaOut
 }
 
 # --- degrees -------------------------------------------------------------
@@ -47,23 +47,23 @@ fn gx_adj(gaEdges, gaNode) {
 # Number of incoming edges per node, as a list of [node, count] pairs, in
 # the same order as `nodes`. Edges pointing at unknown nodes are ignored.
 fn in_degrees(idNodes, idEdges) {
-  idCounts = []
-  for idN in idNodes {
-    idCounts = push(idCounts, 0)
-  }
-  for idE in idEdges {
-    idJ = index_of(idNodes, idE[1])
-    if idJ >= 0 {
-      idCounts[idJ] = idCounts[idJ] + 1
+    idCounts = []
+    for idN in idNodes {
+        idCounts = push(idCounts, 0)
     }
-  }
-  idOut = []
-  idI = 0
-  while idI < len(idNodes) {
-    idOut = push(idOut, [idNodes[idI], idCounts[idI]])
-    idI = idI + 1
-  }
-  return idOut
+    for idE in idEdges {
+        idJ = index_of(idNodes, idE[1])
+        if idJ >= 0 {
+            idCounts[idJ] = idCounts[idJ] + 1
+        }
+    }
+    idOut = []
+    idI = 0
+    while idI < len(idNodes) {
+        idOut = push(idOut, [idNodes[idI], idCounts[idI]])
+        idI = idI + 1
+    }
+    return idOut
 }
 
 # --- topological order ---------------------------------------------------
@@ -72,68 +72,68 @@ fn in_degrees(idNodes, idEdges) {
 # left-to-right, or nil() if the graph has a cycle (so no order exists).
 # Ties are broken by the order nodes appear in `nodes`, so it is stable.
 fn topo_sort(tsNodes, tsEdges) {
-  tsDeg = []
-  for tsN in tsNodes {
-    tsDeg = push(tsDeg, 0)
-  }
-  for tsE in tsEdges {
-    tsJ = index_of(tsNodes, tsE[1])
-    if tsJ >= 0 {
-      tsDeg[tsJ] = tsDeg[tsJ] + 1
+    tsDeg = []
+    for tsN in tsNodes {
+        tsDeg = push(tsDeg, 0)
     }
-  }
-
-  # Seed the queue with everything that has nothing pointing at it.
-  tsQueue = []
-  tsI = 0
-  while tsI < len(tsNodes) {
-    if tsDeg[tsI] == 0 {
-      tsQueue = push(tsQueue, tsNodes[tsI])
-    }
-    tsI = tsI + 1
-  }
-
-  tsOut = []
-  tsHead = 0
-  while tsHead < len(tsQueue) {
-    tsCur = tsQueue[tsHead]
-    tsHead = tsHead + 1
-    tsOut = push(tsOut, tsCur)
-    for tsE2 in tsEdges {
-      if tsE2[0] == tsCur {
-        tsK = index_of(tsNodes, tsE2[1])
-        if tsK >= 0 {
-          tsDeg[tsK] = tsDeg[tsK] - 1
-          if tsDeg[tsK] == 0 {
-            tsQueue = push(tsQueue, tsNodes[tsK])
-          }
+    for tsE in tsEdges {
+        tsJ = index_of(tsNodes, tsE[1])
+        if tsJ >= 0 {
+            tsDeg[tsJ] = tsDeg[tsJ] + 1
         }
-      }
     }
-  }
 
-  # Anything left undrained is stuck inside a cycle.
-  if len(tsOut) < len(tsNodes) {
-    return nil()
-  }
-  return tsOut
+    # Seed the queue with everything that has nothing pointing at it.
+    tsQueue = []
+    tsI = 0
+    while tsI < len(tsNodes) {
+        if tsDeg[tsI] == 0 {
+            tsQueue = push(tsQueue, tsNodes[tsI])
+        }
+        tsI = tsI + 1
+    }
+
+    tsOut = []
+    tsHead = 0
+    while tsHead < len(tsQueue) {
+        tsCur = tsQueue[tsHead]
+        tsHead = tsHead + 1
+        tsOut = push(tsOut, tsCur)
+        for tsE2 in tsEdges {
+            if tsE2[0] == tsCur {
+                tsK = index_of(tsNodes, tsE2[1])
+                if tsK >= 0 {
+                    tsDeg[tsK] = tsDeg[tsK] - 1
+                    if tsDeg[tsK] == 0 {
+                        tsQueue = push(tsQueue, tsNodes[tsK])
+                    }
+                }
+            }
+        }
+    }
+
+    # Anything left undrained is stuck inside a cycle.
+    if len(tsOut) < len(tsNodes) {
+        return nil()
+    }
+    return tsOut
 }
 
 # true when the directed graph contains at least one cycle (a self-loop
 # counts). Simply: a cycle is exactly what stops a topological order existing.
 fn has_cycle(hcNodes, hcEdges) {
-  return type(topo_sort(hcNodes, hcEdges)) == "nil"
+    return type(topo_sort(hcNodes, hcEdges)) == "nil"
 }
 
 # --- edge tricks ---------------------------------------------------------
 
 # Reverse every edge: [from, to] becomes [to, from].
 fn transpose(tpEdges) {
-  tpOut = []
-  for tpE in tpEdges {
-    tpOut = push(tpOut, [tpE[1], tpE[0]])
-  }
-  return tpOut
+    tpOut = []
+    for tpE in tpEdges {
+        tpOut = push(tpOut, [tpE[1], tpE[0]])
+    }
+    return tpOut
 }
 
 # --- reachability --------------------------------------------------------
@@ -141,27 +141,27 @@ fn transpose(tpEdges) {
 # Every node reachable from rfStart by following edges forwards, in BFS
 # order and including rfStart itself. [] if rfStart is not in `nodes`.
 fn reachable_from(rfNodes, rfEdges, rfStart) {
-  if not contains(rfNodes, rfStart) {
-    return []
-  }
-  rfOut = []
-  rfSeen = [rfStart]
-  rfQueue = [rfStart]
-  rfHead = 0
-  while rfHead < len(rfQueue) {
-    rfCur = rfQueue[rfHead]
-    rfHead = rfHead + 1
-    rfOut = push(rfOut, rfCur)
-    for rfNb in gx_succ(rfEdges, rfCur) {
-      if not contains(rfSeen, rfNb) {
-        if contains(rfNodes, rfNb) {
-          rfSeen = push(rfSeen, rfNb)
-          rfQueue = push(rfQueue, rfNb)
-        }
-      }
+    if not contains(rfNodes, rfStart) {
+        return []
     }
-  }
-  return rfOut
+    rfOut = []
+    rfSeen = [rfStart]
+    rfQueue = [rfStart]
+    rfHead = 0
+    while rfHead < len(rfQueue) {
+        rfCur = rfQueue[rfHead]
+        rfHead = rfHead + 1
+        rfOut = push(rfOut, rfCur)
+        for rfNb in gx_succ(rfEdges, rfCur) {
+            if not contains(rfSeen, rfNb) {
+                if contains(rfNodes, rfNb) {
+                    rfSeen = push(rfSeen, rfNb)
+                    rfQueue = push(rfQueue, rfNb)
+                }
+            }
+        }
+    }
+    return rfOut
 }
 
 # --- undirected structure ------------------------------------------------
@@ -170,93 +170,93 @@ fn reachable_from(rfNodes, rfEdges, rfStart) {
 # Returns a list of lists of node ids; every node appears exactly once, and
 # an isolated node comes back as a component of one.
 fn connected_components(ccNodes, ccEdges) {
-  ccSeen = []
-  ccOut = []
-  for ccN in ccNodes {
-    if not contains(ccSeen, ccN) {
-      ccComp = []
-      ccSeen = push(ccSeen, ccN)
-      ccQueue = [ccN]
-      ccHead = 0
-      while ccHead < len(ccQueue) {
-        ccCur = ccQueue[ccHead]
-        ccHead = ccHead + 1
-        ccComp = push(ccComp, ccCur)
-        for ccNb in gx_adj(ccEdges, ccCur) {
-          if not contains(ccSeen, ccNb) {
-            if contains(ccNodes, ccNb) {
-              ccSeen = push(ccSeen, ccNb)
-              ccQueue = push(ccQueue, ccNb)
+    ccSeen = []
+    ccOut = []
+    for ccN in ccNodes {
+        if not contains(ccSeen, ccN) {
+            ccComp = []
+            ccSeen = push(ccSeen, ccN)
+            ccQueue = [ccN]
+            ccHead = 0
+            while ccHead < len(ccQueue) {
+                ccCur = ccQueue[ccHead]
+                ccHead = ccHead + 1
+                ccComp = push(ccComp, ccCur)
+                for ccNb in gx_adj(ccEdges, ccCur) {
+                    if not contains(ccSeen, ccNb) {
+                        if contains(ccNodes, ccNb) {
+                            ccSeen = push(ccSeen, ccNb)
+                            ccQueue = push(ccQueue, ccNb)
+                        }
+                    }
+                }
             }
-          }
+            ccOut = push(ccOut, ccComp)
         }
-      }
-      ccOut = push(ccOut, ccComp)
     }
-  }
-  return ccOut
+    return ccOut
 }
 
 # true when the nodes can be split into two groups with every (undirected)
 # edge crossing between them -- i.e. the graph has no odd-length cycle.
 # Done by 2-colouring each component with BFS; -1 means "not coloured yet".
 fn is_bipartite(bpNodes, bpEdges) {
-  bpColor = []
-  for bpN in bpNodes {
-    bpColor = push(bpColor, -1)
-  }
-  bpI = 0
-  while bpI < len(bpNodes) {
-    if bpColor[bpI] == -1 {
-      bpColor[bpI] = 0
-      bpQueue = [bpNodes[bpI]]
-      bpHead = 0
-      while bpHead < len(bpQueue) {
-        bpCur = bpQueue[bpHead]
-        bpHead = bpHead + 1
-        bpCi = index_of(bpNodes, bpCur)
-        for bpNb in gx_adj(bpEdges, bpCur) {
-          bpNi = index_of(bpNodes, bpNb)
-          if bpNi >= 0 {
-            if bpColor[bpNi] == -1 {
-              bpColor[bpNi] = 1 - bpColor[bpCi]
-              bpQueue = push(bpQueue, bpNb)
-            } else if bpColor[bpNi] == bpColor[bpCi] {
-              return false
-            }
-          }
-        }
-      }
+    bpColor = []
+    for bpN in bpNodes {
+        bpColor = push(bpColor, -1)
     }
-    bpI = bpI + 1
-  }
-  return true
+    bpI = 0
+    while bpI < len(bpNodes) {
+        if bpColor[bpI] == -1 {
+            bpColor[bpI] = 0
+            bpQueue = [bpNodes[bpI]]
+            bpHead = 0
+            while bpHead < len(bpQueue) {
+                bpCur = bpQueue[bpHead]
+                bpHead = bpHead + 1
+                bpCi = index_of(bpNodes, bpCur)
+                for bpNb in gx_adj(bpEdges, bpCur) {
+                    bpNi = index_of(bpNodes, bpNb)
+                    if bpNi >= 0 {
+                        if bpColor[bpNi] == -1 {
+                            bpColor[bpNi] = 1 - bpColor[bpCi]
+                            bpQueue = push(bpQueue, bpNb)
+                        } else if bpColor[bpNi] == bpColor[bpCi] {
+                            return false
+                        }
+                    }
+                }
+            }
+        }
+        bpI = bpI + 1
+    }
+    return true
 }
 
 # --- pretty printing -----------------------------------------------------
 
 fn show_degrees(sdLabel, sdPairs) {
-  sdParts = []
-  for sdP in sdPairs {
-    sdParts = push(sdParts, str(sdP[0]) + "=" + num(sdP[1]))
-  }
-  print(sdLabel + join(sdParts, "  "))
+    sdParts = []
+    for sdP in sdPairs {
+        sdParts = push(sdParts, str(sdP[0]) + "=" + num(sdP[1]))
+    }
+    print(sdLabel + join(sdParts, "  "))
 }
 
 fn show_order(soLabel, soOrder) {
-  if type(soOrder) == "nil" {
-    print(soLabel + "nil (graph is cyclic)")
-  } else {
-    print(soLabel + join(soOrder, " -> "))
-  }
+    if type(soOrder) == "nil" {
+        print(soLabel + "nil (graph is cyclic)")
+    } else {
+        print(soLabel + join(soOrder, " -> "))
+    }
 }
 
 fn show_components(scLabel, scComps) {
-  scParts = []
-  for scC in scComps {
-    scParts = push(scParts, "{" + join(scC, ",") + "}")
-  }
-  print(scLabel + join(scParts, " "))
+    scParts = []
+    for scC in scComps {
+        scParts = push(scParts, "{" + join(scC, ",") + "}")
+    }
+    print(scLabel + join(scParts, " "))
 }
 
 # ---------------------------------------------------------------------------

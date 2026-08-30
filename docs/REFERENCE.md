@@ -95,7 +95,7 @@ names.
 
 ## Keywords
 
-All 16, and there are no others (`lexer.c:48-55`):
+All 16, and there are no others (`src/frontend/lexer.c:48-55`):
 
 `if  elif  else  for  in  fn  return  while  not  and  or  true  false
 break  continue  import`

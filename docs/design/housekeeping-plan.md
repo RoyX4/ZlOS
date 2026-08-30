@@ -45,7 +45,7 @@ The ask is "all docs, in every folder". Proposed set, with one owner each:
 
 ### 2.1 Per-directory orientation — `README.md` in every folder
 
-~15 directories have none: `kernel/`, `kernel/hosttest/`, `kernel/docs/`,
+~15 directories have none: `kernel/`, `kernel/tests/host/`, `kernel/docs/`,
 `tools/`, `docs/`, `docs/design/`, `examples/`, `tests/`, `stdlib/`,
 `freestanding/`, `editors/`, `learn/`, `bench/`, `interp/`, `nativegen/`.
 
@@ -80,9 +80,9 @@ paragraph about `nativegen/` is worse than nothing.
 | `kernel/HANDOFF.md` | state | **human/agent, deliberately** | where is this right now |
 | `docs/JOURNAL.md` | history | tool, append-only | what happened, and when |
 | `TODO.md` | derived | tool, fully regenerated | what is outstanding |
-| `docs/HAZARDS.md` | explanation | human, checked by tool | what will bite you |
+| hazards doc | explanation | human, checked by tool | what will bite you |
 
-`HAZARDS.md` is new and is worth pulling out of `CLAUDE.md`: the EFI/LLP64 rule,
+The hazards doc is new and is worth pulling out of `CLAUDE.md`: the EFI/LLP64 rule,
 the panel-power rule, the "code exists ≠ code works" rule, the gate-timing rule.
 `CLAUDE.md` and `AGENTS.md` then *link* to it instead of restating it, so there
 is one copy to keep true. Every hazard gets a registered claim (§4.3) so the doc
@@ -92,7 +92,7 @@ cannot quietly stop being accurate the way the `-Werror=` claim did.
 
 `docs/design/` has ~30 files. Two gaps worth closing:
 
-- **An index.** `docs/design/README.md` listing each doc, its status
+- **An index.** A design-doc README listing each doc, its status
   (proposed / decided / landed / superseded), and its date. Several existing docs
   are decided-but-not-landed (`design_scoping_decision.md`), which a reader
   cannot tell without opening them.
@@ -178,7 +178,7 @@ Each item below already has evidence in this repo:
 | dead code | "exists" ≠ "runs" | `lt_armed` paths |
 | stale branches | 14 remote branches, several merged | |
 | large files | 628 MB working tree vs 13.5 MB packed | |
-| duplicate docs | `_GAPS_REALWORLD.backup.md` | |
+| duplicate docs | `docs/archive/backups/GAPS_REALWORLD-2026-08-03.backup.md` | |
 
 Output is a report, not a failure. Optionally opens one GitHub issue per class,
 updated in place rather than duplicated.
@@ -238,12 +238,12 @@ idea in this document.
 
 ## 7. Suggested order
 
-1. **`docs/HAZARDS.md`** extracted from `CLAUDE.md`, every hazard with a claim.
+1. **Hazards doc** extracted from `CLAUDE.md`, every hazard with a claim.
 2. **Per-folder `README.md`** — generated inventory, empty prose with `TODO:`.
 3. **Doc coverage check** — every directory has a README; every design doc has a
    status header.
-4. **`tools/doc-fmt.sh`** — formatting only, pre-commit, fast.
-5. **`tools/code-check.sh`** (§4.1), baselined like `hazard-scan`.
+4. **Doc formatter tool** — formatting only, pre-commit, fast.
+5. **Code checker tool** (§4.1), baselined like `hazard-scan`.
 6. **Journal + TODO** — the held prototype, after the taxonomy above is settled.
 7. **Nightly housekeeping report.**
 8. **`codex review`** with a key, advisory.

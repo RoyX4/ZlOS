@@ -15,7 +15,7 @@ established by measurement rather than assumed:
 
 1. **It cannot render on its own.** It loads a template runtime from
    `<script src="./support.js">` and that file was never delivered.
-   `kernel/refrender/support.js` is a reimplementation of that runtime — a
+   `kernel/tests/refrender/support.js` is a reimplementation of that runtime — a
    React-based `x-dc` shim supporting `{{ }}` binding, `<sc-for>`, `<sc-if>`,
    camelCase style objects, `style-hover`, refs and handlers. With it the
    reference renders, deterministically (byte-identical PNGs across runs).
@@ -31,12 +31,12 @@ established by measurement rather than assumed:
 ## The oracle: how "exact same" became a number
 
 "Exact same" is unfalsifiable as an instruction — fifty agents produce fifty
-readings of it. `kernel/oracle/` replaces it with a measurement.
+readings of it. `kernel/tests/oracle/` replaces it with a measurement.
 
 ```
-kernel/refrender/  renders the reference to PNG at 1280x800   (no QEMU)
-kernel/oracle/     boots zlOS at 1280x800 and screenshots it  (QEMU, ~2 min)
-kernel/oracle/diff-regions.py   scores the two, per region
+kernel/tests/refrender/  renders the reference to PNG at 1280x800   (no QEMU)
+kernel/tests/oracle/     boots zlOS at 1280x800 and screenshots it  (QEMU, ~2 min)
+kernel/tests/oracle/diff-regions.py   scores the two, per region
 ```
 
 `regions.json` holds 62 named boxes — one per app window at the reference's own
@@ -60,10 +60,10 @@ calling `wm_dmg(win)` — it compiled, passed every gate, and repainted nothing.
 
 ## One palette, and the chain that proves it
 
-`kernel/design.h` is the only file in the tree where a colour literal may
+`kernel/src/graphics/ui/design.h` is the only file in the tree where a colour literal may
 appear. Everything else names a token or calls `ui_color()` with a role.
 
-`kernel/hosttest/palette.c` enforces a three-link chain:
+`kernel/tests/host/palette.c` enforces a three-link chain:
 
 ```
 ds-reference.html  ->  design.h    every token occurs LITERALLY in the artifact
@@ -86,7 +86,7 @@ editing `design.h` and nothing else.
 
 ## Motion: seven curves, not one smoothstep
 
-`kernel/ease.c` implements one fixed-point cubic-bezier evaluator, because CSS's
+`kernel/src/graphics/ui/ease.c` implements one fixed-point cubic-bezier evaluator, because CSS's
 named timing functions are themselves cubic-beziers. So the reference's seven
 animations are five constants rather than five hand-tuned polynomials:
 
@@ -153,13 +153,13 @@ ones that changed a decision:
 
 | path | what |
 |---|---|
-| `kernel/design.h` | every design token, with the evidence for each |
-| `kernel/ease.c` + `kernel/ease.h` | the motion curves |
-| `kernel/ui.c`, `kernel/uikit.c` | the widget toolkit, ~82 functions |
+| `kernel/src/graphics/ui/design.h` | every design token, with the evidence for each |
+| `kernel/src/graphics/ui/ease.c` + `kernel/src/graphics/ui/ease.h` | the motion curves |
+| `kernel/src/graphics/ui/ui.c`, `kernel/src/graphics/ui/uikit.c` | the widget toolkit, ~82 functions |
 | `kernel/docs/reference-widgets.md` | 68 widget records, 178 line citations |
-| `kernel/refrender/` | the `x-dc` shim + reference renderer |
-| `kernel/oracle/` | the fidelity measurement |
-| `kernel/apps_sys2.zl`, `kernel/apps_sys3.zl`, `kernel/apps_games3.zl`, `kernel/apps_games4.zl` | id-disjoint app slices |
+| `kernel/tests/refrender/` | the `x-dc` shim + reference renderer |
+| `kernel/tests/oracle/` | the fidelity measurement |
+| `kernel/apps/apps_sys2.zl`, `kernel/apps/apps_sys3.zl`, `kernel/apps/apps_games3.zl`, `kernel/apps/apps_games4.zl` | id-disjoint app slices |
 
 **The slice rule matters.** The registry dispatches through seven if-chains on
 `id`. Several agents editing all seven in one working tree clobber each other,
@@ -172,10 +172,10 @@ disjoint range; the registry gains one line per slice per chain.
 
 ```bash
 cd kernel && ./build.sh                       # 0 undefined symbols
-cd kernel/hosttest && ./build.sh
+cd kernel/tests/host && ./build.sh
 ./palette ./uitest ./wmtest ./wmtest_feel ./easetest ./settingstest
-./kernel/check-memmap.sh
-cd kernel/oracle && ./diff-regions.py --zlos out/zlos-desktop.png \
+./kernel/tools/checks/check-memmap.sh
+cd kernel/tests/oracle && ./diff-regions.py --zlos out/zlos-desktop.png \
     --ref ../refrender/out/reference-1280x800.png
 ```
 

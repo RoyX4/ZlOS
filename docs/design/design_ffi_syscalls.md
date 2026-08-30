@@ -10,7 +10,7 @@ half. No code is changed by this document.
 ## 0. TL;DR
 
 The native backend already produces a **freestanding, CRT-free PE that imports only
-kernel32** (`nativert.c` / `nativeval.c`: custom entry at RVA 0x1000, `VirtualAlloc`
+kernel32** (`src/backends/native/nativert.c` / `src/backends/native/nativeval.c`: custom entry at RVA 0x1000, `VirtualAlloc`
 for the heap, `ExitProcess` to leave, `dumpbin /imports` shows no msvcrt/ucrtbase/
 vcruntime). So "freestanding output" is not a thing to build from scratch — it is a
 thing to *formalize and expose*. What is genuinely missing is the ability to reach
@@ -21,7 +21,7 @@ This proposal adds, in order:
 1. **Freestanding, made explicit.** Expose the subsystem (console vs GUI) and entry
    point that the native PE writer already hardcodes, so a zl program can declare it
    builds a windowed app with no CRT. Nothing new is invented; `write_pe` in
-   `nativert.c` grows two knobs.
+   `src/backends/native/nativert.c` grows two knobs.
 2. **Raw FFI primitives.** Add `LoadLibraryA` / `GetProcAddress` / `FreeLibrary` to the
    runtime's import table (kernel32 already provides all three, so the "no libc"
    property survives), plus a hand-assembled **generic call trampoline** `zl_ccall`
@@ -49,24 +49,24 @@ already is.
 
 ### 1.1 What "as good as C" actually requires
 
-`OVERNIGHT_CAMPAIGN.md` W5 lists six systems capabilities. Three of them — raw memory,
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` W5 lists six systems capabilities. Three of them — raw memory,
 structs, fixed-layout records — are the companion agent's half. The other three are
 this document:
 
-> - direct Win32 syscalls without libc (`nativert.c` already proves kernel32-only works)
+> - direct Win32 syscalls without libc (`src/backends/native/nativert.c` already proves kernel32-only works)
 > - freestanding output: no CRT, custom entry point, `-nostdlib`
 > - a real FFI so zl can call any DLL
 
 Without FFI, zl can compute but cannot *do* anything the runtime's ~30 builtins don't
 already hardcode. Every new OS capability (a window, a socket, a registry key, a thread)
-would otherwise mean hand-assembling another routine into `nativert.c`. FFI collapses
+would otherwise mean hand-assembling another routine into `src/backends/native/nativert.c`. FFI collapses
 that infinite tail into one trampoline: once zl can call `GetProcAddress` and then call
 the pointer it returns, the entire Win32 surface — and every third-party DLL — is
 reachable from zl source with no C and no compiler.
 
 ### 1.2 Freestanding is already done — this is a trap worth naming
 
-It is tempting to write a "freestanding output" epic. Do not. Read `nativert.c`'s
+It is tempting to write a "freestanding output" epic. Do not. Read `src/backends/native/nativert.c`'s
 `emit_main` (line 1235) and `write_pe` (line 1460):
 
 - The entry point is the code at RVA 0x1000. There is no CRT `mainCRTStartup`, no
@@ -81,7 +81,7 @@ freestanding since brick 1. The real gaps are narrow:
    program needs subsystem 2 and must not spawn a console.
 2. There is no way for a zl program to *say* "I am freestanding / I am a GUI app" — the
    choice is baked into the C of the backend, not driven by the zl source.
-3. The C backend (`compile.c`) and LLVM backend (`compilel.c`) still link the CRT.
+3. The C backend (`src/backends/c/compile.c`) and LLVM backend (`src/backends/llvm/compilel.c`) still link the CRT.
    Freestanding there means passing `-nostdlib -e <entry>` to clang and providing an
    entry — a separate, smaller concern noted in §6.4, not the main line.
 
@@ -163,7 +163,7 @@ for the overwhelming majority of Win32:
 
 - Integers, `BOOL`, handles, `HWND`, flags → already tagged ints.
 - Strings → the caller converts with **`cstr(s)`**, which returns the address of a
-  NUL-terminated arena copy. `zl_cstr` **already exists in `nativert.c`** (line 876) —
+  NUL-terminated arena copy. `zl_cstr` **already exists in `src/backends/native/nativert.c`** (line 876) —
   v1 marshalling is mostly wiring, not new machine code.
 - Buffers → a raw-memory `alloc(n)` address (companion half), passed as an int.
 
@@ -186,14 +186,14 @@ stack. The rules, and how `zl_ccall` satisfies each:
 | Nonvolatile | `rbx, rbp, rdi, rsi, r12–r15` preserved across the call | trampoline saves what it uses |
 | Float args | first 4 float args in `xmm0–xmm3`, **and** the shadow of the matching integer register is still consumed | v2 only |
 
-`nativert.c` already lives by these rules — `and rsp,-16` (the brick-1 lesson, line 177),
+`src/backends/native/nativert.c` already lives by these rules — `and rsp,-16` (the brick-1 lesson, line 177),
 `st_arg32`/`st_arg0` for the 5th+ Win32 argument (line 139), and the note that "every
 routine keeps rsp 16-byte aligned at nested call sites." `zl_ccall` generalizes the
 fixed-arg-count call sites already in `emit_read`/`emit_write_file` into a **loop over a
 runtime-known argc**.
 
 Concrete shape of the trampoline (pseudo-assembly; encodings follow the existing
-`nativert.c` idiom of hand-built byte arrays with computed displacements):
+`src/backends/native/nativert.c` idiom of hand-built byte arrays with computed displacements):
 
 ```
 ; zl_ccall(rcx = fnptr, rdx = argv ptr, r8 = argc)   -> rax = raw return
@@ -229,7 +229,7 @@ zl_ccall:
 ```
 
 The register-arg and stack-arg placement are two short unrolled/looped copies; because
-`nativert.c` computes every jump displacement mechanically (`jz_fwd`/`land`/`jmp_back`,
+`src/backends/native/nativert.c` computes every jump displacement mechanically (`jz_fwd`/`land`/`jmp_back`,
 line 122) rather than hand-counting — the brick-2 lesson — the loop is safe to write.
 
 **Untagging happens in the trampoline, not the caller**, so `call([..])` accepts ordinary
@@ -329,21 +329,21 @@ Design decisions:
 
 Rationale: this is the primitive that makes the *rest* of the systems layer bootstrappable
 — any instruction the backend doesn't emit (a `cpuid`, an `rdtsc`, an `int 3`, a `syscall`)
-becomes reachable without touching the C of `nativegen.c`. It is also the single most
+becomes reachable without touching the C of `src/backends/native/nativegen.c`. It is also the single most
 dangerous construct in the language, which is exactly why it is gated hardest.
 
 ---
 
 ## 3. Current-state map (for the implementer)
 
-| Concern | Interpreter (`interp.c` / `os_win.c`) | Native (`nativert.c` / `nativeval.c`) |
+| Concern | Interpreter (`src/runtime/interp.c` / `os_win.c`) | Native (`src/backends/native/nativert.c` / `src/backends/native/nativeval.c`) |
 |---|---|---|
 | Freestanding | n/a (links CRT, is the dev tool) | **already freestanding**, kernel32-only PE |
 | Custom entry | n/a | entry at RVA 0x1000, `emit_main`/nativeval entry |
 | Subsystem | n/a | **hardcoded console** (`write_pe`, `pu16(opt+68,3)`) |
 | DLL load | `<windows.h>` available in `os_win.c` | **absent** — must add to IAT |
 | Call convention plumbing | C compiler does it | `st_arg32`/`st_arg0`, `and rsp,-16` (fixed argc) |
-| String → C ptr | trivial in C | **`zl_cstr` exists** (`nativert.c:876`) |
+| String → C ptr | trivial in C | **`zl_cstr` exists** (`src/backends/native/nativert.c:876`) |
 | Pointer value | a `double` holding an address (lossy > 2^53!) | a tagged int (exact to 2^63) |
 | `asm` | — | — |
 
@@ -354,7 +354,7 @@ Two things to read from this table:
    above 2^53 loses precision there; interpreter-side FFI (§6.3) needs care and is
    secondary.
 2. Most of the machinery — the ABI call sites, `and rsp,-16`, `zl_cstr` — **already
-   exists in `nativert.c`**. FFI is largely generalizing fixed call sites into a
+   exists in `src/backends/native/nativert.c`**. FFI is largely generalizing fixed call sites into a
    trampoline and adding three imports, not green-field assembly.
 
 ---
@@ -362,7 +362,7 @@ Two things to read from this table:
 ## 4. Staged implementation sketch
 
 Each stage is independently shippable and ends with a **targeted** verification (not the
-cross-engine gate — see §7). Native-backend files (`nativert.c`, `nativeval.c`) are
+cross-engine gate — see §7). Native-backend files (`src/backends/native/nativert.c`, `src/backends/native/nativeval.c`) are
 serial-only per the campaign's disjoint-ownership rule.
 
 ### Stage 0 — Lock the spec (no code)
@@ -375,7 +375,7 @@ serial-only per the campaign's disjoint-ownership rule.
 
 ### Stage 1 — Freestanding, exposed
 
-Lift what `nativert.c`/`nativeval.c` already hardcode into options.
+Lift what `src/backends/native/nativert.c`/`src/backends/native/nativeval.c` already hardcode into options.
 
 1. Parameterize `write_pe`: a `subsystem` field (3 = console, 2 = GUI → `pu16(opt+68, …)`)
    and an optional entry-symbol override (default: RVA 0x1000, unchanged).
@@ -392,9 +392,9 @@ Lift what `nativert.c`/`nativeval.c` already hardcode into options.
 
 ### Stage 2 — Raw FFI primitives (integer-only)
 
-The core stage. All in `nativert.c` (runtime) + `nativeval.c` (builtin dispatch).
+The core stage. All in `src/backends/native/nativert.c` (runtime) + `src/backends/native/nativeval.c` (builtin dispatch).
 
-1. **Grow the import table** in `nativert.c`'s `write_pe` from 7 to 10 kernel32 imports:
+1. **Grow the import table** in `src/backends/native/nativert.c`'s `write_pe` from 7 to 10 kernel32 imports:
    add `LoadLibraryA`, `GetProcAddress`, `FreeLibrary`. Mechanical: extend `nrva[]`,
    the IAT slot `#define`s (`IAT_*`), and the hint/name block. Still no libc.
 2. **`emit_dlopen`** (`zl_dlopen`): `cstr` the name (reuse `zl_cstr`), `call [LoadLibraryA]`,
@@ -404,7 +404,7 @@ The core stage. All in `nativert.c` (runtime) + `nativeval.c` (builtin dispatch)
 4. **`emit_ccall`** (`zl_ccall`) — the trampoline of §2.4: reserve shadow + stack, place
    up to 4 register args (untagging), place the tail on the stack (untagging), align,
    `call`, box `rax`.
-5. **Builtins** `dll`/`sym`/`call` in `nativeval.c`'s dispatch, lowering to the three
+5. **Builtins** `dll`/`sym`/`call` in `src/backends/native/nativeval.c`'s dispatch, lowering to the three
    routines. `call`'s second argument is a zl list; the backend passes its slot base and
    count as `argv`/`argc`.
 
@@ -496,7 +496,7 @@ Interpreter-side FFI (§6.3) must keep `os_win.c`'s invariant intact: it is *the
 that includes `<windows.h>`* (its header comment says so, to stop `TokenType`-style name
 clashes). So the interpreter's `dll`/`sym`/`call` implementations live in `os_win.c`
 behind small `os_*` shims (`os_dlopen`, `os_dlsym`, `os_invoke`), called from
-`interp.c`'s `call_builtin` — never `<windows.h>` in `interp.c`.
+`src/runtime/interp.c`'s `call_builtin` — never `<windows.h>` in `src/runtime/interp.c`.
 
 ### 6.3 Interpreter FFI is real but secondary
 
@@ -516,7 +516,7 @@ Ship native FFI first (Stage 2); add interpreter FFI when a program needs to be 
 
 ### 6.4 LLVM/C backends and `-nostdlib`
 
-`compile.c` and `compilel.c` emit C / LLVM IR that clang links against the CRT. Genuine
+`src/backends/c/compile.c` and `src/backends/llvm/compilel.c` emit C / LLVM IR that clang links against the CRT. Genuine
 freestanding there means emitting `-nostdlib -e <entry>` and a `_start`. That is a
 separate, smaller epic (clang does the ABI work; we only supply the entry and avoid CRT
 calls). It is **not** on this document's main line — the native backend is already
@@ -529,7 +529,7 @@ map.
 
 Every construct here is a licensed invariant violation. The language already has the
 right primitive for "this is dangerous, I mean it": the **`!` danger marker** (`N_DANGER`,
-`parser.h:19`; `REFERENCE.md` "Danger marker `!` — means 'I mean it'"). This proposal
+`src/frontend/parser.h:19`; `REFERENCE.md` "Danger marker `!` — means 'I mean it'"). This proposal
 puts it to work as the single, consistent FFI/`asm` gate.
 
 **The rule:** `call`, `asm`, `subsystem`, and any `extern`-declared foreign call **must**
@@ -550,7 +550,7 @@ Per-construct hazards and mitigations:
 | Callbacks | The thunk runs on a stack the *foreign* code set up; a zl fn that allocates heavily can outrun assumptions; reentrancy into the interpreter is unsupported. | v1 native-only, ≤4 int args; thunk is minimal and preserves nothing it doesn't set. |
 
 **Simulated-mode analog.** The interpreter already treats `kill`/`poke`/`rm` as
-*simulated* no-ops (`interp.c:190`, the `SIMULATED[]` table) so running untrusted zl on
+*simulated* no-ops (`src/runtime/interp.c:190`, the `SIMULATED[]` table) so running untrusted zl on
 the dev machine is safe. FFI/`asm` should join that table: under the interpreter's
 default (safe) mode, `dll`/`sym`/`call`/`asm` are simulated (log the intended call,
 return `nil`/0) unless an explicit opt-in flag is set. The native backend, which is only
@@ -587,7 +587,7 @@ fully capable.
 ## 9. Definition of done
 
 1. Spec §2 locked; `extern` form and type-tag set frozen (Stage 0).
-2. `nativert.c`/`nativeval.c` emit `zl_dlopen`/`zl_dlsym`/`zl_ccall`; the import table is
+2. `src/backends/native/nativert.c`/`src/backends/native/nativeval.c` emit `zl_dlopen`/`zl_dlsym`/`zl_ccall`; the import table is
    kernel32-only at 10 functions; `dumpbin /imports` shows no CRT.
 3. A compiled zl program calls `GetTickCount`, `Beep`, and `MessageBoxA` correctly, and
    resolves `GetProcAddress` through its own FFI.

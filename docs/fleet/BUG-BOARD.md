@@ -60,18 +60,18 @@ Full write-ups linked; all of these are ✓ hand-verified as well.
 
 | file:line | finding |
 |---|---|
-| `kernel/wguard.sh:45` | the guard for the LLP64 class never reads the flag line it claims to guard. The refuter's amendment: dropping `-Werror=pointer-to-int-cast` **is** detected, so "cannot detect *any* single flag" overstates it — but the rest holds |
+| `kernel/tools/checks/wguard.sh:45` | the guard for the LLP64 class never reads the flag line it claims to guard. The refuter's amendment: dropping `-Werror=pointer-to-int-cast` **is** detected, so "cannot detect *any* single flag" overstates it — but the rest holds |
 | `tools/hazard-scan.sh:62` | checks 1 and 2 report through `warn()`, which never sets `fail`; `fail=1` appears only at `:125` and `:133`. Advisory checks that look like gates |
 | `tools/engine-parity.sh:141` | `if [ "$got" = "__BUILDFAIL__" ]; then mark="build!"` with no `fail=1` — a total engine build failure is not a failure |
-| `kernel/check-himap.sh:107` | `grep -oP '0x0[0-9A-Fa-f]{7}'` requires a literal `0` after `0x`, making it a **spelling** filter rather than a value filter. Latent, not live |
-| `kernel/memmap.h:73` | **new** — `AP_STACK_SPAN` (272 KiB) is derived from the *length* of `cpu_apic_ids[]`, but both trampolines address the stacks by a different rule. The refuter's correction: the load-bearing evidence is a line the original claim never cited |
-| `kernel/settings.c:483` | `settings_load` has no caller — the Settings app writes to NVMe on every gesture and nothing ever reads it back. Settings do not persist |
-| `kernel/gpucursor.c:149` | `gpu_cursor_install` has no caller, so `cursor_live` can never become 1 and `wm.c:1620,1627` permanently take the false branch |
-| `kernel/fb.c:2380` | `px * 4u` wraps in 32 bits, so the ceiling test passes and the allocation proceeds |
-| `kernel/fb.c:2569` | `slot_capture` computes `w * h` with no clamp — signed overflow on all builds |
-| `kernel/input.c:118` | four input-path ring drops with no counter, one of which loses data permanently |
-| `kernel/pci.c:315` | `pci_enable()` discards `pci_power_on()`'s result — reintroducing the exact D3hot failure `06b1a0f` was written to prevent |
-| `kernel/xhci.c:262` | the firmware-ownership handshake measures whether SMM released the controller and throws the answer away |
+| `kernel/tools/checks/check-himap.sh:107` | `grep -oP '0x0[0-9A-Fa-f]{7}'` requires a literal `0` after `0x`, making it a **spelling** filter rather than a value filter. Latent, not live |
+| `kernel/src/arch/x86/memmap.h:73` | **new** — `AP_STACK_SPAN` (272 KiB) is derived from the *length* of `cpu_apic_ids[]`, but both trampolines address the stacks by a different rule. The refuter's correction: the load-bearing evidence is a line the original claim never cited |
+| `kernel/src/graphics/ui/settings.c:483` | `settings_load` has no caller — the Settings app writes to NVMe on every gesture and nothing ever reads it back. Settings do not persist |
+| `kernel/src/drivers/display/gpucursor.c:149` | `gpu_cursor_install` has no caller, so `cursor_live` can never become 1 and `wm.c:1620,1627` permanently take the false branch |
+| `kernel/src/graphics/framebuffer/fb.c:2380` | `px * 4u` wraps in 32 bits, so the ceiling test passes and the allocation proceeds |
+| `kernel/src/graphics/framebuffer/fb.c:2569` | `slot_capture` computes `w * h` with no clamp — signed overflow on all builds |
+| `kernel/src/drivers/input/input.c:118` | four input-path ring drops with no counter, one of which loses data permanently |
+| `kernel/src/arch/x86/pci.c:315` | `pci_enable()` discards `pci_power_on()`'s result — reintroducing the exact D3hot failure `06b1a0f` was written to prevent |
+| `kernel/src/drivers/input/xhci.c:262` | the firmware-ownership handshake measures whether SMM released the controller and throws the answer away |
 
 ---
 
@@ -81,7 +81,7 @@ From the `silent-failure` sweep, and it is the most useful sentence the wave pro
 
 > The tree has **two populations.** `net.c`, `arena.c`, `wm.c`, `html.c`, `layout.c`,
 > `notify.c`, `virtio_net.c` and `tcp.c` follow the doctrine written at
-> `kernel/net.c:58-64` and are clean. **The display driver, the PCI power path, the xHCI
+> `kernel/src/net/net.c:58-64` and are clean. **The display driver, the PCI power path, the xHCI
 > firmware handoff and the whole input event path do not.**
 
 The doctrine — *"EVERY DROP PATH GETS A COUNTER"* — was written after one silent drop

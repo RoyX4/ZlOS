@@ -3,64 +3,64 @@
 
 # Return true if `val` is a member of set `s`.
 fn set_has(s, val) {
-  sh_i = 0
-  while sh_i < len(s) {
-    if s[sh_i] == val {
-      return true
+    sh_i = 0
+    while sh_i < len(s) {
+        if s[sh_i] == val {
+            return true
+        }
+        sh_i = sh_i + 1
     }
-    sh_i = sh_i + 1
-  }
-  return false
+    return false
 }
 
 # Add `val` to set `s`, returning a NEW set. Duplicates are ignored.
 fn set_add(s, val) {
-  if set_has(s, val) {
-    return s
-  }
-  return push(s, val)
+    if set_has(s, val) {
+        return s
+    }
+    return push(s, val)
 }
 
 # Remove `val` from set `s`, returning a NEW set without it.
 fn set_remove(s, val) {
-  sr_out = []
-  sr_i = 0
-  while sr_i < len(s) {
-    if s[sr_i] != val {
-      sr_out = push(sr_out, s[sr_i])
+    sr_out = []
+    sr_i = 0
+    while sr_i < len(s) {
+        if s[sr_i] != val {
+            sr_out = push(sr_out, s[sr_i])
+        }
+        sr_i = sr_i + 1
     }
-    sr_i = sr_i + 1
-  }
-  return sr_out
+    return sr_out
 }
 
 # Number of elements in the set.
 fn set_size(s) {
-  return len(s)
+    return len(s)
 }
 
 # Union of sets `a` and `b` -- a NEW set with every element of both, no dupes.
 fn set_union(a, b) {
-  su_out = a
-  su_i = 0
-  while su_i < len(b) {
-    su_out = set_add(su_out, b[su_i])
-    su_i = su_i + 1
-  }
-  return su_out
+    su_out = a
+    su_i = 0
+    while su_i < len(b) {
+        su_out = set_add(su_out, b[su_i])
+        su_i = su_i + 1
+    }
+    return su_out
 }
 
 # Intersection of `a` and `b` -- a NEW set of elements present in both.
 fn set_intersect(a, b) {
-  si_out = []
-  si_i = 0
-  while si_i < len(a) {
-    if set_has(b, a[si_i]) {
-      si_out = set_add(si_out, a[si_i])
+    si_out = []
+    si_i = 0
+    while si_i < len(a) {
+        if set_has(b, a[si_i]) {
+            si_out = set_add(si_out, a[si_i])
+        }
+        si_i = si_i + 1
     }
-    si_i = si_i + 1
-  }
-  return si_out
+    return si_out
 }
 
 # ---------------------------------------------------------------------------

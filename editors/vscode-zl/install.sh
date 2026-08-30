@@ -34,7 +34,8 @@ command -v npx  >/dev/null || { echo "install: needs npx (node) to package the .
 # The formatter is a real binary; the extension shells out to it.
 if [ ! -x "$REPO/zlfmt" ]; then
     echo "==> building zlfmt"
-    ( cd "$REPO" && gcc -O2 -Wall -D_strdup=strdup -DBUILD_PARSER -o zlfmt zlfmt.c lexer.c -lm )
+    ( cd "$REPO" && gcc -O2 -Wall -D_strdup=strdup -DBUILD_PARSER \
+        -Isrc/frontend -o zlfmt src/tools/zlfmt.c src/frontend/lexer.c -lm )
 fi
 
 VERSION=$(python3 -c "import json;print(json.load(open('package.json'))['version'])")

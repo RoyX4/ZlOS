@@ -13,7 +13,7 @@
 
 AGENTS.md | the interpreter is ground truth and prints 7 for global write-through | printf 'c = 100\nfn b() { c = 7  return 0 }\nb()\nprint(c)\n' > /tmp/dc1.zl && [ "$(./interp /tmp/dc1.zl)" = "7" ]
 
-AGENTS.md | the LLVM backend disagrees, printing 100 for the same program | printf 'c = 100\nfn b() { c = 7  return 0 }\nb()\nprint(c)\n' > /tmp/dc2.zl && ./compilel /tmp/dc2.zl >/dev/null 2>&1 && clang -O2 out.ll runtime.c os_linux.c -I. -D_strdup=strdup -o /tmp/dc2.bin -lm 2>/dev/null && [ "$(/tmp/dc2.bin)" = "100" ]
+AGENTS.md | the LLVM backend disagrees, printing 100 for the same program | printf 'c = 100\nfn b() { c = 7  return 0 }\nb()\nprint(c)\n' > /tmp/dc2.zl && ./compilel /tmp/dc2.zl >/dev/null 2>&1 && clang -O2 out.ll src/runtime/runtime.c src/runtime/os_linux.c -Isrc/runtime -D_strdup=strdup -o /tmp/dc2.bin -lm 2>/dev/null && [ "$(/tmp/dc2.bin)" = "100" ]
 
 AGENTS.md | recursion works, so parameters are frame-scoped | printf 'fn f(n) { if n <= 1 { return 1 }  return n * f(n - 1) }\nprint(f(5))\n' > /tmp/dc3.zl && [ "$(./interp /tmp/dc3.zl)" = "120" ]
 
@@ -25,6 +25,6 @@ docs/design/ci-and-agent-pipeline.md | -w suppresses a later -Werror=, so the EF
 
 docs/design/ci-and-agent-pipeline.md | -Wno-everything does NOT suppress it, which is the fix | printf 'int g;\nunsigned long t(void) { return (unsigned long)&g; }\n' > /tmp/dc7.c && ! clang -target x86_64-unknown-windows -ffreestanding -O2 -Wno-everything -Werror=pointer-to-int-cast -c /tmp/dc7.c -o /tmp/dc7.o 2>/dev/null
 
-AGENTS.md | wmshot renders the compositor with no boot and no GPU | [ -f kernel/hosttest/wmshot.c ] && grep -q 'P6' kernel/hosttest/wmshot.c
+AGENTS.md | wmshot renders the compositor with no boot and no GPU | [ -f kernel/tests/host/wmshot.c ] && grep -q 'P6' kernel/tests/host/wmshot.c
 
-CLAUDE.md | verify-efi.sh no longer hard-requires KVM | grep -q 'accel tcg' kernel/verify-efi.sh
+CLAUDE.md | verify-efi.sh no longer hard-requires KVM | grep -q 'accel tcg' kernel/tools/checks/verify-efi.sh

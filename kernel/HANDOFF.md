@@ -14,7 +14,7 @@ exit audit contract and physical read-back procedure are
 [`docs/automatic-system-audit.md`](docs/automatic-system-audit.md).
 The complete performance/storage/process/network implementation receipt,
 including every local gate and every still-open physical gate, is
-[`docs/performance-architecture-implementation-2026-08-22.md`](docs/performance-architecture-implementation-2026-08-22.md).
+[`docs/evidence/performance-architecture-implementation-2026-08-22.md`](docs/evidence/performance-architecture-implementation-2026-08-22.md).
 
 > **Latest physical boot boundary (2026-08-22):** USB ZLLOG recovered 719/719
 > valid records with zero drops. Network discovery returned (210 -> 211), then
@@ -103,7 +103,7 @@ Read this first in a new session. Everything below is verified, not remembered.
 >
 > Two facts from it that change what is possible, and are easy to waste hours
 > rediscovering: the reference **cannot render without a shim** (its runtime was
-> never delivered — `kernel/refrender/` reimplements it), and **every game
+> never delivered — `kernel/tests/refrender/` reimplements it), and **every game
 > canvas in it is blank**, along with Renderer, Framebuffer, Console, Font Atlas
 > and Image Viewer, because seven more of its modules are missing too. For
 > those, only the shell can be cloned.
@@ -117,6 +117,17 @@ Read this first in a new session. Everything below is verified, not remembered.
 > that shapes the per-app oracle: **serial bytes are routed to the focus
 > window**, so on a workspace with no windows the serial console is dead and
 > you cannot switch to an empty workspace and then type a command to fill it.
+
+> **Display state, measured 2026-08-25:**
+> [`docs/display-state-2026-08-25.md`](docs/display-state-2026-08-25.md) — a
+> read-only pass over both halves of the display. It closes the "nothing arms
+> `lt_armed`" claim this file still makes in three places (the chain is
+> `kernel.zl:2063` -> `panel_up` -> `intel.c:4417`, gated behind the `P` shell
+> command and nothing else), records that `STATE-OF-THE-PROJECT.md` §5.1's
+> kernel-halting `key()` is fixed, and measures the real frontier: **59 of 305
+> `intel_*` functions have no caller anywhere in the shipping tree, 40 of them
+> being roadmap phases 0.3-7.** Read it before believing any phase marked
+> "done" in `display-roadmap.md`'s STATUS table.
 
 > **Visual system status:** [`docs/visual-speed-northstar.md`](docs/visual-speed-northstar.md)
 > records the isolated 2026-08-19 implementation pass, its host/QEMU evidence,
@@ -469,7 +480,7 @@ cd ..
 ./tools/zllog.py export kernel/zlOS-usb.img --all \
   --json /tmp/zllog.json --csv /tmp/zllog.csv --text /tmp/zllog.txt
 python3 tools/test_zllog.py
-python3 kernel/hosttest/zllog_e2e_test.py
+python3 kernel/tests/host/zllog_e2e_test.py
 ```
 
 The next manual step is the evidence that cannot be manufactured on the host:
@@ -502,12 +513,12 @@ latency remain explicitly unverified.
 
 ## The development loop that matters
 
-`kernel/hosttest/` compiles **the same `intel.c` that ships in the kernel** as a
+`kernel/tests/host/` compiles **the same `intel.c` that ships in the kernel** as a
 Linux program against the real GPU's PCI BAR. Seconds per iteration instead of
 write-USB → reboot → read-screen.
 
 ```
-cd kernel/hosttest
+cd kernel/tests/host
 ./gpu-dev.sh probe          # read everything (safe, i915 keeps running)
 ./gpu-dev.sh dump a.txt     # 300 registers
 ./gpu-dev.sh diff a.txt b.txt
@@ -789,7 +800,7 @@ zlOS itself still cannot light the panel — the driver can, and is proven to, b
 the kernel has no caller. That is now the single thing between this and zlOS
 booting on the ThinkPad with its own display.
 
-## Finishing the display: `docs/display-roadmap.md`
+## Finishing the display: `kernel/docs/display-roadmap.md`
 
 The decision (2026-08-17): **complete the display subsystem entirely before any
 GPU work.** No ring buffers, no blitter, no execution engine until every item in
@@ -933,7 +944,7 @@ runs unchanged and its transcript is still byte-identical to `golden.txt`.
 Every demo is an app in a window: no `while` loop, no "press any key". Typing
 `snake`, `paint`, `cube`, `anim`, `mouse` or `edit` opens one. The full account
 of that run, including four things it found that no task list predicted, is
-`docs/desktop-platform-run.md`.
+`kernel/docs/evidence/desktop-platform-run.md`.
 
 ## Everything else in the kernel
 
@@ -1046,7 +1057,7 @@ inverts that. Designed 2026-08-17:
   (2026-08-19) settle the kernel against `docs/design/zlOS-design-northstar.html`
   item by item** — the blur is gone and the reason is that it was disabling the
   wallpaper cache on the ThinkPad's 2560x1440 panel, not that it looked wrong.
-- **`docs/NEXT-PROMPT.md` — WHICH ONE TO DO NEXT, ranked, with the measurement
+- **`docs/archive/prompts/NEXT-PROMPT.md` — historical ranked queue, with the measurement
   that ranks it.** Start a new session here. It also carries the standing
   hazard nothing else states plainly: three to five agent sessions share this
   one checkout, and on 2026-08-19 that produced two simultaneous land gates,
@@ -1114,7 +1125,7 @@ inverts that. Designed 2026-08-17:
   choice as `desktop-plan.md`). TempleOS was 640×480/16 colours; **zlOS is
   already well past it**. Do not write a 3D driver — the *display* driver alone
   has cost a 13-conflict plan and an 86-defect audit.
-  **Note:** `docs/design/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
+  **Note:** `docs/archive/superseded/GRAPHICS_PLAN.md` (2026-08-03) says the GPU is reached
   via `opengl32.dll` FFI. That is the **Windows-hosted** plan and does not apply
   here — it has been annotated. On zlOS, 3D means a software rasterizer, and
   `fb3d.c` is its first step.
@@ -1145,7 +1156,7 @@ as the `8086:9B41` graphics. So `fb.c` timed here runs on the real target CPU.
 and `mmap`s the three fixed physical addresses fb.c hardcodes. No sudo.
 
 ```
-cd kernel/hosttest && ./build.sh && ./fbbench
+cd kernel/tests/host && ./build.sh && ./fbbench
 ```
 
 Baseline measured 2026-08-17, whole desktop with 3 windows:
@@ -1227,7 +1238,7 @@ code*, and asserts parity — the same key must produce the same event from eith
 keyboard. No GPU, no root, no QEMU, milliseconds:
 
 ```
-cd kernel/hosttest && ./build.sh && ./inputtest
+cd kernel/tests/host && ./build.sh && ./inputtest
 ```
 
 Full write-up: `docs/input-stack.md`.
@@ -1297,14 +1308,14 @@ LPSS I2C controller, so the touchpad driver only runs on the laptop, which is
 also the only machine with a panel big enough to make the framebuffer reach.
 The two halves of the bug were never on the same machine as a working test.
 
-The map is now **[`kernel/memmap.h`](memmap.h)** — declared once, with every
+The map is now **[`kernel/src/arch/x86/memmap.h`](src/arch/x86/memmap.h)** — declared once, with every
 owner asserting its own extent against its neighbours at compile time. It
 replaced a comment in `fb.c` that carried the list *and told you not to trust
 it* ("do not take this list on trust, re-grep it"). That instruction was the
 admission; the list was already wrong when it was written.
 
 ```
-cd kernel/hosttest && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
+cd kernel/tests/host && ./memmap-guard-test.sh    # seconds, no QEMU, no hardware
 ```
 
 **That paragraph said "12 checks" and the script was scoring 10 passed, 2
@@ -1351,7 +1362,7 @@ actually booted, and all three of these were simultaneously true:
 | `verify-efi.sh`, `exercise.py`, `try.sh` | 1G | 4× the asserted ceiling |
 
 `HI_TOP` is now **`0x40000000`, 1 GiB**, and every QEMU in the tree passes
-`-m 1G`. `kernel/check-ram.sh` is the gate: it reads `HI_TOP` out of `memmap.h`,
+`-m 1G`. `kernel/tools/checks/check-ram.sh` is the gate: it reads `HI_TOP` out of `memmap.h`,
 finds every QEMU launch in every `.sh` and `.py` here, and fails if any of them
 passes less than that or passes no `-m` at all. Static — no build, no QEMU, so
 it cannot fail because the host is busy. Validated against three planted
@@ -1496,7 +1507,7 @@ Three docs, all written from measurement rather than intent:
 Gates the exec track added, cheapest first:
 
 ```
-cd kernel/hosttest && ./build.sh
+cd kernel/tests/host && ./build.sh
 ./arenatest        # the program arena's ceiling      62 checks, no QEMU
 ./exectest         # `run`, with a fake filesystem    44 checks, no QEMU
 ./exectest-nofs    # `run`, as it actually ships      32 checks, no QEMU

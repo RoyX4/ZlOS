@@ -1,0 +1,78 @@
+# Repository Structure
+
+This layout borrows the useful common pattern from mature language and OS
+repositories: a small orientation surface at the root, stable source ownership,
+and separate homes for tests, tools, current plans, evidence, and history.
+
+## Current Layout
+
+```text
+zl-linux/
+|-- README.md                 project front door
+|-- build.sh                  language build entry point
+|-- src/
+|   |-- frontend/             shared C lexer, parser, and AST headers
+|   |-- runtime/              interpreter, boxed runtime, and Linux OS bridge
+|   |-- backends/             C, LLVM, and direct-native code generators
+|   |-- selfhost/             zl-written compiler, lexer, parser, and native work
+|   `-- tools/                language-aware tools such as zlfmt
+|-- stdlib/                   zl standard library
+|-- tests/                    language tests
+|-- examples/                 source examples
+|-- freestanding/             no-libc proof lane
+|-- kernel/                   zlOS product root
+|   |-- apps/                 zl applications and games
+|   |-- boot/                 entry code, EFI handoff, and linker layouts
+|   |-- src/                  kernel implementation by subsystem
+|   |-- tests/                host, oracle, reference, and fixture tests
+|   |-- tools/                checks, generators, image builders, probes, runners
+|   `-- docs/                 current kernel docs, evidence, and archive
+|-- tools/                    repository maintenance tools
+|-- gates/                    landing orchestration
+|-- docs/
+|   |-- README.md             documentation front door
+|   |-- PROJECT-STATUS.md     current truth and cross-repo commit state
+|   |-- program/              complete destination and dependency graph
+|   |-- design/               proposals and decisions
+|   |-- evidence/             measured historical records
+|   |-- fleet/                audit findings and boards
+|   `-- archive/              superseded plans, prompts, backups, handoffs
+`-- kernel/docs/
+    |-- README.md             kernel documentation front door
+    |-- evidence/             dated implementation and run receipts
+    `-- archive/              old prompts, audits, and handoffs
+```
+
+## Source Ownership
+
+The host language implementation lives under `src/`. Shared syntax belongs in
+`src/frontend/`; executable semantics and the OS boundary belong in
+`src/runtime/`; output formats belong in `src/backends/`; zl-written bootstrap
+work belongs in `src/selfhost/`. `src/README.md` is the detailed ownership map.
+
+The zlOS implementation follows the same ownership rule inside `kernel/`:
+architecture, core services, drivers, filesystems, graphics, networking,
+runtime, and web code have separate homes under `kernel/src/`. `kernel/SOURCES`
+is the authoritative shared build manifest; boot-specific entry code remains
+under `kernel/boot/`, and all build scripts consume the nested paths.
+
+## Placement Rules
+
+- Current queues and truth maps stay near `docs/README.md`.
+- Proposals stay in `docs/design/`; a proposal is never completion evidence.
+- Measured outputs worth retaining go in an `evidence/` directory.
+- Superseded prompts, dated handoffs, and backup copies go in `archive/`.
+- Generated binaries, disk images, screenshots, caches, and compiler output are
+  ignored. Curated proof belongs under `docs/`, with a short receipt.
+- Feature maturity lives in program ledgers and receipts, not in source-folder
+  names such as `done/` or `half-done/`.
+
+## Reference Patterns
+
+The useful pattern is consistency, not copying another repository's names.
+Zig keeps `src`, `lib`, `test`, `tools`, and `doc` separate; SerenityOS uses
+clear product ownership such as `Kernel`, `Userland`, `Tests`, `Toolchain`, and
+`Documentation`; Redox keeps `src`, `recipes`, `scripts`, `config`, and build
+machinery distinct. The local cognitive-substrate project adds a strong
+`START-HERE` plus purpose-based `docs/` subfolders. zl-linux follows the same
+idea while retaining zlOS's current kernel paths.

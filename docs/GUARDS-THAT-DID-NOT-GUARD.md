@@ -29,7 +29,7 @@ stay after the `-w`."* Plausible, written down twice, **never run.**
 ### The measurement
 
 One file with one instance of each class, compiled three ways
-(`kernel/wguard.sh` automates this):
+(`kernel/tools/checks/wguard.sh` automates this):
 
 | flags | result |
 |---|---|
@@ -97,7 +97,7 @@ and the one warning `-w` was legitimately buying (`-Wexcessive-regsave`, 11 hits
 in `idt.c`, inherent to `__attribute__((interrupt))`) is suppressed **by name**
 so a new class surfaces instead of being swallowed.
 
-`kernel/wguard.sh` runs all three directions — guard bites, `-w` still
+`kernel/tools/checks/wguard.sh` runs all three directions — guard bites, `-w` still
 silences, tree is clean — in about two seconds with no QEMU. **Direction B is
 the one that matters:** it fails if clang ever changes behaviour, which is the
 only world where restoring `-w` would be safe.
@@ -171,10 +171,10 @@ smp.c:265   if (bands > 1) fb_par_hook(smp_band_dispatch, bands);   <- a real ca
 correct. The gap is one rung up — **nothing calls `smp_start()` at boot:**
 
 ```
-$ grep -n 'smp_go' kernel/kernel.zl
+$ grep -n 'smp_go' kernel/src/kernel.zl
 1886:        smn = smp_go()          <- the ONLY occurrence
 
-$ grep -n 'if cmd == 42' kernel/kernel.zl
+$ grep -n 'if cmd == 42' kernel/src/kernel.zl
 1874:    if cmd == 42 {              # * - wake the other CPU cores
 ```
 

@@ -149,7 +149,7 @@ against fake hardware. No GPU, no root, no QEMU — it runs anywhere in
 milliseconds.
 
 ```
-cd kernel/hosttest && ./build.sh && ./inputtest
+cd kernel/tests/host && ./build.sh && ./inputtest
 ```
 
 The assertions that matter are the parity ones: the same key must produce the

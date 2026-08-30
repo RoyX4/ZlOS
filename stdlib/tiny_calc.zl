@@ -12,33 +12,33 @@ DIGITS = "0123456789."
 # ---- tokenizer ----------------------------------------------------------
 # Turns "12 + (3*4)" into a list of token strings ["12","+","(","3","*","4",")"]
 fn isNumChar(c) {
-  return find(DIGITS, c) >= 0
+    return find(DIGITS, c) >= 0
 }
 
 fn tokenize(s) {
-  toks = []
-  i = 0
-  while i < len(s) {
-    c = at(s, i)
-    if c == " " or c == "\t" {
-      i = i + 1
-    } else {
-      if isNumChar(c) {
-        numstr = ""
-        # consume a run of digits / decimal points
-        while i < len(s) and isNumChar(at(s, i)) {
-          numstr = numstr + at(s, i)
-          i = i + 1
+    toks = []
+    i = 0
+    while i < len(s) {
+        c = at(s, i)
+        if c == " " or c == "\t" {
+            i = i + 1
+        } else {
+            if isNumChar(c) {
+                numstr = ""
+                # consume a run of digits / decimal points
+                while i < len(s) and isNumChar(at(s, i)) {
+                    numstr = numstr + at(s, i)
+                    i = i + 1
+                }
+                toks = push(toks, numstr)
+            } else {
+                # single-char token: + - * / ( )
+                toks = push(toks, c)
+                i = i + 1
+            }
         }
-        toks = push(toks, numstr)
-      } else {
-        # single-char token: + - * / ( )
-        toks = push(toks, c)
-        i = i + 1
-      }
     }
-  }
-  return toks
+    return toks
 }
 
 # ---- recursive-descent parser + evaluator -------------------------------
@@ -51,69 +51,69 @@ fn tokenize(s) {
 # `p < len(toks) and toks[p] == "+"` still evaluates toks[p] out of range.
 # tokAt() returns "" for out-of-range positions to make loop guards safe.
 fn tokAt(toks, p) {
-  if p < len(toks) {
-    return toks[p]
-  } else {
-    return ""
-  }
+    if p < len(toks) {
+        return toks[p]
+    } else {
+        return ""
+    }
 }
 
 fn parseFactor(toks, pos) {
-  t = tokAt(toks, pos)
-  if t == "(" {
-    inner = parseExpr(toks, pos + 1)      # inner = [value, posAtCloseParen]
-    val = inner[0]
-    np = inner[1]
-    return [val, np + 1]                  # skip the ')'
-  } else {
-    if t == "-" {                         # unary minus
-      f = parseFactor(toks, pos + 1)
-      return [-f[0], f[1]]
+    t = tokAt(toks, pos)
+    if t == "(" {
+        inner = parseExpr(toks, pos + 1)      # inner = [value, posAtCloseParen]
+        val = inner[0]
+        np = inner[1]
+        return [val, np + 1]                  # skip the ')'
     } else {
-      return [num(t), pos + 1]
+        if t == "-" {                         # unary minus
+            f = parseFactor(toks, pos + 1)
+            return [-f[0], f[1]]
+        } else {
+            return [num(t), pos + 1]
+        }
     }
-  }
 }
 
 fn parseTerm(toks, pos) {
-  r = parseFactor(toks, pos)
-  val = r[0]
-  p = r[1]
-  while tokAt(toks, p) == "*" or tokAt(toks, p) == "/" {
-    op = tokAt(toks, p)
-    rhs = parseFactor(toks, p + 1)
-    if op == "*" {
-      val = val * rhs[0]
-    } else {
-      val = val / rhs[0]
+    r = parseFactor(toks, pos)
+    val = r[0]
+    p = r[1]
+    while tokAt(toks, p) == "*" or tokAt(toks, p) == "/" {
+        op = tokAt(toks, p)
+        rhs = parseFactor(toks, p + 1)
+        if op == "*" {
+            val = val * rhs[0]
+        } else {
+            val = val / rhs[0]
+        }
+        p = rhs[1]
     }
-    p = rhs[1]
-  }
-  return [val, p]
+    return [val, p]
 }
 
 fn parseExpr(toks, pos) {
-  r = parseTerm(toks, pos)
-  val = r[0]
-  p = r[1]
-  while tokAt(toks, p) == "+" or tokAt(toks, p) == "-" {
-    op = tokAt(toks, p)
-    rhs = parseTerm(toks, p + 1)
-    if op == "+" {
-      val = val + rhs[0]
-    } else {
-      val = val - rhs[0]
+    r = parseTerm(toks, pos)
+    val = r[0]
+    p = r[1]
+    while tokAt(toks, p) == "+" or tokAt(toks, p) == "-" {
+        op = tokAt(toks, p)
+        rhs = parseTerm(toks, p + 1)
+        if op == "+" {
+            val = val + rhs[0]
+        } else {
+            val = val - rhs[0]
+        }
+        p = rhs[1]
     }
-    p = rhs[1]
-  }
-  return [val, p]
+    return [val, p]
 }
 
 # public entry point: evaluate a string expression -> number
 fn evaluate(s) {
-  toks = tokenize(s)
-  r = parseExpr(toks, 0)
-  return r[0]
+    toks = tokenize(s)
+    r = parseExpr(toks, 0)
+    return r[0]
 }
 
 # ---- self-test ----------------------------------------------------------

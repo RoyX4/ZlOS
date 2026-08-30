@@ -28,7 +28,7 @@ cp out.c freestanding/_gen.c
 #                  (note design_kernel.md K1 wants RIP-relative for UEFI -
 #                   that is a kernel-backend concern, not this harness's)
 gcc -O2 -ffreestanding -nostdlib -fno-stack-protector -fno-pic -no-pie \
-    -I. -o "$OUT" \
+    -I. -Isrc/runtime -o "$OUT" \
     freestanding/start.c freestanding/_gen.c freestanding/runtime_kernel.c
 
 echo "built $OUT"

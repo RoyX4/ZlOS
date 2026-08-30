@@ -1,0 +1,1477 @@
+# apps_utils.zl - the 10 utility apps (ds.html's UTILS list), ids 14..23.
+# apps_registry.zl holds the shared registry these plug into; apps_common.zl
+# holds ac_draw_base (hex/dec/oct/bin text, by hand - there are no string
+# values here to format with).
+#
+# THIS SLICE OWNS IDS 14..23 AND NO OTHERS, and every name in it is au_/cb_/
+# cp_/pt_/bc_/ld_/ck_/uc_/nt_/kt_/bm_ prefixed. The slice files and kernel.zl
+# compile into ONE translation unit (_gen.c), so a bare name is global to all
+# of them - apps_sys3.zl's Network app was first written with an `nt_` prefix
+# and collided head-on with Sticky Notes below.
+#
+# ==============================================================================
+# THE SHARED UTILITY SHELL - ds-reference.html 535-567, utilVals() 1773-1950
+# ==============================================================================
+# All ten of these apps are ONE layout in the reference, parameterised. It is
+# reproduced once, in the au_* helpers below, and every app calls it:
+#
+#   1. AN INPUT BLOCK at the top - #14171a, 1px #0b0d0f bottom border,
+#      11px/12px padding, 7px gaps. Each field is a row: a 66px fixed-width
+#      uppercase 10px label in #5c6167 with .07em tracking, then the input.
+#   2. OPTIONALLY A BUTTON ROW under the fields, 6px gaps, 2px padding-top.
+#   3. A BODY - 12px padding, 9px gaps. Optionally a swatch first (Colour
+#      Picker), then key/value rows: a 96px fixed-width mono key in #74797f,
+#      10px gap, then the value.
+#   4. OPTIONALLY A CLOSING NOTE - 11px #5c6167, line-height 1.6.
+#
+# WHICH TOOLKIT EACH WIDGET COMES FROM. uikit.c's catalogue is only partly
+# reachable from zl: the bridge is freestanding/runtime_kernel.c and it binds
+# ui_* names up to ui_meter. What this file needs and GETS:
+#
+#   ui_begin ui_txt ui_tw ui_th ui_pill ui_pill_w ui_pill_h ui_ink_on ui_color
+#
+# What it needs and the bridge does NOT bind, so it is drawn here against the
+# reference's own numbers - each au_* helper being a one-line forward the day
+# its twin is bridged:
+#
+#   ui_input   the text field      au_field      S18.3 / ds 1775
+#   ui_kv      the key/value row   au_row        S15.3 / ds 1782, template 558
+#   ui_heading the section head    (not used - the utility shell has none)
+#
+# ui_kv would not have served anyway: it is S15.3's CARD row - 13px padding,
+# key in #9ba0a6, value RIGHT-aligned - and the utility row is a third shape,
+# reference-widgets.md S15.3 last paragraph: 96px mono key at the LEFT, value
+# flex:1 beside it. Two different widgets that happen to share a name.
+#
+# COLOUR. Every colour is theme(TH_*), i.e. ui_color(), i.e. design.h. The
+# mapping is exact except where noted:
+#
+#   ds #14171a  input block          -> TH_PANEL_HI    (ZD_SURF_4)   exact
+#   ds #0b0d0f  block bottom border  -> TH_CHROME_LINE (ZD_SURF_2)   exact
+#   ds #101215  the body ground      -> TH_PANEL       (ZD_SURF_3)   exact
+#   ds #0d0f12  the field well       -> TH_SURF_WELL   (ZD_SURF_WELL) exact
+#   ds #5c6167  field label, note    -> TH_TEXT_6      (ZD_TEXT_6)   exact
+#   ds #74797f  the 96px row key     -> TH_TEXT_5      (ZD_TEXT_5)   exact
+#   ds #dfe2e5  field + row value    -> TH_TEXT        (ZD_TEXT_1)   exact
+#   ds #232830  the field border     -> TH_BORDER      (ZD_SURF_6)   NEAREST
+#   ds #0d1005  ink on the accent    -> ui_ink_on(theme(TH_ACCENT))  computed
+#
+# #232830 is the one hex in the reference that appears exactly once (S1.7,
+# ds 1776) and design.h gives it no role; #22262b is one step off it.
+#
+# TWO THINGS THE TOOLKIT CANNOT REPRODUCE, said plainly rather than faked:
+#
+#   - MONO HAS ONE SIZE. ui_text() with UI_F_MONO calls fb_text_aa(), which
+#     draws the 8x16 cell font and ignores `size` entirely. So the reference's
+#     10.5px key and 11.5px value collapse onto one height here. Family is
+#     kept (both ARE mono in the reference); the half-point apart is lost.
+#   - THERE IS NO LETTER-SPACING. The .07em on the uppercase field label has
+#     no expression in fb.c's text path.
+#
+# THE FOCUSED FIELD LIFTS ITS BORDER TO THE ACCENT, and that is a deliberate
+# extension, not the reference: S18.3 and S21.2 record that the reference has
+# NO focus ring anywhere. uikit.c's ui_input already made that call and says
+# so in its own comment ("an input that gives no sign of holding the caret is
+# unusable without a mouse"); this file follows it so the two agree.
+#
+# INPUT CONVENTION shared by every typing app below: EV_CHAR (ety 3) already
+# carries the fully-resolved, shift-aware ASCII character - input.c's to_char()
+# does that once, for every app, the same way term.c and the editor rely on.
+# 8 = Backspace, 9 = Tab, 13 = Enter, 32..126 = printable.
+#
+# WHICH APPS CAN SEE THE POINTER AT ALL. apps_registry.zl's reg_event fixes
+# each handler's arity, and this file cannot edit that file:
+#
+#   5 args (win, ety, ecode, ex, ey) - cb_ cp_ uc_ bm_   -> clicks work
+#   3 args (win, ety, ecode)         - pt_ bc_ ld_ ck_ nt_ kt_ -> keyboard only
+#
+# So the reference's button rows on Base Converter, Text Diff and Sticky Notes
+# are NOT drawn here. A button that cannot be clicked is worse than no button,
+# and widening those signatures needs apps_registry.zl, which another agent
+# owns. Everything else the reference gives those apps is present.
+
+# ---- ui.h's text sizes, flags and button kinds, as zl constants -------------
+AU_SM = 0
+AU_MD = 1
+AU_MONO = 1
+AU_BOLD = 2
+AU_BTN_NEUTRAL = 0
+AU_BTN_PRIMARY = 1
+AU_BTN_DANGER  = 2
+
+# ---- the shell's geometry, in design units, straight off ds 538-565 ---------
+AU_IN_PY    = 11                    # input block padding, vertical
+AU_IN_PX    = 12                    # ...and horizontal
+AU_IN_GAP   = 7                     # between the block's children
+AU_LBL_W    = 66                    # the fixed-width uppercase field label
+AU_LBL_GAP  = 9                     # label to input
+AU_FIELD_H  = 26                    # ds 1775
+AU_FIELD_R  = 9
+AU_FIELD_PX = 10
+AU_BTN_PT   = 2                     # the button row's padding-top
+AU_BTN_GAP  = 6
+AU_BODY_PAD = 12
+AU_BODY_GAP = 9
+AU_KEY_W    = 96                    # template 558
+AU_ROW_GAP  = 10
+AU_SWATCH_H = 56                    # ds 1811
+AU_SWATCH_R = 12
+AU_WHITE_A  = 26                    # rgba(255,255,255,.1), as 0..255 alpha
+
+# Which button row an app is drawing. zl has no function values, so the label
+# lookup is one dispatch rather than four copies of the row walker.
+AU_BSET_CLIP  = 0
+AU_BSET_COLOR = 1
+AU_BSET_UNIT  = 2
+AU_BSET_BENCH = 3
+
+# ==============================================================================
+# The shell, drawn once.
+# ==============================================================================
+
+# EVERY DRAW FUNCTION CALLS THIS FIRST, and that is not decoration. ui.c keeps
+# the draw/hit-test mode in a static and every uikit widget opens with
+# `if (ui_mode_get() != UI_DRAW) return;`. Nothing resets it when a draw
+# begins. kernel.zl's menu_event leaves it at UI_HITTEST, so an app here that
+# skipped ui_begin would compile clean, pass every gate, and then paint
+# nothing from the first start-menu click onward.
+fn au_shell(ax, ay, aw, ah) {
+    ui_begin(ax, ay, aw, ah, 0, 0, 0, 0)
+    fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
+    return 0
+}
+
+fn au_btn_h() { return ui_pill_h(AU_SM) }
+
+# The input block's height for `nf` fields and `nb` button rows (0 or 1),
+# including its 1px bottom border. Computed, never guessed, so the body can be
+# placed before the block is drawn.
+fn au_inblock_h(nf, nb) {
+    u = ui()
+    n = nf + nb
+    if n == 0 { return 0 }
+    h = 2 * AU_IN_PY * u + (n - 1) * AU_IN_GAP * u + nf * AU_FIELD_H * u
+    if nb > 0 { h = h + AU_BTN_PT * u + au_btn_h() }
+    return h + u
+}
+
+fn au_inblock(x, y, w, h) {
+    u = ui()
+    fill_rgb(x, y, w, h - u, theme(TH_PANEL_HI))
+    fill_rgb(x, y + h - u, w, u, theme(TH_CHROME_LINE))
+    return 0
+}
+
+fn au_field_y(ay, i) { return ay + AU_IN_PY * ui() + i * (AU_FIELD_H + AU_IN_GAP) * ui() }
+fn au_field_x(ax) { return ax + (AU_IN_PX + AU_LBL_W + AU_LBL_GAP) * ui() }
+fn au_field_w(aw) { return aw - (2 * AU_IN_PX + AU_LBL_W + AU_LBL_GAP) * ui() }
+fn au_field_tx(ax) { return au_field_x(ax) + AU_FIELD_PX * ui() }
+fn au_field_ty(y) { return y + (AU_FIELD_H * ui() - cell_h()) / 2 }
+
+# One labelled field row. `focused` lifts the border - see the header.
+fn au_field(ax, aw, y, lbl, focused) {
+    u = ui()
+    ly = y + (AU_FIELD_H * u - ui_th(AU_SM)) / 2
+    ui_txt(ax + AU_IN_PX * u, ly, lbl, theme(TH_TEXT_6), AU_SM, 0)
+    x = au_field_x(ax)
+    w = au_field_w(aw)
+    h = AU_FIELD_H * u
+    bc = theme(TH_BORDER)
+    if focused == 1 { bc = theme(TH_ACCENT) }
+    rrect(x, y, w, h, AU_FIELD_R * u, bc)
+    rrect(x + u, y + u, w - 2 * u, h - 2 * u, (AU_FIELD_R - 1) * u, theme(TH_SURF_WELL))
+    return 0
+}
+
+# How many mono characters fit inside a field.
+fn au_field_cols(aw) {
+    n = (au_field_w(aw) - 2 * AU_FIELD_PX * ui()) / cell_w()
+    if n < 1 { n = 1 }
+    return n
+}
+
+# `n` bytes from `buf`, mono, scrolled left so the caret stays in view, then
+# the caret itself when this field holds it.
+fn au_field_text(ax, aw, y, buf, n, caret) {
+    u = ui()
+    dw = cell_w()
+    tx = au_field_tx(ax)
+    ty = au_field_ty(y)
+    cols = au_field_cols(aw)
+    from = 0
+    if n >= cols { from = n - cols + 1 }
+    i = from
+    while i < n {
+        char_aa(tx + (i - from) * dw, ty, peek8(buf + i), theme(TH_TEXT))
+        i = i + 1
+    }
+    if caret == 1 { fill_rgb(tx + (n - from) * dw, ty, 2 * u, cell_h(), theme(TH_ACCENT)) }
+    return 0
+}
+
+# The reference's `placeholder` (S18.4): the same well, dimmed ink.
+#
+# It is indented past the caret when the field is focused. The reference has no
+# caret to collide with - its fields are real DOM inputs - so this is our
+# resolution of a conflict it never had, not a departure from it.
+fn au_field_ph(ax, y, s, focused) {
+    x = au_field_tx(ax)
+    if focused == 1 { x = x + 4 * ui() }
+    ui_txt(x, au_field_ty(y), s, theme(TH_TEXT_6), AU_MD, AU_MONO)
+    return 0
+}
+
+# ---- the button row ---------------------------------------------------------
+fn au_btn_label(set, i) {
+    if set == AU_BSET_CLIP { return "wipe" }
+    if set == AU_BSET_COLOR { return cp_preset_name(i) }
+    if set == AU_BSET_UNIT { return uc_cat_name(i) }
+    return "run benchmark"
+}
+fn au_btn_row_y(ay, nf) { return au_field_y(ay, nf) + AU_BTN_PT * ui() }
+fn au_btn_x(set, ax, i) {
+    u = ui()
+    bx = ax + AU_IN_PX * u
+    j = 0
+    while j < i {
+        bx = bx + ui_pill_w(au_btn_label(set, j), AU_SM, AU_MONO) + AU_BTN_GAP * u
+        j = j + 1
+    }
+    return bx
+}
+fn au_btn_row(set, ax, y, n, active, kind) {
+    i = 0
+    while i < n {
+        s = au_btn_label(set, i)
+        k = kind
+        if i == active { k = AU_BTN_PRIMARY }
+        ui_pill(au_btn_x(set, ax, i), y, ui_pill_w(s, AU_SM, AU_MONO), au_btn_h(), s, AU_SM, k, AU_MONO)
+        i = i + 1
+    }
+    return 0
+}
+# Which button the client-relative point (cx, cy) is in, or -1. Draw and
+# hit-test share au_btn_x, so the two cannot drift.
+fn au_btn_hit(set, ax, y, n, cx, cy) {
+    if cy < y { return 0 - 1 }
+    if cy >= y + au_btn_h() { return 0 - 1 }
+    i = 0
+    while i < n {
+        bx = au_btn_x(set, ax, i)
+        bw = ui_pill_w(au_btn_label(set, i), AU_SM, AU_MONO)
+        if cx >= bx { if cx < bx + bw { return i } }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+# ---- the body ---------------------------------------------------------------
+fn au_body_y(ay, blockh) { return ay + blockh + AU_BODY_PAD * ui() }
+fn au_row_adv() { return cell_h() + AU_BODY_GAP * ui() }
+fn au_key_x(ax) { return ax + AU_BODY_PAD * ui() }
+fn au_val_x(ax) { return ax + (AU_BODY_PAD + AU_KEY_W + AU_ROW_GAP) * ui() }
+fn au_fits(y, ay, ah) { if y + cell_h() > ay + ah { return 0 }  return 1 }
+
+fn au_key(ax, y, s) { ui_txt(au_key_x(ax), y, s, theme(TH_TEXT_5), AU_SM, AU_MONO)  return 0 }
+
+# The reference's `[0]`, `[1]`, ... row keys (regex hits 1822, key log 1913).
+fn au_digits(n) {
+    if n < 0 { n = 0 - n }
+    d = 1
+    p = 10
+    while p <= n { d = d + 1  p = p * 10 }
+    return d
+}
+fn au_keyi(ax, y, i) {
+    dw = cell_w()
+    x = au_key_x(ax)
+    c = theme(TH_TEXT_5)
+    char_aa(x, y, 91, c)
+    num_aa(x + dw, y, i, c)
+    char_aa(x + dw + au_digits(i) * dw, y, 93, c)
+    return 0
+}
+
+fn au_val(ax, y, s, c) { ui_txt(au_val_x(ax), y, s, c, AU_MD, AU_MONO)  return 0 }
+fn au_valn(ax, y, n, c) { num_aa(au_val_x(ax), y, n, c)  return 0 }
+fn au_row(ax, y, k, v, c) { au_key(ax, y, k)  au_val(ax, y, v, c)  return 0 }
+fn au_rown(ax, y, k, n, c) { au_key(ax, y, k)  au_valn(ax, y, n, c)  return 0 }
+
+# A number with a unit after it, the unit in the key's tier so the figure reads.
+fn au_valn_sfx(ax, y, n, sfx, c) {
+    x = au_val_x(ax)
+    num_aa(x, y, n, c)
+    ui_txt(x + au_digits(n) * cell_w(), y, sfx, theme(TH_TEXT_5), AU_MD, AU_MONO)
+    return 0
+}
+fn au_rown_sfx(ax, y, k, n, sfx, c) { au_key(ax, y, k)  au_valn_sfx(ax, y, n, sfx, c)  return 0 }
+
+# A prefixed, zero-padded number in a base - `0x1f4`, `0o764`, `0b1011`.
+fn au_row_base(ax, y, k, v, digits, base, pfx, c) {
+    au_key(ax, y, k)
+    x = au_val_x(ax)
+    ui_txt(x, y, pfx, theme(TH_TEXT_5), AU_MD, AU_MONO)
+    ac_draw_base(x + ui_tw(pfx, AU_MD, AU_MONO), y, v, digits, base, c)
+    return 0
+}
+
+# One decimal place, held as an integer x10 - this kernel's zl truncates, so a
+# ratio is carried scaled rather than pretending to be a float.
+fn au_row_x10(ax, y, k, v10, sfx, c) {
+    au_key(ax, y, k)
+    dw = cell_w()
+    x = au_val_x(ax)
+    n = v10 / 10
+    num_aa(x, y, n, c)
+    w = au_digits(n) * dw
+    char_aa(x + w, y, 46, c)
+    num_aa(x + w + dw, y, v10 % 10, c)
+    ui_txt(x + w + 2 * dw, y, sfx, theme(TH_TEXT_5), AU_MD, AU_MONO)
+    return 0
+}
+
+# How many mono characters fit in the value column.
+fn au_val_cols(aw) {
+    n = (aw - (2 * AU_BODY_PAD + AU_KEY_W + AU_ROW_GAP) * ui()) / cell_w()
+    if n < 1 { n = 1 }
+    return n
+}
+# Raw bytes as the value - there are no string values here, so a typed buffer
+# is drawn one character at a time, clipped to the column.
+fn au_val_bytes(ax, aw, y, buf, from, n, c) {
+    dw = cell_w()
+    x = au_val_x(ax)
+    cols = au_val_cols(aw)
+    i = 0
+    while i < n {
+        if i >= cols { i = n } else {
+            char_aa(x + i * dw, y, peek8(buf + from + i), c)
+            i = i + 1
+        }
+    }
+    return 0
+}
+
+# The closing note - 11px #5c6167, line-height 1.6. Wrapping is the caller's
+# job: fb.c has no text measurer that can break a run, and the notes here are
+# written to fit.
+fn au_note(ax, y, s) { ui_txt(au_key_x(ax), y, s, theme(TH_TEXT_6), AU_SM, 0)  return 0 }
+fn au_note_adv() { return ui_th(AU_SM) * 16 / 10 }
+
+# The Colour Picker's swatch block, ds 1811.
+fn au_swatch(ax, aw, y, c) {
+    u = ui()
+    x = au_key_x(ax)
+    w = aw - 2 * AU_BODY_PAD * u
+    h = AU_SWATCH_H * u
+    rrect(x, y, w, h, AU_SWATCH_R * u, c)
+    # `border:1px solid rgba(255,255,255,.1)` - blended from the bright ink
+    # role, so it is not a colour literal either.
+    blend(x, y, w, u, theme(TH_TEXT_HI), AU_WHITE_A)
+    blend(x, y + h - u, w, u, theme(TH_TEXT_HI), AU_WHITE_A)
+    blend(x, y, u, h, theme(TH_TEXT_HI), AU_WHITE_A)
+    blend(x + w - u, y, u, h, theme(TH_TEXT_HI), AU_WHITE_A)
+    return 0
+}
+fn au_swatch_adv() { return AU_SWATCH_H * ui() + AU_BODY_GAP * ui() }
+
+# ==============================================================================
+# 14 - Clipboard.  ds 1795-1804.  utilInput is false in the reference, but the
+# `wipe` action is real here, so the block takes the shape the reference's own
+# Benchmark uses: an input block with NO fields and one button (ds 1929,
+# `utilInput:true, utilFields:[], utilHasBtns:true`).
+#
+# Read-only view of clip.c's ONE buffer (clip_n/clip_ch/clip_seq), plus the one
+# write clip.c exposes to zl.
+# ==============================================================================
+CB_PREVIEW_ROWS = 4
+
+fn cb_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    n = clip_n()
+    bh = au_inblock_h(0, 1)
+    au_inblock(ax, ay, aw, bh)
+    au_btn_row(AU_BSET_CLIP, ax, au_btn_row_y(ay, 0), 1, 0 - 1, AU_BTN_DANGER)
+
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    if n == 0 {
+        au_row(ax, y, "state", "empty", theme(TH_TEXT_6))
+    } else {
+        au_row(ax, y, "state", "holding", theme(TH_ACCENT))
+    }
+    y = y + adv
+    au_rown_sfx(ax, y, "bytes", n, " B", theme(TH_TEXT))
+    y = y + adv
+    au_rown(ax, y, "sequence", clip_seq(), theme(TH_TEXT))
+    y = y + adv
+
+    cols = au_val_cols(aw)
+    r = 0
+    while r < CB_PREVIEW_ROWS {
+        from = r * cols
+        if from >= n { r = CB_PREVIEW_ROWS } else {
+            if au_fits(y, ay, ah) == 0 { r = CB_PREVIEW_ROWS } else {
+                left = n - from
+                if left > cols { left = cols }
+                au_keyi(ax, y, r)
+                cb_preview(ax, y, from, left)
+                y = y + adv
+                r = r + 1
+            }
+        }
+    }
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Ctrl+C in the shell writes here. One buffer, the way a real clipboard has one.") }
+    return 0
+}
+
+# clip.c hands out bytes one at a time, not a buffer address, so this cannot go
+# through au_val_bytes.
+fn cb_preview(ax, y, from, n) {
+    dw = cell_w()
+    x = au_val_x(ax)
+    i = 0
+    while i < n {
+        char_aa(x + i * dw, y, clip_ch(from + i), theme(TH_TEXT))
+        i = i + 1
+    }
+    return 0
+}
+
+fn cb_event(win, ety, ecode, ex, ey) {
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    cx = ex - wm_cx(win)
+    cy = ey - wm_cy(win)
+    if au_btn_hit(AU_BSET_CLIP, 0, au_btn_row_y(0, 0), 1, cx, cy) < 0 { return 0 }
+    clip_wipe()
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 15 - Colour Picker.  ds 1799-1818.  A hex field, five preset buttons, the
+# 56px swatch, then hex / rgb / hsl / luminance / contrast / rgb565.
+#
+# The three R/G/B sliders this app used to carry are gone: the reference's
+# input for this app is a hex field and a preset row, and a slider appears
+# nowhere in utilVals(). Typing shifts hex digits into a 24-bit accumulator,
+# which is the same idiom Base Converter uses for decimal - zl has no string
+# values, so a text field over a number is a shift register.
+#
+# THE FIVE PRESETS ARE THEME ROLES, NOT THE REFERENCE'S FIVE HEX LITERALS
+# (ds 1810: #b8e838 #57b6ff #ff6a50 #b57bff #4ce0b3). Only the first of those
+# has a token in design.h - it IS ZD_ACCENT - so transcribing the row would
+# have put four invented colours and one duplicate of the accent into a zl
+# file, which is the exact thing the palette gate exists to stop. The roles
+# this desktop actually names answer a better question anyway: what does the
+# live accent measure at, and does WARN pass on black?
+# ==============================================================================
+cp_hex = 0 - 1                      # -1 = untouched, i.e. the live accent
+CP_PRESETS = 5
+
+fn cp_val() {
+    if cp_hex < 0 { return theme(TH_ACCENT) }
+    return cp_hex
+}
+fn cp_preset(i) {
+    if i == 0 { return theme(TH_ACCENT) }
+    if i == 1 { return theme(TH_ACCENT_BR) }
+    if i == 2 { return theme(TH_OK) }
+    if i == 3 { return theme(TH_WARN) }
+    return theme(TH_DANGER)
+}
+fn cp_preset_name(i) {
+    if i == 0 { return "accent" }
+    if i == 1 { return "bright" }
+    if i == 2 { return "ok" }
+    if i == 3 { return "warn" }
+    return "danger"
+}
+fn cp_active() {
+    i = 0
+    while i < CP_PRESETS {
+        if cp_preset(i) == cp_val() { return i }
+        i = i + 1
+    }
+    return 0 - 1
+}
+
+fn cp_rr() { return band(shr(cp_val(), 16), 255) }
+fn cp_gg() { return band(shr(cp_val(), 8), 255) }
+fn cp_bb() { return band(cp_val(), 255) }
+fn cp_mx() {
+    m = cp_rr()
+    if cp_gg() > m { m = cp_gg() }
+    if cp_bb() > m { m = cp_bb() }
+    return m
+}
+fn cp_mn() {
+    m = cp_rr()
+    if cp_gg() < m { m = cp_gg() }
+    if cp_bb() < m { m = cp_bb() }
+    return m
+}
+# HSL, integer. Hue in degrees, saturation and lightness in percent; the
+# reference computes the same three in floating point and prints them whole
+# (`(hh*60|0)`), so truncating here matches what it shows.
+fn cp_hue() {
+    d = cp_mx() - cp_mn()
+    if d == 0 { return 0 }
+    if cp_mx() == cp_rr() { return (360 + (cp_gg() - cp_bb()) * 60 / d) % 360 }
+    if cp_mx() == cp_gg() { return (120 + (cp_bb() - cp_rr()) * 60 / d) % 360 }
+    return (240 + (cp_rr() - cp_gg()) * 60 / d) % 360
+}
+fn cp_lgt() { return (cp_mx() + cp_mn()) * 10 / 51 }
+fn cp_sat() {
+    d = cp_mx() - cp_mn()
+    if d == 0 { return 0 }
+    s = cp_mx() + cp_mn() - 255
+    if s < 0 { s = 0 - s }
+    return d * 100 / (255 - s)
+}
+# WCAG relative luminance in per-mille, the same weights ui_ink_on uses.
+fn cp_lum() { return (2126 * cp_rr() + 7152 * cp_gg() + 722 * cp_bb()) / 2550 }
+# Contrast against black, x10: (L + .05) / .05, so 1000 per-mille -> 210.
+fn cp_contrast_x10() { return (cp_lum() + 50) / 5 }
+fn cp_565() { return shl(shr(cp_rr(), 3), 11) + shl(shr(cp_gg(), 2), 5) + shr(cp_bb(), 3) }
+fn cp_rgb() { return rgb(cp_rr(), cp_gg(), cp_bb()) }
+
+fn cp_draw(ax, ay, aw, ah) {
+    u = ui()
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(1, 1)
+    au_inblock(ax, ay, aw, bh)
+    fy = au_field_y(ay, 0)
+    au_field(ax, aw, fy, "HEX", 1)
+    dw = cell_w()
+    char_aa(au_field_tx(ax), au_field_ty(fy), 35, theme(TH_TEXT))
+    ac_draw_base(au_field_tx(ax) + dw, au_field_ty(fy), cp_val(), 6, 16, theme(TH_TEXT))
+    au_btn_row(AU_BSET_COLOR, ax, au_btn_row_y(ay, 1), CP_PRESETS, cp_active(), AU_BTN_NEUTRAL)
+
+    y = au_body_y(ay, bh)
+    au_swatch(ax, aw, y, cp_rgb())
+    y = y + au_swatch_adv()
+    adv = au_row_adv()
+
+    au_row_base(ax, y, "hex", cp_val(), 6, 16, "#", theme(TH_TEXT))
+    y = y + adv
+    cp_row_rgb(ax, y)
+    y = y + adv
+    cp_row_hsl(ax, y)
+    y = y + adv
+    au_row_x10(ax, y, "luminance", cp_lum() / 10, " %", theme(TH_TEXT))
+    y = y + adv
+    cc = theme(TH_OK)
+    if cp_contrast_x10() < 45 { cc = theme(TH_DANGER) }
+    au_row_x10(ax, y, "on black", cp_contrast_x10(), ":1", cc)
+    y = y + adv
+    if au_fits(y, ay, ah) == 1 { au_row_base(ax, y, "rgb565", cp_565(), 4, 16, "0x", theme(TH_ACCENT)) }
+    return 0
+}
+
+# `r, g, b` - three numbers and two separators, laid out by measured width so
+# nothing overlaps at any scale.
+fn cp_row_rgb(ax, y) {
+    dw = cell_w()
+    au_key(ax, y, "rgb")
+    x = au_val_x(ax)
+    c = theme(TH_TEXT)
+    num_aa(x, y, cp_rr(), c)
+    x = x + au_digits(cp_rr()) * dw
+    ui_txt(x, y, ", ", theme(TH_TEXT_5), AU_MD, AU_MONO)
+    x = x + 2 * dw
+    num_aa(x, y, cp_gg(), c)
+    x = x + au_digits(cp_gg()) * dw
+    ui_txt(x, y, ", ", theme(TH_TEXT_5), AU_MD, AU_MONO)
+    x = x + 2 * dw
+    num_aa(x, y, cp_bb(), c)
+    return 0
+}
+fn cp_row_hsl(ax, y) {
+    dw = cell_w()
+    au_key(ax, y, "hsl")
+    x = au_val_x(ax)
+    c = theme(TH_TEXT)
+    num_aa(x, y, cp_hue(), c)
+    x = x + au_digits(cp_hue()) * dw
+    ui_txt(x, y, "deg ", theme(TH_TEXT_5), AU_MD, AU_MONO)
+    x = x + 4 * dw
+    num_aa(x, y, cp_sat(), c)
+    x = x + au_digits(cp_sat()) * dw
+    ui_txt(x, y, "% ", theme(TH_TEXT_5), AU_MD, AU_MONO)
+    x = x + 2 * dw
+    num_aa(x, y, cp_lgt(), c)
+    x = x + au_digits(cp_lgt()) * dw
+    ui_txt(x, y, "%", theme(TH_TEXT_5), AU_MD, AU_MONO)
+    return 0
+}
+
+fn cp_hexval(ch) {
+    if ch >= 48 { if ch <= 57 { return ch - 48 } }
+    if ch >= 97 { if ch <= 102 { return ch - 87 } }
+    if ch >= 65 { if ch <= 70 { return ch - 55 } }
+    return 0 - 1
+}
+
+fn cp_event(win, ety, ecode, ex, ey) {
+    if ety == 4 {
+        if band(ecode, 1) == 0 { return 0 }
+        cx = ex - wm_cx(win)
+        cy = ey - wm_cy(win)
+        i = au_btn_hit(AU_BSET_COLOR, 0, au_btn_row_y(0, 1), CP_PRESETS, cx, cy)
+        if i < 0 { return 0 }
+        cp_hex = cp_preset(i)
+        wm_dmg(win)
+        return 1
+    }
+    if ety != 3 { return 0 }
+    if ecode == 8 { cp_hex = cp_val() / 16  wm_dmg(win)  return 1 }
+    v = cp_hexval(ecode)
+    if v < 0 { return 0 }
+    cp_hex = band(cp_val() * 16 + v, 16777215)
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 16 - Regex Tester.  ds 1819-1828.  Two fields (PATTERN, SUBJECT) and match
+# rows - the reference's `matches` count then `[0]`, `[1]`, ... of the hits.
+#
+# A small, REAL regex engine: literal characters, `.` (any character), `*`
+# (zero-or-more of the PRECEDING atom), and `^`/`$` anchors. Not a full regex
+# library (no classes, no alternation) - a bounded, honest subset, which is
+# what fits without string values: both the pattern and the subject are typed
+# into fixed byte buffers and matched by peek8, one byte at a time.
+# ==============================================================================
+pt_plen = 0
+pt_tlen = 0
+pt_field = 0                        # 0 = editing the pattern, 1 = the subject
+pt_ms = 0 - 1                       # where the first match starts, or -1
+pt_me = 0 - 1                       # ...and where it ends
+PT_MAX = 48
+
+fn pt_reset() { pt_plen = 0  pt_tlen = 0  pt_field = 0  pt_ms = 0 - 1  pt_me = 0 - 1  return 0 }
+
+# Does pattern[pi..] match text[ti..] to the end of the pattern? Returns the
+# END index in the text on success, -1 on failure. Classic tiny-regex
+# recursion, extended to report where it stopped so the matched run can be
+# shown as a row rather than just "MATCH".
+#
+# NOTE the `*` loop tries ZERO repeats first, so this is LAZY, not greedy: it
+# reports the SHORTEST match at the earliest start. (The comment this replaces
+# claimed greedy; the code has always been lazy.)
+fn pt_end_here(pi, ti) {
+    if pi >= pt_plen { return ti }
+    pc = peek8(PT_PATTERN + pi)
+    if pi + 1 < pt_plen {
+        if peek8(PT_PATTERN + pi + 1) == 42 {
+            n = ti
+            while 1 == 1 {
+                e = pt_end_here(pi + 2, n)
+                if e >= 0 { return e }
+                if n >= pt_tlen { return 0 - 1 }
+                tc = peek8(PT_TEXT + n)
+                if pc != 46 { if pc != tc { return 0 - 1 } }
+                n = n + 1
+            }
+        }
+    }
+    if pc == 36 { if pi + 1 == pt_plen {
+            if ti == pt_tlen { return ti }
+            return 0 - 1
+    }}
+    if ti >= pt_tlen { return 0 - 1 }
+    tc = peek8(PT_TEXT + ti)
+    if pc != 46 { if pc != tc { return 0 - 1 } }
+    return pt_end_here(pi + 1, ti + 1)
+}
+
+# Find the first match and record it in pt_ms/pt_me. Returns 1 on a hit.
+fn pt_scan() {
+    pt_ms = 0 - 1
+    pt_me = 0 - 1
+    if pt_plen == 0 { return 0 }
+    p0 = 0
+    anchored = 0
+    if peek8(PT_PATTERN) == 94 { anchored = 1  p0 = 1 }
+    t0 = 0
+    while t0 <= pt_tlen {
+        e = pt_end_here(p0, t0)
+        if e >= 0 { pt_ms = t0  pt_me = e  return 1 }
+        if anchored == 1 { return 0 }
+        t0 = t0 + 1
+    }
+    return 0
+}
+
+fn pt_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(2, 0)
+    au_inblock(ax, ay, aw, bh)
+    y0 = au_field_y(ay, 0)
+    y1 = au_field_y(ay, 1)
+    au_field(ax, aw, y0, "PATTERN", 1 - pt_field)
+    au_field(ax, aw, y1, "SUBJECT", pt_field)
+    if pt_plen == 0 { au_field_ph(ax, y0, "a.*b", 1 - pt_field) }
+    if pt_tlen == 0 { au_field_ph(ax, y1, "abcb", pt_field) }
+    au_field_text(ax, aw, y0, PT_PATTERN, pt_plen, 1 - pt_field)
+    au_field_text(ax, aw, y1, PT_TEXT, pt_tlen, pt_field)
+
+    hit = pt_scan()
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    if hit == 1 {
+        au_rown(ax, y, "matches", 1, theme(TH_OK))
+        y = y + adv
+        au_rown(ax, y, "at", pt_ms, theme(TH_TEXT))
+        y = y + adv
+        au_keyi(ax, y, 0)
+        au_val_bytes(ax, aw, y, PT_TEXT, pt_ms, pt_me - pt_ms, theme(TH_ACCENT))
+        y = y + adv
+    } else {
+        au_rown(ax, y, "matches", 0, theme(TH_TEXT_6))
+        y = y + adv
+        au_row(ax, y, "at", "-", theme(TH_TEXT_6))
+        y = y + adv
+    }
+    au_rown_sfx(ax, y, "pattern", pt_plen, " B", theme(TH_TEXT))
+    y = y + adv
+    au_rown_sfx(ax, y, "subject", pt_tlen, " B", theme(TH_TEXT))
+    y = y + adv
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Tab switches field. The engine is literal, . any, * zero-or-more, ^ $ anchors.") }
+    y = y + au_note_adv()
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "It reports the shortest match at the earliest start.") }
+    return 0
+}
+
+fn pt_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 9 { pt_field = 1 - pt_field  wm_dmg(win)  return 1 }
+    if ecode == 8 {
+        if pt_field == 0 { if pt_plen > 0 { pt_plen = pt_plen - 1 } }
+        if pt_field == 1 { if pt_tlen > 0 { pt_tlen = pt_tlen - 1 } }
+        wm_dmg(win)
+        return 1
+    }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if pt_field == 0 { if pt_plen < PT_MAX { poke8(PT_PATTERN + pt_plen, ecode)  pt_plen = pt_plen + 1 } }
+    if pt_field == 1 { if pt_tlen < PT_MAX { poke8(PT_TEXT + pt_tlen, ecode)  pt_tlen = pt_tlen + 1 } }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 17 - Base Converter.  ds 1829-1841.  One DECIMAL field, then rows for
+# decimal / hex / octal / binary / bytes / bits set / char.
+#
+# The reference also gives this app four preset buttons. They are not drawn:
+# bc_event's arity in apps_registry.zl is (win, ety, ecode), so no pointer
+# event ever reaches this app and the buttons could not be clicked.
+# ==============================================================================
+bc_val = 0
+BC_MAX = 16777216                   # 24 bits, which is what the binary row shows
+
+fn bc_bits(v) {
+    n = 0
+    while v > 0 { n = n + v % 2  v = v / 2 }
+    return n
+}
+
+fn bc_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(1, 0)
+    au_inblock(ax, ay, aw, bh)
+    fy = au_field_y(ay, 0)
+    au_field(ax, aw, fy, "DECIMAL", 1)
+    dw = cell_w()
+    tx = au_field_tx(ax)
+    ty = au_field_ty(fy)
+    num_aa(tx, ty, bc_val, theme(TH_TEXT))
+    fill_rgb(tx + au_digits(bc_val) * dw, ty, 2 * ui(), cell_h(), theme(TH_ACCENT))
+
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    au_rown(ax, y, "decimal", bc_val, theme(TH_TEXT))
+    y = y + adv
+    au_row_base(ax, y, "hex", bc_val, 6, 16, "0x", theme(TH_ACCENT))
+    y = y + adv
+    au_row_base(ax, y, "octal", bc_val, 8, 8, "0o", theme(TH_TEXT))
+    y = y + adv
+    au_row_base(ax, y, "binary", bc_val, 24, 2, "0b", theme(TH_TEXT_DIM))
+    y = y + adv
+    bc_row_bytes(ax, y)
+    y = y + adv
+    au_rown(ax, y, "bits set", bc_bits(bc_val), theme(TH_TEXT))
+    y = y + adv
+    au_key(ax, y, "char")
+    if bc_val > 31 { if bc_val < 127 {
+            char_aa(au_val_x(ax), y, bc_val, theme(TH_ACCENT))
+    }}
+    if bc_val < 32 { au_val(ax, y, "-", theme(TH_TEXT_6)) }
+    if bc_val > 126 { au_val(ax, y, "-", theme(TH_TEXT_6)) }
+    y = y + adv
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Type digits, backspace drops one. 24 bits, which is what the binary row shows.") }
+    return 0
+}
+
+# The reference's `human()` row. Whole units only - this kernel's zl truncates
+# on purpose, so a fraction would be a lie dressed as precision.
+fn bc_row_bytes(ax, y) {
+    if bc_val >= 1048576 { au_rown_sfx(ax, y, "bytes", bc_val / 1048576, " MiB", theme(TH_TEXT))  return 0 }
+    if bc_val >= 1024 { au_rown_sfx(ax, y, "bytes", bc_val / 1024, " KiB", theme(TH_TEXT))  return 0 }
+    au_rown_sfx(ax, y, "bytes", bc_val, " B", theme(TH_TEXT))
+    return 0
+}
+
+fn bc_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 8 { bc_val = bc_val / 10  wm_dmg(win)  return 1 }
+    if ecode < 48 { return 0 }
+    if ecode > 57 { return 0 }
+    nv = bc_val * 10 + (ecode - 48)
+    if nv < BC_MAX { bc_val = nv }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 18 - Text Diff.  ds 1842-1858.  Two fields (A, B) and diff rows - the
+# reference's `summary` row, then `- n` for a line only in A and `+ n` for a
+# line only in B, coloured BAD and OK.
+#
+# Bounded to a line each on purpose, the same reason the Regex Tester is
+# bounded to . * ^ $: real rules, honestly scoped, rather than a stub. The
+# reference's Save/Clear-style button row is not drawn - ld_event is keyboard
+# only, see the header.
+# ==============================================================================
+ld_alen = 0
+ld_blen = 0
+ld_field = 0
+LD_MAX = 48
+
+# The first column at which A and B differ, or -1 when they are identical.
+fn ld_firstdiff() {
+    short = ld_alen
+    if ld_blen < short { short = ld_blen }
+    di = 0
+    while di < short {
+        if peek8(DIFF_A + di) != peek8(DIFF_B + di) { return di }
+        di = di + 1
+    }
+    if ld_alen != ld_blen { return short }
+    return 0 - 1
+}
+
+fn ld_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(2, 0)
+    au_inblock(ax, ay, aw, bh)
+    y0 = au_field_y(ay, 0)
+    y1 = au_field_y(ay, 1)
+    au_field(ax, aw, y0, "A", 1 - ld_field)
+    au_field(ax, aw, y1, "B", ld_field)
+    au_field_text(ax, aw, y0, DIFF_A, ld_alen, 1 - ld_field)
+    au_field_text(ax, aw, y1, DIFF_B, ld_blen, ld_field)
+
+    fd = ld_firstdiff()
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    if fd < 0 {
+        au_row(ax, y, "summary", "1 unchanged, 0 differing", theme(TH_OK))
+        y = y + adv
+        au_row(ax, y, "  1", "", theme(TH_TEXT_6))
+        au_val_bytes(ax, aw, y, DIFF_A, 0, ld_alen, theme(TH_TEXT_6))
+        y = y + adv
+        au_row(ax, y, "first diff", "-", theme(TH_TEXT_6))
+    } else {
+        au_row(ax, y, "summary", "0 unchanged, 1 differing", theme(TH_WARN))
+        y = y + adv
+        au_row(ax, y, "- 1", "", theme(TH_DANGER))
+        au_val_bytes(ax, aw, y, DIFF_A, 0, ld_alen, theme(TH_DANGER))
+        y = y + adv
+        au_row(ax, y, "+ 1", "", theme(TH_OK))
+        au_val_bytes(ax, aw, y, DIFF_B, 0, ld_blen, theme(TH_OK))
+        y = y + adv
+        au_rown(ax, y, "first diff", fd, theme(TH_WARN))
+    }
+    y = y + adv
+    ld_row_len(ax, y)
+    y = y + adv
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Tab switches line. Column numbers are 0-based, the way the buffers are.") }
+    return 0
+}
+
+fn ld_row_len(ax, y) {
+    dw = cell_w()
+    au_key(ax, y, "length")
+    x = au_val_x(ax)
+    c = theme(TH_TEXT)
+    num_aa(x, y, ld_alen, c)
+    x = x + au_digits(ld_alen) * dw
+    ui_txt(x, y, " vs ", theme(TH_TEXT_5), AU_MD, AU_MONO)
+    num_aa(x + 4 * dw, y, ld_blen, c)
+    return 0
+}
+
+fn ld_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 9 { ld_field = 1 - ld_field  wm_dmg(win)  return 1 }
+    if ecode == 8 {
+        if ld_field == 0 { if ld_alen > 0 { ld_alen = ld_alen - 1 } }
+        if ld_field == 1 { if ld_blen > 0 { ld_blen = ld_blen - 1 } }
+        wm_dmg(win)
+        return 1
+    }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if ld_field == 0 { if ld_alen < LD_MAX { poke8(DIFF_A + ld_alen, ecode)  ld_alen = ld_alen + 1 } }
+    if ld_field == 1 { if ld_blen < LD_MAX { poke8(DIFF_B + ld_blen, ecode)  ld_blen = ld_blen + 1 } }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 19 - Checksum.  ds 1859-1881.  One INPUT field, then one row per algorithm.
+#
+# FOUR REAL, INDEPENDENTLY SPECIFIED CHECKSUMS, each computed from the
+# specification rather than a library - which is the reference's own claim for
+# this app, kept honest. None is cryptographic and none is sold as such: this
+# kernel has no crypto.c at all, and browser.c's HTTPS refusal says so.
+#
+# WHY THESE FOUR AND NOT THE REFERENCE'S. The reference computes FNV-1a and
+# djb2, which are 32-bit MULTIPLY hashes. zl numbers are doubles and integers
+# are exact only below 2^53, so `fnv * 0x01000193` (up to 2^56) silently loses
+# its low bits before any mask can be applied - the digest would be wrong and
+# would still look like a digest. Adler-32 (mod 65521), CRC-32 and CRC-16 use
+# only add, xor and shift on values under 2^32, all exact here. Substituting
+# two exact algorithms beats printing two inexact ones.
+# ==============================================================================
+ck_len = 0
+CK_MAX = 64
+CK_CRC32_POLY = 3988292384          # 0xEDB88320, reflected
+CK_CRC32_INIT = 4294967295          # 0xFFFFFFFF
+CK_CRC16_POLY = 4129                # 0x1021, CRC-16/CCITT-FALSE
+CK_ADLER_MOD  = 65521
+
+fn ck_fletcher() {
+    s1 = 0
+    s2 = 0
+    ci = 0
+    while ci < ck_len {
+        s1 = (s1 + peek8(HASH_BUF + ci)) % 255
+        s2 = (s2 + s1) % 255
+        ci = ci + 1
+    }
+    return s2 * 256 + s1
+}
+fn ck_adler() {
+    a = 1
+    b = 0
+    ci = 0
+    while ci < ck_len {
+        a = (a + peek8(HASH_BUF + ci)) % CK_ADLER_MOD
+        b = (b + a) % CK_ADLER_MOD
+        ci = ci + 1
+    }
+    return b * 65536 + a
+}
+fn ck_crc32() {
+    crc = CK_CRC32_INIT
+    ci = 0
+    while ci < ck_len {
+        crc = bxor(crc, peek8(HASH_BUF + ci))
+        k = 0
+        while k < 8 {
+            if band(crc, 1) == 1 { crc = bxor(shr(crc, 1), CK_CRC32_POLY) } else { crc = shr(crc, 1) }
+            k = k + 1
+        }
+        ci = ci + 1
+    }
+    return bxor(crc, CK_CRC32_INIT)
+}
+fn ck_crc16() {
+    crc = 65535
+    ci = 0
+    while ci < ck_len {
+        crc = bxor(crc, shl(peek8(HASH_BUF + ci), 8))
+        k = 0
+        while k < 8 {
+            if band(crc, 32768) == 32768 { crc = band(bxor(shl(crc, 1), CK_CRC16_POLY), 65535) } else { crc = band(shl(crc, 1), 65535) }
+            k = k + 1
+        }
+        ci = ci + 1
+    }
+    return crc
+}
+
+fn ck_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(1, 0)
+    au_inblock(ax, ay, aw, bh)
+    fy = au_field_y(ay, 0)
+    au_field(ax, aw, fy, "INPUT", 1)
+    if ck_len == 0 { au_field_ph(ax, fy, "type bytes to digest", 1) }
+    au_field_text(ax, aw, fy, HASH_BUF, ck_len, 1)
+
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    au_rown_sfx(ax, y, "length", ck_len, " B", theme(TH_TEXT))
+    y = y + adv
+    au_row_base(ax, y, "fletcher-16", ck_fletcher(), 4, 16, "0x", theme(TH_ACCENT))
+    y = y + adv
+    au_row_base(ax, y, "adler-32", ck_adler(), 8, 16, "0x", theme(TH_ACCENT))
+    y = y + adv
+    au_row_base(ax, y, "crc-32", ck_crc32(), 8, 16, "0x", theme(TH_ACCENT))
+    y = y + adv
+    au_row_base(ax, y, "crc-16/ccitt", ck_crc16(), 4, 16, "0x", theme(TH_ACCENT))
+    y = y + adv
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Each digest is computed from its specification, not from a library.") }
+    y = y + au_note_adv()
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "None of them is cryptographic - this kernel has no crypto at all.") }
+    return 0
+}
+
+fn ck_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 8 { if ck_len > 0 { ck_len = ck_len - 1 }  wm_dmg(win)  return 1 }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if ck_len < CK_MAX { poke8(HASH_BUF + ck_len, ecode)  ck_len = ck_len + 1 }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 20 - Unit Converter.  ds 1882-1897.  A VALUE field, a row of unit buttons
+# that pick what the value is measured IN, then the conversions as rows -
+# exactly the reference's shape (its buttons pick B/KiB/MiB/GiB and its rows
+# are the same quantity in every other unit).
+#
+# Integer arithmetic throughout: this kernel's zl_binop truncates on purpose
+# ("numbers here are whole", freestanding/runtime_kernel.c), so results are
+# truncated, not rounded, and drawn as whole numbers honestly.
+# ==============================================================================
+uc_cat = 0                          # 0 length, 1 mass, 2 temperature
+uc_val = 0
+UC_CATS = 3
+UC_MAX = 1000000
+
+fn uc_cat_name(c) {
+    if c == 0 { return "length" }
+    if c == 1 { return "mass" }
+    return "temp"
+}
+fn uc_field_label() {
+    if uc_cat == 0 { return "KM" }
+    if uc_cat == 1 { return "KG" }
+    return "CELSIUS"
+}
+fn uc_key(i) {
+    if uc_cat == 0 {
+        if i == 0 { return "metres" }
+        if i == 1 { return "miles" }
+        if i == 2 { return "feet" }
+        return "nautical mi"
+    }
+    if uc_cat == 1 {
+        if i == 0 { return "grams" }
+        if i == 1 { return "pounds" }
+        if i == 2 { return "ounces" }
+        return "stone"
+    }
+    if i == 0 { return "fahrenheit" }
+    if i == 1 { return "kelvin" }
+    if i == 2 { return "rankine" }
+    return "reaumur"
+}
+fn uc_conv(i) {
+    if uc_cat == 0 {
+        if i == 0 { return uc_val * 1000 }
+        if i == 1 { return uc_val * 1000 / 1609 }
+        if i == 2 { return uc_val * 3281 }
+        return uc_val * 540 / 1000
+    }
+    if uc_cat == 1 {
+        if i == 0 { return uc_val * 1000 }
+        if i == 1 { return uc_val * 2205 / 1000 }
+        if i == 2 { return uc_val * 3527 / 100 }
+        return uc_val * 1575 / 10000
+    }
+    if i == 0 { return uc_val * 9 / 5 + 32 }
+    if i == 1 { return uc_val + 273 }
+    if i == 2 { return (uc_val + 273) * 9 / 5 }
+    return uc_val * 4 / 5
+}
+UC_ROWS = 4
+
+fn uc_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(1, 1)
+    au_inblock(ax, ay, aw, bh)
+    fy = au_field_y(ay, 0)
+    au_field(ax, aw, fy, uc_field_label(), 1)
+    num_aa(au_field_tx(ax), au_field_ty(fy), uc_val, theme(TH_TEXT))
+    cx = au_field_tx(ax) + au_digits(uc_val) * cell_w()
+    fill_rgb(cx, au_field_ty(fy), 2 * ui(), cell_h(), theme(TH_ACCENT))
+    au_btn_row(AU_BSET_UNIT, ax, au_btn_row_y(ay, 1), UC_CATS, uc_cat, AU_BTN_NEUTRAL)
+
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    i = 0
+    while i < UC_ROWS {
+        if au_fits(y, ay, ah) == 0 { i = UC_ROWS } else {
+            c = theme(TH_TEXT)
+            if i == 0 { c = theme(TH_ACCENT) }
+            au_rown(ax, y, uc_key(i), uc_conv(i), c)
+            y = y + adv
+            i = i + 1
+        }
+    }
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Whole numbers only - this kernel's arithmetic truncates, and a fraction here") }
+    y = y + au_note_adv()
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "would be precision it does not have.") }
+    return 0
+}
+
+fn uc_event(win, ety, ecode, ex, ey) {
+    if ety == 4 {
+        if band(ecode, 1) == 0 { return 0 }
+        cx = ex - wm_cx(win)
+        cy = ey - wm_cy(win)
+        i = au_btn_hit(AU_BSET_UNIT, 0, au_btn_row_y(0, 1), UC_CATS, cx, cy)
+        if i < 0 { return 0 }
+        uc_cat = i
+        wm_dmg(win)
+        return 1
+    }
+    if ety != 3 { return 0 }
+    # This handler used to change uc_val and return 1 WITHOUT wm_dmg, so typing
+    # never repainted. Same class as the nine handlers audited earlier.
+    if ecode == 8 { uc_val = uc_val / 10  wm_dmg(win)  return 1 }
+    if ecode < 48 { return 0 }
+    if ecode > 57 { return 0 }
+    nv = uc_val * 10 + (ecode - 48)
+    if nv < UC_MAX { uc_val = nv }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 21 - Sticky Notes.  ds 1898-1911.  A NOTE field carrying the line being
+# typed, then rows: characters / words / lines, then the note's lines as
+# `[0]`, `[1]`, ...
+#
+# The note lives in its own buffer (2 pages: NOTES_BUF). The reference's
+# Save/Clear button row is not drawn - nt_event is keyboard only, see the
+# header - so Enter starts a new line and that is the whole interaction.
+# ==============================================================================
+nt_len = 0
+NOTES_MAX = 800                     # comfortably inside the 2 reserved pages
+NT_ROWS = 5
+
+# Where the line being typed starts: just past the last newline.
+fn nt_line_start() {
+    i = nt_len
+    while i > 0 {
+        if peek8(NOTES_BUF + i - 1) == 10 { return i }
+        i = i - 1
+    }
+    return 0
+}
+fn nt_lines() {
+    n = 1
+    i = 0
+    while i < nt_len {
+        if peek8(NOTES_BUF + i) == 10 { n = n + 1 }
+        i = i + 1
+    }
+    return n
+}
+fn nt_words() {
+    n = 0
+    inw = 0
+    i = 0
+    while i < nt_len {
+        c = peek8(NOTES_BUF + i)
+        if c == 32 { inw = 0 } else {
+            if c == 10 { inw = 0 } else {
+                if inw == 0 { n = n + 1  inw = 1 }
+            }
+        }
+        i = i + 1
+    }
+    return n
+}
+# Where line `k` starts, or -1 when there is no such line.
+fn nt_line_at(k) {
+    if k == 0 { return 0 }
+    seen = 0
+    i = 0
+    while i < nt_len {
+        if peek8(NOTES_BUF + i) == 10 {
+            seen = seen + 1
+            if seen == k { return i + 1 }
+        }
+        i = i + 1
+    }
+    return 0 - 1
+}
+fn nt_line_len(from) {
+    n = 0
+    while from + n < nt_len {
+        if peek8(NOTES_BUF + from + n) == 10 { return n }
+        n = n + 1
+    }
+    return n
+}
+
+fn nt_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(1, 0)
+    au_inblock(ax, ay, aw, bh)
+    fy = au_field_y(ay, 0)
+    au_field(ax, aw, fy, "NOTE", 1)
+    if nt_len == 0 { au_field_ph(ax, fy, "type - Enter starts a line", 1) }
+    ls = nt_line_start()
+    au_field_text(ax, aw, fy, NOTES_BUF + ls, nt_len - ls, 1)
+
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    au_rown(ax, y, "characters", nt_len, theme(TH_TEXT))
+    y = y + adv
+    au_rown(ax, y, "words", nt_words(), theme(TH_TEXT))
+    y = y + adv
+    au_rown(ax, y, "lines", nt_lines(), theme(TH_TEXT))
+    y = y + adv
+    cc = theme(TH_TEXT)
+    if nt_len > NOTES_MAX - 64 { cc = theme(TH_WARN) }
+    au_rown_sfx(ax, y, "capacity", NOTES_MAX - nt_len, " B left", cc)
+    y = y + adv
+
+    k = 0
+    while k < NT_ROWS {
+        from = nt_line_at(k)
+        if from < 0 { k = NT_ROWS } else {
+            if au_fits(y, ay, ah) == 0 { k = NT_ROWS } else {
+                au_keyi(ax, y, k)
+                au_val_bytes(ax, aw, y, NOTES_BUF, from, nt_line_len(from), theme(TH_TEXT))
+                y = y + adv
+                k = k + 1
+            }
+        }
+    }
+    return 0
+}
+
+fn nt_event(win, ety, ecode) {
+    if ety != 3 { return 0 }
+    if ecode == 8 { if nt_len > 0 { nt_len = nt_len - 1 }  wm_dmg(win)  return 1 }
+    if ecode == 13 {
+        if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, 10)  nt_len = nt_len + 1 }
+        wm_dmg(win)
+        return 1
+    }
+    if ecode < 32 { return 0 }
+    if ecode > 126 { return 0 }
+    if nt_len < NOTES_MAX { poke8(NOTES_BUF + nt_len, ecode)  nt_len = nt_len + 1 }
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 22 - Keyboard Tester.  ds 1912-1917.  No input block at all (the reference
+# sets utilInput:false), a live `last key` row, then the last ten events as
+# `[0]` .. `[9]`, then the note.
+#
+# The log is ten scalars rather than a ring in memory: every reserved buffer in
+# kernel.zl is spoken for, adding one means editing kernel.zl, and another
+# agent owns that file this session.
+# ==============================================================================
+KT_LOG = 10
+kt_l0 = 0 - 1
+kt_l1 = 0 - 1
+kt_l2 = 0 - 1
+kt_l3 = 0 - 1
+kt_l4 = 0 - 1
+kt_l5 = 0 - 1
+kt_l6 = 0 - 1
+kt_l7 = 0 - 1
+kt_l8 = 0 - 1
+kt_l9 = 0 - 1
+
+fn kt_push(v) {
+    kt_l9 = kt_l8
+    kt_l8 = kt_l7
+    kt_l7 = kt_l6
+    kt_l6 = kt_l5
+    kt_l5 = kt_l4
+    kt_l4 = kt_l3
+    kt_l3 = kt_l2
+    kt_l2 = kt_l1
+    kt_l1 = kt_l0
+    kt_l0 = v
+    return 0
+}
+fn kt_at(i) {
+    if i == 0 { return kt_l0 }
+    if i == 1 { return kt_l1 }
+    if i == 2 { return kt_l2 }
+    if i == 3 { return kt_l3 }
+    if i == 4 { return kt_l4 }
+    if i == 5 { return kt_l5 }
+    if i == 6 { return kt_l6 }
+    if i == 7 { return kt_l7 }
+    if i == 8 { return kt_l8 }
+    return kt_l9
+}
+fn kt_ety_name(e) {
+    if e == 1 { return "key down" }
+    if e == 2 { return "key up" }
+    if e == 3 { return "char" }
+    if e == 5 { return "wheel" }
+    return "-"
+}
+
+# One logged event as a value: the type word, the code, and the character when
+# the code names one.
+fn kt_val(ax, y, v, c) {
+    dw = cell_w()
+    x = au_val_x(ax)
+    ety = v / 65536
+    code = v % 65536
+    s = kt_ety_name(ety)
+    ui_txt(x, y, s, c, AU_MD, AU_MONO)
+    x = x + ui_tw(s, AU_MD, AU_MONO) + dw
+    num_aa(x, y, code, theme(TH_TEXT_5))
+    x = x + au_digits(code) * dw + dw
+    if ety == 3 { if code >= 32 { if code < 127 {
+                char_aa(x, y, 39, theme(TH_TEXT_5))
+                char_aa(x + dw, y, code, theme(TH_ACCENT))
+                char_aa(x + 2 * dw, y, 39, theme(TH_TEXT_5))
+    }}}
+    return 0
+}
+
+fn kt_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    y = au_body_y(ay, 0)
+    adv = au_row_adv()
+    au_key(ax, y, "last key")
+    if kt_l0 < 0 {
+        au_val(ax, y, "press any key", theme(TH_TEXT_6))
+    } else {
+        kt_val(ax, y, kt_l0, theme(TH_ACCENT))
+    }
+    y = y + adv
+    i = 0
+    while i < KT_LOG {
+        v = kt_at(i)
+        if v < 0 { i = KT_LOG } else {
+            if au_fits(y, ay, ah) == 0 { i = KT_LOG } else {
+                au_keyi(ax, y, i)
+                kt_val(ax, y, v, theme(TH_TEXT_DIM))
+                y = y + adv
+                i = i + 1
+            }
+        }
+    }
+    # ONE line, not two. A full log is 11 rows and the body has room for
+    # exactly one note under it - the second line measured 2px past the client
+    # rect at ui() 1, and au_fits would have dropped half a sentence.
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "Shift is already resolved: input.c's to_char runs before the WM.") }
+    return 0
+}
+
+fn kt_event(win, ety, ecode) {
+    if ety == 4 { return 0 }            # mouse motion would repaint every pixel
+    kt_push(ety * 65536 + ecode)
+    wm_dmg(win)
+    return 1
+}
+
+# ==============================================================================
+# 23 - Benchmark.  ds 1928-1941.  The reference's shape exactly: an input block
+# holding NO fields and one primary button, then result rows, then the note.
+#
+# A real timed workload - recursive fib, the same function the text shell's `f`
+# command already runs, reused rather than reinvented - reporting elapsed 100Hz
+# ticks. n grows each run so the number means something newer hardware would
+# show smaller.
+# ==============================================================================
+bm_n = 24
+bm_ticks = 0 - 1
+bm_result = 0
+bm_calls = 0
+
+# fib(n) makes exactly 2*fib(n+1)-1 calls. Derived, not counted - and fib(n+1)
+# is recomputed ITERATIVELY here, never by calling the recursive fib again:
+# that would cost more than the workload it is reporting on and would land
+# inside the same click the frame loop is already waiting for.
+fn bm_fib_iter(n) {
+    a = 0
+    b = 1
+    i = 0
+    while i < n { t = a + b  a = b  b = t  i = i + 1 }
+    return a
+}
+fn bm_callcount(n) { return 2 * bm_fib_iter(n + 1) - 1 }
+
+fn bm_draw(ax, ay, aw, ah) {
+    au_shell(ax, ay, aw, ah)
+    bh = au_inblock_h(0, 1)
+    au_inblock(ax, ay, aw, bh)
+    au_btn_row(AU_BSET_BENCH, ax, au_btn_row_y(ay, 0), 1, 0, AU_BTN_NEUTRAL)
+
+    y = au_body_y(ay, bh)
+    adv = au_row_adv()
+    if bm_ticks < 0 {
+        au_row(ax, y, "status", "not run", theme(TH_TEXT_6))
+        y = y + adv
+        au_rown(ax, y, "next n", bm_n, theme(TH_TEXT))
+        y = y + adv
+    } else {
+        au_row(ax, y, "workload", "recursive fib", theme(TH_TEXT))
+        y = y + adv
+        au_rown(ax, y, "n", bm_n - 1, theme(TH_TEXT))
+        y = y + adv
+        au_rown(ax, y, "result", bm_result, theme(TH_TEXT))
+        y = y + adv
+        au_rown_sfx(ax, y, "elapsed", bm_ticks, " ticks (100 Hz)", theme(TH_ACCENT))
+        y = y + adv
+        au_rown(ax, y, "calls", bm_calls, theme(TH_TEXT))
+        y = y + adv
+        if bm_ticks > 0 {
+            au_rown(ax, y, "calls/tick", bm_calls / bm_ticks, theme(TH_ACCENT_BR))
+        } else {
+            au_row(ax, y, "calls/tick", "under one tick", theme(TH_TEXT_6))
+        }
+        y = y + adv
+    }
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "One real workload, timed on the 100 Hz tick. n grows each run and wraps at 27:") }
+    y = y + au_note_adv()
+    if au_fits(y, ay, ah) == 1 { au_note(ax, y, "fib is recursive and runs inside the click, which the frame loop waits on.") }
+    return 0
+}
+
+fn bm_event(win, ety, ecode, ex, ey) {
+    if ety != 4 { return 0 }
+    if band(ecode, 1) == 0 { return 0 }
+    cx = ex - wm_cx(win)
+    cy = ey - wm_cy(win)
+    if au_btn_hit(AU_BSET_BENCH, 0, au_btn_row_y(0, 0), 1, cx, cy) < 0 { return 0 }
+    t0 = ticks()
+    bm_result = fib(bm_n)
+    bm_ticks = ticks() - t0
+    bm_calls = bm_callcount(bm_n)
+    bm_n = bm_n + 1
+    # Capped well below what the shell's own `f` command already allows
+    # unbounded (kernel.zl run_command cmd 102) - fib is recursive and this
+    # runs synchronously inside an event handler, which the frame loop waits
+    # on, so growing this without a ceiling would eventually stall the whole
+    # desktop for one click. 27 keeps every run comfortably sub-second.
+    if bm_n > 27 { bm_n = 20 }
+    wm_dmg(win)
+    return 1
+}

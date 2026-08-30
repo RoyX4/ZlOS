@@ -25,7 +25,7 @@ first match wins, and a `zl.mod` only when you need to override.
 
 ## 2. Records / structs (item 4)
 
-`.` is ALREADY parsed (parser.c builds N_MEMBER), so this is close.
+`.` is ALREADY parsed (src/frontend/parser.c builds N_MEMBER), so this is close.
 
     rec Point { x: int, y: int }
     p = Point { x: 10, y: 20 }

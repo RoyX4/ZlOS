@@ -6,77 +6,77 @@
 
 # Strip leading zeros but keep at least one digit.
 fn big_norm(s) {
-  bn_i = 0
-  while bn_i < len(s) - 1 and at(s, bn_i) == "0" {
-    bn_i = bn_i + 1
-  }
-  return slice(s, bn_i, len(s))
+    bn_i = 0
+    while bn_i < len(s) - 1 and at(s, bn_i) == "0" {
+        bn_i = bn_i + 1
+    }
+    return slice(s, bn_i, len(s))
 }
 
 # Add two digit strings.
 fn big_add(a, b) {
-  ba_i = len(a) - 1
-  ba_j = len(b) - 1
-  ba_carry = 0
-  ba_res = ""
-  while ba_i >= 0 or ba_j >= 0 or ba_carry > 0 {
-    ba_da = 0
-    if ba_i >= 0 { ba_da = num(at(a, ba_i)) }
-    ba_db = 0
-    if ba_j >= 0 { ba_db = num(at(b, ba_j)) }
-    ba_sum = ba_da + ba_db + ba_carry
-    ba_dig = ba_sum % 10
-    ba_carry = int(ba_sum / 10)
-    ba_res = ("" + ba_dig) + ba_res
-    ba_i = ba_i - 1
-    ba_j = ba_j - 1
-  }
-  if ba_res == "" { ba_res = "0" }
-  return big_norm(ba_res)
+    ba_i = len(a) - 1
+    ba_j = len(b) - 1
+    ba_carry = 0
+    ba_res = ""
+    while ba_i >= 0 or ba_j >= 0 or ba_carry > 0 {
+        ba_da = 0
+        if ba_i >= 0 { ba_da = num(at(a, ba_i)) }
+        ba_db = 0
+        if ba_j >= 0 { ba_db = num(at(b, ba_j)) }
+        ba_sum = ba_da + ba_db + ba_carry
+        ba_dig = ba_sum % 10
+        ba_carry = int(ba_sum / 10)
+        ba_res = ("" + ba_dig) + ba_res
+        ba_i = ba_i - 1
+        ba_j = ba_j - 1
+    }
+    if ba_res == "" { ba_res = "0" }
+    return big_norm(ba_res)
 }
 
 # Multiply a digit string by a single digit d (0..9). Returns a digit string.
 fn big_smul(a, d) {
-  bs_i = len(a) - 1
-  bs_carry = 0
-  bs_res = ""
-  while bs_i >= 0 or bs_carry > 0 {
-    bs_da = 0
-    if bs_i >= 0 { bs_da = num(at(a, bs_i)) }
-    bs_prod = bs_da * d + bs_carry
-    bs_dig = bs_prod % 10
-    bs_carry = int(bs_prod / 10)
-    bs_res = ("" + bs_dig) + bs_res
-    bs_i = bs_i - 1
-  }
-  if bs_res == "" { bs_res = "0" }
-  return bs_res
+    bs_i = len(a) - 1
+    bs_carry = 0
+    bs_res = ""
+    while bs_i >= 0 or bs_carry > 0 {
+        bs_da = 0
+        if bs_i >= 0 { bs_da = num(at(a, bs_i)) }
+        bs_prod = bs_da * d + bs_carry
+        bs_dig = bs_prod % 10
+        bs_carry = int(bs_prod / 10)
+        bs_res = ("" + bs_dig) + bs_res
+        bs_i = bs_i - 1
+    }
+    if bs_res == "" { bs_res = "0" }
+    return bs_res
 }
 
 # Multiply two digit strings using shift-and-add.
 fn big_mul(a, b) {
-  bm_acc = "0"
-  bm_j = len(b) - 1
-  bm_shift = ""
-  while bm_j >= 0 {
-    bm_d = num(at(b, bm_j))
-    bm_part = big_smul(a, bm_d) + bm_shift
-    bm_acc = big_add(bm_acc, bm_part)
-    bm_shift = bm_shift + "0"
-    bm_j = bm_j - 1
-  }
-  return big_norm(bm_acc)
+    bm_acc = "0"
+    bm_j = len(b) - 1
+    bm_shift = ""
+    while bm_j >= 0 {
+        bm_d = num(at(b, bm_j))
+        bm_part = big_smul(a, bm_d) + bm_shift
+        bm_acc = big_add(bm_acc, bm_part)
+        bm_shift = bm_shift + "0"
+        bm_j = bm_j - 1
+    }
+    return big_norm(bm_acc)
 }
 
 # Factorial of n via repeated big_mul.
 fn big_fact(n) {
-  bf_res = "1"
-  bf_k = 2
-  while bf_k <= n {
-    bf_res = big_mul(bf_res, "" + bf_k)
-    bf_k = bf_k + 1
-  }
-  return bf_res
+    bf_res = "1"
+    bf_k = 2
+    while bf_k <= n {
+        bf_res = big_mul(bf_res, "" + bf_k)
+        bf_k = bf_k + 1
+    }
+    return bf_res
 }
 
 # ---------------- self-test ----------------

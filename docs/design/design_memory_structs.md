@@ -16,7 +16,7 @@ The dilemma this feature is usually killed by:
 > A struct that is **boxed** cannot be handed to C — its bytes are `Value`
 > structs with a `double num` and three pointers, not the layout `WNDCLASSA`
 > needs. A struct that is **unboxed** does not fit in a `Value` — there is no
-> field in `interp.c:34`'s `Value` that can hold 72 arbitrary bytes.
+> field in `src/runtime/interp.c:34`'s `Value` that can hold 72 arbitrary bytes.
 
 The way out is to refuse the dilemma:
 
@@ -24,7 +24,7 @@ The way out is to refuse the dilemma:
 > compile-time name for an offset table.**
 
 `p.x` compiles to a sized load at `p + 0`. `p` itself is an ordinary zl number
-holding a base address. Nothing enters the `Value` union, `runtime.h` is
+holding a base address. Nothing enters the `Value` union, `src/runtime/runtime.h` is
 untouched, the native tag scheme is untouched, and the interpreter's `double num`
 holds the address **exactly** — Win64 user-mode virtual addresses are 47 bits and
 2^47 < 2^53 with six bits to spare (§2.2). The `double num` weakness is thereby
@@ -54,7 +54,7 @@ decision here after §2.
 Costs paid honestly and up front: reference semantics only (no by-value struct
 arguments, no struct returns — already non-goals in `design_ffi_syscalls.md` §8);
 `free` is a no-op in v1 and reclamation is by region reset; nothing is
-bounds-checked by default; `nativegen.c` has no data section and no heap at all
+bounds-checked by default; `src/backends/native/nativegen.c` has no data section and no heap at all
 today, so it grows both.
 
 ---
@@ -63,7 +63,7 @@ today, so it grows both.
 
 ### 1.1 What W5 actually asks for
 
-`OVERNIGHT_CAMPAIGN.md` W5, lines 83–84:
+`docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` W5, lines 83–84:
 
 > - raw memory: `alloc(n)`, `free(p)`, `peek(p)`, `poke(p,v)`, `peek8/poke8`, pointer arithmetic
 > - structs / records with a fixed memory layout, and fixed-size typed arrays
@@ -81,9 +81,9 @@ Three facts that make this a smaller change than it sounds:
 - **`MASTER_PLAN.md` §4.3 already locked `.` as "reaching into a thing"**, with
   `f.age` as the given example. The rule list is not being extended; it is being
   *implemented*.
-- **`parser.c` already parses it.** Line 350 builds an `N_MEMBER` node for
+- **`src/frontend/parser.c` already parses it.** Line 350 builds an `N_MEMBER` node for
   `expr . IDENT` today. The AST shape exists.
-- **`interp.c:1396` is the entire current implementation:**
+- **`src/runtime/interp.c:1396` is the entire current implementation:**
 
   ```c
   case N_MEMBER:
@@ -91,8 +91,8 @@ Three facts that make this a smaller change than it sounds:
   ```
 
   `.` is a parsed, reserved, unimplemented piece of syntax with no competing
-  claimant. `compile.c` does not handle `N_MEMBER` at all (it falls into its
-  `default:` at line 282 and exits); `compilef.c`/`compilel.c` print "not
+  claimant. `src/backends/c/compile.c` does not handle `N_MEMBER` at all (it falls into its
+  `default:` at line 282 and exits); `src/backends/c/compilef.c`/`src/backends/llvm/compilel.c` print "not
   supported yet (type %d)". Nothing has to be taken away from anyone.
 
 `design_type_system.md` deferred this deliberately — its non-goals list says
@@ -154,7 +154,7 @@ region of memory that is not made of `Value`s at all.
 |---|---|---|---|
 | Representation | new `V_STRUCT`; fields are `Value`s in `items[]` | new `V_STRUCT`; `Value` gains `void *raw` + a layout id | no new representation at all; the value is a `V_NUM` holding a base address |
 | Can C read it? | **no** — the bytes are 32-byte `Value`s | yes, via the payload pointer | yes — the bytes *are* the C layout |
-| `Value` / `runtime.h` change | one new enum member | **new field in `Value`, in `interp.c` *and* `runtime.h`** | **none** |
+| `Value` / `src/runtime/runtime.h` change | one new enum member | **new field in `Value`, in `src/runtime/interp.c` *and* `src/runtime/runtime.h`** | **none** |
 | Native tag scheme | new heap-object tag (2 and 4+ are free) | new heap-object tag | none — an address is already a tagged int |
 | Lifetime / `type()` / printing | natural | natural | **absent** — `type(p)` says `num`, `print(p)` prints a number |
 | Duplicates `design_maps.md`? | yes, almost exactly | partly | no |
@@ -171,7 +171,7 @@ carrying `{layout_id, size, raw}` buys `type(p) == "Point"`, a printable struct,
 a size for bounds checks, and a place to hang a destructor later. Its cost is
 concrete and it is the reason it loses:
 
-- `Value` is defined **twice**, in `interp.c:34` and `runtime.h:14`, and the two
+- `Value` is defined **twice**, in `src/runtime/interp.c:34` and `src/runtime/runtime.h:14`, and the two
   must stay identical or the C backend miscompiles silently. Adding a field means
   editing both, plus every `make_*` constructor, plus `value_to_string`, plus
   `eval_binary`'s tag dispatch, plus `zl_binop`.
@@ -196,10 +196,10 @@ This is load-bearing, so it is stated precisely.
 - A C `double` represents every integer up to 2^53 exactly: 9.007 × 10^15.
 - 2^53 / 2^47 = 64. **There are six spare bits.**
 
-Therefore an address round-trips through `interp.c`'s `double num` with no loss,
-and through `nativert.c`'s `(n<<1)|1` tagged int with no loss (48 < 63, which
+Therefore an address round-trips through `src/runtime/interp.c`'s `double num` with no loss,
+and through `src/backends/native/nativert.c`'s `(n<<1)|1` tagged int with no loss (48 < 63, which
 `design_ffi_syscalls.md` §2.2 already established for `FARPROC`), and through
-`compilef.c`/`compilel.c`/`nativegen.c`'s `i64` trivially. **All five engines
+`src/backends/c/compilef.c`/`src/backends/llvm/compilel.c`/`src/backends/native/nativegen.c`'s `i64` trivially. **All five engines
 represent a pointer exactly.**
 
 This sharpens — and partially corrects — `design_ffi_syscalls.md` §6.3, which
@@ -215,7 +215,7 @@ this design changes.
 
 | Cost | Detail | Verdict |
 |---|---|---|
-| **Reference semantics** | `b = a` copies the address, not the bytes. Mutating `b.x` changes `a.x`. | **zl already works this way for lists.** `env_assign` (`interp.c:171`) stores the `Value` struct by value, which copies `items` — the *pointer* — so two names share one array and `x[i] = v` is visible through both. Structs are consistent with the aggregate the language already has, not a new exception. |
+| **Reference semantics** | `b = a` copies the address, not the bytes. Mutating `b.x` changes `a.x`. | **zl already works this way for lists.** `env_assign` (`src/runtime/interp.c:171`) stores the `Value` struct by value, which copies `items` — the *pointer* — so two names share one array and `x[i] = v` is visible through both. Structs are consistent with the aggregate the language already has, not a new exception. |
 | **No `type()`, no `print()`** | `type(p)` is `"num"`; `print(p)` prints an address. | Accepted, and §7 makes "never print an address" a test-suite rule anyway, because addresses differ per run and would break the three-engine gate on contact. A `dump(Point, p)` debug builtin is a cheap v2 nicety. |
 | **No by-value struct args or returns** | `f(p)` passes the address; `return p` returns the address. | Already a locked non-goal: `design_ffi_syscalls.md` §8, "By-value struct arguments / returns … waits on the companion struct/record feature and is a v3 concern. v1/v2 pass struct *pointers*." This document supplies exactly the pointers it asked for. |
 | **No lifetime tracking** | Nothing knows a block was released. | §3.3's bump-only policy makes use-after-`free` *impossible* in v1 by never reusing memory; use-after-`release` is real and is what checked mode (§3.5) exists for. |
@@ -266,14 +266,14 @@ change, no grammar change, no reserved word.
 | `copy_mem(dst, src, n)` | `memmove`, overlap-safe |
 | `fill_mem(p, byte, n)` | `memset` |
 | `sext(v, bits)` | sign-extend the low `bits` of `v` (§3.2) |
-| `cstr(s)` | **already exists** as `zl_cstr`, `nativert.c:876` — NUL-terminated copy of a zl string, returns its address |
+| `cstr(s)` | **already exists** as `zl_cstr`, `src/backends/native/nativert.c:876` — NUL-terminated copy of a zl string, returns its address |
 
 The names `peek8/16/32/64` and `poke8/16/32/64` are chosen to match, character
 for character, the ones `design_kernel.md` §8.2 and `design_game_system.md` §2.2
 already wrote their zl against. That is not decoration: those files are the
 acceptance tests.
 
-**The bare `peek`/`poke` stay simulated.** They are in `interp.c:347`'s
+**The bare `peek`/`poke` stay simulated.** They are in `src/runtime/interp.c:347`'s
 `SIMULATED[]` table today and print instead of acting. Do **not** repurpose them
 — any existing program calling `poke(a, v)` would silently start writing memory.
 They are deprecated in favour of the sized names and left exactly as they are, so
@@ -294,7 +294,7 @@ in `pe_min.zl`:
 | Engine | `peek64` result | Exact for |
 |---|---|---|
 | `interp.exe` (`double num`) | a `double` | \|v\| < 2^53 |
-| `compile.exe` → `runtime.c` (`double num`) | a `double` | \|v\| < 2^53 |
+| `compile.exe` → `src/runtime/runtime.c` (`double num`) | a `double` | \|v\| < 2^53 |
 | `compilef` / `compilel` / `nativegen` | `i64` | all 64 bits, two's complement |
 | `nativeval` (tagged int) | 63-bit tagged | \|v\| < 2^62 |
 
@@ -327,11 +327,11 @@ object arena*, and `free(p)` is accepted and ignored in every engine.**
 
 Three reasons, and the third is the one that matters:
 
-1. **Separation.** `nativert.c`'s arena holds tagged objects with type headers
+1. **Separation.** `src/backends/native/nativert.c`'s arena holds tagged objects with type headers
    (`[+0] type, [+8] len, [+16] payload`). Raw bytes handed to `StretchDIBits`
    must not share a region with objects the runtime walks. One region per
    discipline.
-2. **`nativegen.c` has no heap at all.** It imports three kernel32 functions —
+2. **`src/backends/native/nativegen.c` has no heap at all.** It imports three kernel32 functions —
    `GetStdHandle`, `WriteFile`, `ExitProcess`. There is no `VirtualAlloc`, no
    arena, no `zl_alloc`. A real `free` in that backend means a real allocator in
    hand-assembled x86-64, which is a week of work buying nothing.
@@ -379,10 +379,10 @@ engine:
 
 - interpreter / C backends: one zeroed static block per program, addresses handed
   out at startup.
-- `compilel.c`: a `@global` with `align 4096`.
-- `nativegen.c`: **a `.data` section, which does not exist today** (§5.4). This is
+- `src/backends/llvm/compilel.c`: a `@global` with `align 4096`.
+- `src/backends/native/nativegen.c`: **a `.data` section, which does not exist today** (§5.4). This is
   the single largest piece of new work in the plan and it also retires the
-  "program too big for the simple 1-page layout" bail at `nativegen.c:445`.
+  "program too big for the simple 1-page layout" bail at `src/backends/native/nativegen.c:445`.
 
 `reserve` must be a top-level statement. Calling it inside a loop is a compile
 error, not a leak.
@@ -440,7 +440,7 @@ markdown file into the compiler is the deliverable.
 `{base, size, live}` per `alloc`/`reserve`, consulted by every `peek*`/`poke*`/
 field access: out-of-range, released-region, and null accesses become clean
 runtime errors with the offending address. ~40 lines in the interpreter, a
-`runtime.c` flag for the boxed C backend, and **not in the unboxed or native
+`src/runtime/runtime.c` flag for the boxed C backend, and **not in the unboxed or native
 backends at all** — those exist to be fast. It is a debugging tool, so it lives
 where debugging happens.
 
@@ -483,12 +483,12 @@ struct WndClassA {
 Fields are `name: type`, one per line — newline-terminated, per
 `MASTER_PLAN.md` §4.3's "Statement end: **newline** — no semicolons". The `:`
 already lexes as a single-character symbol with no lexer change
-(`design_type_system.md` §2.1 verified this against `compiler.zl`'s own lexer).
+(`design_type_system.md` §2.1 verified this against `src/selfhost/compiler.zl`'s own lexer).
 `struct` declarations are top-level only, and forward references are resolved in
 one pass at end of file, so declaration order does not matter.
 
 A new `NodeType` member, **appended at the end of the enum** so no existing
-numeric value shifts (`compilel.c:176` and `compilef.c` print raw `type %d`):
+numeric value shifts (`src/backends/llvm/compilel.c:176` and `src/backends/c/compilef.c` print raw `type %d`):
 
 ```
 N_STRUCT    /* text = struct name; kids = field decls (N_TYPE-annotated idents) */
@@ -612,7 +612,7 @@ hash. **A field access costs exactly what the equivalent C costs**, and in
 
 Compound assignment falls out for free: `p.x += 1` is
 `poke32(p+0, peek32(p+0) + 1)`, matching how `x[i] += 1` already works
-(`interp.c:1448` reads before evaluating the right side — the same ordering rule
+(`src/runtime/interp.c:1448` reads before evaluating the right side — the same ordering rule
 applies).
 
 An unknown field is a compile error naming the struct and listing its fields. A
@@ -651,7 +651,7 @@ world[i].hp = 100        ==>  poke32(world + i*32 + 0, 100)
 `Entity[]` in an annotation means "a pointer to a run of `Entity`", with no
 length — this is a systems array, not a zl list. **`world[i]` is not bounds
 checked and `len(world)` does not work on it**; the program owns the count. That
-divergence from `x[i]` on a `V_LIST` (which *is* bounds-checked, `interp.c:1391`)
+divergence from `x[i]` on a `V_LIST` (which *is* bounds-checked, `src/runtime/interp.c:1391`)
 is real and is the price of contiguity. The annotation is what disambiguates the
 two meanings of `[`, and it is required — an un-annotated `world[i].hp` is the
 same compile error as an un-annotated `p.x`.
@@ -687,7 +687,7 @@ p.y = 4
 
 ### 5.1 The C backends must not use a real C `struct`
 
-`compile.c` emits C. It *could* emit
+`src/backends/c/compile.c` emits C. It *could* emit
 
 ```c
 typedef struct { unsigned style; void *lpfnWndProc; /* … */ } zl_s_WndClassA;
@@ -696,9 +696,9 @@ typedef struct { unsigned style; void *lpfnWndProc; /* … */ } zl_s_WndClassA;
 and use `offsetof`, and get MSVC's layout for free, exactly as the brief
 suggests. **Do not.** Two reasons, the second decisive:
 
-1. **It creates a second source of truth.** `nativegen.c` cannot ask a C compiler
-   anything — it computes offsets itself or it does not run. If `compile.c` uses
-   MSVC's layout and `nativegen.c` uses ours, the two agree only as long as our
+1. **It creates a second source of truth.** `src/backends/native/nativegen.c` cannot ask a C compiler
+   anything — it computes offsets itself or it does not run. If `src/backends/c/compile.c` uses
+   MSVC's layout and `src/backends/native/nativegen.c` uses ours, the two agree only as long as our
    rule set (§4.3) matches MSVC exactly. It does today. It would silently stop
    matching the first time someone adds `f64[3]` or a `packed` nested struct or
    an over-aligned type, and there is no build error for "these two layouts
@@ -710,10 +710,10 @@ suggests. **Do not.** Two reasons, the second decisive:
    gate cannot cover (§7). A defect class that is invisible to the test suite and
    fatal in production is the worst possible shape.
 
-**Decision: one `layout.c` / `layout.h`, shared by `interp.c`, `compile.c`,
-`compilef.c`, `compilel.c`, and `nativegen.c`.** It takes an `N_STRUCT` node and
+**Decision: one `layout.c` / `layout.h`, shared by `src/runtime/interp.c`, `src/backends/c/compile.c`,
+`src/backends/c/compilef.c`, `src/backends/llvm/compilel.c`, and `src/backends/native/nativegen.c`.** It takes an `N_STRUCT` node and
 produces `{size, align, [{name, offset, type, size, signed}]}`. It is ~120 lines
-implementing R1–R5. Every engine reads the same table. `compile.c` emits
+implementing R1–R5. Every engine reads the same table. `src/backends/c/compile.c` emits
 `char`-buffer arithmetic and explicit offsets, never a C `struct`.
 
 The cost is real and worth naming: we implement the MS x64 layout rule ourselves
@@ -741,37 +741,37 @@ Those four answers were derived independently of this document and are therefore
 a real check on it.
 
 Note this test compares against MSVC only — it does not prove clang agrees, which
-matters for `compilel.c`. Add the same file compiled with `clang` from
+matters for `src/backends/llvm/compilel.c`. Add the same file compiled with `clang` from
 `C:\Program Files\LLVM\bin` and diff three ways.
 
 ### 5.3 Per-engine lowering
 
-| Construct | `interp.c` | `compile.c` (boxed C) | `compilef.c` (unboxed C) | `compilel.c` (LLVM) | `nativegen.c` (x86-64) |
+| Construct | `src/runtime/interp.c` | `src/backends/c/compile.c` (boxed C) | `src/backends/c/compilef.c` (unboxed C) | `src/backends/llvm/compilel.c` (LLVM) | `src/backends/native/nativegen.c` (x86-64) |
 |---|---|---|---|---|---|
-| `alloc(n)` | `calloc` via `os_win.c` | `zl_alloc_raw` in `runtime.c` | `calloc` | `@malloc`+`memset` | **`VirtualAlloc` — a 4th import** |
+| `alloc(n)` | `calloc` via `os_win.c` | `zl_alloc_raw` in `src/runtime/runtime.c` | `calloc` | `@malloc`+`memset` | **`VirtualAlloc` — a 4th import** |
 | `reserve(n,a)` | static block | static block | `_declspec(align(a))` array | `@g align a` | **a new `.data` section** |
-| `peek32(p)` | `*(uint32_t*)(uintptr_t)p` | `zl_calln("peek32", …)` — **no `compile.c` change needed** | `*(unsigned*)(char*)p` | `load i32, ptr` | `mov eax,[rax]` |
+| `peek32(p)` | `*(uint32_t*)(uintptr_t)p` | `zl_calln("peek32", …)` — **no `src/backends/c/compile.c` change needed** | `*(unsigned*)(char*)p` | `load i32, ptr` | `mov eax,[rax]` |
 | `p.x` (u32 @ 4) | offset folded at parse | `zl_peek32_off(p, 4)` | `*(unsigned*)((char*)p+4)` | `getelementptr i8` + `load i32` | **`mov eax,[rax+4]` — one instruction** |
 | `sizeof(S)` | folded to `N_NUMBER` | folded | folded | folded | folded |
 
 One detail worth flagging in that table: **the raw-memory layer needs no
-`compile.c` change at all.** `compile.c` emits unknown builtins as
-`zl_calln("name", n, …)` (line 188) and `runtime.c:973`'s `zl_calln` dispatches
-by name into `builtin()`. Adding `peek32` to `runtime.c` makes it work in the C
+`src/backends/c/compile.c` change at all.** `src/backends/c/compile.c` emits unknown builtins as
+`zl_calln("name", n, …)` (line 188) and `src/runtime/runtime.c:973`'s `zl_calln` dispatches
+by name into `builtin()`. Adding `peek32` to `src/runtime/runtime.c` makes it work in the C
 backend for free. Only the `.field` lowering — a new `N_MEMBER` case — touches
-`compile.c`.
+`src/backends/c/compile.c`.
 
-For `compilel.c`, **do not** declare an LLVM named struct type and use typed
+For `src/backends/llvm/compilel.c`, **do not** declare an LLVM named struct type and use typed
 `getelementptr`. Same argument as §5.1: it is a third layout authority. Emit
 `getelementptr i8, ptr %p, i64 <our offset>` and a typed load. Byte offsets we
 computed, always.
 
-### 5.4 `nativegen.c` — the one that has to do it itself
+### 5.4 `src/backends/native/nativegen.c` — the one that has to do it itself
 
 This backend has no C compiler behind it, so everything is explicit. What it has
 today, read out of the source:
 
-| | Today (`nativegen.c`) |
+| | Today (`src/backends/native/nativegen.c`) |
 |---|---|
 | Sections | `.text` + a **one-page** `.idata`, with an outright bail at line 445: `"program too big for the simple 1-page layout"` |
 | Data section | **none.** String literals are appended to the tail of `.text` and reached by rip-relative `lea` displacements backpatched through `sfix[]` (line 490) |
@@ -824,9 +824,9 @@ argument for structs is real and it is largest exactly where
    using the *existing* `sfix[]` backpatch machinery — this is the same problem
    string literals already solved, at a different offset.
 2. **A fourth import, `VirtualAlloc`.** Mechanical: extend the ILT/IAT/hint-name
-   block in `write_pe` from 3 entries to 4. `nativert.c:1242` already shows the
+   block in `write_pe` from 3 entries to 4. `src/backends/native/nativert.c:1242` already shows the
    exact call shape (`VirtualAlloc(NULL, size, MEM_COMMIT|MEM_RESERVE,
-   PAGE_READWRITE)`) and `nativert.c:159`'s `emit_alloc` shows the bump loop to
+   PAGE_READWRITE)`) and `src/backends/native/nativert.c:159`'s `emit_alloc` shows the bump loop to
    copy. Emit a one-time init at entry and a 6-instruction bump allocator.
 3. **Rule K1 compatibility.** `design_kernel.md`'s Rule K1 forbids absolute
    addresses so a UEFI image stays relocatable. Reaching `.data` through
@@ -834,7 +834,7 @@ argument for structs is real and it is largest exactly where
    `reserve` when it forks. Doing it with an absolute `movabs` would work in
    user mode and silently break W6. **Use rip-relative.**
 
-### 5.5 `nativeval.c` — untag, access, retag
+### 5.5 `src/backends/native/nativeval.c` — untag, access, retag
 
 The boxed native backend's values are `(n<<1)|1`. A struct handle is a tagged
 address, so a field access is three instructions instead of one:
@@ -877,7 +877,7 @@ This document answers its §11 risks 1 and 2 directly: the spellings are
 `peek8/16/32/64` and `poke8/16/32/64` as it assumed, and `reserve(n, align)` is
 the aligned `.bss` reservation it needed. Its §4.1 "write descriptors as two
 32-bit halves" is now a general rule (M1, §3.2) rather than a local workaround.
-`kernelgen.c` forks a `nativegen.c` that, after Stage 4 here, already has a
+`kernelgen.c` forks a `src/backends/native/nativegen.c` that, after Stage 4 here, already has a
 computed multi-section layout and rip-relative data access — which retires two
 of that document's stage-1 tasks before it starts.
 
@@ -948,7 +948,7 @@ Plus the two gates this feature adds:
   write, read back, compare; and write via `p.f` / read via `peek*` at
   `offsetof`, and vice versa, so the two layers are proven to agree.
 
-`compiler.zl` uses no structs and needs none, so the **fixpoint is untouched** —
+`src/selfhost/compiler.zl` uses no structs and needs none, so the **fixpoint is untouched** —
 worth stating explicitly, because it is the invariant every change to the parser
 threatens. The `N_STRUCT` enum member is appended (§4.1) precisely so nothing
 that prints `type %d` shifts.
@@ -958,7 +958,7 @@ that prints `type %d` shifts.
 ## 8. Staged plan
 
 Each stage is independently shippable and ends with `verify.ps1` green.
-`nativegen.c` work is serial-only (single-owner file), per the campaign rule.
+`src/backends/native/nativegen.c` work is serial-only (single-owner file), per the campaign rule.
 
 ### Stage 0 — Lock the spec (no code)
 
@@ -973,7 +973,7 @@ commit so the two do not disagree in the repo.
 ### Stage 1 — Raw memory, interpreter + C backend
 
 `alloc` / `mark` / `release` / `free` / `peek8..64` / `poke8..64` / `copy_mem` /
-`fill_mem` / `sext` in `interp.c`'s `call_builtin` and in `runtime.c`'s
+`fill_mem` / `sext` in `src/runtime/interp.c`'s `call_builtin` and in `src/runtime/runtime.c`'s
 `builtin()`. Real memory access lives behind `os_*` shims in `os_win.c` if it
 needs `<windows.h>` (that file's stated invariant). `SIMULATED[]` is **not**
 touched; bare `peek`/`poke` stay simulated.
@@ -983,8 +983,8 @@ writes and reads every width; interpreter and C backend agree byte for byte.
 ### Stage 2 — `struct`, `sizeof`, `offsetof`, `.field`
 
 `layout.c`/`layout.h`; contextual `struct` parsing; `N_STRUCT` appended;
-`sizeof`/`offsetof` folded to `N_NUMBER`; `N_MEMBER` lowered in `interp.c` and
-`compile.c`; annotation syntax (§2.4) if it does not exist yet.
+`sizeof`/`offsetof` folded to `N_NUMBER`; `N_MEMBER` lowered in `src/runtime/interp.c` and
+`src/backends/c/compile.c`; annotation syntax (§2.4) if it does not exist yet.
 **Verify:** the layout oracle (§5.2) passes on `WndClassA` (72),
 `BitmapFileHeader packed` (14), `MSG` (48), `Rect` (16) against both `cl` and
 `clang`; `p.f` and `peek*(p + offsetof(...))` agree; `verify.ps1` green and the
@@ -992,13 +992,13 @@ fixpoint hash unchanged.
 
 ### Stage 3 — Unboxed C and LLVM backends
 
-`compilef.c` emits direct casts; `compilel.c` emits `getelementptr i8` with our
+`src/backends/c/compilef.c` emits direct casts; `src/backends/llvm/compilel.c` emits `getelementptr i8` with our
 offsets plus typed loads. Both reject `f64` fields only if they already reject
 floats.
 **Verify:** four engines produce identical output on the struct suite; the
 unboxed backends show the expected speedup on a struct-heavy benchmark.
 
-### Stage 4 — `nativegen.c`: data section, heap, one-instruction fields
+### Stage 4 — `src/backends/native/nativegen.c`: data section, heap, one-instruction fields
 
 In order: (a) computed multi-section layout, string literals moved from the
 `.text` tail into `.rodata`, the line-445 bail deleted; (b) `reserve` as an
@@ -1018,7 +1018,7 @@ by zl is opened by a real image viewer.
 
 ### Stage 6 — Checked mode
 
-`--checked` allocation table in `interp.c` and `runtime.c` only.
+`--checked` allocation table in `src/runtime/interp.c` and `src/runtime/runtime.c` only.
 **Verify:** a deliberate out-of-bounds `poke32` and a use-after-`release` each
 produce a clean diagnostic under `--checked` and the documented undefined
 behaviour without it; `verify.ps1` runs unchecked and stays green.
@@ -1030,7 +1030,7 @@ behaviour without it; `verify.ps1` runs unchecked and stays green.
 | # | Item | Note |
 |---|---|---|
 | R1 | **Our layout rule drifts from MSVC's.** | The whole feature's correctness rests on §4.3 matching the compiler that produced `user32.dll`'s headers. Mitigation is §5.2's oracle, run in CI, seeded from four independently-derived golden answers. This is the highest-consequence risk here. |
-| R2 | **`nativegen.c`'s section rework breaks existing programs.** | It touches the PE writer, string-literal addressing, and the entry layout at once. Mitigation: Stage 4(a) must be proven a byte-for-byte no-op *before* 4(b)–(d), the same discipline `design_optimizer.md` §"Ordering rationale" imposes on its IR refactor. |
+| R2 | **`src/backends/native/nativegen.c`'s section rework breaks existing programs.** | It touches the PE writer, string-literal addressing, and the entry layout at once. Mitigation: Stage 4(a) must be proven a byte-for-byte no-op *before* 4(b)–(d), the same discipline `design_optimizer.md` §"Ordering rationale" imposes on its IR refactor. |
 | R3 | **LA57 (5-level paging) breaks §2.2.** | 57-bit user VA exceeds 2^53 and makes interpreter pointers lossy. Opt-in per-process on Windows and not default today. If it becomes default, representation (B) from §2.1 has to be reconsidered; nothing else in this design moves. |
 | R4 | **`peek64` above 2^53.** | Rule M1. Known, documented, tested-around, and identical to the hole `design_kernel.md` §2 already found. The failure is silent and gives a *plausible* wrong number, which is why it needs a named rule rather than a footnote. |
 | R5 | **Bump-only means a long-running program leaks.** | `design_game_system.md`'s frame loop is the case that matters and it uses `mark`/`release`. Anything else that allocates in a loop and never releases will exhaust the region. A real allocator with reuse is a v2 document, and it will have to re-open §7's determinism argument when it lands. |
@@ -1077,12 +1077,12 @@ behaviour without it; `verify.ps1` runs unchecked and stays green.
    `copy_mem` `fill_mem` `sext` work in all five engines; bare `peek`/`poke`
    remain simulated and unchanged.
 3. `struct` parses with **zero new reserved words**, `N_STRUCT` is appended to the
-   enum, and `compiler.zl`'s fixpoint hash is unchanged.
+   enum, and `src/selfhost/compiler.zl`'s fixpoint hash is unchanged.
 4. `layout.c` is the only implementation of R1–R5, and the oracle test agrees with
    both `cl` and `clang` on `WndClassA` = 72 / `lpfnWndProc` @ 8,
    `BitmapFileHeader packed` = 14, `MSG` = 48, `Rect` = 16.
-5. `p.f` compiles to one instruction in `nativegen.c` and to a direct cast in
-   `compilef.c`; `nativegen.c` has a computed multi-section layout, a `.data`
+5. `p.f` compiles to one instruction in `src/backends/native/nativegen.c` and to a direct cast in
+   `src/backends/c/compilef.c`; `src/backends/native/nativegen.c` has a computed multi-section layout, a `.data`
    section reached rip-relative, and a `VirtualAlloc` heap.
 6. Nested structs, fixed arrays, arrays of structs, and `packed` all round-trip,
    and a `packed` BMP header written by zl opens in a real image viewer.

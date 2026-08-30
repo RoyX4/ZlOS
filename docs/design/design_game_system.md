@@ -2,7 +2,7 @@
 
 **Status:** proposal
 **Author:** language/systems design pass, 2026-07-31
-**Scope:** `OVERNIGHT_CAMPAIGN.md` W8. Consumes W5 (raw memory + FFI), W3/W4 (speed),
+**Scope:** `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md` W8. Consumes W5 (raw memory + FFI), W3/W4 (speed),
 and the existing stdlib (`bmp.zl`, `noise.zl`, `easing.zl`, `vec.zl`, `geometry.zl`).
 No code is changed by this document.
 
@@ -120,7 +120,7 @@ Now price a frame at 60 Hz (16.6 ms) on a 320×180 buffer (57,600 pixels):
 exactly the `b5_string` result from `bench/README.md` — "compiling the control flow is
 worthless when the work is in the runtime" — read as a design instruction instead of a
 complaint. The C-vs-zl boundary is drawn at three primitives (§2.5), which is smaller than
-the string-routine surface `runtime.c` already owns for `at`/`find`/`replace`.
+the string-routine surface `src/runtime/runtime.c` already owns for `at`/`find`/`replace`.
 
 A second consequence: **shrink the framebuffer and let GDI scale it.** 320×180 stretched
 to 1280×720 is four times fewer pixels for the game to touch, at zero cost to us, and it
@@ -395,7 +395,7 @@ the float engines.
 
 **Timing source:** `QueryPerformanceCounter` / `QueryPerformanceFrequency` (kernel32) into
 an 8-byte slot, read with `peek64`. `now()` is not an option on the shipping path: it is
-`clock()`-based (`interp.c:805`), millisecond-resolution, and **not in the native runtime's
+`clock()`-based (`src/runtime/interp.c:805`), millisecond-resolution, and **not in the native runtime's
 builtin set** at all. `Sleep(1)` at the end of a frame that finished early keeps the
 process off a spin loop; do not `Sleep(0)`, which yields but burns the core.
 
@@ -432,7 +432,7 @@ fn fb_blit(bl_fb, bl_spr, bl_x, bl_y)                      # compiled sprite, §
 fn fb_save_bmp(sv_fb, sv_path)                             # via bmp.zl, for tests
 ```
 
-**The three primitives that must live in the runtime** (`interp.c` **and** `runtime.c`
+**The three primitives that must live in the runtime** (`src/runtime/interp.c` **and** `src/runtime/runtime.c`
 identically — the campaign's parity rule):
 
 | Builtin | Signature | Does |
@@ -444,7 +444,7 @@ identically — the campaign's parity rule):
 That is the entire C surface the game adds. Everything else — clipping, coordinates,
 sprites, collision, the loop — is zl. Compare against the alternative of writing the
 blitter in C: this boundary is three functions with no policy in them, and it is smaller
-than the string surface `runtime.c` already owns.
+than the string surface `src/runtime/runtime.c` already owns.
 
 **Clipping happens once per span, never per pixel.** And a real zl hazard applies here,
 noted at the top of `geometry.zl`: **`and`/`or` evaluate both sides**, so a bounds guard
@@ -587,7 +587,7 @@ Generating the sounds is where `noise.zl` reappears: a white-noise burst shaped 
 `read()` cannot load binary data. zl can *write* bytes (`write_bytes`) and cannot read them
 back. That asymmetry has to close before any asset exists.
 
-**Proposal — two builtins, in `interp.c` and `runtime.c` identically:**
+**Proposal — two builtins, in `src/runtime/interp.c` and `src/runtime/runtime.c` identically:**
 
 | Builtin | Signature | For |
 |---|---|---|
@@ -665,7 +665,7 @@ Two supporting measures:
 
 - **Hoist argument lists.** `call!` takes a list; pre-build one list per call site at
   startup and mutate it with index assignment (`args[0] = hwnd`), which the interpreter
-  already does in place (`interp.c` `N_ASSIGN`/`N_INDEX`: "mutate the list element in
+  already does in place (`src/runtime/interp.c` `N_ASSIGN`/`N_INDEX`: "mutate the list element in
   place"). `nativeval` must match that semantic, or the hoisting silently does nothing.
 - **Grow the arena** from 64 MB and make the size a startup option. Necessary but not
   sufficient — it converts "dies in six minutes" into "dies in an hour."
@@ -679,7 +679,7 @@ Two supporting measures:
 | pixel buffer | `bmp.zl` — a boxed list, `[w,h,px]`, flat, top-down | needs a raw-memory twin with the same shape |
 | BMP output | `bmp_save` works, verified, 24-bit, bottom-up flip contained in one function | reuse as-is for the file presenter |
 | BMP input | **none** — `read()` truncates at the first NUL byte | `read_bytes` / `load_file` (§2.9) |
-| raw memory | `peek`/`poke` are names in `interp.c:190`'s `SIMULATED[]` table with no widths and no semantics | W5 companion half: `alloc`/`free`/`peek8/32/64`/`poke8/32/64` |
+| raw memory | `peek`/`poke` are names in `src/runtime/interp.c:190`'s `SIMULATED[]` table with no widths and no semantics | W5 companion half: `alloc`/`free`/`peek8/32/64`/`poke8/32/64` |
 | span primitives | none | `fill32`/`copy32`/`blit32` (§2.5) |
 | FFI | designed (`design_ffi_syscalls.md`), not built | Stage 2 (`dll`/`sym`/`call!`) blocks everything visual |
 | callbacks | FFI Stage 4, not built | **not required** — §2.2 |
@@ -700,7 +700,7 @@ is blocked on nothing**, which is why M0 can start immediately.
 
 Every stage ends with a check that can fail. New files only (`game/`, `stdlib/fb.zl`,
 `stdlib/win32.zl`, `stdlib/sprite.zl`), so the wave is parallel-safe except for the runtime
-bricks, which touch `interp.c`/`runtime.c` and are therefore **serial, alone**, per the
+bricks, which touch `src/runtime/interp.c`/`src/runtime/runtime.c` and are therefore **serial, alone**, per the
 campaign rules.
 
 **Multi-file note:** until `include` lands (`design_modules.md`), a five-line `pack.ps1`
@@ -729,7 +729,7 @@ integer state, so this must hold).
 Serial (runtime files).
 
 1. W5 companion half: `alloc`/`free`/`peek*`/`poke*`.
-2. `fill32`/`copy32`/`blit32` in `interp.c` **and** `runtime.c` (parity rule).
+2. `fill32`/`copy32`/`blit32` in `src/runtime/interp.c` **and** `src/runtime/runtime.c` (parity rule).
 3. Re-point `fb.zl` at raw memory. **No call site above `fb_*` changes.**
 
 **Verify:** M0's 120 BMPs are byte-identical. A new `bench/b6_fill.zl` records the real
@@ -898,11 +898,11 @@ Precisely five things, three of them already designed:
 
 | # | Blocker | Owner | Blocking? |
 |---|---|---|---|
-| 1 | **Raw memory** — `alloc`, `free`, `peek8/32/64`, `poke8/32/64`. Today `peek`/`poke` are only names in `interp.c:190`'s `SIMULATED[]` list, with no widths and no semantics. | W5 companion half | **Hard.** No framebuffer without it. |
+| 1 | **Raw memory** — `alloc`, `free`, `peek8/32/64`, `poke8/32/64`. Today `peek`/`poke` are only names in `src/runtime/interp.c:190`'s `SIMULATED[]` list, with no widths and no semantics. | W5 companion half | **Hard.** No framebuffer without it. |
 | 2 | **FFI Stage 2** — `dll`/`sym`/`call!` with the ≥5-argument stack path working. `CreateWindowExA` takes 12 arguments, `StretchDIBits` 13; both land in the stack-argument path on their first call. | `design_ffi_syscalls.md` Stage 2 | **Hard.** No window without it. |
-| 3 | **`fill32` / `copy32` / `blit32`** in `interp.c` and `runtime.c` (parity). Without them §1.3's arithmetic says the game misses 60 Hz by 3–4×. | this doc, §2.5 | **Hard** for 60 Hz; a 160×90 buffer at 30 Hz limps without them. |
+| 3 | **`fill32` / `copy32` / `blit32`** in `src/runtime/interp.c` and `src/runtime/runtime.c` (parity). Without them §1.3's arithmetic says the game misses 60 Hz by 3–4×. | this doc, §2.5 | **Hard** for 60 Hz; a 160×90 buffer at 30 Hz limps without them. |
 | 4 | **Arena `mark`/`release`** (§2.10), plus in-place list index assignment on `nativeval` so hoisted argument lists actually help. | native runtime | **Soft** — the game runs, and dies after ~6 minutes. Blocking for "playable," not for "runs." |
-| 5 | **The native runtime's builtin coverage.** `nativert.c` implements the 7 builtins the self-host needs. Breakout additionally needs `int`, `abs`, `min`, `max`, `band`, `str`-of-number, `slice`, `index_at`, plus the new raw-memory and FFI set. `zl_int_str` and `zl_at` already exist, so this is a short list of byte loops — but it must be enumerated before M4, not discovered during it. | native runtime | **Hard**, and the one most likely to be forgotten. |
+| 5 | **The native runtime's builtin coverage.** `src/backends/native/nativert.c` implements the 7 builtins the self-host needs. Breakout additionally needs `int`, `abs`, `min`, `max`, `band`, `str`-of-number, `slice`, `index_at`, plus the new raw-memory and FFI set. `zl_int_str` and `zl_at` already exist, so this is a short list of byte loops — but it must be enumerated before M4, not discovered during it. | native runtime | **Hard**, and the one most likely to be forgotten. |
 
 Explicitly **not** blockers, each with the reason:
 
@@ -968,5 +968,5 @@ Explicitly **not** blockers, each with the reason:
    alongside the new builtins (`alloc`/`free`/`peek*`/`poke*`/`fill32`/`copy32`/`blit32`/
    `mark`/`release`/`read_bytes`/`load_file`), and the module count corrected — it drifts
    every wave.
-8. `OVERNIGHT_CAMPAIGN.md`'s W8 row records what shipped, and the arena finding (§2.10) is
+8. `docs/archive/prompts/OVERNIGHT_CAMPAIGN.md`'s W8 row records what shipped, and the arena finding (§2.10) is
    written back into `design_native_runtime.md` §7, which currently says the opposite.

@@ -38,7 +38,7 @@ the part that makes a change legible later, and the part nobody writes down.
 <details><summary>2 file(s)</summary>
 
 - `docs/JOURNAL.md`
-- `docs/MERGE-ROUND-2.md`
+- `docs/evidence/MERGE-ROUND-2.md`
 
 </details>
 
@@ -93,7 +93,7 @@ the part that makes a change legible later, and the part nobody writes down.
 <details><summary>3 file(s)</summary>
 
 - `.gitignore`
-- `docs/MERGE-ROUND-2.md`
+- `docs/evidence/MERGE-ROUND-2.md`
 - `examples/Zaccoding.zl`
 
 </details>

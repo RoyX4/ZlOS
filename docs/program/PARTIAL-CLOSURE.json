@@ -576,14 +576,14 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/hosttest/trace_event.c",
+          "path": "kernel/tests/host/trace_event.c",
           "sha256": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
-          "path": "kernel/hosttest/trace_event.h",
+          "path": "kernel/tests/host/trace_event.h",
           "sha256": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
           "schema": null,
           "result": "SOURCE"

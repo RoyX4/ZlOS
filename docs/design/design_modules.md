@@ -9,7 +9,7 @@
 
 Every `.zl` file is currently standalone. There is no way to reuse code across
 files, so the moment a second program wants `is_digit`, `cstr`, or a string
-helper, it gets copy-pasted. `compiler.zl` is already ~720 lines in one file for
+helper, it gets copy-pasted. `src/selfhost/compiler.zl` is already ~720 lines in one file for
 exactly this reason — the lexer, parser, and codegen can't be split apart even
 though they are three separable concerns.
 
@@ -17,7 +17,7 @@ The self-hosting spec (§4.5) **deliberately cut "modules"** from Floor 1, and
 that call was correct: full namespaced modules are not needed to self-host. But
 a *minimal* code-sharing mechanism now buys real leverage:
 
-- Split `compiler.zl` into `lexer.zl` + `parser.zl` + `codegen.zl` and reuse the
+- Split `src/selfhost/compiler.zl` into `src/selfhost/lexer.zl` + `src/selfhost/parser.zl` + `codegen.zl` and reuse the
   standalone stepping-stone files instead of maintaining two copies.
 - Grow a tiny standard library (`stdlib/` already exists as an empty dir) that
   programs pull in rather than re-declaring string helpers.
@@ -64,7 +64,7 @@ print(math.sqrt(2))
 ```
 
 - **Pro:** no collisions, real encapsulation, explicit surface via exports.
-- **Con:** requires **new grammar** — the self-hosted parser (`compiler.zl`,
+- **Con:** requires **new grammar** — the self-hosted parser (`src/selfhost/compiler.zl`,
   `parse_postfix`) does not handle `.` member access at all today. It would need
   a `.`-call form plus symbol **name-mangling** in codegen
   (`math.sqrt` → `zl_fn_math__sqrt`), an export marker, and a module resolver
@@ -78,7 +78,7 @@ print(math.sqrt(2))
 **Ship Option A now. Keep Option B as a documented future upgrade.**
 
 Textual include is ~40 lines, changes nothing downstream, and immediately lets
-`compiler.zl` be split into files. Namespaces are a strictly larger change that
+`src/selfhost/compiler.zl` be split into files. Namespaces are a strictly larger change that
 should wait until (a) `.` member access exists in the self-hosted parser and
 (b) a real collision problem has actually been felt — not before. The two are
 compatible: `include` can keep meaning "splice flat" even after `import`
@@ -97,8 +97,8 @@ Rules:
 - The directive is a **line** whose first non-blank word is `include`, followed
   by a **double-quoted path**, followed by only whitespace/comment.
 - Path is resolved **relative to the directory of the file that contains the
-  directive**, not the working directory. So `compiler.zl` including
-  `"lexer.zl"` finds its sibling regardless of where the compiler is invoked.
+  directive**, not the working directory. So `src/selfhost/compiler.zl` including
+  `"src/selfhost/lexer.zl"` finds its sibling regardless of where the compiler is invoked.
 - It is a top-level directive. By convention it goes at the top of the file, but
   because `fn` declarations are hoisted, it may appear anywhere at column 0.
 - Comments after it are fine: `include "strings.zl"   # text helpers`.
@@ -106,9 +106,9 @@ Rules:
 Example — splitting the compiler:
 
 ```
-# compiler.zl (after)
-include "lexer.zl"
-include "parser.zl"
+# src/selfhost/compiler.zl (after)
+include "src/selfhost/lexer.zl"
+include "src/selfhost/parser.zl"
 include "codegen.zl"
 
 input = read("input.zl")
@@ -176,7 +176,7 @@ expand(path, seen, stack):
 Top-level call: `source = expand(entry_path, {}, [])`, then feed `source` to the
 existing lexer.
 
-### 5.3 C bootstrap (`lexer.c` / small new `preprocess.c`)
+### 5.3 C bootstrap (`src/frontend/lexer.c` / small new `preprocess.c`)
 
 `read_whole_file` already exists. Add `char *expand_includes(const char *path)`
 that implements §5.2 over the buffer (split on `\n`, `strncmp` the trimmed line
@@ -185,7 +185,7 @@ canonical key, recurse). Then change `lex_file` to call it instead of
 `read_whole_file`. `seen` can be a small array of strings; the include depth is
 tiny, so linear scan is fine.
 
-### 5.4 Self-hosted (`compiler.zl`)
+### 5.4 Self-hosted (`src/selfhost/compiler.zl`)
 
 This is the load-bearing part — it must work in zl itself, using only existing
 built-ins (`read`, `len`, `at`, `slice`, `find`, `has`, `lines`, `split`,
@@ -244,8 +244,8 @@ exist, so this is genuinely small.
 
 ### 5.5 Self-hosting guard
 
-`compiler.zl` compiles itself, so `expand` must survive the fixpoint: run
-`interp.exe compiler.zl` (now splitting via `include`) to produce `gen1.c`,
+`src/selfhost/compiler.zl` compiles itself, so `expand` must survive the fixpoint: run
+`interp.exe src/selfhost/compiler.zl` (now splitting via `include`) to produce `gen1.c`,
 build `zlc.exe`, recompile → `gen2.c`, and assert `gen1.c == gen2.c` exactly as
 the existing proof does. The include pass has no effect on emitted C (it only
 changes *which text* is parsed), so the fixpoint should hold unchanged.
@@ -270,7 +270,7 @@ changes *which text* is parsed), so the fixpoint should hold unchanged.
 - **Build Option A (textual `include`) now.** ~40 lines, one new pass, zero
   changes to lexer/parser/codegen, zero new reserved words, survives
   self-hosting.
-- **First payoff:** split `compiler.zl` into `lexer.zl` / `parser.zl` /
+- **First payoff:** split `src/selfhost/compiler.zl` into `src/selfhost/lexer.zl` / `src/selfhost/parser.zl` /
   `codegen.zl` and seed `stdlib/strings.zl`.
 - **Defer Option B (namespaced `import ... as`)** until `.` member access exists
   in the self-hosted parser *and* a concrete name-collision problem is felt.

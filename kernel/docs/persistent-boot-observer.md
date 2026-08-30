@@ -640,7 +640,7 @@ Run the proof suite with:
 
 ```text
 python3 tools/test_zllog.py
-python3 kernel/hosttest/zllog_e2e_test.py
+python3 kernel/tests/host/zllog_e2e_test.py
 cd kernel && ./mkusb.sh && ./verify-efi.sh
 ../tools/zllog.py read zlOS-usb.img --latest
 ```

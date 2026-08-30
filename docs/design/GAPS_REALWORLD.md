@@ -26,7 +26,7 @@ The eight targets and their one-line verdicts:
 - **JSON pretty-printer** — *gets further than xxd/wc; defeated on **number fidelity**, objects,
   and `\u` escapes.*
 - **xxd hex dumper** (+ `wc -w` cross-check) — *dies line 1 on any real binary; works on NUL-free text.*
-- **semantic-consistency audit** (`interp.c`/`parser.c`/`lexer.c`) — 13 verified core-semantics
+- **semantic-consistency audit** (`src/runtime/interp.c`/`src/frontend/parser.c`/`src/frontend/lexer.c`) — 13 verified core-semantics
   inconsistencies beyond the two known ones.
 - **Zig-parity audit** — measures zl against Zig's actual feature set; finds two whole clusters
   the docs never name (the integer model, and the "no hidden X" disciplines).
@@ -66,7 +66,7 @@ already leans on this finding for its interop verdict.
 
 **This is the headline new finding.** `str()`/`print()` render every non-integer number with C's
 default `%g` (6 significant digits) and every integer-valued float without its decimal point
-(`interp.c:108-112`). Measured **(verified here)**:
+(`src/runtime/interp.c:108-112`). Measured **(verified here)**:
 
 ```
 str(370.0)                          -> "370"     (decimal point unrecoverable)
@@ -89,7 +89,7 @@ significant figures."
 ### 1.3 No entropy and no wall clock — every run is byte-identical; `now()` is process-uptime, not wall-clock — *(game, build-tool)* · BLOCKER for reproducibility & incremental work
 
 Measured by the game agent: `now()` reads `0` at launch (it is ms-since-process-start,
-`interp.c:1184`), so `seed(now())` == `seed(0)` every run; `randint(0,99)` printed `38` on three
+`src/runtime/interp.c:1184`), so `seed(now())` == `seed(0)` every run; `randint(0,99)` printed `38` on three
 independent runs. Default `rand()` (no seed) is also constant. `getpid`/`timestamp`/`urandom` are
 all absent. So **every game or simulation is byte-identical every launch, with no workaround.**
 
@@ -166,14 +166,14 @@ numeric field arriving from a file or the network is **actively unsafe**, not me
 Measured **(verified here)**: with a global `g=100`, `fn f(){ for g = 1 to 3 {} }` then `f()`
 leaves `g == 4` — the **range** counter writes the GLOBAL. But `for g in [1,2,3]` in the same
 position leaves `g == 100` — that form **localizes**. Cause: `parse_for_range` emits the counter as
-a plain `N_ASSIGN`, and `define_loop_vars` (`interp.c:1416`) only pre-binds `N_FOR` nodes, so it
+a plain `N_ASSIGN`, and `define_loop_vars` (`src/runtime/interp.c:1416`) only pre-binds `N_FOR` nodes, so it
 never sees the desugared range counter. `design_scoping_decision.md` covers assignment-writes-global
 in general; the **for-range-vs-for-in asymmetry** is new, and it is a per-request/per-frame
 state-corruption hazard hiding inside the more common loop form.
 
 ### 1.9 `%` is the only arithmetic operator that truncates to int, and it rounds toward zero — *(game, semantic-consistency)* · PAINFUL
 
-Two defects in one operator (`interp.c:1389`), measured by the agents:
+Two defects in one operator (`src/runtime/interp.c:1389`), measured by the agents:
 
 - `5.5 % 2` -> `1`, while `fmod(5.5, 2)` -> `1.5` and `7/2` -> `3.5`. `%` unconditionally truncates
   **both operands** to `long long`, disagreeing with its own builtin sibling `fmod` and with every
@@ -198,7 +198,7 @@ Six verified inconsistencies, none in any doc:
   error: list index out of range"*. With no `try`/`catch` and no line numbers, a short CSV row is
   an uncatchable crash (data-cli hit exactly this).
 - **Lists mix reference and value semantics per operation.** `ys = xs; xs[0] = 99` makes
-  `ys[0] == 99` (index-assign mutates the shared items array in place, `interp.c:1621`), but
+  `ys[0] == 99` (index-assign mutates the shared items array in place, `src/runtime/interp.c:1621`), but
   `push(xs, 4)` returns a **fresh** list so `len(xs)` stays 3; `insert`/`remove`/`concat`/`sort`/
   `reverse` likewise copy. The same value is reference-typed for `[i]=` and value-typed for
   everything else.
@@ -206,7 +206,7 @@ Six verified inconsistencies, none in any doc:
   `true - 1` -> runtime error, `sum([true,true,true])` -> `3` (numeric), `1 == true` -> `false`
   (type-first equality). Four operations, four notions of what a bool is.
 - **A total order over all types exists — reachable only through `sort()`.** `value_compare`
-  (`interp.c:1314`) defines `nil < bool < num < str < list < fn`, so `sort(["banana","apple"])`
+  (`src/runtime/interp.c:1314`) defines `nil < bool < num < str < list < fn`, so `sort(["banana","apple"])`
   orders strings; but `"apple" < "banana"` -> *"this operator needs numbers"* and `min("a","b")`
   -> *"min needs two numbers"*. `<`, `>`, `<=`, `>=`, `min`, `max` are all numbers-only. The obvious
   counterpart of the sort order is not exposed.
@@ -234,7 +234,7 @@ Escape** keypress from the **start of an arrow sequence** requires reading **wit
 (the classic ESC-disambiguation problem: if no byte follows within ~50 ms it was a real ESC). zl has
 neither a timed/non-blocking read **nor** `sleep` to build the timeout window, so even a
 hypothetical `read_char()` + `kbhit()` could not decode arrow keys correctly. The only input
-primitive today is line-buffered `input()` (`fgets`, `interp.c:460`), and `interp.c` contains **zero**
+primitive today is line-buffered `input()` (`fgets`, `src/runtime/interp.c:460`), and `src/runtime/interp.c` contains **zero**
 `SetConsoleMode`/`tcsetattr` — no raw/cbreak mode exists to enable at all. The multi-byte +
 read-timeout requirement is documented nowhere.
 
@@ -284,7 +284,7 @@ numeric story and is nowhere framed as a parity gap:
   `@enumFromInt`) — once sized ints exist, FFI needs defined checked-narrowing and bit-reinterpret;
   the docs mention only loose `num`/`int`/`str` conversions.
 - **Internal inconsistency:** bit/precision ops raise *"needs more than 53 bits of precision"*
-  (`interp.c:356`) past 2^53, but **printing** a >2^53 integer literal silently rounds
+  (`src/runtime/interp.c:356`) past 2^53, but **printing** a >2^53 integer literal silently rounds
   (`9007199254740993` -> `…992`). One path guards, the other corrupts.
 
 **(b) The two "no hidden X" disciplines.** Zig's signature guarantees, which zl actively *violates*
@@ -321,11 +321,11 @@ Two file-layer walls that the per-builtin missing-lists (`exists`, `is_dir`, `wa
   `dir()` the parent and string-scan the names. Each piece is documented alone; together they leave
   **no clean way to test for a file**.
 - **`dir()` is not composable into `walk`.** It returns bare filename strings with no type
-  discriminator (`interp.c:804-819`) and there is no `is_dir`/`is_file`, so given
+  discriminator (`src/runtime/interp.c:804-819`) and there is no `is_dir`/`is_file`, so given
   `["src","main.zl","README"]` you cannot tell which entry to recurse into. `dir` is usable only
   **one level deep**; a recursive project-tree walk cannot be written in userland at all.
 
-Plus a self-hosting-specific framing: because `run()` only **simulates** (`interp.c:416-418`;
+Plus a self-hosting-specific framing: because `run()` only **simulates** (`src/runtime/interp.c:416-418`;
 `run("clang","--version")` prints `[sim] run(clang, --version)` and returns nil), **a build tool
 written in zl cannot launch zl's own compiler.** A self-hosting toolchain cannot be *managed* by a
 program in the language it builds — the ecosystem story dead-ends at its first step.
@@ -378,7 +378,7 @@ Already in the abstract docs; the real programs make them concrete. Referenced, 
   builder). Measured for list `push` in the docs, not for string concat. The O(n) fix (push pieces
   to a list, then `join`) is non-obvious. Hit by JSON and xxd.
 - **No signal / `atexit` / `defer`** (`C_CPP_PARITY.md`). `runtime_error()` calls `exit(1)`
-  (`interp.c:250`) and Ctrl-C kills outright, so a game/tui that hides the cursor (`CSI ?25l`, which
+  (`src/runtime/interp.c:250`) and Ctrl-C kills outright, so a game/tui that hides the cursor (`CSI ?25l`, which
   `life.zl` emits) or switches to the alternate screen leaves the terminal **broken** with no
   restore hook.
 - **stdlib files are self-running scripts, not importable libraries** (extends "no imports",
@@ -447,7 +447,7 @@ lack strings, lists, and real floats).
 - **Named higher-order function pipelines** — `map`/`filter`/`reduce`/`group_by`/`sort-by-key` are
   all writable and working today, using named functions passed by value (§1.5). This is the single
   biggest positive correction in the whole exercise.
-- **A JSON pretty-printer — partially.** Whole-file read + recursive-descent parse work (compiler.zl
+- **A JSON pretty-printer — partially.** Whole-file read + recursive-descent parse work (src/selfhost/compiler.zl
   proves the parser class), `num()` reads exponent notation, and the `\"` `\\` `\n` `\t` output
   escapes exist — so **ASCII JSON with no high-precision numbers and no objects** pretty-prints.
   Defeated by §1.2 (numbers > 6 sig figs corrupt), no maps (objects), and no `\u` escapes.
@@ -460,7 +460,7 @@ lack strings, lists, and real floats).
 - **A line-oriented text tool on NUL-free input, with a hardcoded path.** The xxd port produced
   correct output on text; a grep-lite filter or `wc -l` (line count via `split` on `"\n"`) works,
   awkwardly. *Not* buildable: `wc -w` (no whitespace-collapsing split) and any binary input (§1.1).
-- **Substantial batch text processing** — up to the **664-line self-hosted `compiler.zl`** itself,
+- **Substantial batch text processing** — up to the **664-line self-hosted `src/selfhost/compiler.zl`** itself,
   the existence proof for this whole class.
 
 **Not buildable at all (state it plainly):**

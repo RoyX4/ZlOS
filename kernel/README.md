@@ -16,7 +16,7 @@
  h help    q halt                    ready
 ```
 
-`kernel.zl` runs on bare metal. No operating system underneath it, no libc,
+`src/kernel.zl` runs on bare metal. No operating system underneath it, no libc,
 no syscalls. `print()` talks to COM1 by polling the UART; `poke8` writes to
 VGA text memory at `0xB8000` and the characters appear on screen.
 
@@ -26,24 +26,24 @@ through to disk; `Esc` saves and closes. See
 [`docs/storage-and-files.md`](docs/storage-and-files.md).
 
 ```bash
-./build.sh          # kernel.zl -> kernel.elf
+./build.sh          # src/kernel.zl -> kernel.elf
 ./run.sh            # boot in QEMU: window = screen, this terminal = keyboard
 ./run.sh --term     # no window, everything in the terminal
-./mkiso.sh          # -> zlOS.iso, boots BIOS *and* UEFI
+./tools/images/mkiso.sh          # -> zlOS.iso, boots BIOS and UEFI
 ./verify.sh         # fast gate: headless boot, drive the shell, diff golden.txt
-./verify-iso.sh     # slow gate: boot the real ISO on BIOS and on UEFI
+./tools/checks/verify-iso.sh     # slow gate: boot the ISO on BIOS and UEFI
 ```
 
 ## Running it on real hardware
 
 ```bash
-./mkiso.sh
+./tools/images/mkiso.sh
 qemu-system-i386 -cdrom zlOS.iso              # test the real boot path first
 sudo dd if=zlOS.iso of=/dev/sdX bs=4M status=progress && sync
 ```
 
 The ISO is **hybrid**: one image, both boot paths, verified by
-`verify-iso.sh`.
+`tools/checks/verify-iso.sh`.
 
 - **UEFI** - what a machine made after ~2015 will use. Verified against OVMF.
 - **Legacy BIOS/CSM** - older machines, and QEMU's default.
@@ -60,12 +60,12 @@ The fix is in three parts:
    an exact 1024x768x32 fails on firmware that offers something else - OVMF
    hands out 1280x800 - and GRUB then gives up rather than picking a nearby
    mode.
-2. `mkiso.sh` does `insmod all_video`, without which GRUB may have no video
+2. `tools/images/mkiso.sh` does `insmod all_video`, without which GRUB may have no video
    driver loaded and cannot satisfy the request at all.
 3. `fb.c` renders glyphs into that framebuffer with an 8x16 bitmap font
    (generated from the system console font), and `console.c` chooses
    framebuffer or VGA text **at run time** - so one image serves both, and
-   `kernel.zl` never learns which screen it is on.
+   `src/kernel.zl` never learns which screen it is on.
 
 ### Two more things that decide whether YOUR machine boots it
 
@@ -96,7 +96,7 @@ transcript headlessly while a human sees the screen.
 ## How it is built
 
 ```
-kernel.zl ─► ../compile ─► out.c ─► gcc -m32 -ffreestanding -nostdlib ─► kernel.elf
+src/kernel.zl ─► ../compile ─► out.c ─► gcc -m32 -ffreestanding -nostdlib ─► kernel.elf
                                   + runtime_kernel.c  (-DZL_KERNEL_SERIAL)
                                   + boot.S            (multiboot header, stack, entry)
                                   + support.c         (outb/inb, UART bring-up)
@@ -139,7 +139,7 @@ one function. That is what "swappable later" has to mean in practice.
 
 ## The shell
 
-`kernel.zl` polls COM1 and runs commands you type:
+`src/kernel.zl` polls COM1 and runs commands you type:
 
 ```
 zl> h        help

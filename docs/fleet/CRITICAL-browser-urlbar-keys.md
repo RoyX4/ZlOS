@@ -15,7 +15,7 @@ bug) into the rest of the key-routing path.
 
 ## Two defects, one cause
 
-`app_event` in `kernel/kernel.zl` handles `APP_BROWSER` **before** the key-translation
+`app_event` in `kernel/src/kernel.zl` handles `APP_BROWSER` **before** the key-translation
 layer that exists specifically to prevent both of these, and returns without ever
 reaching it.
 
@@ -40,14 +40,14 @@ fn app_event(id, win, ety, ecode, ex, ey) {
 ```
 
 `nav_to_char` is defined at `kernel.zl:2972` and has **exactly one call site**, line
-3001. `grep -n nav_to_char kernel/kernel.zl` returns two lines: the definition and that
+3001. `grep -n nav_to_char kernel/src/kernel.zl` returns two lines: the definition and that
 call.
 
 ---
 
 ## Defect 1 — every printable character is inserted twice
 
-`kernel/input.c:343-370` pushes **both** event types for one physical keypress, and for
+`kernel/src/drivers/input/input.c:343-370` pushes **both** event types for one physical keypress, and for
 a printable key both carry the *same value*:
 
 ```c
@@ -67,7 +67,7 @@ The generic path handles this correctly: `nav_to_char('a')` returns 0, and
 delivery. That `return 0` is the deduplication.
 
 The browser branch skips it and calls `br_key` on both. `browser_key`
-(`kernel/browser.c:709-712`) appends on either:
+(`kernel/src/web/browser.c:709-712`) appends on either:
 
 ```c
 if (code >= 32 && code < 127 && url_len < URL_MAX - 2) {

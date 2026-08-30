@@ -7,7 +7,7 @@
 set -e
 cd "$(dirname "$0")"
 
-../compile kernel.zl >/dev/null
+ZL_STDLIB="$PWD/apps" ../compile src/kernel.zl >/dev/null
 cp out.c _genefi.c
 
 # -fshort-wchar: UEFI strings are UTF-16
@@ -37,8 +37,9 @@ cp out.c _genefi.c
 # of registers, which is the entire job of an interrupt handler. It is
 # suppressed BY NAME, so that a new warning class shows up rather than being
 # swallowed with it.
+INCLUDES=$(find src boot -type d -printf ' -I%s' | sort)
 CF="-target x86_64-unknown-windows -ffreestanding -fno-stack-protector \
-    -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -I.. \
+    -fshort-wchar -mno-red-zone -O2 -DZL_64 -DZL_EFI -I.. -I../src/runtime $INCLUDES \
     -Wno-excessive-regsave \
     -Werror=shift-count-overflow -Werror=void-pointer-to-int-cast \
     -Werror=pointer-to-int-cast -Werror=int-to-pointer-cast"
@@ -54,7 +55,7 @@ CORE=$(grep -vE '^[[:space:]]*(#|$)' SOURCES | tr '\n' ' ')
 
 OBJS=""
 # shellcheck disable=SC2086
-for f in efi.c _genefi.c ../freestanding/runtime_kernel.c gdt64.c $CORE; do
+for f in boot/efi.c _genefi.c ../freestanding/runtime_kernel.c boot/gdt64.c $CORE; do
     o="_efi_$(basename "$f" .c).o"
     # idt.c and apic.c hold the interrupt handlers, and they must be built
     # -mgeneral-regs-only so a handler can never touch SSE. build.sh and
@@ -66,14 +67,14 @@ for f in efi.c _genefi.c ../freestanding/runtime_kernel.c gdt64.c $CORE; do
     # 64-bit boot dying inside setup_idt() with no diagnostic at all, while
     # the 32-bit build is perfectly happy.
     EXTRA=""
-    case "$f" in idt.c|apic.c) EXTRA="-mgeneral-regs-only" ;; esac
+    case "$f" in */idt.c|*/apic.c) EXTRA="-mgeneral-regs-only" ;; esac
     # shellcheck disable=SC2086
     clang $CF $EXTRA -DZL_KERNEL_SERIAL -c "$f" -o "$o"
     OBJS="$OBJS $o"
 done
 
 # The AP trampoline is assembly, not C, so it is not in the loop above.
-clang $CF -c smp_trampoline64.S -o _efi_smptr.o
+clang $CF -c boot/smp_trampoline64.S -o _efi_smptr.o
 OBJS="$OBJS _efi_smptr.o"
 
 # UEFI images are relocated by firmware.  A zero preferred base, subsystem
@@ -89,7 +90,7 @@ lld-link $PEFLAGS -entry:efi_main -out:ZLOS.EFI $OBJS
 # Keep stage 0 independent of the kernel object graph.  If the large image is
 # malformed or faults, this small application can still say so and persist the
 # exact LoadImage/StartImage status before returning to firmware.
-clang $CF -c efi_stage0.c -o _efi_stage0.o
+clang $CF -c boot/efi_stage0.c -o _efi_stage0.o
 # shellcheck disable=SC2086
 lld-link $PEFLAGS -entry:efi_stage0_main -out:BOOTX64.EFI _efi_stage0.o
 

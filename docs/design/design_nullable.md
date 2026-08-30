@@ -4,13 +4,13 @@
 
 > **On the citations.** Every `file:line` below was read out of the tree on
 > 2026-08-02 and every "measured" row was produced by running `interp.exe`, not
-> from memory. `interp.c`, `runtime.c` and the backends were being edited
+> from memory. `src/runtime/interp.c`, `src/runtime/runtime.c` and the backends were being edited
 > concurrently by another agent while this was written, so treat line numbers as
 > pointers, not anchors — the quoted code is what matters.
 
 **Scope:** one postfix type constructor (`T?`), two builtins (`must`, `or_else`),
 one flow analysis (narrowing) in the type pass, and matching checks in
-`interp.c` / `runtime.c`. **Zero lexer changes. Zero runtime representation
+`src/runtime/interp.c` / `src/runtime/runtime.c`. **Zero lexer changes. Zero runtime representation
 changes. Zero new reserved words. `struct Node` unchanged.**
 
 ---
@@ -21,11 +21,11 @@ changes. Zero new reserved words. `struct Node` unchanged.**
    `list[int?]`. `any?` is a type error (`any` already contains `nil`).
    `nil` alone is still not a type, upholding `design_type_system.md` §9.
 2. **The lexer needs no change.** `?` is already an accepted one-character
-   symbol (`lexer.c:256`), added for the ternary. There is no two-character
+   symbol (`src/frontend/lexer.c:256`), added for the ternary. There is no two-character
    hazard, so `?` is strictly cheaper than the `->` that §2.5 of the type-system
    doc had to argue for.
 3. **No collision with the ternary.** `?` is *infix with a mandatory `:`* in
-   expression grammar (`parser.c:537-549`) and *postfix with no operand* in type
+   expression grammar (`src/frontend/parser.c:537-549`) and *postfix with no operand* in type
    grammar. Type position is closed — four sites, enumerated in §3.3 — and a
    ternary cannot occur in any of them.
 4. **Zero runtime change.** A `T?` is represented exactly as `any` is today: a
@@ -47,11 +47,11 @@ changes. Zero new reserved words. `struct Node` unchanged.**
    `refuse at compile time`, with exactly one opt-in abort.** A `T?` reaching a
    `T` context is a **compile-time error**. The only way to abort is to write
    `must(x)` yourself, which is `assert()` with a value and uses the same
-   `exit(1)` path that already exists (`interp.c:224-226`, `runtime.c:723`).
+   `exit(1)` path that already exists (`src/runtime/interp.c:224-226`, `src/runtime/runtime.c:723`).
    `or_else(x, d)` is the total alternative. **Nothing implicitly aborts and
    nothing implicitly defaults.**
 9. **Narrowing is unsound on globals** because of `env_assign`'s global-slot
-   rule (`interp.c:180-185`). Containment: parameters are always narrowable;
+   rule (`src/runtime/interp.c:180-185`). Containment: parameters are always narrowable;
    other locals are narrowable *iff no global of that name exists*; globals are
    never narrowable. This is decidable statically and is the whole mitigation.
 
@@ -80,7 +80,7 @@ It also **corrects one stale fact** in that document, see §3.2.
 ### 1.1 Method
 
 `grep -rn "nil()"` over `stdlib/*.zl`, `examples/*.zl`, `tests/*.zl` and
-`compiler.zl`, then reading every hit and classifying it as *producer* (returns
+`src/selfhost/compiler.zl`, then reading every hit and classifying it as *producer* (returns
 `nil()` as "absent"), *consumer* (tests for it), or *value* (uses `nil` as a
 first-class datum, not a sentinel). Call sites were then traced by name.
 The `tests/` copies of `stdlib` functions are excluded from the counts below —
@@ -231,7 +231,7 @@ of it.
 | `nil() != 1` | `true` | yes |
 | `[nil()] + [1]` | `[nil, 1]` | yes |
 | `len([nil()])` | `1` | yes |
-| `if nil() {` | falsy (`interp.c:66-70`) | yes |
+| `if nil() {` | falsy (`src/runtime/interp.c:66-70`) | yes |
 | **`nil() + 1`** | **`"nil1"`** | **yes — and that is the problem** |
 | `nil() - 1` | `runtime error: this operator needs numbers`, `exit(1)` | **no** |
 | `len(nil())` | `runtime error: len needs a string or a list`, `exit(1)` | **no** |
@@ -241,25 +241,25 @@ Three conclusions, and they carry most of the argument in this document:
 
 1. **The language already aborts on a failed unwrap.** For `-`, `*`, `/`, `%`,
    `<`, `>`, `<=`, `>=`, `len` and indexing, a `nil` that slipped through
-   already ends the process with a message. `interp.c:1347` is the single guard
+   already ends the process with a message. `src/runtime/interp.c:1347` is the single guard
    (`if (l.type != V_NUM || r.type != V_NUM) runtime_error(...)`), mirrored at
-   `runtime.c:320`. So "a failed unwrap aborts" is not a *new* failure mode this
+   `src/runtime/runtime.c:320`. So "a failed unwrap aborts" is not a *new* failure mode this
    design introduces — it is the status quo, and this design's job is to move it
    from run time to compile time.
 2. **`+` is the sole exception, and it is silent.** `eval_plus`
-   (`interp.c:1180-1201`) falls through to `value_to_string` on any operand pair
+   (`src/runtime/interp.c:1180-1201`) falls through to `value_to_string` on any operand pair
    that is not num+num or list+list. A leaked `nil` becomes the four characters
    `"nil"` glued into a string, and the program keeps going with a wrong answer.
    This is the one place where the feature turns a silent wrong answer into a
    loud rejection, which is a strict improvement.
 3. **`or` cannot be a default operator.** `eval_binary` returns
-   `make_bool(is_truthy(l) || is_truthy(r))` (`interp.c:1334`, mirrored at
-   `runtime.c:318`) — zl's `or` yields `true`/`false`, **not the operand**. So
+   `make_bool(is_truthy(l) || is_truthy(r))` (`src/runtime/interp.c:1334`, mirrored at
+   `src/runtime/runtime.c:318`) — zl's `or` yields `true`/`false`, **not the operand**. So
    the Python/JS idiom `x or default` is unavailable and `??` cannot be defined
    as sugar over it. §5.4's `or_else` builtin exists because of this line.
 
 There is a fourth, quieter consequence. `nil` is falsy, but so are `0`, `""`,
-`false` and `[]` (`interp.c:66-77`). `if x` is therefore *not* a nil test for
+`false` and `[]` (`src/runtime/interp.c:66-77`). `if x` is therefore *not* a nil test for
 `int?`, `str?`, `bool?` or `list[T]?`. `statemachine.zl:13-14` already documents
 having been bitten by the neighbouring version of this:
 
@@ -278,7 +278,7 @@ having been bitten by the neighbouring version of this:
 |---|---|
 | **`T?`** | **Chosen.** Zero lexer cost (§3.2), postfix so it reads as a modifier on a type you already wrote, one character, and universally recognised from Kotlin/Swift/C#/TypeScript. |
 | `option[T]` | Reads like a generic. zl has exactly one bracketed type (`list[T]`) and it is special-cased, not a general type constructor (`design_type_system.md` §9 cuts generics). Introducing a second bracketed type invites `map[K,V]`, `result[T,E]`, and a real generic system. |
-| `nil \| T` | `\|` is not in the accepted symbol set (`lexer.c:256`) — a new token, unlike `?`. And it is a *union*, which is the thing §9 cut wholesale. `T?` is deliberately the degenerate one-member union and nothing more. |
+| `nil \| T` | `\|` is not in the accepted symbol set (`src/frontend/lexer.c:256`) — a new token, unlike `?`. And it is a *union*, which is the thing §9 cut wholesale. `T?` is deliberately the degenerate one-member union and nothing more. |
 | `T = nil` default-value syntax | Conflates absence with a default. §6.4. |
 
 **`any?` is a type error**, not a synonym for `any`. `any` is defined as "a
@@ -296,12 +296,12 @@ generated annotation stack `?`s silently. One `?` or none.
 lexer's symbol set, and quote:
 
 ```c
-/* design_type_system.md §2.2, quoting lexer.c:198 */
+/* design_type_system.md §2.2, quoting src/frontend/lexer.c:198 */
 if (strchr("(){}[],.+-*/%=!<>", c) == NULL) {
 ```
 
 **That is no longer the code.** As of today the set already contains both
-characters, at `lexer.c:252-258`:
+characters, at `src/frontend/lexer.c:252-258`:
 
 ```c
     /* '?' and ':' are only ever the two halves of a ternary. Neither
@@ -322,7 +322,7 @@ So:
   equivalent hazard because it is one character: there is no two-character
   ladder for it to jump ahead of, and comments and string literals are consumed
   by `next_token` before `lex_symbol` is ever reached
-  (`lexer.c:265-292`) regardless.
+  (`src/frontend/lexer.c:265-292`) regardless.
 
 Measured, on the current binary — the annotation position is still a hard parse
 error, so nothing that parses today changes meaning:
@@ -342,7 +342,7 @@ reached for free.
 
 ### 3.3 Proof that `T?` cannot collide with the ternary
 
-The ternary is parsed at the loosest precedence, `parser.c:537-549`:
+The ternary is parsed at the loosest precedence, `src/frontend/parser.c:537-549`:
 
 ```c
 static Node *parse_ternary(void)
@@ -517,15 +517,15 @@ type-checks with no source edit**:
 
 | Operation | Result type | Why it is safe |
 |---|---|---|
-| `x == y`, `x != y` | `bool` | `values_equal` is total (`interp.c:1257`) |
-| `str(x)` | `str` | `value_to_string` renders `V_NIL` as `"nil"` (`interp.c:84`) |
+| `x == y`, `x != y` | `bool` | `values_equal` is total (`src/runtime/interp.c:1257`) |
+| `str(x)` | `str` | `value_to_string` renders `V_NIL` as `"nil"` (`src/runtime/interp.c:84`) |
 | `print(x)` | — | same path |
-| `type(x)` | `str` | `interp.c:858-861` handles `V_NIL` in its `default:` |
+| `type(x)` | `str` | `src/runtime/interp.c:858-861` handles `V_NIL` in its `default:` |
 | assign to a `T?` or `any` slot | — | §4.2 |
 | pass to a `T?` or `any` parameter | — | §4.2 |
 | `return x` from `-> T?` or `-> any` | — | §4.2 |
 | element of a `list[T?]` or `list[any]` | — | §4.2 |
-| `if x`, `while x`, `and`, `or`, `not x` | `bool` | `is_truthy` is total (`interp.c:66-77`) |
+| `if x`, `while x`, `and`, `or`, `not x` | `bool` | `is_truthy` is total (`src/runtime/interp.c:66-77`) |
 
 That last row is legal **but never narrows** — see §5.2. It is legal because
 refusing it would break Neutrality: `if x { }` runs today and must keep running
@@ -584,7 +584,7 @@ tree:
 | N1 | `x == nil()` / `x != nil()` | `dijkstra.zl:25`, `combinat.zl:168` |
 | N2 | `type(x) == "nil"` / `type(x) != "nil"` | `astar.zl:66`, `statemachine.zl:48`, `segtree.zl:52`, `graphx.zl:247` |
 | N3 | `t = type(x)` then `t == "nil"` — one level of let-binding | `jsonw.zl:29-30`, `sortx.zl:35-36` |
-| N4 | `not <N1|N2|N3>` | (defensive; `not` is the only negation, `interp.c:1493`) |
+| N4 | `not <N1|N2|N3>` | (defensive; `not` is the only negation, `src/runtime/interp.c:1493`) |
 
 N3 is not gold-plating. Both files that consume `nil` without producing it use
 it:
@@ -628,7 +628,7 @@ Where narrowing applies:
   40 lines, and it is a pure function of the AST.
 
 **Truthiness is deliberately NOT a narrowing form.** `if x { }` does not refine
-`x`, because `0`, `""`, `false` and `[]` are falsy too (`interp.c:66-77`). For
+`x`, because `0`, `""`, `false` and `[]` are falsy too (`src/runtime/interp.c:66-77`). For
 `int?` the branch `if x { }` is entered for neither nil *nor* zero, so treating
 it as a nil test would be simply wrong for `x == 0`. It stays legal (§4.3) and
 inert, and the checker should suggest `x != nil()` when it sees a `T?` in a
@@ -638,7 +638,7 @@ documents the neighbouring bug; do not reintroduce it.
 ### 5.3 Where narrowing does not apply — the global-slot problem
 
 This is the second of the two language-level blockers, and it is fatal to naive
-narrowing. `env_assign` (`interp.c:180-185`):
+narrowing. `env_assign` (`src/runtime/interp.c:180-185`):
 
 ```c
 static void env_assign(Env *e, const char *name, Value val)
@@ -651,7 +651,7 @@ static void env_assign(Env *e, const char *name, Value val)
 
 `env_find` walks the parent chain, so **an assignment inside a function writes
 the global slot when a global of that name exists.** It is deliberate — it is
-what lets `compiler.zl` share a cursor across functions.
+what lets `src/selfhost/compiler.zl` share a cursor across functions.
 
 The consequence for narrowing:
 
@@ -674,7 +674,7 @@ fn use() {
    only thing in the language that is — so no callee can reach a parameter.
 2. **A non-parameter local is narrowable iff no global of that name exists.**
    Function environments parent directly to the global environment
-   (`interp.c:1404`: `Env *call_env = env_new(g_global);`), never to the
+   (`src/runtime/interp.c:1404`: `Env *call_env = env_new(g_global);`), never to the
    caller's, so a callee can only clobber a name that is global or its own.
    The checker already walks the whole file and therefore already knows the
    global name set.
@@ -699,7 +699,7 @@ type error: 'cur' cannot be narrowed - a global named 'cur' exists (line 1),
 **Uncertainty, stated:** rules 1–4 are sound against the *interpreter's*
 scoping as it stands today. If `design_type_system.md`'s work ever makes typed
 function bodies use true lexical locals in the compiled backends but not in
-`interp.c`, the two engines would narrow differently and Neutrality would break
+`src/runtime/interp.c`, the two engines would narrow differently and Neutrality would break
 before this feature ever ran. Any change to `env_assign` or to `env_new(g_global)`
 must re-check this section.
 
@@ -725,12 +725,12 @@ shapes of need:
 | `or_else(x, d)` | `(T?, T) -> T` | if `x` is nil: `d`. Otherwise `x`. Total. |
 
 Both are ordinary identifiers — zero reserved words, per `MASTER_PLAN.md` §4.3,
-exactly like `print` and `assert`. Both must be added to `interp.c`'s
-`call_builtin` **and** `runtime.c`'s (parity is load-bearing; `runtime.c:717`
-and `interp.c:826` are the matching `nil` entries to copy the shape from).
+exactly like `print` and `assert`. Both must be added to `src/runtime/interp.c`'s
+`call_builtin` **and** `src/runtime/runtime.c`'s (parity is load-bearing; `src/runtime/runtime.c:717`
+and `src/runtime/interp.c:826` are the matching `nil` entries to copy the shape from).
 
 `must` uses the abort path that already exists. `assert` is
-`interp.c:830-834` / `runtime.c:720-724`; `must` is that same `fflush` +
+`src/runtime/interp.c:830-834` / `src/runtime/runtime.c:720-724`; `must` is that same `fflush` +
 `fprintf(stderr, ...)` + `exit(1)`, differing only in returning the value on
 success. It should name the source line:
 
@@ -756,7 +756,7 @@ clarity before anyone annotates it.
   refine `x`. §5.4 exists precisely for this.
 - **No narrowing of list elements or indexed expressions.** `if xs[0] != nil()`
   does not refine `xs[0]`, because `xs` is mutable in place
-  (`interp.c:1563-1580`, index-assign) and two evaluations of `xs[0]` need not
+  (`src/runtime/interp.c:1563-1580`, index-assign) and two evaluations of `xs[0]` need not
   agree. Only bare names narrow.
 - **No flow-sensitive *re*-widening beyond the block.** A narrowed name reverts
   to `T?` at the end of the block that narrowed it (except for the early-exit
@@ -767,7 +767,7 @@ clarity before anyone annotates it.
 ## 6. The hard constraint: zl has no catchable errors
 
 `runtime_error` is `fflush(stdout); fprintf(stderr, ...); exit(1)`
-(`interp.c:224-226`). There is no `try`, no error value convention, no
+(`src/runtime/interp.c:224-226`). There is no `try`, no error value convention, no
 `errno`-style out-parameter. A failed unwrap therefore cannot throw. The task
 brief is right that this forces a choice, and it must be made explicitly.
 
@@ -865,7 +865,7 @@ precisely rather than gestured at.
 a PowerShell script that watches exit codes from outside — and it explicitly
 rejects `try`/`catch` on engine cost:
 
-> A real `catch` is five different mechanisms, not one … `nativert.c` has **no
+> A real `catch` is five different mechanisms, not one … `src/backends/native/nativert.c` has **no
 > error path whatsoever** so it would need raising built first, in hand-written
 > x86-64.
 
@@ -888,7 +888,7 @@ Errors-as-values needs **two** things — flow-sensitive narrowing *and* a gener
 union type — and this document supplies only the first. §10 cuts general unions
 deliberately, and `T?` is specifically the *degenerate* one-member union chosen
 because it is the one the corpus demonstrably needs. `int | err` is a real
-union: it carries a payload, `|` is not in the symbol set (`lexer.c:256`), and
+union: it carries a payload, `|` is not in the symbol set (`src/frontend/lexer.c:256`), and
 its narrowing forms are not N1–N4. When trigger 2 fires, the re-costing should
 find that the narrowing machinery in §5.2 and the block-exit analysis are
 reusable more or less as-is, and that the type-level work is still ahead. That
@@ -898,7 +898,7 @@ is a genuine discount, but it is not the whole bill.
 integer divide that the CPU kills the process over — *"exit code is not 1"* —
 so some existing failure paths are worse than an orderly abort. `must(x)`
 failing produces a message on stderr and a clean `exit(1)` through the path at
-`interp.c:224-226`, which the harness in that document can observe and assert
+`src/runtime/interp.c:224-226`, which the harness in that document can observe and assert
 on. So the one abort this design introduces is, by that document's own
 instrument, a *testable* failure rather than an untestable crash.
 
@@ -918,7 +918,7 @@ n += "x"
 check("number += string",  n, "5x")    # + is a join as soon as one side is text
 ```
 
-`eval_plus` (`interp.c:1180-1201`) implements it and `runtime.c:290-310`
+`eval_plus` (`src/runtime/interp.c:1180-1201`) implements it and `src/runtime/runtime.c:290-310`
 mirrors it. Note that both directions are locked, so `+` cannot be narrowed to
 "numeric unless the *left* side is a string" either.
 
@@ -953,12 +953,12 @@ IGNORES them for representation"**, with the three-way table at its §6.1. That
 choice carries over unchanged and needs no re-argument, but it has three
 concrete obligations here:
 
-1. **`interp.c` and `runtime.c` both gain `must` and `or_else`.** Parity between
+1. **`src/runtime/interp.c` and `src/runtime/runtime.c` both gain `must` and `or_else`.** Parity between
    them is load-bearing — they are two implementations of one builtin table, and
    `run_tests.ps1` is what catches drift. Add both in the same commit.
 2. **The interpreter does not need the narrowing analysis.** Narrowing decides
    *acceptance*, and acceptance is decided by the type pass over `Node*` that
-   §6 says is shared. `interp.c` runs the accepted program with boxed values
+   §6 says is shared. `src/runtime/interp.c` runs the accepted program with boxed values
    exactly as today. There is no second implementation of narrowing to drift.
 3. **The Neutrality harness (§6.2 of that document) covers this feature for
    free.** `strip_annotations(P)` deletes `: T?` and `-> T?` the same way it
@@ -966,13 +966,13 @@ concrete obligations here:
    calls with runtime meaning, not annotations. Worth a test: a program using
    `or_else` must produce identical output annotated and stripped.
 
-**`compiler.zl`** needs the same ~20-line additive skip logic
+**`src/selfhost/compiler.zl`** needs the same ~20-line additive skip logic
 `design_type_system.md` §7.1 describes, extended by one character: after
 skipping a type name, skip an optional `?`. The fixpoint risk called out in
-`design_selfhost_parity.md` — `compiler.zl` concatenating a *number* onto a
+`design_selfhost_parity.md` — `src/selfhost/compiler.zl` concatenating a *number* onto a
 *string* to emit C, where unboxing could flip `"3"` to `"3.0"` — is untouched by
 this proposal, because `T?` changes no numeric representation and `must` /
-`or_else` emit ordinary boxed calls. Do not annotate `compiler.zl` (that
+`or_else` emit ordinary boxed calls. Do not annotate `src/selfhost/compiler.zl` (that
 document's R7 and Stage 8 still apply).
 
 ---
@@ -984,7 +984,7 @@ document's R7 and Stage 8 still apply).
 | `design_type_system.md` | This is its §9 "nullable" row, unblocked. §1–§8 unchanged. One stale fact corrected (§3.2 here). |
 | `design_maps.md` | Direct hit. `get(m, k)` is specified to return "value for `k`, or `nil` if absent" — that is `V?` where `V` is the value type, and `has_key(m,k)` is its companion test. When maps land, `get` should be typed `-> any?` and the N1/N2 narrowing forms apply unchanged. `get(m, k, default)` is `or_else` by another name; consider defining one in terms of the other rather than shipping two defaulting mechanisms. |
 | `design_memory_structs.md` | **Not the same thing.** A struct there is an address in a `double`, and "no struct" would be address `0`, not `V_NIL`. `T?` deliberately does not extend to struct handles — a null-pointer type is a separate design and should not be smuggled in under this syntax. |
-| `design_selfhost_parity.md` | `?` in annotations is one more feature `compiler.zl` must skip. It widens the measured 63-of-110 gap by zero files today (nothing uses annotations yet) and by one line of skip logic once they do. |
+| `design_selfhost_parity.md` | `?` in annotations is one more feature `src/selfhost/compiler.zl` must skip. It widens the measured 63-of-110 gap by zero files today (nothing uses annotations yet) and by one line of skip logic once they do. |
 | `design_floats.md` | `float?` is well-formed and needs nothing special. NaN is *not* a nil and must not be conflated with one — `nil != NaN`, and `type(NaN) == "num"`. |
 | `design_switch_case.md` | If a `switch` on a `T?` lands, a `nil` arm should narrow the other arms to `T`. Out of scope here; noted so it is not designed twice. |
 
@@ -997,7 +997,7 @@ document's R7 and Stage 8 still apply).
 | **General unions (`A \| B`)** | `design_type_system.md` §9's cut, still right. `T?` is the single degenerate case that 13 files demonstrably need; nothing in the corpus needs `int \| str`. |
 | **Distinguishing two absences** | §1.5(a)'s `dj_get` wants "unreachable" and "no such node" to differ. That needs a sum type with payloads. Genuinely out of scope. |
 | **`?.` safe navigation** | §5.5. No field access exists yet. |
-| **`??`** | §5.5. `or_else` covers it and `or` cannot implement it (`interp.c:1334`). |
+| **`??`** | §5.5. `or_else` covers it and `or` cannot implement it (`src/runtime/interp.c:1334`). |
 | **Non-null-by-default** | Would mean every unannotated `any` is non-null, which is false — `any` includes `V_NIL` today and must keep doing so. Nullability is opt-in on the annotation, like everything else. |
 | **Narrowing through calls** | Needs effect analysis. §5.4's `must` is the escape. |
 | **Narrowing globals** | §5.3. Unsound as the language stands. |
@@ -1016,7 +1016,7 @@ document's R7 and Stage 8 still apply).
 | R2 | **The global-slot rule silently disables narrowing** when an unrelated top-level name matches a local (§5.3, rule 2). | The error message names the offending global and its line. Do not fail silently by treating the value as `any`. |
 | R3 | **`must` becomes the default fix** because it is the shortest, converting silent wrongness into crashes. | Error text lists `or_else` first and `must` last, with the word "aborts" attached (§4.4). |
 | R4 | **`list[int]?` vs `list[int?]` confusion.** | Render types in the canonical spelling in every message; add both to the test corpus. |
-| R5 | **`interp.c` / `runtime.c` builtin drift** on `must` / `or_else`. | Same commit, and a `run_tests.ps1` case exercising both engines. This is the documented failure mode for every builtin so far. |
+| R5 | **`src/runtime/interp.c` / `src/runtime/runtime.c` builtin drift** on `must` / `or_else`. | Same commit, and a `run_tests.ps1` case exercising both engines. This is the documented failure mode for every builtin so far. |
 | R6 | **`seg_op`'s identity-`nil` gets "refactored away"** by someone who reads it as a sentinel. | §1.5(b) says out loud that it is a value, and its annotation `-> int?` is correct as written. |
 | R7 | **No error design exists** (§6.5), so §6's whole decision rests on an assumption. | Stated as an assumption, not a fact. Revisit if a `design_errors.md` ever lands. |
 | R8 | **Uncertainty about the count** of affected functions (§1.2, 22 vs the brief's 33). | The design is insensitive to it — the site *shapes* are what matter and they are enumerated. Recount before quoting a number in a changelog. |
@@ -1028,13 +1028,13 @@ document's R7 and Stage 8 still apply).
 **Stage N0 — spec only (this document).** No code.
 
 **Stage N1 — syntax.** `parse_type` accepts a trailing `?` and encodes it in the
-type node's `text` (§3.5). `any?` and `T??` are errors. `compiler.zl`'s skip
+type node's `text` (§3.5). `any?` and `T??` are errors. `src/selfhost/compiler.zl`'s skip
 logic skips the `?`. Nothing checks anything yet. *Done when:* `x: int? = nil()`
 and `fn f(a: int?) -> str? { ... }` parse on all engines, `verify.ps1` is still
 green, and every stdlib module still runs byte-identically.
 
-**Stage N2 — the builtins.** `must` and `or_else` in `interp.c` and
-`runtime.c`, with tests that they behave identically. Usable in untyped code
+**Stage N2 — the builtins.** `must` and `or_else` in `src/runtime/interp.c` and
+`src/runtime/runtime.c`, with tests that they behave identically. Usable in untyped code
 immediately. *Done when:* `run_tests.ps1` covers `must` on nil (exit 1, correct
 message) and non-nil, and `or_else` both ways, on both engines.
 
@@ -1051,7 +1051,7 @@ answer.
 **Stage N5 — annotate the corpus, consumers first.** `sortx.zl` and `jsonw.zl`
 (consumers, small, total), then `statemachine.zl` and `astar.zl` (self-contained
 producer+consumer pairs), then the rest. `linalg.zl` last — it has the most
-call sites and §1.5(c)'s real defect. **Do not annotate `compiler.zl`.**
+call sites and §1.5(c)'s real defect. **Do not annotate `src/selfhost/compiler.zl`.**
 
 **Definition of done for the feature:**
 
@@ -1061,7 +1061,7 @@ call sites and §1.5(c)'s real defect. **Do not annotate `compiler.zl`.**
    unannotated file is unaffected, by construction (§4.1).
 3. The Neutrality harness passes: for every annotated test program,
    `interp(P) == interp(strip_annotations(P))`.
-4. `verify.ps1` reaches the same byte-identical fixpoint, with `compiler.zl`
+4. `verify.ps1` reaches the same byte-identical fixpoint, with `src/selfhost/compiler.zl`
    unannotated.
 5. Annotating `astar.zl` and `statemachine.zl` requires **no change to their
    bodies** — the existing `if type(x) == "nil"` tests are accepted as-is. If

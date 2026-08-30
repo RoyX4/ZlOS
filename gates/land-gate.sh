@@ -48,8 +48,8 @@ run "zl toolchain"     "$WT"               ./build.sh
 run "kernel 32-bit"    "$WT/kernel"        ./build.sh
 run "kernel 64-bit"    "$WT/kernel"        ./build64.sh
 run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
-[ -x "$WT/kernel/verify-sources.sh" ] && run "SOURCES coverage" "$WT/kernel" ./verify-sources.sh
-run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
+[ -x "$WT/kernel/tools/checks/verify-sources.sh" ] && run "SOURCES coverage" "$WT/kernel" ./tools/checks/verify-sources.sh
+run "hosttest build"   "$WT/kernel/tests/host" ./build.sh
 
 # --- RUN them. Building a test proves it compiles; it proves nothing else.
 # This gate built ~26 harnesses and executed none of them for its whole life -
@@ -73,12 +73,12 @@ run "hosttest build"   "$WT/kernel/hosttest" ./build.sh
 # work would rot.
 echo; echo "=== hosttest run ==="
 hf=0; hp=0; hs=0
-for t in "$WT"/kernel/hosttest/*; do
+for t in "$WT"/kernel/tests/host/*; do
   [ -x "$t" ] && [ ! -d "$t" ] || continue
   case "$(basename "$t")" in
-    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|gpu-dev.sh|modeset-run.sh|jmptest32) continue;;
+    *.*|intel_probe|modeset_test|dpll_test|gpu_fillrate|jmptest32) continue;;
   esac
-  ( cd "$WT/kernel/hosttest" && timeout 180 "./$(basename "$t")" >/dev/null 2>&1 )
+  ( cd "$WT/kernel/tests/host" && timeout 180 "./$(basename "$t")" >/dev/null 2>&1 )
   case $? in
     0)  hp=$((hp+1));;
     77) echo "SKIP: $(basename "$t") (77 - hardware or device not present here)"
@@ -94,30 +94,31 @@ else echo ">>> ok (hosttest run: $hp passed, $hs skipped)"; fi
 # kernel.zl call site resolves (zl has no compile-time check for that at all),
 # and check-memmap proves no two fixed addresses overlap - which is how
 # LINE_BUF and DISK_SCRATCH sat on 0x02030000 through a whole integration.
-[ -x "$WT/kernel/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./check-zl-calls.sh
-[ -x "$WT/kernel/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./check-memmap.sh
+[ -x "$WT/kernel/tools/checks/check-zl-calls.sh" ] && run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
+[ -x "$WT/kernel/tools/checks/check-memmap.sh" ]   && run "memory map"    "$WT/kernel" ./tools/checks/check-memmap.sh
 # check-memmap.sh reads kernel.zl and no C at all, which is why intel.c's
 # edid_buf sat inside fb.c's blur arena while it printed a clean map. This is
 # the other half: every page-aligned hex literal in a .c or .h that lands
 # strictly inside a declared HI_* region without being its base.
-[ -x "$WT/kernel/check-himap.sh" ]    && run "high-RAM map"  "$WT/kernel" ./check-himap.sh
+[ -x "$WT/kernel/tools/checks/check-himap.sh" ]    && run "high-RAM map"  "$WT/kernel" ./tools/checks/check-himap.sh
 
 # --- the reverse SOURCES check: a .c present but not listed is silently not compiled
 if [ -f "$WT/kernel/SOURCES" ]; then
   echo; echo "=== reverse SOURCES sweep ==="
   # SOURCES proves every listed file is compiled. This proves the reverse: that
-  # a .c sitting in kernel/ is not silently absent from the build. Three
+  # a .c sitting in kernel/src is not silently absent from the build. Three
   # outcomes, and only one of them is a failure.
   miss=0; hostonly=0; dead=0
-  for f in "$WT"/kernel/*.c; do
+  while IFS= read -r f; do
     b=$(basename "$f")
+    rel=${f#"$WT/kernel/"}
     # compiled outside the SOURCES loop by every target, deliberately
-    case "$b" in _gen*.c|gdt.c|gdt64.c|efi.c|out.c) continue;; esac
-    grep -qx "$b" "$WT/kernel/SOURCES" && continue
-    if grep -q "$b" "$WT/kernel/hosttest/build.sh" 2>/dev/null; then
+    case "$rel" in src/runtime/interp_kernel.c) continue;; esac
+    grep -qx "$rel" "$WT/kernel/SOURCES" && continue
+    if grep -q "$rel\|$b" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
       # host-only: a harness compiles it, the kernel does not. Correct.
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
-    elif grep -lsr -- "${b%.c}" "$WT"/kernel/*.c "$WT"/kernel/*.h 2>/dev/null \
+    elif grep -lsr -- "${b%.c}" "$WT"/kernel/src "$WT"/kernel/boot 2>/dev/null \
          | grep -qv "/$b\$"; then
       # something references it but SOURCES does not list it - this is the
       # silent-drop this whole check exists for
@@ -126,7 +127,7 @@ if [ -f "$WT/kernel/SOURCES" ]; then
       # referenced by nothing at all. Not a build failure; dead weight.
       echo "dead (referenced by nothing): $b"; dead=$((dead+1))
     fi
-  done
+  done < <(find "$WT/kernel/src" -type f -name '*.c' | sort)
   if [ $miss -gt 0 ]; then
     FAIL=$((FAIL+1)); echo ">>> FAIL (reverse SOURCES: $miss silently uncompiled)"
   else
@@ -135,7 +136,7 @@ if [ -f "$WT/kernel/SOURCES" ]; then
 fi
 
 # --- boot gates: QEMU under TCG, one at a time, guarded
-for g in mkiso.sh verify.sh verify-iso.sh verify-efi.sh verify-raw.sh verify-disk.sh verify-clock.sh; do
+for g in tools/images/mkiso.sh verify.sh tools/checks/verify-iso.sh tools/checks/verify-efi.sh tools/checks/verify-raw.sh tools/checks/verify-disk.sh tools/checks/verify-clock.sh; do
   [ -x "$WT/kernel/$g" ] || continue
   until guard; do sleep 30; done
   run "boot: $g" "$WT/kernel" "./$g"

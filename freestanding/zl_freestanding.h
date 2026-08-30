@@ -3,7 +3,7 @@
  * interp.c's body is unchanged between the two builds. On the host it links
  * glibc; here every name it uses is redirected to interp_kernel.c's, each of
  * which is checked against the real libc's over tens of thousands of generated
- * inputs (kernel/hosttest/libctest.c, 43 checks).
+ * inputs (kernel/tests/host/libctest.c, 43 checks).
  *
  * The redirection is macros rather than #ifdefs through the interpreter,
  * because the alternative is a second copy of it that the hosted test suite

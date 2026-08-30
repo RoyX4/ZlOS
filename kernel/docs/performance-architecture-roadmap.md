@@ -8,7 +8,7 @@ Windows, Apple and Linux documentation.
 The locally executable implementation batch has now landed. The exact source
 changes, final BIOS/UEFI/network/SMP evidence and the physical-only acceptance
 gates are recorded in
-[`performance-architecture-implementation-2026-08-22.md`](performance-architecture-implementation-2026-08-22.md).
+[`performance-architecture-implementation-2026-08-22.md`](evidence/performance-architecture-implementation-2026-08-22.md).
 This page remains the architecture and test contract; it must not be read as a
 claim that the ThinkPad gates have run.
 
@@ -44,8 +44,8 @@ real owners:
 | desktop restoration | p95 9.169 ms; max 143.744 ms | split and cache/optimise the desktop restore separately |
 | present after WC | about 3 ms in the phase trace | no longer the dominant owner |
 
-At `kernel/wm.c:1735`, damage is walked against visible windows; at
-`kernel/wm.c:1810` and `:1820`, it invokes `chrome()` and `hook_draw()`.
+At `kernel/src/graphics/windowing/wm.c:1735`, damage is walked against visible windows; at
+`kernel/src/graphics/windowing/wm.c:1810` and `:1820`, it invokes `chrome()` and `hook_draw()`.
 That explains the trace directly. The next architecture is therefore:
 
 ```text
@@ -114,7 +114,7 @@ explicit retire/fence rule rather than a free while another CPU reads it.
 ### 2. Use a real region representation before elaborate GPU work
 
 Damage is a correctness contract first and a speed hint second. The current
-rectangle merger in `kernel/fb.c:472-510` treats touching rectangles as one
+rectangle merger in `kernel/src/graphics/framebuffer/fb.c:472-510` treats touching rectangles as one
 bounding box. That is not area-preserving: two thin L-shaped/touching regions
 can turn into a large rectangle containing pixels neither region requested.
 This is a plausible amplifier, not yet a measured explanation for the physical

@@ -4,9 +4,9 @@
 # Build the image, boot it headless, drive the shell over serial, capture
 # the transcript, diff against golden.txt, always time out.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
-GOLDEN=golden.txt
+GOLDEN=tests/fixtures/golden.txt
 OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
 
 ./build.sh >/dev/null 2>&1 || { echo "FAIL: kernel did not build"; exit 1; }

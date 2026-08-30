@@ -9,7 +9,7 @@
 # 4. Checks the self-hosting fixpoint (./verify_selfhost.sh) - compiler.zl
 #    compiled by the interpreter must compile itself to byte-identical output.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 fail=0
 tmp=$(mktemp -d)
@@ -27,7 +27,7 @@ echo "== C backend: cross-check against interpreter =="
 for t in tests/*.zl; do
     name=$(basename "$t" .zl)
     ( cd "$tmp" && "$OLDPWD/compile" "$OLDPWD/$t" >/dev/null 2>&1 && \
-      gcc -O2 -D_strdup=strdup -I"$OLDPWD" -o "$name.bin" out.c "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -lm 2>"$name.cc.err" )
+      gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o "$name.bin" out.c "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm 2>"$name.cc.err" )
     if [ -x "$tmp/$name.bin" ]; then
         "$tmp/$name.bin" > "$tmp/$name.native_c.out" 2>&1
         if diff -q "$tmp/$name.interp.out" "$tmp/$name.native_c.out" >/dev/null; then
@@ -118,7 +118,7 @@ else
     echo "  FAIL  w5 primitives"; cat "$tmp/w5.interp"; fail=1
 fi
 # the C backend is the kernel-track backend: it must agree exactly
-( cd "$tmp" && "$OLDPWD/compile" w5.zl >/dev/null 2>&1 &&   gcc -O2 -D_strdup=strdup -I"$OLDPWD" -o w5.bin out.c "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -lm 2>/dev/null )
+( cd "$tmp" && "$OLDPWD/compile" w5.zl >/dev/null 2>&1 &&   gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o w5.bin out.c "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm 2>/dev/null )
 if [ -x "$tmp/w5.bin" ]; then
     "$tmp/w5.bin" > "$tmp/w5.c.out" 2>&1
     if diff -q "$tmp/w5.interp" "$tmp/w5.c.out" >/dev/null; then
@@ -199,7 +199,7 @@ if command -v qemu-system-i386 >/dev/null; then
         echo "  FAIL  kernel gate"; echo "$kout" | head -8; fail=1
     fi
     if command -v nasm >/dev/null; then
-        if rout=$(./kernel/verify-raw.sh 2>&1); then
+        if rout=$(./kernel/tools/checks/verify-raw.sh 2>&1); then
             echo "  $rout"
         else
             echo "  FAIL  raw-bootloader gate"; echo "$rout" | head -8; fail=1
@@ -214,7 +214,7 @@ if command -v qemu-system-i386 >/dev/null; then
     # struct idt_ptr/gdt_ptr were 6 bytes instead of 10 in the EFI build, so
     # lidt/lgdt took the top half of each base from adjacent memory.
     if [ -f /usr/share/OVMF/OVMF_CODE_4M.fd ] && command -v qemu-system-x86_64 >/dev/null; then
-        if eout=$(./kernel/verify-efi.sh 2>&1); then
+        if eout=$(./kernel/tools/checks/verify-efi.sh 2>&1); then
             echo "  ok    zlOS boots as its own UEFI application (64-bit)"
         else
             echo "  FAIL  native-EFI gate"; echo "$eout" | head -8; fail=1
@@ -240,7 +240,7 @@ done
 echo "== examples: C backend cross-check (deterministic ones) =="
 for name in csvstats wordfreq texttools; do
     ( cd "$tmp" && "$OLDPWD/compile" "$OLDPWD/examples/$name.zl" >/dev/null 2>&1 && \
-      gcc -O2 -D_strdup=strdup -I"$OLDPWD" -o "ex_$name.bin" out.c "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -lm 2>"ex_$name.cc.err" )
+      gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o "ex_$name.bin" out.c "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm 2>"ex_$name.cc.err" )
     if [ -x "$tmp/ex_$name.bin" ]; then
         "$tmp/ex_$name.bin" > "$tmp/ex_$name.c.out" 2>&1
         if diff -q "$tmp/ex_$name.out" "$tmp/ex_$name.c.out" >/dev/null; then
@@ -331,7 +331,7 @@ if command -v clang >/dev/null; then
     # runtime.c/os_linux.c must be linked: any bridged builtin (has, sum,
     # join, ...) calls back into the boxed runtime through the zlx_ bridge.
     ( cd "$tmp" && "$OLDPWD/compilel" llvm_smoke.zl >/dev/null 2>&1 && \
-      clang -O2 out.ll "$OLDPWD/runtime.c" "$OLDPWD/os_linux.c" -I"$OLDPWD" \
+      clang -O2 out.ll "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -I"$OLDPWD/src/runtime" \
             -D_strdup=strdup -o llvm_smoke.bin -lm 2>/dev/null )
     if [ -x "$tmp/llvm_smoke.bin" ]; then
         "$tmp/llvm_smoke.bin" > "$tmp/llvm_smoke.llvm.out" 2>&1

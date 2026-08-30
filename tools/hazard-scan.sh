@@ -13,7 +13,7 @@
 # Exit 1 on any hit. Run locally, or from .github/workflows/gates.yml.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 COUNT_ONLY=0
 [ "${1:-}" = "--count" ] && COUNT_ONLY=1
@@ -97,7 +97,7 @@ if command -v clang >/dev/null 2>&1; then
             total=$((total+n)); bad=$((bad+1))
         fi
     done
-    popd >/dev/null
+    popd >/dev/null || exit
     if [ "$COUNT_ONLY" -eq 1 ]; then echo "$total"; exit 0; fi
     base=$(grep -E '^efi_truncation_sites=' tools/hazard-baseline.txt 2>/dev/null | cut -d= -f2)
     base=${base:-0}
@@ -119,13 +119,13 @@ fi
 
 echo "== 3. gates must poll for a marker, never race a wall clock =="
 # A gate that fails for reasons unrelated to the code costs a bisect every time.
-for g in kernel/verify*.sh; do
+for g in kernel/verify.sh kernel/tools/checks/verify-*.sh; do
     [ -f "$g" ] || continue
     if grep -qE 'timeout' "$g" && ! grep -qE 'while|until|CEILING|kill -0' "$g"; then
         hit "$g uses timeout with no polling loop"
     fi
 done
-grep -qE 'CEILING|kill -0' kernel/verify-raw.sh 2>/dev/null && ok "verify*.sh poll rather than racing a clock"
+grep -qE 'CEILING|kill -0' kernel/tools/checks/verify-raw.sh 2>/dev/null && ok "verify*.sh poll rather than racing a clock"
 
 echo "== 4. generated sources and build outputs must not be tracked =="
 found=0
@@ -142,7 +142,7 @@ if [ -x ./interp ] && [ -x ./compile ]; then
     printf 'counter = 100\nfn bump() { counter = 7  return 0 }\nbump()\nprint(counter)\n' > "$tmp/s.zl"
     a=$(./interp "$tmp/s.zl" 2>&1)
     if ./compile "$tmp/s.zl" >/dev/null 2>&1 \
-       && gcc -O2 -D_strdup=strdup -I. -o "$tmp/s.bin" out.c runtime.c os_linux.c -lm 2>/dev/null; then
+       && gcc -O2 -D_strdup=strdup -Isrc/runtime -o "$tmp/s.bin" out.c src/runtime/runtime.c src/runtime/os_linux.c -lm 2>/dev/null; then
         b=$("$tmp/s.bin" 2>&1)
         [ "$a" = "$b" ] && ok "interp and C backend agree (both '$a')" \
                         || hit "scoping divergence: interp '$a' vs C backend '$b'"

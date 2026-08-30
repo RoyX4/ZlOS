@@ -13,16 +13,16 @@ tree, because the claim contradicts a documented hardware-safety boundary.
 ## The chain, verified end to end
 
 ```
-kernel/kernel.zl:1489        if cmd == 80 {          # 'P' - light the panel with OUR driver
+kernel/src/kernel.zl:1489        if cmd == 80 {          # 'P' - light the panel with OUR driver
         ↓
 freestanding/runtime_kernel.c:1484
         if (streq(name, "panel_up")) return zl_num((double)intel_bringup_panel());
         ↓
-kernel/intel.c:4288          u32 intel_bringup_panel(void)
+kernel/src/drivers/display/intel.c:4288          u32 intel_bringup_panel(void)
         ↓
-kernel/intel.c:4323              intel_link_train_arm(1);
-kernel/intel.c:4324              int ok = intel_modeset_run(0);
-kernel/intel.c:4325              intel_link_train_arm(0);
+kernel/src/drivers/display/intel.c:4323              intel_link_train_arm(1);
+kernel/src/drivers/display/intel.c:4324              int ok = intel_modeset_run(0);
+kernel/src/drivers/display/intel.c:4325              intel_link_train_arm(0);
 ```
 
 `intel_link_train_arm` is the setter for `lt_armed` (`intel.c:2186`). So pressing `P`
@@ -35,11 +35,11 @@ There is a second identical arming pair at `intel.c:4336`/`4338`, in the shutdow
 
 ```
 $ grep -rn "intel_link_train_arm" kernel/*.c freestanding/*.c | grep -v 'out.c\|_gen'
-kernel/intel.c:2186:void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
-kernel/intel.c:4323:    intel_link_train_arm(1);
-kernel/intel.c:4325:    intel_link_train_arm(0);
-kernel/intel.c:4336:    intel_link_train_arm(1);
-kernel/intel.c:4338:    intel_link_train_arm(0);
+kernel/src/drivers/display/intel.c:2186:void intel_link_train_arm(int on) { lt_armed = on ? 1 : 0; }
+kernel/src/drivers/display/intel.c:4323:    intel_link_train_arm(1);
+kernel/src/drivers/display/intel.c:4325:    intel_link_train_arm(0);
+kernel/src/drivers/display/intel.c:4336:    intel_link_train_arm(1);
+kernel/src/drivers/display/intel.c:4338:    intel_link_train_arm(0);
 ```
 
 Two of those four are in the shipping kernel and reachable from a zl builtin.

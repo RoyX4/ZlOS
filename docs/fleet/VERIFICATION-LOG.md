@@ -14,7 +14,7 @@ Larger items have their own files, linked from [`README.md`](README.md).
 
 **Agent claim** (lens `fb-blend`, severity `high`):
 > *The only correctness net over `fb.c` hashes a scene containing zero translucency
-> primitives.* — `kernel/hosttest/fbbench.c:360`
+> primitives.* — `kernel/tests/host/fbbench.c:360`
 
 **Too strong as stated.** The hashed `scene()` (`fbbench.c:365-377`) does contain
 blending work: `fb_shadow` at line 369, and `fb_text_aa` at 355 which goes through
@@ -67,7 +67,7 @@ compositor pass, never per unit of elapsed time.*
 **Confirmed.** The whole advance is one line:
 
 ```c
-/* kernel/wm.c:431-445 */
+/* kernel/src/graphics/windowing/wm.c:431-445 */
 static void anim_tick(void)
 {
     for (int i = 0; i < ANIM_MAX; i++) {
@@ -110,7 +110,7 @@ nothing for the compositor.
 **Confirmed.**
 
 ```c
-/* kernel/http.c:278 */
+/* kernel/src/net/http.c:278 */
 u32 http_body_addr(void)  { return (u32)(uptr)(resp + body_at); }
 ```
 
@@ -122,7 +122,7 @@ considered trade.
 **The defect is the C caller:**
 
 ```c
-/* kernel/browser.c:426 */
+/* kernel/src/web/browser.c:426 */
 doc_set((const char *)(uptr)http_body_addr(), http_body_len());
 ```
 
@@ -145,12 +145,12 @@ zl accessor — add a `const char *http_body_ptr(void)` for C callers and leave
 ## CONFIRMED — Alt+Tab never fires. One token.
 
 **Agent claim** (lens `wm-focus`, severity `high`): *`route_key` tests `'\t'` (9) but
-both keyboards emit `KEY_TAB` (0x103).* — `kernel/wm.c:1450`
+both keyboards emit `KEY_TAB` (0x103).* — `kernel/src/graphics/windowing/wm.c:1450`
 
 **Confirmed, and the repo documents the rule that is being broken.**
 
 ```c
-/* kernel/wm.c:1448-1452 */
+/* kernel/src/graphics/windowing/wm.c:1448-1452 */
 static void route_key(int type, int code, int mods)
 {
     if (type == EV_KEY_DOWN && code == '\t' && (mods & MOD_ALT)) {
@@ -159,7 +159,7 @@ static void route_key(int type, int code, int mods)
     }
 ```
 
-`'\t'` is 9. But `kernel/keycodes.h:10-21` is explicit that key codes live above 0x100
+`'\t'` is 9. But `kernel/src/drivers/input/keycodes.h:10-21` is explicit that key codes live above 0x100
 *specifically* so they cannot be confused with characters:
 
 > *"…above 0x100 where it cannot collide with a character. That boundary is load
@@ -197,9 +197,9 @@ event `code` against a character literal for a key that has a `KEY_*` constant.
 ## CONFIRMED — `intel.c` has no `static` functions at all
 
 ```
-$ grep -cP '^static\s+[\w \*]*\bintel_\w+\s*\(' kernel/intel.c
+$ grep -cP '^static\s+[\w \*]*\bintel_\w+\s*\(' kernel/src/drivers/display/intel.c
 0
-$ grep -cP '^(?!static)[A-Za-z_][\w \*]*\bintel_\w+\s*\(' kernel/intel.c
+$ grep -cP '^(?!static)[A-Za-z_][\w \*]*\bintel_\w+\s*\(' kernel/src/drivers/display/intel.c
 308
 ```
 
@@ -218,7 +218,7 @@ Detail and the orphan grouping: [`GROUND-TRUTH-CORRECTIONS.md`](GROUND-TRUTH-COR
 **Agent claim** (lens `wm-drag`, severity `critical`): *"`snap_release()` has no
 reachable caller in the shipping tree at all."*
 
-**False.** `kernel/wm.c:1281` calls it. The agent's *conclusion* — that drag-to-edge
+**False.** `kernel/src/graphics/windowing/wm.c:1281` calls it. The agent's *conclusion* — that drag-to-edge
 snapping is a one-way door — is nonetheless **correct**, via the `z != SNAP_NONE` guard
 at `wm.c:1358`.
 
@@ -239,14 +239,14 @@ false evidence, and the false evidence is what a reader would have quoted.
 
 ```
 $ grep -n "HTTP_REDIRECT" kernel/*.c kernel/*.h
-kernel/http.c:267:        state = HTTP_REDIRECT;
-kernel/http.h:21:    HTTP_REDIRECT,     /* 3xx with a Location, under the redirect limit */
+kernel/src/net/http.c:267:        state = HTTP_REDIRECT;
+kernel/src/net/http.h:21:    HTTP_REDIRECT,     /* 3xx with a Location, under the redirect limit */
 ```
 
 `http.c` **enters** the state. `browser_tick` never leaves it:
 
 ```c
-/* kernel/browser.c:422-432 */
+/* kernel/src/web/browser.c:422-432 */
 int s = http_poll();
 if (s == HTTP_DONE)    { fetching = 0; ... return 1; }
 if (s == HTTP_REFUSED) { fetching = 0; status = BR_BAD_TYPE; return 1; }
@@ -278,7 +278,7 @@ no-op, so a full buffer stops draining TCP.*
 **Confirmed.** Two functions, each individually reasonable.
 
 ```c
-/* kernel/http.c:224-230 */
+/* kernel/src/net/http.c:224-230 */
 int avail = tcp_available();
 if (avail > 0) {
     int room = HTTP_BUF - resp_len;
@@ -289,7 +289,7 @@ if (avail > 0) {
 ```
 
 ```c
-/* kernel/tcp.c */
+/* kernel/src/net/tcp.c */
 int tcp_recv(u8 *out, int max)
 {
     if (max <= 0) return 0;              /* a trust boundary, so it is checked */
@@ -337,13 +337,13 @@ writes to NVMe on every gesture and nothing ever reads it back.*
 
 ```
 $ grep -rn "settings_load\|settings_save" kernel/ freestanding/ | grep -v 'out.c\|_gen'
-kernel/settings.c:125:     * settings_load clamped both ways with the named constants…   ← comment
-kernel/settings.c:127:     * earlier, surviving in a second place - so settings_load's…   ← comment
-kernel/settings.c:157: int settings_save(void);
-kernel/settings.c:185:     settings_save();                                              ← the one real caller
-kernel/settings.c:441: int settings_save(void)
-kernel/settings.c:483: int settings_load(void)                                           ← definition
-kernel/hosttest/settingstest.c:34: int  settings_load(void);                             ← prototype only
+kernel/src/graphics/ui/settings.c:125:     * settings_load clamped both ways with the named constants…   ← comment
+kernel/src/graphics/ui/settings.c:127:     * earlier, surviving in a second place - so settings_load's…   ← comment
+kernel/src/graphics/ui/settings.c:157: int settings_save(void);
+kernel/src/graphics/ui/settings.c:185:     settings_save();                                              ← the one real caller
+kernel/src/graphics/ui/settings.c:441: int settings_save(void)
+kernel/src/graphics/ui/settings.c:483: int settings_load(void)                                           ← definition
+kernel/tests/host/settingstest.c:34: int  settings_load(void);                             ← prototype only
 ```
 
 `settings_save` has exactly one caller, at `settings.c:185`, and its own comment
@@ -355,7 +355,7 @@ So zlOS persists settings correctly on every change and never loads them at boot
 missing feature — `settings_load` is written, careful, and documents its own discipline:
 
 ```c
-/* kernel/settings.c:478-482 */
+/* kernel/src/graphics/ui/settings.c:478-482 */
 /* Read them back. Returns 1 if a good block was found and applied, 0 if the
  * defaults are in force - and in every 0 case it has printed WHY.
  *
@@ -379,10 +379,10 @@ implemented: only RENDER and BLITTER."*
 nobody re-files it as one.
 
 ```
-$ grep -cn "forcewake\|FORCEWAKE" kernel/intel.c
+$ grep -cn "forcewake\|FORCEWAKE" kernel/src/drivers/display/intel.c
 0
 
-$ grep -n "FORCEWAKE_.*_GEN9" kernel/gpuring.c
+$ grep -n "FORCEWAKE_.*_GEN9" kernel/src/drivers/display/gpuring.c
 127:#define FORCEWAKE_BLITTER_GEN9     0x0A188u
 128:#define FORCEWAKE_ACK_BLITTER_GEN9 0x130044u
 129:#define FORCEWAKE_RENDER_GEN9      0x0A278u

@@ -17,95 +17,95 @@ QUOTE = at("\"", 0)   # a single double-quote character
 
 # Parse one CSV line into a list of field strings.
 fn csvParseLine(clLine) {
-  clFields = []
-  clCur = ""
-  clInQ = false
-  clI = 0
-  clN = len(clLine)
-  while clI < clN {
-    clCh = at(clLine, clI)
-    if clInQ {
-      if clCh == QUOTE {
-        clNext = at(clLine, clI + 1)
-        if clNext == QUOTE {
-          clCur = clCur + QUOTE   # doubled quote -> literal quote
-          clI = clI + 2
+    clFields = []
+    clCur = ""
+    clInQ = false
+    clI = 0
+    clN = len(clLine)
+    while clI < clN {
+        clCh = at(clLine, clI)
+        if clInQ {
+            if clCh == QUOTE {
+                clNext = at(clLine, clI + 1)
+                if clNext == QUOTE {
+                    clCur = clCur + QUOTE   # doubled quote -> literal quote
+                    clI = clI + 2
+                } else {
+                    clInQ = false
+                    clI = clI + 1
+                }
+            } else {
+                clCur = clCur + clCh
+                clI = clI + 1
+            }
         } else {
-          clInQ = false
-          clI = clI + 1
+            if clCh == QUOTE {
+                clInQ = true
+                clI = clI + 1
+            } else if clCh == "," {
+                clFields = push(clFields, clCur)
+                clCur = ""
+                clI = clI + 1
+            } else {
+                clCur = clCur + clCh
+                clI = clI + 1
+            }
         }
-      } else {
-        clCur = clCur + clCh
-        clI = clI + 1
-      }
-    } else {
-      if clCh == QUOTE {
-        clInQ = true
-        clI = clI + 1
-      } else if clCh == "," {
-        clFields = push(clFields, clCur)
-        clCur = ""
-        clI = clI + 1
-      } else {
-        clCur = clCur + clCh
-        clI = clI + 1
-      }
     }
-  }
-  clFields = push(clFields, clCur)
-  return clFields
+    clFields = push(clFields, clCur)
+    return clFields
 }
 
 # Is this text still inside an open quoted field? A quote either opens or
 # closes a field and a literal quote is written doubled, so an ODD number of
 # quote characters means one is still open and the record continues.
 fn csvOpenQuote(oqS) {
-  return count(oqS, QUOTE) % 2 == 1
+    return count(oqS, QUOTE) % 2 == 1
 }
 
 # Parse a whole CSV string into a list of rows.
 fn csvParse(cpText) {
-  cpRows = []
-  cpLns = lines(cpText)
-  cpI = 0
-  cpBuf = ""
-  cpHave = false
-  while cpI < len(cpLns) {
+    cpRows = []
+    cpLns = lines(cpText)
+    cpI = 0
+    cpBuf = ""
+    cpHave = false
+    while cpI < len(cpLns) {
+        if cpHave {
+            cpBuf = cpBuf + "\n" + cpLns[cpI]
+        } else {
+            cpBuf = cpLns[cpI]
+            cpHave = true
+        }
+        if not csvOpenQuote(cpBuf) {
+            cpRows = push(cpRows, csvParseLine(cpBuf))
+            cpBuf = ""
+            cpHave = false
+        }
+        cpI = cpI + 1
+    }
+    # An unterminated quote at end of input: parse what we have rather than
+    # dropping the last record on the floor.
     if cpHave {
-      cpBuf = cpBuf + "\n" + cpLns[cpI]
-    } else {
-      cpBuf = cpLns[cpI]
-      cpHave = true
+        cpRows = push(cpRows, csvParseLine(cpBuf))
     }
-    if not csvOpenQuote(cpBuf) {
-      cpRows = push(cpRows, csvParseLine(cpBuf))
-      cpBuf = ""
-      cpHave = false
-    }
-    cpI = cpI + 1
-  }
-  # An unterminated quote at end of input: parse what we have rather than
-  # dropping the last record on the floor.
-  if cpHave {
-    cpRows = push(cpRows, csvParseLine(cpBuf))
-  }
-  return cpRows
+    return cpRows
 }
 
 # Pretty-print parsed rows for the self-test.
 fn csvDump(cdRows) {
-  cdI = 0
-  while cdI < len(cdRows) {
-    cdRow = cdRows[cdI]
-    cdParts = []
-    cdJ = 0
-    while cdJ < len(cdRow) {
-      cdParts = push(cdParts, "[" + cdRow[cdJ] + "]")
-      cdJ = cdJ + 1
+    cdI = 0
+    while cdI < len(cdRows) {
+        cdRow = cdRows[cdI]
+        cdParts = []
+        cdJ = 0
+        while cdJ < len(cdRow) {
+            cdParts = push(cdParts, "[" + cdRow[cdJ] + "]")
+            cdJ = cdJ + 1
+        }
+        print("row " + cdI + ": " + join(cdParts, " "))
+        cdI = cdI + 1
     }
-    print("row " + cdI + ": " + join(cdParts, " "))
-    cdI = cdI + 1
-  }
 }
 
 # ---------------- self-test ----------------

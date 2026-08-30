@@ -44,7 +44,7 @@ same named-file service and explicit sync boundary.
 ## Checks
 
 ```bash
-cd kernel/hosttest
+cd kernel/tests/host
 ./build.sh
 ./fstest
 

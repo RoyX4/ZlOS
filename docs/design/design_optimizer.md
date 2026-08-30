@@ -2,7 +2,7 @@
 
 **Status:** proposal / not built
 **Author:** design pass, 2026-07-29
-**Scope:** four optimization passes bolted onto the native backend (`nativegen.c`, Floor 4 §5.4) so the machine code it emits stops being naive stack-machine churn and starts approaching what a C++ compiler at `-O1` would produce for the same integer subset. Adds one AST pass and one small instruction-level IR between the AST walk and the byte encoder. Changes no language semantics, no PE writer, no runtime. Every existing `.zl` program keeps producing a correct `native.exe`.
+**Scope:** four optimization passes bolted onto the native backend (`src/backends/native/nativegen.c`, Floor 4 §5.4) so the machine code it emits stops being naive stack-machine churn and starts approaching what a C++ compiler at `-O1` would produce for the same integer subset. Adds one AST pass and one small instruction-level IR between the AST walk and the byte encoder. Changes no language semantics, no PE writer, no runtime. Every existing `.zl` program keeps producing a correct `native.exe`.
 
 ---
 
@@ -18,7 +18,7 @@ The §5.4 "honest note" says the plan is *correctness first, optimizer later, op
 
 ### 1.1 The code we emit today is embarrassingly slow — on purpose
 
-`nativegen.c` is a textbook **stack machine** (its own header comment says so). Every binary operation does this (`gen_expr`, `N_BINARY`, lines 166–172):
+`src/backends/native/nativegen.c` is a textbook **stack machine** (its own header comment says so). Every binary operation does this (`gen_expr`, `N_BINARY`, lines 166–172):
 
 ```
 gen_expr(n->a);          // left  -> rax

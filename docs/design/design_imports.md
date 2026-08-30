@@ -31,15 +31,15 @@ current all-functions-are-global reality perfectly.
 
 v1 ships the first two forms. `as` (aliasing) needs real namespaces and is v2.
 
-`import` becomes keyword #16 (lexer.c:48-53). Per KEYWORDS_MAP.md this is one of the ~14 planned
+`import` becomes keyword #16 (src/frontend/lexer.c:48-53). Per KEYWORDS_MAP.md this is one of the ~14 planned
 additions, so the budget is intact.
 
 ## How it works (the mechanism)
 
-1. **Lexer** (`lexer.c`): add `"import"` to the keyword list.
-2. **Parser** (`parser.c`): parse `import name1, name2, ...` at STATEMENT position into a new node,
+1. **Lexer** (`src/frontend/lexer.c`): add `"import"` to the keyword list.
+2. **Parser** (`src/frontend/parser.c`): parse `import name1, name2, ...` at STATEMENT position into a new node,
    e.g. `N_IMPORT` holding the list of module names. (Reuse the existing identifier-list parsing.)
-3. **Interpreter** (`interp.c`): on `N_IMPORT`, for each name:
+3. **Interpreter** (`src/runtime/interp.c`): on `N_IMPORT`, for each name:
    - Resolve the file: search `./<name>.zl`, then `./stdlib/<name>.zl`, then a global stdlib dir.
      First match wins. Error clearly (with the searched paths) if not found.
    - GUARD against double-import and CYCLES: keep a global set of already-imported module names; if
@@ -49,7 +49,7 @@ additions, so the budget is intact.
      what defines its `fn`s). The interpreter already has the lex→parse→exec pipeline; `import`
      just points it at another file and runs it into `g_global`.
 4. **The backends**: `import` is resolved at parse/load time into the combined program, so
-   `compile.c`/`compilel.c`/`nativegen.c` ideally never see `N_IMPORT` — the imported functions are
+   `src/backends/c/compile.c`/`src/backends/llvm/compilel.c`/`src/backends/native/nativegen.c` ideally never see `N_IMPORT` — the imported functions are
    already in the tree. Simplest: do the file inclusion during PARSING (splice the imported file's
    top-level defs into the program AST) so ALL engines get it for free, exactly like the for-range
    desugaring. Decide parse-time-splice vs interp-time-exec early; parse-time-splice is more work but
@@ -62,9 +62,9 @@ made loops free. The double-import set lives in the parser.
 
 ## What must NOT break
 
-- **The fixpoint.** `compiler.zl` does not use `import`, so `verify.ps1` is unaffected — but
-  `compiler.zl` must still PARSE a program containing `import` if it ever compiles one. Since
-  `compiler.zl` compiles only itself (which has no `import`), this is safe for v1. Note it.
+- **The fixpoint.** `src/selfhost/compiler.zl` does not use `import`, so `verify.ps1` is unaffected — but
+  `src/selfhost/compiler.zl` must still PARSE a program containing `import` if it ever compiles one. Since
+  `src/selfhost/compiler.zl` compiles only itself (which has no `import`), this is safe for v1. Note it.
 - **Only ONE import of a file executes**, even if imported by several modules (the guard set).
 - **A missing module is a clear error**, not a silent skip or a crash — list the paths searched.
 

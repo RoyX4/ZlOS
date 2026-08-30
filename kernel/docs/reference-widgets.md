@@ -199,7 +199,7 @@ densest band is 5–14 px. A toolkit that snaps to a 4-px grid will not reproduc
 this file; a toolkit that keeps arbitrary integers will. Recommend keeping the
 literals.
 
-### 1.7 Colours (raw literals — mapping to `kernel/design.h` tokens is a later step)
+### 1.7 Colours (raw literals — mapping to `kernel/src/graphics/ui/design.h` tokens is a later step)
 
 Hex, by frequency:
 

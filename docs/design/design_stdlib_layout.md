@@ -308,9 +308,9 @@ Both are ~5 lines and can be wired into `run_stdlib_tests.ps1` as preconditions.
 
 ### 7.4 Self-hosting guard
 
-The stdlib reorg does not touch `compiler.zl`'s emitted output, so the
+The stdlib reorg does not touch `src/selfhost/compiler.zl`'s emitted output, so the
 self-hosting fixpoint (`gen1.c == gen2.c`) is unaffected. The *first real
-customer* of the stdlib should be `compiler.zl` itself: once `include` and a
+customer* of the stdlib should be `src/selfhost/compiler.zl` itself: once `include` and a
 `str`/`core` module exist, the compiler's inline string helpers can be replaced
 with `include "stdlib/str.zl"` — proving the library works under the same
 byte-identical-recompile bar the rest of the language is held to.

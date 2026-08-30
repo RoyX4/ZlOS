@@ -159,7 +159,7 @@ be split into typed records rather than changing the fixed record format.
 
 ### 5. Laboratory tracing
 
-`kernel/trace-qemu.sh` runs a bounded, disposable QEMU experiment. Its default
+`kernel/tools/run/trace-qemu.sh` runs a bounded, disposable QEMU experiment. Its default
 mode captures interrupts, resets, guest errors, and unimplemented operations.
 The explicit `--instructions` mode captures QEMU execution blocks for one
 narrow investigation. It has time and output-size limits and boots the USB

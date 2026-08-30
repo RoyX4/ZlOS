@@ -110,7 +110,7 @@ Skipping wave 3 to start apps sooner is the single most likely way this fails.
 
 ## 5. One file per agent — the merge rule
 
-Fifty-three agents editing `kernel/kernel.zl` is a guaranteed conflict storm.
+Fifty-three agents editing `kernel/src/kernel.zl` is a guaranteed conflict storm.
 The rule:
 
 - each app is **its own `kernel/apps_<name>.zl`**, owned by exactly one agent

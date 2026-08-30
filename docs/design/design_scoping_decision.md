@@ -4,10 +4,10 @@
 `global` opts into write-through). Recorded in MASTER_PLAN §10. Unblocks closures and the type
 system. Land in the two phases in §7 so the fixpoint never goes red.
 **Author:** language design pass, 2026-08-02; decision ratified 2026-08-03
-**Scope:** the meaning of `x = e` inside a function body. Touches `interp.c`
-(one function), `compile.c` (one condition), `compilef.c` (one condition),
-`nativeval.c`, `compilel.c`, `nativegen.c`, `parser.c`, `lexer.c`, and
-`compiler.zl`. No code is changed by this document.
+**Scope:** the meaning of `x = e` inside a function body. Touches `src/runtime/interp.c`
+(one function), `src/backends/c/compile.c` (one condition), `src/backends/c/compilef.c` (one condition),
+`src/backends/native/nativeval.c`, `src/backends/llvm/compilel.c`, `src/backends/native/nativegen.c`, `src/frontend/parser.c`, `src/frontend/lexer.c`, and
+`src/selfhost/compiler.zl`. No code is changed by this document.
 
 ---
 
@@ -15,7 +15,7 @@ system. Land in the two phases in §7 so the fixpoint never goes red.
 
 Today, an assignment inside a function writes the **global** slot whenever a
 global of that name exists. Only parameters and `for`-loop variables bind
-locally. This is deliberate and documented, and `compiler.zl` relies on it.
+locally. This is deliberate and documented, and `src/selfhost/compiler.zl` relies on it.
 
 It also makes per-function type inference **unsound**, and it is the mechanism
 behind a live class of bug that 16 stdlib files work around by hand-prefixing
@@ -25,9 +25,9 @@ Three things this document establishes that were not previously written down:
 
 1. **The corpus cost of removing the rule is 168 assignment sites in 24 of 111
    `.zl` files** — 116 `global` declarations if declared per-function, 78 if
-   declared per-file. Not the whole corpus. `compiler.zl` needs **8**.
-2. **The engines already disagree.** `interp.c`, `compile.c`, `compilef.c` and
-   `nativeval.c` implement write-through. **`compilel.c` and `nativegen.c` do
+   declared per-file. Not the whole corpus. `src/selfhost/compiler.zl` needs **8**.
+2. **The engines already disagree.** `src/runtime/interp.c`, `src/backends/c/compile.c`, `src/backends/c/compilef.c` and
+   `src/backends/native/nativeval.c` implement write-through. **`src/backends/llvm/compilel.c` and `src/backends/native/nativegen.c` do
    not** — they give every name a function assigns its own slot. The LLVM
    backend, the designated speed backend, is on the *other* side of this
    decision already and nothing in `run_tests.ps1` or `verify.ps1` notices.
@@ -44,7 +44,7 @@ fixpoint never goes red. Details in §7.
 
 ### 1.1 The interpreter
 
-`interp.c:173-185`:
+`src/runtime/interp.c:173-185`:
 
 ```c
 /* assign: update an existing variable anywhere up the chain,
@@ -62,18 +62,18 @@ static void env_assign(Env *e, const char *name, Value val)
 }
 ```
 
-`env_find` (`interp.c:139-145`) walks the parent chain. A call frame's parent is
-`g_global`, not the caller (`interp.c:1404`), so the chain is exactly two links:
+`env_find` (`src/runtime/interp.c:139-145`) walks the parent chain. A call frame's parent is
+`g_global`, not the caller (`src/runtime/interp.c:1404`), so the chain is exactly two links:
 locals, then globals. That is why *function-to-function* locals do not collide
 and only top-level names leak in.
 
 Two names are exempt, and both are exempt because the *language* introduces
 them rather than the programmer assigning them:
 
-- **parameters**, bound with `env_define` (`interp.c:163-171`), which always
+- **parameters**, bound with `env_define` (`src/runtime/interp.c:163-171`), which always
   makes a fresh slot in the call scope;
 - **`for`-loop variables**, bound at call time by `define_loop_vars`
-  (`interp.c:1375-1384`), with the reason spelled out at `interp.c:1364-1367`:
+  (`src/runtime/interp.c:1375-1384`), with the reason spelled out at `src/runtime/interp.c:1364-1367`:
   "`for i in [7,8] {}` inside a function used to leave a top-level `i` holding 8."
 
 So the rule is narrower than "zl has no local scope". It is precisely: **plain
@@ -133,15 +133,15 @@ of the backends.
 
 | Engine | Evidence |
 |---|---|
-| `interp.c` | `env_assign`, §1.1 |
-| `compile.c` | `compile.c:416-418` — a local is declared only `if (!is_param && (!set_has(&g_globals, ...) \|\| set_has(&loopvars, ...)))`. A name that is a global gets no local declaration, so the emitted C writes the file-scope `Value v_NAME`. |
-| `compilef.c` | `compilef.c:142`, the same condition. |
-| `nativeval.c` | `nativeval.c:32-37`: "A function assigning to a name that IS a top-level global writes THROUGH to the global - that is the 'function-locals leak into globals' footgun the self-host relies on." |
+| `src/runtime/interp.c` | `env_assign`, §1.1 |
+| `src/backends/c/compile.c` | `src/backends/c/compile.c:416-418` — a local is declared only `if (!is_param && (!set_has(&g_globals, ...) \|\| set_has(&loopvars, ...)))`. A name that is a global gets no local declaration, so the emitted C writes the file-scope `Value v_NAME`. |
+| `src/backends/c/compilef.c` | `src/backends/c/compilef.c:142`, the same condition. |
+| `src/backends/native/nativeval.c` | `src/backends/native/nativeval.c:32-37`: "A function assigning to a name that IS a top-level global writes THROUGH to the global - that is the 'function-locals leak into globals' footgun the self-host relies on." |
 
 **Local-by-default (does *not* match the interpreter):**
 
-`compilel.c` — the LLVM backend — builds its local set from *every* assigned
-name with no global exemption (`compilel.c:366-368`):
+`src/backends/llvm/compilel.c` — the LLVM backend — builds its local set from *every* assigned
+name with no global exemption (`src/backends/llvm/compilel.c:366-368`):
 
 ```c
     g_locals.count = 0;
@@ -149,7 +149,7 @@ name with no global exemption (`compilel.c:366-368`):
     collect_vars(fn->a, &g_locals);
 ```
 
-and then (`compilel.c:376-380`):
+and then (`src/backends/llvm/compilel.c:376-380`):
 
 ```c
     /* locals live in alloca slots, never in the @v_ globals */
@@ -159,19 +159,19 @@ and then (`compilel.c:376-380`):
     }
 ```
 
-`var_slot` (`compilel.c:84-87`) then resolves the name to `%l_NAME` for the
+`var_slot` (`src/backends/llvm/compilel.c:84-87`) then resolves the name to `%l_NAME` for the
 whole body. So in `compilel`, `bump()` in §1.2 reads a zeroed alloca, returns
 `1`, and leaves the global at `100`. Reads diverge too, not just writes.
 
-`nativegen.c` is further out again: it has no global storage at all.
-`local_slot` (`nativegen.c:62-72`) hands every name an `rbp`-relative slot, and
-`nlocals` is reset per function (`nativegen.c:298-299`) with top-level names
-collected into the same array for the entry function (`nativegen.c:468-469`).
+`src/backends/native/nativegen.c` is further out again: it has no global storage at all.
+`local_slot` (`src/backends/native/nativegen.c:62-72`) hands every name an `rbp`-relative slot, and
+`nlocals` is reset per function (`src/backends/native/nativegen.c:298-299`) with top-level names
+collected into the same array for the entry function (`src/backends/native/nativegen.c:468-469`).
 
 **Why this was never caught:** `run_tests.ps1` runs three engines — interpreter,
 `compile.exe`, `nativegen.exe` — over six hand-written integer programs
 (`run_tests.ps1:1-15, 82-91`). None of them writes a global from inside a
-function. `compilel.c` and `compilef.c` appear in **neither** `run_tests.ps1`
+function. `src/backends/llvm/compilel.c` and `src/backends/c/compilef.c` appear in **neither** `run_tests.ps1`
 nor `verify.ps1`. The gate is green because the divergent case is not in it.
 
 > *Epistemic status:* the `compilel`/`nativegen` divergence is read off the
@@ -180,7 +180,7 @@ nor `verify.ps1`. The gate is green because the divergent case is not in it.
 > `interp.exe` numbers in §1.2 were run.
 
 This reframes everything below. "Keep the rule" is not the zero-cost option; it
-means **changing `compilel.c` and `nativegen.c` to adopt write-through**, in the
+means **changing `src/backends/llvm/compilel.c` and `src/backends/native/nativegen.c` to adopt write-through**, in the
 backend whose entire value is that it emits `add i64` into SSA registers.
 
 ---
@@ -193,8 +193,8 @@ Under the current rule it cannot decide that per function.
 1. **A local is not a local until you have read the whole file.** Whether
    `tmp = n * 2` in `shadow` binds a fresh slot or writes a global depends on
    whether *some other part of the program* assigns `tmp` at top level.
-   `compile.c` already has to do this — it collects `g_globals` before emitting
-   any function (`compile.c:470-478`) precisely so `emit_function` can answer
+   `src/backends/c/compile.c` already has to do this — it collects `g_globals` before emitting
+   any function (`src/backends/c/compile.c:470-478`) precisely so `emit_function` can answer
    the question. An inference pass would need the same pre-pass, which is
    affordable but means **no function can be typed in isolation.**
 
@@ -217,7 +217,7 @@ Under the current rule it cannot decide that per function.
    `str,str->str` and that is a tested guarantee (`tests/test_syntax.zl`). To
    emit an unboxed `add i64` you need both operand types. If one operand is a
    name whose type is a whole-program join that landed on `any`, you cannot.
-   The globals are exactly the hot cursors (`compiler.zl`'s `spos`/`pos`,
+   The globals are exactly the hot cursors (`src/selfhost/compiler.zl`'s `spos`/`pos`,
    `json_parse.zl`'s `gPos`, `calc_repl.zl`'s `POS`), so this is not a corner.
 
 None of these is fatal on its own. Together they mean the inference pass has a
@@ -234,7 +234,7 @@ assigned at top level in the same file, **excluding** that function's parameters
 and its `for`-loop variables (both bind, §1.1). Comments are stripped
 crudely (`#` outside string literals). Files are standalone today — the include
 system in `docs/design/design_modules.md` is a proposal and `grep` finds no
-`include` handling in `lexer.c`, `parser.c`, `interp.c` or `compiler.zl` — so
+`include` handling in `src/frontend/lexer.c`, `src/frontend/parser.c`, `src/runtime/interp.c` or `src/selfhost/compiler.zl` — so
 "same file" is the whole story. This is a heuristic scanner, not the parser;
 treat the counts as accurate to within a couple of sites.
 
@@ -243,7 +243,7 @@ treat the counts as accurate to within a couple of sites.
 | `stdlib/` | 96 | 844 | 506 | 3,705 | **59** | 10 |
 | `tests/` | 8 | 185 | 207 | 663 | **20** | 8 |
 | `examples/` | 6 | 144 | 361 | 1,059 | **70** | 5 |
-| `compiler.zl` | 1 | 46 | 9 | 154 | **19** | 1 |
+| `src/selfhost/compiler.zl` | 1 | 46 | 9 | 154 | **19** | 1 |
 | **total** | **111** | **1,219** | **1,083** | **5,581** | **168** | **24** |
 
 Migration size under an explicit-marker scheme:
@@ -278,7 +278,7 @@ are **latent, not currently firing** — the outputs are correct today by luck o
 call ordering. `sortx.zl` shows zero sites because it was fixed this session by
 prefixing every local `sx_`.
 
-`compiler.zl` (19 sites, 8 declarations) — the case the rule exists for:
+`src/selfhost/compiler.zl` (19 sites, 8 declarations) — the case the rule exists for:
 
 | function | globals written |
 |---|---|
@@ -305,26 +305,26 @@ disappear if those landed.
 
 ### Option 1 — keep the rule, make inference whole-program
 
-Nothing in the corpus changes. `compiler.zl` untouched. Fixpoint untouched.
+Nothing in the corpus changes. `src/selfhost/compiler.zl` untouched. Fixpoint untouched.
 The inference pass gets a pre-pass that collects top-level names (exactly
-`compile.c:470-478`), resolves each in-function assignment against it, and
+`src/backends/c/compile.c:470-478`), resolves each in-function assignment against it, and
 iterates a join to fixpoint over globals.
 
 - **Breaks in stdlib:** nothing. Zero edits.
-- **Breaks in `compiler.zl`:** nothing.
-- **Fixpoint:** unaffected. The gate's only input is `compiler.zl`, whose
+- **Breaks in `src/selfhost/compiler.zl`:** nothing.
+- **Fixpoint:** unaffected. The gate's only input is `src/selfhost/compiler.zl`, whose
   behaviour is unchanged.
 - **Cost to the type system:** all four problems in §3. Concretely: inference
   is non-modular; annotations inside functions are non-local and can collide
   between unrelated functions; a single inconsistent write anywhere de-optimises
   a global everywhere; and there is no way for a programmer to say "this really
   is my local" short of renaming it.
-- **Cost elsewhere:** `compilel.c` and `nativegen.c` must be *changed* to
+- **Cost elsewhere:** `src/backends/llvm/compilel.c` and `src/backends/native/nativegen.c` must be *changed* to
   implement write-through (§2). For `compilel` that means globals it cannot
   keep in SSA registers — every write-through name becomes a `load`/`store`
   against `@v_NAME` on every touch. LLVM's mem2reg cannot promote a global the
   way it promotes an alloca, because a call might read it. The parser cursor
-  in a self-hosted `compiler.zl` is the hottest variable in the program, and
+  in a self-hosted `src/selfhost/compiler.zl` is the hottest variable in the program, and
   this option pins it to memory.
 - **Leaves the footgun.** The two accidental collisions in §4 stay latent, and
   the naming tax on 16 stdlib files stays owed.
@@ -345,17 +345,17 @@ changes, and only for names not declared `global` in the enclosing function.
   Two of those files (`ansi.zl`, `hash.zl`) are *fixed* rather than broken —
   the latent collisions become impossible. The other 86 stdlib files are
   untouched.
-- **Breaks in `compiler.zl`:** 19 sites, 8 declarations, 5 functions (§4).
-  **And `compiler.zl` must also learn to parse `global`**, since it compiles
+- **Breaks in `src/selfhost/compiler.zl`:** 19 sites, 8 declarations, 5 functions (§4).
+  **And `src/selfhost/compiler.zl` must also learn to parse `global`**, since it compiles
   itself. That is the real risk and §7 is built around it.
 - **Breaks in tests/examples:** 20 sites / 18 declarations and 70 / 54.
   `tests/*.zl` is almost entirely one pattern — `check()` writing `g_pass`/
   `g_fail`, in all 8 files.
 - **Fixpoint:** this is a flag day if done in one step. `verify.ps1` compares
   gen1 to gen2 within a single run, so it does not care about history — but it
-  does require that whatever `compiler.zl` says, `compiler.zl`-compiled-by-itself
-  agrees. A `compiler.zl` containing `global` cannot be compiled by a
-  `compiler.zl` that does not know the word. §7 sequences around that.
+  does require that whatever `src/selfhost/compiler.zl` says, `src/selfhost/compiler.zl`-compiled-by-itself
+  agrees. A `src/selfhost/compiler.zl` containing `global` cannot be compiled by a
+  `src/selfhost/compiler.zl` that does not know the word. §7 sequences around that.
 - **Cost to the type system:** this is the option that *removes* cost. Every
   unannotated assignment in a function is a genuine local, inferrable from its
   own function. Globals are written only where declared, so the join set for a
@@ -366,14 +366,14 @@ changes, and only for names not declared `global` in the enclosing function.
   one-time widening, not drift". A second one needs the same justification.
   It cannot be a *contextual* keyword the way type names are: type names are
   safe because they appear only in type position, whereas `global pos` today
-  parses as two legal expression statements (`parser.c:927`, `:958-960`), so a
+  parses as two legal expression statements (`src/frontend/parser.c:927`, `:958-960`), so a
   contextual reading would silently change the meaning of existing programs.
   If the word is unacceptable, a sigil (`^pos = 1`) avoids the reserved word at
   the cost of a new token and worse readability; that is a strictly worse trade.
-- **Cost in engines:** `compilel.c` and `nativegen.c` need **no change** — they
-  already do this. `interp.c` gains ~6 lines in `env_assign`. `compile.c:416`
-  and `compilef.c:142` swap `g_globals` for the function's declared-global set.
-  `nativeval.c` needs the corresponding change to its global-index path.
+- **Cost in engines:** `src/backends/llvm/compilel.c` and `src/backends/native/nativegen.c` need **no change** — they
+  already do this. `src/runtime/interp.c` gains ~6 lines in `env_assign`. `src/backends/c/compile.c:416`
+  and `src/backends/c/compilef.c:142` swap `g_globals` for the function's declared-global set.
+  `src/backends/native/nativeval.c` needs the corresponding change to its global-index path.
 
 ### Option 3 — keep the rule, require an annotation on any global whose type varies
 
@@ -418,13 +418,13 @@ practice.
 The deciding argument is not the type system, though the type system is the
 reason this is being asked. It is §2: **the tree already contains both
 semantics, and the fast backend has the other one.** Option 1 is not "leave it
-alone" — it is a decision to go and put write-through *into* `compilel.c`, which
+alone" — it is a decision to go and put write-through *into* `src/backends/llvm/compilel.c`, which
 is the one file whose job is to keep values in registers.
 
 Supporting arguments, in order of weight:
 
 1. **Scope of change is small and now measured.** 168 sites, 24 files, 116
-   declarations. `compiler.zl` — the file the rule exists for — needs 8. The
+   declarations. `src/selfhost/compiler.zl` — the file the rule exists for — needs 8. The
    other 86 stdlib modules do not change at all.
 2. **It makes inference modular**, which is the difference between a checker
    that can be written and one that has to be a whole-program fixpoint before
@@ -442,18 +442,18 @@ Costs accepted, stated plainly:
 - A 15th reserved word, and the `MASTER_PLAN.md` §4.4 list has to be amended
   with the same "deliberate widening" note the last three got.
 - Every file in §4's table needs an edit, `examples/` most of all.
-- A bootstrap sequencing risk around `compiler.zl`, addressed next.
+- A bootstrap sequencing risk around `src/selfhost/compiler.zl`, addressed next.
 
 ---
 
 ## 7. How to land it without breaking the fixpoint
 
 The hazard is precise: `verify.ps1` proves `f(f(x)) == f(x)` where `x` is
-`compiler.zl`. If `compiler.zl` starts containing a word its own parser does not
+`src/selfhost/compiler.zl`. If `src/selfhost/compiler.zl` starts containing a word its own parser does not
 recognise, gen1 never gets produced. Two phases avoid a flag day.
 
-**Phase A — make `global` a legal no-op.** Add the keyword to `lexer.c` /
-`parser.c` and to `compiler.zl`'s lexer and parser. It parses to a declaration
+**Phase A — make `global` a legal no-op.** Add the keyword to `src/frontend/lexer.c` /
+`src/frontend/parser.c` and to `src/selfhost/compiler.zl`'s lexer and parser. It parses to a declaration
 node that every backend *ignores*, because write-through is still the default
 and so is already what `global x` means. Nothing changes semantically. Then add
 the declarations to all 24 files in §4 — 116 lines that are correct under both
@@ -461,18 +461,18 @@ the old and the new rule.
 
 - Verify: `run_tests.ps1` unchanged, `verify.ps1` green, every file in §4 gives
   byte-identical output before and after.
-- At the end of Phase A, `compiler.zl` both understands and uses `global`, and
+- At the end of Phase A, `src/selfhost/compiler.zl` both understands and uses `global`, and
   gen1 == gen2 still holds.
 
-**Phase B — flip the default.** Change `env_assign` (`interp.c:180`),
-`compile.c:416`, `compilef.c:142`, and `nativeval.c`'s global-index path to
+**Phase B — flip the default.** Change `env_assign` (`src/runtime/interp.c:180`),
+`src/backends/c/compile.c:416`, `src/backends/c/compilef.c:142`, and `src/backends/native/nativeval.c`'s global-index path to
 consult the function's declared-global set instead of `g_globals`.
-`compilel.c` and `nativegen.c` need nothing.
+`src/backends/llvm/compilel.c` and `src/backends/native/nativegen.c` need nothing.
 
 - Verify: the same output-identity check over all 111 files. Anything that
   changes output is a site Phase A missed, and the check names it.
 - The one place this can bite the fixpoint is the path
-  `design_selfhost_parity.md` already warns about — `compiler.zl` concatenating
+  `design_selfhost_parity.md` already warns about — `src/selfhost/compiler.zl` concatenating
   a number onto a string to emit C. That path is unaffected here (it is about
   numeric formatting, not scoping), but it is the reason the Phase B check must
   be *byte* identity of generated `.c`, not just identical program output.
@@ -517,6 +517,6 @@ precondition for emitting an unboxed add.
 - **Is `global` needed at file scope too?** A top-level `global x` would be a
   no-op (top level *is* global scope). Proposal: make it a parse error there, to
   keep one meaning per construct. Not strongly held.
-- **Unverified:** the `compilel.c` / `nativegen.c` divergence in §2 is read from
+- **Unverified:** the `src/backends/llvm/compilel.c` / `src/backends/native/nativegen.c` divergence in §2 is read from
   source, not executed. Phase C should confirm it before it is cited as settled
   fact anywhere else.

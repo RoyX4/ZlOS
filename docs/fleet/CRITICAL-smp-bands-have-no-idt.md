@@ -5,7 +5,7 @@
 Found by fleet driver agent `smp-bands`. Re-derived here. **Confirmed.**
 
 This is the most decision-relevant finding of the run, because
-[`.ultra/STATE.md`](../../.ultra/STATE.md) §4 currently ranks turning SMP bands on as
+`.ultra/STATE.md` §4 in that 2026-08-19 worktree ranked turning SMP bands on as
 **"the best win-to-risk on the board"** and `kernel/docs/gpu-next.md` calls its risk
 *"real but bounded."*
 
@@ -17,7 +17,7 @@ written. The risk is not bounded in the way those documents describe.
 ## 1. Application processors run with no interrupt descriptor table
 
 ```
-$ grep -n "lidt\|idt_load\|setup_idt\|IDT" kernel/smp.c kernel/smp_trampoline64.S
+$ grep -n "lidt\|idt_load\|setup_idt\|IDT" kernel/src/arch/x86/smp.c kernel/boot/smp_trampoline64.S
   (no output)
 ```
 
@@ -25,7 +25,7 @@ Neither the AP trampoline nor `smp_ap_main` ever loads an IDT. `smp_ap_main`
 (`smp.c:127`) does `cpuid`, claims a slot, and drops straight into its work loop:
 
 ```c
-/* kernel/smp.c:147-155 */
+/* kernel/src/arch/x86/smp.c:147-155 */
 u32 seen = 0;
 for (;;) {
     while (ap_slots[slot].seq == seen) smp_pause();
@@ -54,7 +54,7 @@ green. This is the same neighbourhood.
 ## 2. The barrier has no timeout
 
 ```c
-/* kernel/smp.c:177 */
+/* kernel/src/arch/x86/smp.c:177 */
 while (ap_slots[i].done != ap_slots[i].seq) smp_pause();
 ```
 
@@ -84,12 +84,12 @@ from the old text shell's `*` key, so `smp_start()` never runs on a desktop boot
 **That is false.** Measured:
 
 ```
-$ grep -n '"smp"\|"cores"' kernel/term.c
-kernel/term.c:190:    { "smp",      42 }, { "cores",    42 },
-kernel/term.c:204:    { "smp",      42 }, { "cores",    42 },
+$ grep -n '"smp"\|"cores"' kernel/src/graphics/windowing/term.c
+kernel/src/graphics/windowing/term.c:190:    { "smp",      42 }, { "cores",    42 },
+kernel/src/graphics/windowing/term.c:204:    { "smp",      42 }, { "cores",    42 },
 
-$ grep -n 'smp_go' kernel/kernel.zl freestanding/runtime_kernel.c
-kernel/kernel.zl:1886:        smn = smp_go()
+$ grep -n 'smp_go' kernel/src/kernel.zl freestanding/runtime_kernel.c
+kernel/src/kernel.zl:1886:        smn = smp_go()
 freestanding/runtime_kernel.c:1402:    if (streq(name,"smp_go")) return zl_num((double)smp_start());
 ```
 

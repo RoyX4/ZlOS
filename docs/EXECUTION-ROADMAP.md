@@ -7,7 +7,7 @@ Those files remain evidence and history; they are not the execution queue.
 
 **Implementation update 2026-08-22:** the complete locally executable batch is
 recorded in
-[`kernel/docs/performance-architecture-implementation-2026-08-22.md`](../kernel/docs/performance-architecture-implementation-2026-08-22.md).
+[`kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md`](../kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md).
 Retained composition, bounded regions, deadline/input work, async block cache,
 named-file migration, preemptive multi-process hostile 64-bit Ring 3, generic virtio/e1000
 networking with DHCP, browser persistence and opt-in GPU-copy fallback are now
@@ -296,7 +296,7 @@ cd ..
 ./tools/zllog.py export kernel/zlOS-usb.img --all \
   --json /tmp/zllog.json --csv /tmp/zllog.csv --text /tmp/zllog.txt
 python3 tools/test_zllog.py
-python3 kernel/hosttest/zllog_e2e_test.py
+python3 kernel/tests/host/zllog_e2e_test.py
 ```
 
 ## Phase 3 — make persistence the default, not a demo — implemented locally

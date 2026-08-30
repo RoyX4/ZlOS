@@ -33,7 +33,7 @@
 # documented subset rather than a disagreement.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 EXPECTED="tools/engine-parity-expected.txt"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
@@ -110,10 +110,10 @@ run_engine() {   # run_engine <engine> <srcfile> ; echoes output or __BUILDFAIL_
     case "$eng" in
       interp)   ./interp "$src" 2>&1 ;;
       compile)  ( ./compile "$src" >/dev/null 2>&1 \
-                  && gcc -O2 -D_strdup=strdup -I. -o "$d/a.bin" out.c runtime.c os_linux.c -lm 2>/dev/null \
+                  && gcc -O2 -D_strdup=strdup -Isrc/runtime -o "$d/a.bin" out.c src/runtime/runtime.c src/runtime/os_linux.c -lm 2>/dev/null \
                   && "$d/a.bin" 2>&1 ) || echo "__BUILDFAIL__" ;;
       compilel) ( ./compilel "$src" >/dev/null 2>&1 \
-                  && clang -O2 out.ll runtime.c os_linux.c -I. -D_strdup=strdup -o "$d/a.bin" -lm 2>/dev/null \
+                  && clang -O2 out.ll src/runtime/runtime.c src/runtime/os_linux.c -Isrc/runtime -D_strdup=strdup -o "$d/a.bin" -lm 2>/dev/null \
                   && "$d/a.bin" 2>&1 ) || echo "__BUILDFAIL__" ;;
       # nativegen writes ./native_out into the current directory, so it runs in
       # a scratch dir. $src is already absolute - prefixing it with the repo

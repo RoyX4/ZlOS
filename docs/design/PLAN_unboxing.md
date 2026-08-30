@@ -9,8 +9,9 @@
 
 **Status:** implementation plan (the ordering, not the analysis)
 **Author:** planning pass, 2026-08-02
-**Scope:** `runtime.h`, `runtime.c`, `lexer.c`, `parser.c/.h`, a new type pass,
-`compilel.c`, and — last, and only last — `compiler.zl`. No code is changed by
+**Scope:** `src/runtime/runtime.h`, `src/runtime/runtime.c`, `src/frontend/lexer.c`,
+`src/frontend/parser.c`, `src/frontend/parser.h`, a new type pass,
+`src/backends/llvm/compilel.c`, and — last, and only last — `src/selfhost/compiler.zl`. No code is changed by
 this document.
 
 **Reads on top of:** `design_type_system.md` (the *what*: syntax, type set,
@@ -23,8 +24,8 @@ order*, and it corrects two things those docs assert that are no longer true
 plan costs and buys *for zlOS specifically*. It records two things this document
 cannot know: that `Value` is now **64 bytes, not 48** (so Stage 2 is worth more
 than estimated here), that Stage 2's unverified Win64 register caveat **resolves
-favourably on Linux/SysV**, and that Stage 5 targets `compilel.c` while the
-kernel builds through `compile.c` — a gap this plan does not close.
+favourably on Linux/SysV**, and that Stage 5 targets `src/backends/llvm/compilel.c` while the
+kernel builds through `src/backends/c/compile.c` — a gap this plan does not close.
 
 ---
 
@@ -34,7 +35,7 @@ zl's compiled output is 4–6x slower than it needs to be, and the reason is not
 codegen — `nativegen` with no optimiser at all matches `clang -O2` on the
 benchmark loops, and `compilel` is at parity with C on four integer benchmarks
 (67ms vs 71, 58 vs 61, 33 vs 33, 62 vs 62). The reason is that every value in a
-`compile.c`-generated program is a 48-byte tagged `Value` handed to a
+`src/backends/c/compile.c`-generated program is a 48-byte tagged `Value` handed to a
 string-keyed dispatcher, and the fast backends only escape that by refusing to
 compile most of the language. The fix is *not* one change; it is a sequence in
 which the first two steps make the boxed path cheaper without touching the
@@ -71,12 +72,12 @@ Types: `int`, `float`, `bool`, `str`, `list[T]`, `any`. Unannotated is `any`.
 
 ### 1.1 The lexing situation, corrected
 
-`design_type_system.md` §2.2 proves `:` is free by quoting a `lexer.c` line that
+`design_type_system.md` §2.2 proves `:` is free by quoting a `src/frontend/lexer.c` line that
 rejects it. **That proof is stale.** The ternary work has since added `?` and
 `:` to the accepted set:
 
 ```c
-/* lexer.c:252-258 */
+/* src/frontend/lexer.c:252-258 */
 /* '?' and ':' are only ever the two halves of a ternary. Neither
    starts a two-character symbol, so there is nothing above to
    shadow: adding them here can only turn text that used to be a
@@ -103,11 +104,11 @@ position. Nothing can break; but the claim to make in the commit message is
 "`:` is a parse error in annotation position", not "`:` does not lex".
 
 `->` is genuinely free and must be added **inside `lex_symbol`, after the
-compound-assignment ladder at `lexer.c:246-250`**, not in `next_token`'s
+compound-assignment ladder at `src/frontend/lexer.c:246-250`**, not in `next_token`'s
 dispatch. The reason is that `->` appears in comments and inside string
 literals (`stdlib/brainfuck.zl`), and `next_token` strips comments at
-`lexer.c:271-273` and consumes strings at `lexer.c:290` *before* reaching
-`return lex_symbol(lx);` at `lexer.c:312`. Put the check anywhere earlier and a
+`src/frontend/lexer.c:271-273` and consumes strings at `src/frontend/lexer.c:290` *before* reaching
+`return lex_symbol(lx);` at `src/frontend/lexer.c:312`. Put the check anywhere earlier and a
 comment starts mangling tokens.
 
 ---
@@ -138,7 +139,7 @@ O(n) `list[T] ↔ any` trap, the fast-builtin table) are `design_type_system.md`
 
 ### 2.1 Two language-level facts that constrain every stage
 
-**(a) `+` is three-way overloaded and it is a tested guarantee.** `runtime.c`'s
+**(a) `+` is three-way overloaded and it is a tested guarantee.** `src/runtime/runtime.c`'s
 `binop_plus` is `num+num → num`, `list+list → concat`, and *otherwise stringify
 both sides and join*. `tests/test_syntax.zl:369-378` locks all of it:
 
@@ -156,7 +157,7 @@ static types are `int`** (or both `float`). One `any` on either side and the
 whole expression takes the boxed path. This is not a limitation to engineer
 around; it is the correct reading of the semantics.
 
-**(b) An assignment inside a function writes the global slot.** `interp.c:173-185`:
+**(b) An assignment inside a function writes the global slot.** `src/runtime/interp.c:173-185`:
 
 ```c
 /* NOTE, deliberate and shared with the C backend: assigning a name
@@ -170,7 +171,7 @@ Therefore **per-function type inference is unsound as the language stands.**
 Any inference pass must begin with a whole-program collection of global names,
 and treat an assignment to a name that has a global as a store into that
 global's declared type (`any` unless annotated). This is one extra pre-pass, it
-is exactly the pass `compile.c` and `compiler.zl` already run to emit globals,
+is exactly the pass `src/backends/c/compile.c` and `src/selfhost/compiler.zl` already run to emit globals,
 and skipping it produces silently wrong code rather than an error. It is the
 single most likely way to get this feature subtly wrong.
 
@@ -185,7 +186,7 @@ list* — `stdlib/astar.zl` says so out loud ("zl has no maps"). Tiered:
 
 | Tier | Need | Files |
 |---|---|---|
-| A | irreducibly dynamic — keep them dynamic | 8 (`jsonw`, `json_pretty`, `json_parse`, `sortx`, `lisp_interp`, `uuid`, `compiler.zl`, `examples/calc_repl`) |
+| A | irreducibly dynamic — keep them dynamic | 8 (`jsonw`, `json_pretty`, `json_parse`, `sortx`, `lisp_interp`, `uuid`, `src/selfhost/compiler.zl`, `examples/calc_repl`) |
 | B | tuples / records | ~23 |
 | C | nullable / option (33 functions using `nil()` as a sentinel) | 13 |
 | D | generics `list[T]` | ~11 (`dict`, `set`, `hashset`, `deque`, `heapq`, `stack_queue`, `binarytree`, `listx`, `searching`, `sorting`, `quicksort`) |
@@ -209,8 +210,8 @@ obligation, not a build-order one.** Three reasons to keep records at Stage 7:
    records first means Stages 1–6 of speed work sit behind a language feature
    they do not use.
 3. **Records have the largest blast radius in the repo.** A record type touches
-   `runtime.h`, `runtime.c`, `interp.c`, `compile.c`, `nativegen.c` *and*
-   `compiler.zl` (which must at minimum parse them), plus it collides with
+   `src/runtime/runtime.h`, `src/runtime/runtime.c`, `src/runtime/interp.c`, `src/backends/c/compile.c`, `src/backends/native/nativegen.c` *and*
+   `src/selfhost/compiler.zl` (which must at minimum parse them), plus it collides with
    `design_memory_structs.md`, which specifies a `struct` that is *an address
    and an offset table, never a value* — a different feature that shares a word.
    Annotations, by contrast, are provably inert until something reads them.
@@ -236,8 +237,8 @@ write §2's assignability with "a named type is assignable only to itself or
 Every stage: **one commit, `.\verify.ps1` green, one agent.** Measurement is
 `pwsh -File bench\run_bench.ps1` (`-Only bN` to isolate, `-Runs 5` to de-noise).
 One property of the harness makes Stages 1–2 unusually easy to measure:
-`interp.exe` does **not** link `runtime.c` (`build.bat` builds it from
-`interp.c parser.c lexer.c os_win.c`), so a `runtime.c` change moves the
+`interp.exe` does **not** link `src/runtime/runtime.c` (`build.bat` builds it from
+`src/runtime/interp.c src/frontend/parser.c src/frontend/lexer.c os_win.c`), so a `src/runtime/runtime.c` change moves the
 `boxed-C` column and leaves the `interp` column fixed. The harness's own
 speedup-vs-interpreter ratio is therefore the metric, with the control built in.
 
@@ -245,9 +246,9 @@ speedup-vs-interpreter ratio is therefore the metric, with the control built in.
 
 ### Stage 1 — Kill the string-keyed operator dispatch
 
-**Changes:** `runtime.c` only. `zl_binop` keeps its exact signature
-(`Value zl_binop(const char *op, Value l, Value r)` — `runtime.c:312`), so no
-caller, no generated `.c`, and no line of `compiler.zl` changes. Replace the
+**Changes:** `src/runtime/runtime.c` only. `zl_binop` keeps its exact signature
+(`Value zl_binop(const char *op, Value l, Value r)` — `src/runtime/runtime.c:312`), so no
+caller, no generated `.c`, and no line of `src/selfhost/compiler.zl` changes. Replace the
 `strcmp` ladder with a `switch (op[0])` plus one `op[1]` test:
 
 ```c
@@ -260,7 +261,7 @@ if (strcmp(op, "==") == 0) return zl_bool(values_equal(l, r));
 `"or"` → `'o'`), with `op[1] == '='` separating `<`/`<=` and `>`/`>=`. Keep the
 `rt_error("unknown operator")` default arm.
 
-**Files:** `runtime.c`.
+**Files:** `src/runtime/runtime.c`.
 
 **Expected:** the measured cost is 46 `strcmp`s per iteration of `b2_arith`,
 110 million for the run. Removing them should be worth roughly 1.3–1.6x on the
@@ -273,19 +274,19 @@ before and after, with the `interp` column as the unchanged control. Also run
 `-Only b4` (list) and `-Only b5` (string) to confirm no regression.
 
 **What could break:** an operator string reaching `zl_binop` that the switch
-does not enumerate. `in` does *not* reach it — `compile.c:236` routes it to
+does not enumerate. `in` does *not* reach it — `src/backends/c/compile.c:236` routes it to
 `contains()`/`has()` separately — but grep every `zl_binop(` call site in
-`compile.c` (lines 245, 316, 331) and in `compiler.zl:487` and confirm the
+`src/backends/c/compile.c` (lines 245, 316, 331) and in `src/selfhost/compiler.zl:487` and confirm the
 operator set matches before deleting the ladder.
 
 ---
 
 ### Stage 2 — Shrink `Value` from 48 bytes to 16
 
-**Changes:** `runtime.h` + `runtime.c`. Today:
+**Changes:** `src/runtime/runtime.h` + `src/runtime/runtime.c`. Today:
 
 ```c
-/* runtime.h:14-22 */
+/* src/runtime/runtime.h:14-22 */
 typedef struct Value {
     ValueType      type;
     double         num;      /* V_NUM, and V_BOOL (0/1) */
@@ -301,14 +302,14 @@ typedef struct Value {
 `double num` / `char *str` / a pointer to a heap-side list header carrying
 `items`/`nitems`/`cap`/`tip`, keeping `type` as the **first** member. 16 bytes.
 
-**Keep the `memset` in `zl_nil`.** `interp.c:44-50` records why: the C backend
+**Keep the `memset` in `zl_nil`.** `src/runtime/interp.c:44-50` records why: the C backend
 has always relied on `zl_nil` zeroing the *whole* struct, because a partially
 initialised `Value` gave the interpreter garbage where the backend saw 0, and
 the two engines disagreed. A `memset` of 16 bytes preserves that invariant
 exactly and is still a 3x cut against the measured 31.2 million memsets / 1.5 GB
 of zeroing. The win here is size, not the removal of the zeroing.
 
-**Files:** `runtime.h`, `runtime.c`.
+**Files:** `src/runtime/runtime.h`, `src/runtime/runtime.c`.
 
 **Expected:** the measured ABI cost is ~1.44 KB of hidden-pointer copying per
 `b2_arith` iteration, 3.4 GB for the run; 48→16 cuts that ~3x. Estimated
@@ -320,8 +321,8 @@ bytes, so the hidden pointer stays. Only an 8-byte `Value` (NaN-boxing: payload
 in the mantissa of a signalling NaN, which works because Win64 user-mode
 pointers are 47 bits — the same fact `design_memory_structs.md` §2.2 leans on)
 rides in `rcx`. **NaN-boxing is deliberately deferred**, not rejected: it
-touches `interp.c`'s separate `Value` (`interp.c:33-43`, which has an extra
-`V_FN` and a `Node *fn`) as well as `runtime.h`'s, and doing it before the type
+touches `src/runtime/interp.c`'s separate `Value` (`src/runtime/interp.c:33-43`, which has an extra
+`V_FN` and a `Node *fn`) as well as `src/runtime/runtime.h`'s, and doing it before the type
 system exists means doing the invasive change twice. Confirm the
 register-passing claim by disassembling one `zl_binop` call before writing the
 speedup into a commit message.
@@ -332,9 +333,9 @@ column. `b4_list` should move most (allocation-heavy).
 **What could break:** any read of a field that is not the active union member.
 `to_string` and `values_equal` switch on `type` first and are safe by
 inspection; **the audit is every other `.num` / `.str` / `.items` read in
-`runtime.c`, and I did not do it.** One place in *generated* code touches a
-field — `compile.c:162` emits `if (r.type == V_LIST) return zl_calln("contains", ...)` —
-and it reads only `type`, which stays first. `interp.c` has its own `Value` and
+`src/runtime/runtime.c`, and I did not do it.** One place in *generated* code touches a
+field — `src/backends/c/compile.c:162` emits `if (r.type == V_LIST) return zl_calln("contains", ...)` —
+and it reads only `type`, which stays first. `src/runtime/interp.c` has its own `Value` and
 is not affected; that halves the blast radius.
 
 ---
@@ -343,26 +344,26 @@ is not affected; that halves the blast radius.
 
 Two commits, both green.
 
-**3a (C side):** `lexer.c` gains the `->` two-char case inside `lex_symbol`
-after the `-=` ladder (§1.1). `parser.h` gains optional type slots; `parser.c`
+**3a (C side):** `src/frontend/lexer.c` gains the `->` two-char case inside `lex_symbol`
+after the `-=` ladder (§1.1). `src/frontend/parser.h` gains optional type slots; `src/frontend/parser.c`
 parses `name: type` in assignment position, `param: type` in `parse_fn`, and
 `-> type` after `)`. **Nothing reads the slots.** `type := NAME | NAME "[" type ("," type)* "]"`
 per §3 — the multi-argument form parses now even though nothing produces it.
 
-**3b (`compiler.zl` side):** the mirror `skip_type()` — consume a NAME,
+**3b (`src/selfhost/compiler.zl` side):** the mirror `skip_type()` — consume a NAME,
 optionally `[` recurse `]` — called after each param, after `)`, and after an
 assignment LHS. Per `design_type_system.md` §7.1 this is ~20 lines and the AST
 shape does not change: `["fn", name, params, body]` and `["assign", name, value]`
 are emitted exactly as before.
 
-**Files:** 3a — `lexer.c`, `parser.c`, `parser.h`. 3b — `compiler.zl`.
+**Files:** 3a — `src/frontend/lexer.c`, `src/frontend/parser.c`, `src/frontend/parser.h`. 3b — `src/selfhost/compiler.zl`.
 
 **Expected speedup: zero.** That is the point. This stage is the enabler and it
 is provably inert.
 
 **Measured by:** not the bench harness. The gate is the **skip-neutrality
 check**: for every one of the 111 `.zl` files in the tree, the `out.c` produced
-by `compiler.zl` before 3b must be byte-identical to the `out.c` produced after
+by `src/selfhost/compiler.zl` before 3b must be byte-identical to the `out.c` produced after
 it. Provable in advance by inspection (`skip_type` is never reached when no
 `:`/`->` appears in code position) and checkable in one loop.
 
@@ -373,18 +374,18 @@ Second risk: the parser accepting `x: int` where the ternary wants
 `?` that has already been consumed), but write the test both ways before
 trusting it.
 
-*Note on ordering:* this stage touches `compiler.zl` even though the brief says
-put fixpoint risk last. The distinction is deliberate. **Teaching `compiler.zl`
+*Note on ordering:* this stage touches `src/selfhost/compiler.zl` even though the brief says
+put fixpoint risk last. The distinction is deliberate. **Teaching `src/selfhost/compiler.zl`
 to skip annotations is additive and inert, and the skip-neutrality gate proves
-it.** *Annotating* `compiler.zl` changes what it emits and is the real fixpoint
+it.** *Annotating* `src/selfhost/compiler.zl` changes what it emits and is the real fixpoint
 risk — that is Stage 9.
 
 ---
 
 ### Stage 4 — The type pass, check-only
 
-**Changes:** a new `check.c` over `Node*`, wired into `interp.c` and
-`compile.c` as a **check that changes no representation**
+**Changes:** a new `check.c` over `Node*`, wired into `src/runtime/interp.c` and
+`src/backends/c/compile.c` as a **check that changes no representation**
 (`design_type_system.md` §6, "check, don't use" — the only one of three options
 that keeps the three-engine test honest). Flags `--no-check` and `--warn` per
 `design_types.md` §4.
@@ -393,7 +394,7 @@ that keeps the three-engine test honest). Flags `--no-check` and `--warn` per
 first; an assignment inside a function to a name that has a global is a store
 to the global's slot and is checked against the global's declared type.
 
-**Files:** new `check.c`, small hooks in `interp.c`, `compile.c`, `build.bat`.
+**Files:** new `check.c`, small hooks in `src/runtime/interp.c`, `src/backends/c/compile.c`, `build.bat`.
 
 **Expected speedup: zero, possibly slightly negative** (one extra tree walk at
 compile time).
@@ -410,9 +411,9 @@ the file.
 
 ---
 
-### Stage 5 — `compilel.c` consumes types: unboxed `int` and `bool`
+### Stage 5 — `src/backends/llvm/compilel.c` consumes types: unboxed `int` and `bool`
 
-**Changes:** `compilel.c` reads the Stage-4 types. A typed function becomes
+**Changes:** `src/backends/llvm/compilel.c` reads the Stage-4 types. A typed function becomes
 `define i64 @zl_f(i64 %a)`. Typed locals become `alloca` (so `mem2reg`/SROA
 promote them) instead of the current globals. Everything else still exits with
 "not supported yet", exactly as the header comment says today: *"Values are
@@ -422,7 +423,7 @@ string literal."*
 
 **Per §2.1(a), emit `add i64` only when both operand types are `int`.**
 
-**Files:** `compilel.c`.
+**Files:** `src/backends/llvm/compilel.c`.
 
 **Expected:** annotated code reaches the numbers already measured — parity with
 `clang -O2` (67 vs 71, 58 vs 61, 33 vs 33, 62 vs 62). The *new* thing is not
@@ -446,12 +447,12 @@ in immediately after their work lands. It must not be built twice.
 
 ### Stage 6 — The boundary: box/unbox shims and `any`
 
-**Changes:** `runtime.c` gains `zl_box_int` / `zl_box_bool` / `zl_unbox_int` /
-`zl_unbox_bool` / `zl_type_error`. `compilel.c` emits sites B1–B7 and U1–U6 per
+**Changes:** `src/runtime/runtime.c` gains `zl_box_int` / `zl_box_bool` / `zl_unbox_int` /
+`zl_unbox_bool` / `zl_type_error`. `src/backends/llvm/compilel.c` emits sites B1–B7 and U1–U6 per
 `design_type_system.md` §4.2–§4.3, and emits the "crosses a boxing boundary
 inside a loop" note from §4.5.
 
-**Files:** `runtime.h`, `runtime.c`, `compilel.c`.
+**Files:** `src/runtime/runtime.h`, `src/runtime/runtime.c`, `src/backends/llvm/compilel.c`.
 
 **Expected: no speedup on its own** — and that is worth stating plainly,
 because it is the largest single stage in the plan. What it buys is that
@@ -476,10 +477,10 @@ error.
 
 **Changes:** a record type in the type system — a named product of typed
 fields — that `compilel` lowers to an LLVM struct in an SROA-able `alloca`, and
-that `interp.c`/`compile.c` represent as they represent a list today.
+that `src/runtime/interp.c`/`src/backends/c/compile.c` represent as they represent a list today.
 
-**Files:** `lexer.c`/`parser.c` (declaration syntax), `check.c`, `compilel.c`,
-`interp.c`, `compile.c`, `runtime.c`, and `compiler.zl` (skip only).
+**Files:** `src/frontend/lexer.c`/`src/frontend/parser.c` (declaration syntax), `check.c`, `src/backends/llvm/compilel.c`,
+`src/runtime/interp.c`, `src/backends/c/compile.c`, `src/runtime/runtime.c`, and `src/selfhost/compiler.zl` (skip only).
 
 **Expected:** no direct benchmark movement — no benchmark uses a record. The
 win is that ~23 stdlib modules become annotatable at all, which is the
@@ -529,27 +530,27 @@ the copy can never happen implicitly. Hold that line even when it is annoying.
 
 ---
 
-### Stage 9 — Annotate `compiler.zl` (the fixpoint risk, last, optional)
+### Stage 9 — Annotate `src/selfhost/compiler.zl` (the fixpoint risk, last, optional)
 
-**Changes:** annotate `compiler.zl`'s hot paths. Nothing else in the toolchain.
+**Changes:** annotate `src/selfhost/compiler.zl`'s hot paths. Nothing else in the toolchain.
 
 **Why last:** `verify.ps1` compares gen1 to gen2 *within one run*
 (`f(f(x)) == f(x)`), never against a stored hash, and its only input is
-`compiler.zl` — so it proves **closure over one file, not coverage**.
-`design_selfhost_parity.md` measures that `compiler.zl` mishandles 63 of 110
+`src/selfhost/compiler.zl` — so it proves **closure over one file, not coverage**.
+`design_selfhost_parity.md` measures that `src/selfhost/compiler.zl` mishandles 63 of 110
 `.zl` files today while the gate stays green. The gate will not catch a
 coverage regression, and it *will* catch this one specific trap:
 
 ```
-/* compiler.zl:480 */    s = "zl_list_n(" + len(node[1])
-/* compiler.zl:509 */    s = "zl_calln(" + cstr(node[1]) + ", " + len(node[2])
+/* src/selfhost/compiler.zl:480 */    s = "zl_list_n(" + len(node[1])
+/* src/selfhost/compiler.zl:509 */    s = "zl_calln(" + cstr(node[1]) + ", " + len(node[2])
 ```
 
 Both concatenate a **number** onto a **string** to emit C. That routes through
 `binop_plus` → `to_string`, whose `V_NUM` arm is:
 
 ```c
-/* runtime.c, to_string */
+/* src/runtime/runtime.c, to_string */
 if (v.num == (long long)v.num)
     snprintf(buf, sizeof(buf), "%lld", (long long)v.num);
 else
@@ -566,7 +567,7 @@ two lines as `float`.
 **Expected:** faster self-hosted compilation. Genuinely optional — this is the
 one stage that can be skipped without leaving the plan incomplete.
 
-**Measured by:** wall-clock of `.\interp.exe compiler.zl`, plus `verify.ps1`
+**Measured by:** wall-clock of `.\interp.exe src/selfhost/compiler.zl`, plus `verify.ps1`
 green (which is the actual point).
 
 ---
@@ -575,16 +576,16 @@ green (which is the actual point).
 
 | # | Stage | Files | Expected | Fixpoint risk |
 |---|---|---|---|---|
-| 1 | de-string `zl_binop` dispatch | `runtime.c` | ~1.3–1.6x on `b2` boxed-C (est.) | none |
-| 2 | `Value` 48 → 16 bytes | `runtime.h/.c` | ~1.5–2x on `b2`/`b4` boxed-C (est.) | none |
-| 3a | `->` lexes, annotations parse | `lexer.c`, `parser.c/.h` | zero (enabler) | none |
-| 3b | `compiler.zl` skips annotations | `compiler.zl` | zero (enabler) | low, gated |
+| 1 | de-string `zl_binop` dispatch | `src/runtime/runtime.c` | ~1.3–1.6x on `b2` boxed-C (est.) | none |
+| 2 | `Value` 48 → 16 bytes | `src/runtime/runtime.h`, `src/runtime/runtime.c` | ~1.5–2x on `b2`/`b4` boxed-C (est.) | none |
+| 3a | `->` lexes, annotations parse | `src/frontend/lexer.c`, `src/frontend/parser.c`, `src/frontend/parser.h` | zero (enabler) | none |
+| 3b | `src/selfhost/compiler.zl` skips annotations | `src/selfhost/compiler.zl` | zero (enabler) | low, gated |
 | 4 | type pass, check-only | new `check.c` | zero | none |
-| 5 | `compilel` unboxes `int`/`bool` | `compilel.c` | parity with `clang -O2` on annotated code | none |
-| 6 | box/unbox boundary + `any` | `runtime.*`, `compilel.c` | zero direct; coverage unlock | none |
+| 5 | `compilel` unboxes `int`/`bool` | `src/backends/llvm/compilel.c` | parity with `clang -O2` on annotated code | none |
+| 6 | box/unbox boundary + `any` | `runtime.*`, `src/backends/llvm/compilel.c` | zero direct; coverage unlock | none |
 | 7 | records (Tier B, ~23 files) | broad | coverage, not ms | medium |
 | 8 | nullables + `list[T]` (Tiers C+D) | broad | `b4_list` should move | medium |
-| 9 | annotate `compiler.zl` | `compiler.zl` | faster self-host | **high** |
+| 9 | annotate `src/selfhost/compiler.zl` | `src/selfhost/compiler.zl` | faster self-host | **high** |
 
 ---
 
@@ -593,7 +594,7 @@ green (which is the actual point).
 **Strings.** `b5_string` is the outlier in the measured table and unboxing does
 not touch it: the boxed C backend is **1.3x** faster than the tree-walking
 interpreter there, against 7–13x on numeric code. The reason is that both
-engines spend essentially all of their time inside the *same* `runtime.c`
+engines spend essentially all of their time inside the *same* `src/runtime/runtime.c`
 string routines. Compiling the control flow is worthless when the work is in
 the runtime.
 
@@ -626,7 +627,7 @@ The honest summary: **this plan makes numbers fast and leaves the runtime
 alone.** That is the right first target, because numbers are where the measured
 4–6x lives and where the benchmarks that compare zl against other languages
 will be won. But no stage below should be sold as making zl fast in general
-until `runtime.c`'s string and list routines get their own plan.
+until `src/runtime/runtime.c`'s string and list routines get their own plan.
 
 ---
 
@@ -642,7 +643,7 @@ Stated here rather than asserted confidently above:
   believe it does (registers only for 1/2/4/8-byte aggregates), which is why
   Stage 2 is a 3x copy reduction and not an elimination. Verify by disassembly
   before claiming otherwise.
-- **The full audit of non-active union member reads in `runtime.c`** for
+- **The full audit of non-active union member reads in `src/runtime/runtime.c`** for
   Stage 2 was not done. It is the first task of that stage, not an afterthought.
 - **The Tier A/B/C/D file counts** come from another agent's corpus analysis
   and I did not re-derive them; I used them only for ordering, where being off
@@ -651,6 +652,6 @@ Stated here rather than asserted confidently above:
   unresolved and is the largest open design question the plan depends on.
 - **Whether Stage 4's checker should also be written in zl** (as
   `design_types.md` §5.3 sketches) is left open. `design_type_system.md` §7.3
-  says `compiler.zl` only ever needs to *skip* types, never check them, and
+  says `src/selfhost/compiler.zl` only ever needs to *skip* types, never check them, and
   this plan follows that — but a zl-side checker is the natural Stage 10 and
   the best self-hosting stress test available.

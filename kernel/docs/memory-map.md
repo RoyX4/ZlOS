@@ -14,11 +14,11 @@ say, both of which change what you are allowed to do.
 
 ```
 kernel/verify.sh      qemu-system-i386   -kernel kernel.elf ...        no -m
-kernel/verify-raw.sh  qemu-system-i386   -drive ...                    no -m
-kernel/verify-iso.sh  qemu-system-i386   -cdrom zlOS.iso ...           no -m
+kernel/tools/checks/verify-raw.sh  qemu-system-i386   -drive ...                    no -m
+kernel/tools/checks/verify-iso.sh  qemu-system-i386   -cdrom zlOS.iso ...           no -m
                       qemu-system-x86_64 -drive if=pflash ... (UEFI)   no -m
 kernel/run.sh         qemu-system-i386   -kernel kernel.elf            no -m
-kernel/run-vm.sh      qemu-system-i386   -cdrom zlOS.iso -m 256        256 MiB
+kernel/tools/run/run-vm.sh      qemu-system-i386   -cdrom zlOS.iso -m 256        256 MiB
 ```
 
 QEMU's default is not folklore, it is queryable:

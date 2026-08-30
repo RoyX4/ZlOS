@@ -53,7 +53,7 @@ learn/check.sh "" --sol       # prove all solutions still pass
 After 10, the honest next step is not another exercise. It's
 `examples/vm.zl` and `examples/raytracer.zl` — read them, then break them on
 purpose and fix them. Then `stdlib/` (64 modules, all written in zl), then
-`compiler.zl` / `lexer.zl` / `parser.zl`, which is zl reading zl.
+`src/selfhost/compiler.zl` / `src/selfhost/lexer.zl` / `src/selfhost/parser.zl`, which is zl reading zl.
 
 ## Four things that will bite you
 
@@ -110,7 +110,7 @@ language **zl**, not Plain Text — install with `./editors/vscode-zl/install.sh
 - **run current .zl file (interpreter)** — bound to Ctrl+Alt+R
 - compile the current file through the C, LLVM, or native x86-64 backend
 
-and `.vscode/launch.json` will drop gdb into `interp.c` with your `.zl` file as
+and `.vscode/launch.json` will drop gdb into `src/runtime/interp.c` with your `.zl` file as
 the argument — which is the *other* way to learn this language: watch the
 interpreter execute your own program, statement by statement.
 

@@ -55,7 +55,10 @@ jobs:
       - name: all four boot paths
         run: |
           set -o pipefail
-          for g in kernel/verify.sh kernel/verify-raw.sh kernel/verify-iso.sh kernel/verify-efi.sh; do
+          for g in kernel/verify.sh \
+                   kernel/tools/checks/verify-raw.sh \
+                   kernel/tools/checks/verify-iso.sh \
+                   kernel/tools/checks/verify-efi.sh; do
             echo "── $g ──"
             "$g" 2>&1 | tee /tmp/g.log
             grep -qiE '^\s*skip:' /tmp/g.log && { echo "::error::$g skipped"; exit 1; }
@@ -67,10 +70,10 @@ jobs:
       - name: renderer performance
         continue-on-error: true
         run: |
-          bash kernel/hosttest/build.sh >/dev/null 2>&1 || true
-          if [ -x kernel/hosttest/fbbench ]; then
+          bash kernel/tests/host/build.sh >/dev/null 2>&1 || true
+          if [ -x kernel/tests/host/fbbench ]; then
             { echo "## Renderer (cyc/px)"; echo '```'
-              ( cd kernel/hosttest && ./fbbench 2>&1 | grep -E 'cyc/px|ms' | head -25 )
+              ( cd kernel/tests/host && ./fbbench 2>&1 | grep -E 'cyc/px|ms' | head -25 )
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           else

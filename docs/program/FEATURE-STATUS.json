@@ -527,8 +527,8 @@
         "python3 kernel/run-host-tests.py --selftest"
       ],
       "artifacts": [
-        "kernel/hosttest/test-inventory.json",
-        "kernel/hosttest/test-run-receipt.json"
+        "kernel/tests/host/test-inventory.json",
+        "kernel/tests/host/test-run-receipt.json"
       ],
       "tests": [
         "missing target",
@@ -538,14 +538,14 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/hosttest/test-inventory.json",
+          "path": "kernel/tests/host/test-inventory.json",
           "sha256": "ee7812d65ac0124342761b9d5ecaa954bbabcebdf4dcfe2f5e707fc905aac865",
           "schema": "zlos.host-test-inventory.v1",
           "result": null
         },
         {
           "root": "implementation",
-          "path": "kernel/hosttest/test-run-receipt.json",
+          "path": "kernel/tests/host/test-run-receipt.json",
           "sha256": "9f091d6276630a0087bfe7cc03b481fea1d1cefb29b43730e4db80a91dceca2f",
           "schema": "zlos.host-test-run-receipt.v1",
           "result": "PASS"
@@ -771,14 +771,14 @@
       "evidence": [
         {
           "root": "implementation",
-          "path": "kernel/hosttest/trace_event.c",
+          "path": "kernel/tests/host/trace_event.c",
           "sha256": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
-          "path": "kernel/hosttest/trace_event.h",
+          "path": "kernel/tests/host/trace_event.h",
           "sha256": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
           "schema": null,
           "result": "SOURCE"
@@ -2702,7 +2702,7 @@
       "acceptance_contract": "complete vector ownership, nesting, fault frames, spurious paths, and panic fallback",
       "routes": [
         "python3 kernel/verify-crash.py --run --no-build --selftest",
-        "kernel/hosttest/crashtest"
+        "kernel/tests/host/crashtest"
       ],
       "artifacts": [
         "kernel/kernel.elf",

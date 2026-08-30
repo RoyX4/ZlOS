@@ -214,7 +214,7 @@ list loops** (zl has no lists) and **105 flex declarations** (zlOS positions
 everything by hand). Corrected in `desktop-northstar-feasibility.md`.
 *Lesson: judging a stack by its most finished layer.*
 
-**27. `GRAPHICS_PLAN.md` is stale for zlOS** — it is the **Windows-hosted** plan
+**27. `docs/archive/superseded/GRAPHICS_PLAN.md` is stale for zlOS** — it is the **Windows-hosted** plan
 and says the GPU is reached via `opengl32.dll` FFI. Annotated in place. zlOS
 reached its layer 3 by *deleting* the OS underneath, not by calling into one.
 
@@ -1004,7 +1004,7 @@ above the windows, below the toast.
 All seven zones work for free, corners included: `snap_rect`'s `default:` arm
 fills the work area, so no zone can produce an uninitialised rectangle.
 
-**Evidence — `kernel/probe-snap.py`, committed, real QEMU and real pointer.**
+**Evidence — `kernel/tools/probes/probe-snap.py`, committed, real QEMU and real pointer.**
 A green build proves nothing about paint, so this drives an actual drag and
 asks whether the screen changed, in which half, at which moment:
 

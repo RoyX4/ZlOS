@@ -30,7 +30,7 @@ $ grep -rniE "blitter|XY_COLOR_BLT|batch buffer|command streamer|MI_" kernel/*.c
 silicon, verified by reading the pixels back.**
 
 ```
-$ kernel/hosttest/gpu_blt --blit
+$ kernel/tests/host/gpu_blt --blit
   device        0x9B41  (CometLake-U GT2, Gen9.5 - the ThinkPad panel)
   HAS_BLT       1
   engines       4
@@ -172,7 +172,7 @@ checker that only looks for "no error" would call that a pass.
 `--negative` plants exactly that defect:
 
 ```
-$ kernel/hosttest/gpu_blt --negative
+$ kernel/tests/host/gpu_blt --negative
   batch         32 bytes: DW0=0x54200005      <- WRITE_RGB cleared
   inside        0/270000 pixels are 0x60D2EB
   submit+wait   0.652 ms                      <- it RAN, and succeeded
@@ -185,9 +185,9 @@ The destination is also poisoned with `0xDEADBEEF` before every run, so "filled
 with the right colour" can never be confused with "never ran", and pixels
 outside the rectangle are checked to still hold the poison.
 
-## The kernel emits it now — `kernel/gpu.c`
+## The kernel emits it now — `kernel/src/drivers/display/gpu.c`
 
-The command builder lives in `kernel/gpu.c` and is compiled into all four
+The command builder lives in `kernel/src/drivers/display/gpu.c` and is compiled into all four
 targets (`nm kernel.elf | grep gpu_fill_rect` confirms it links, rather than
 assuming the build implies it). **`hosttest/gpu_blt.c` `#include`s it**, so the
 thing proven on silicon and the thing that ships are one implementation, not two
@@ -212,7 +212,7 @@ into the batch. In the kernel that is a DMA engine parsing whatever followed it.
 
 ## What zlOS needs next, in order
 
-0. ~~A command emitter~~ — done, `kernel/gpu.c`, verified on silicon and pinned
+0. ~~A command emitter~~ — done, `kernel/src/drivers/display/gpu.c`, verified on silicon and pinned
    by `gputest`.
 1. **A ring buffer and a way to submit to it.** This is the real work, and it is
    the part that genuinely needs the hardware with i915 detached — which blanks
@@ -498,12 +498,12 @@ worth the ring; a 1.18x loss on copies is not worth moving them.
 
 ## The experiment is written and waiting — three commands, in this order
 
-`kernel/hosttest/gpu_ring.c` + `gpu-ring-run.sh`. Everything that can be proven
+`kernel/tests/host/gpu_ring.c` + `gpu-ring-run.sh`. Everything that can be proven
 without taking the GPU already has been (see below), so only the ring write is
 left.
 
 ```bash
-cd kernel/hosttest
+cd kernel/tests/host
 sudo ./gpu-ring-run.sh --survey    # read-only, i915 stays bound. Zero risk.
 sudo ./gpu-ring-run.sh --dry       # unbinds and rebinds, writes NOTHING.
 sudo ./gpu-ring-run.sh --ring      # the real thing.

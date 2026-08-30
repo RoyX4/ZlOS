@@ -20,9 +20,9 @@ matters, because acting on the wrong evidence would have produced the wrong patc
 
 ```
 $ grep -rnw snap_release kernel/ | grep -v hosttest
-kernel/wm.c:102:  int  snap_release(int win, int *x, int *y, int *w, int *h);   /* decl */
-kernel/wm.c:1281:     if (!snap_release(win, &nx, &ny, &nw, &nh)) return;       /* call */
-kernel/snap.c:151: int snap_release(int win, int *x, int *y, int *w, int *h)   /* defn */
+kernel/src/graphics/windowing/wm.c:102:  int  snap_release(int win, int *x, int *y, int *w, int *h);   /* decl */
+kernel/src/graphics/windowing/wm.c:1281:     if (!snap_release(win, &nx, &ny, &nw, &nh)) return;       /* call */
+kernel/src/graphics/ui/snap.c:151: int snap_release(int win, int *x, int *y, int *w, int *h)   /* defn */
 ```
 
 So the flat "no caller" claim is false. The *reachability* claim survives, for a

@@ -1,143 +1,43 @@
+# Language toolchain outputs
 interp
 compile
+compilef
+compilel
 nativegen
+native_out
 lexer_demo
 parser_demo
 zlfmt
-native_out
 out.c
+outf.c
+out.ll
 *.o
 *.bin
-_probe_out.txt
-compilel
-out.ll
-examples_out/
 *.bmp
 compile_commands.json
-compilef
-outf.c
-kernel/hosttest/intel_probe
-kernel/hosttest/htmltest
-kernel/hosttest/browsershot
-kernel/hosttest/nettest
-kernel/hosttest/tcptest
-kernel/hosttest/httptest
-kernel/hosttest/browsertest
-kernel/hosttest/fuzz
-kernel/hosttest/dnstest
-kernel/hosttest/regs-*.txt
-# The harnesses whose binaries were never listed. csstest and fbtext have been
-# built by ./build.sh since they were written and have shown up as untracked
-# ever since; pngtest is new. A build output that is merely UNLISTED rather
-# than ignored is one `git add -A` away from being committed, which is how
-# _genefi.c got into this repo in the first place.
-kernel/hosttest/csstest
-kernel/hosttest/fbtext
-kernel/hosttest/pngtest
-kernel/hosttest/csstest_san
-kernel/hosttest/pngtest_san
-kernel/hosttest/browsertest_san
-kernel/hosttest/arenatest
-kernel/hosttest/settingstest
-kernel/hosttest/systest
-# parsestat is the measuring instrument for the parser caps (browser-storage-run.md).
-# Listed the same day its .c was written, because four ELF binaries in this
-# directory ARE tracked and dirty ~5 MB on every gate run - and each of them got
-# there by being merely unlisted at the moment somebody ran `git add -A`.
-kernel/hosttest/parsestat
-kernel/hosttest/rtctest
-kernel/hosttest/fstest
-kernel/hosttest/exectest
-kernel/hosttest/libctest
-kernel/hosttest/toasttest
-kernel/hosttest/tritest
-kernel/hosttest/jstest
-kernel/hosttest/x509test
-kernel/hosttest/ecdsatest
-kernel/hosttest/tlstest
-kernel/hosttest/cryptotest
-kernel/hosttest/tlscryptotest
-kernel/hosttest/jmptest
-kernel/hosttest/jmptest32
-kernel/hosttest/modeset_test
-kernel/hosttest/blocktest
-kernel/hosttest/dhcptest
-kernel/hosttest/e1000test
-kernel/hosttest/memtypetest
-kernel/hosttest/msctest
-# NOT *.ppm here: kernel/.gitignore:25 already says hosttest/*.ppm, and
-# browsershot.ppm and wmshot.ppm are TRACKED - so that rule does nothing for
-# them (a tracked file is never ignored) while looking like it does. Adding a
-# second copy of a rule that is already inert would make it harder to find,
-# not easier. Both are ~5 MB and are rewritten by every gate run, so every
-# visual gate produces a multi-megabyte diff. Untracking them is a call for
-# whoever owns those goldens.
+examples_out/
+_probe_out.txt
 
-# build outputs - regenerable, and large. Build them with:
-#   kernel/build.sh      kernel.elf        (BIOS multiboot)
-#   kernel/mkdisk.sh     zlOS.img          (our own bootloader)
-#   kernel/mkiso.sh      zlOS.iso          (hybrid BIOS/UEFI)
-#   kernel/buildefi.sh   BOOTX64.EFI       (stage-0 UEFI witness)
-#                        ZLOS.EFI          (native UEFI kernel)
-#   kernel/mkusb.sh      zlOS-usb.img      (bootable USB image)
+# zlOS outputs are also covered by kernel/.gitignore; these root-qualified
+# patterns make the boundary obvious from the repository front door.
 kernel/*.elf
 kernel/*.img
 kernel/*.iso
-kernel/BOOTX64.EFI
-kernel/ZLOS.EFI
-kernel/BOOTX64.lib
+kernel/*.EFI
+kernel/*.lib
 kernel/_gen*.c
-kernel/hosttest/intel_probe
-kernel/hosttest/htmltest
-kernel/hosttest/browsershot
-kernel/hosttest/nettest
-kernel/hosttest/tcptest
-kernel/hosttest/httptest
-kernel/hosttest/browsertest
-kernel/hosttest/fuzz
-kernel/hosttest/dnstest
-kernel/hosttest/dpll_test
-kernel/hosttest/modeset_test
-kernel/hosttest/inputtest
-kernel/hosttest/regs-*.txt
-kernel/hosttest/modeset-*.log
-
-# screenshots taken by kernel/probe-shot.py - evidence for a visual gate, but
-# regenerable and large. The gate is "run it and look", not "diff a PNG".
 kernel/shots/
-kernel/hosttest/fbbench
-kernel/hosttest/gpu_fillrate
-kernel/hosttest/inputtest
-kernel/hosttest/wmtest
-kernel/hosttest/wmshot
-kernel/hosttest/tritest
-kernel/hosttest/settingstest
+kernel/exercise-out/
 
-kernel/__pycache__/
-**/__pycache__/
-
-# hosttest binary: the arena gate (source is arenatest.c)
-kernel/hosttest/arenatest
-kernel/hosttest/exectest
-kernel/hosttest/exectest-nofs
-kernel/hosttest/jmptest
-kernel/hosttest/jmptest32
-kernel/hosttest/libctest
-scratch.zl
-
-# rendered compositor frames (.github/scripts/render-desktop.sh, which does
-# `mkdir -p shots` at the repo root and writes shots/$label-$size.png there).
-#
-# ANCHORED. Written as a bare `shots/` it matched a directory of that name at
-# ANY depth, which is not what the line above describes and not what it was for:
-# it also swallowed `docs/shots/`, where the two reference screenshots for
-# POINTER-PROMPT.md 1c live. Those are evidence, not output - the "before" one
-# cannot be regenerated at all, because the branch that drew it has never been
-# identified - so an ignore rule aimed at CI output must not reach them.
+# Repository-level rendered frames. Curated evidence under docs/shots remains
+# tracked because this rule is anchored to the root.
 /shots/
-kernel/hosttest/wmbench
 
-# clangd's index and Cursor's per-worktree state. Machine-local, never shared.
+# Local caches and editor state
+**/__pycache__/
 .cache/
 .cursor/
+
+# Local scratch files
+scratch.zl
 examples/Zaccoding.zl

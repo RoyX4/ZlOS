@@ -41,7 +41,7 @@ few hundred lines. **Highest work-to-value ratio of anything in this document.**
 
 ### 2. No memory management
 
-Counted 2026-08-02: `interp.c` has **61 mallocs and 15 frees**; `runtime.c` has **59
+Counted 2026-08-02: `src/runtime/interp.c` has **61 mallocs and 15 frees**; `src/runtime/runtime.c` has **59
 and 12**. No garbage collector, no reference counting, no arena — grepped for all
 three, none present.
 
@@ -104,7 +104,7 @@ Design in flight: `design_error_handling.md`.
 | **Methods** | everything is a loose function |
 | **Multiple return values** | return a list, unpack by index |
 | **Default and named arguments** | every call passes everything |
-| **Varargs** | grepped `parser.c` — no support |
+| **Varargs** | grepped `src/frontend/parser.c` — no support |
 | **Constants** | everything is mutable |
 | **Multi-line list literals** | `stdlib/astar.zl` writes a grid one row at a time and says why in a comment |
 | **Shadowing** | no `let`, so no shadowing — and see the scoping problem below |
@@ -138,14 +138,14 @@ These are defects rather than missing features, but they cap what the language c
 - **`+` is overloaded and it is a tested guarantee** — `add(2,3)=5` but
   `add("n=",5)="n=5"`. No integer add can be emitted without knowing both operand types.
 - **An assignment inside a function writes the GLOBAL slot** when a global of that name
-  exists. Deliberate — it is what lets `compiler.zl` share a cursor across functions —
+  exists. Deliberate — it is what lets `src/selfhost/compiler.zl` share a cursor across functions —
   but it makes per-function type inference unsound, and it caused a real bug in
   `stdlib/sortx.zl`. Must be settled before any inference pass. See
   `design_scoping_decision.md`.
 - **Recursion is capped** at `MAX_CALL_DEPTH` 2000 in the interpreter, and the C backend
   has no guard at all — the same program compiled dies with `STATUS_STACK_OVERFLOW` and
   no output.
-- **`compiler.zl` implements only a subset** of the surface syntax and mishandles 63 of
+- **`src/selfhost/compiler.zl` implements only a subset** of the surface syntax and mishandles 63 of
   110 .zl files while `verify.ps1` stays green — the gate proves closure over one file,
   not coverage.
 
@@ -166,8 +166,8 @@ at("café", 3) -> <半>    returns HALF a character
 
 Strings are byte arrays. Any accented letter, any emoji, any non-English text has the
 wrong length, cannot be indexed safely, and does not case-convert. **zl is English-only.**
-Fixing this is ~800 lines and touches every string builtin in both `interp.c` and
-`runtime.c`.
+Fixing this is ~800 lines and touches every string builtin in both `src/runtime/interp.c` and
+`src/runtime/runtime.c`.
 
 ### Runtime errors say nothing about where
 
@@ -184,7 +184,7 @@ improvement to daily usability in the whole document.
 
 ### A program cannot read its own arguments
 
-`zl prog.zl hello world` — the program cannot see `hello` or `world`. Grepped `interp.c`
+`zl prog.zl hello world` — the program cannot see `hello` or `world`. Grepped `src/runtime/interp.c`
 for an `args`/`argv` builtin; there is none. **zl cannot write a command-line tool.**
 ~30 lines.
 
@@ -220,7 +220,7 @@ package manager · build system · REPL · cross-compilation.
 
 The formatter is the cheap one — the parser already builds a full AST, so a
 pretty-printer over it is a few hundred lines and would pay off immediately across 96
-modules. The LSP is the expensive one, because `parser.c` exits on the first error and
+modules. The LSP is the expensive one, because `src/frontend/parser.c` exits on the first error and
 an LSP needs error recovery.
 
 **Library holes, once imports exist:** networking (no HTTP, no sockets) · threads ·

@@ -147,6 +147,6 @@ routes them to the **focus window** — so on a workspace with no windows,
 
 That is correct (no window, no keys — every WM behaves this way) but it is a
 trap for the oracle: **you cannot switch to an empty workspace and then type a
-shell command to open something there.** `kernel/oracle/shot-apps.py` documents
+shell command to open something there.** `kernel/tests/oracle/shot-apps.py` documents
 the same wall from the other side, and it is why the per-app screenshots keep
 the boot desktop behind the app instead of hiding it on another workspace.

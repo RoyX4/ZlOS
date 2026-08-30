@@ -26,11 +26,11 @@ jobs:
           - name: "bios32 — 32-bit multiboot vs golden transcript"
             script: kernel/verify.sh
           - name: "raw — our own bootloader"
-            script: kernel/verify-raw.sh
+            script: kernel/tools/checks/verify-raw.sh
           - name: "iso — GRUB, BIOS and UEFI"
-            script: kernel/verify-iso.sh
+            script: kernel/tools/checks/verify-iso.sh
           - name: "efi — zlOS as its OWN UEFI app (the ThinkPad path)"
-            script: kernel/verify-efi.sh
+            script: kernel/tools/checks/verify-efi.sh
 
     steps:
       - uses: actions/checkout@v4

@@ -55,7 +55,7 @@ cannot represent `3.5` consistently across its own backends has a hole in Floor
 
 ### 1.2 What "floats work in two of three engines" hides
 
-Because `interp.c` and `runtime.c` both use `double num;`, the following already
+Because `src/runtime/interp.c` and `src/runtime/runtime.c` both use `double num;`, the following already
 run correctly under `interp.exe` and the C backend:
 
 ```
@@ -70,7 +70,7 @@ same program. The gap is invisible until someone compiles a float program with
 
 ### 1.3 Why formatting is a language-design issue, not a print() detail
 
-Today `value_to_string` (in both `interp.c` and `runtime.c`) is:
+Today `value_to_string` (in both `src/runtime/interp.c` and `src/runtime/runtime.c`) is:
 
 ```c
 if (v.num == (long long)v.num)
@@ -103,7 +103,7 @@ formatter**, owned by zl, not a passthrough to `%g`.
 Keep the current model: there is exactly one number type, IEEE-754 `double`.
 Rationale:
 
-- It is what `interp.c`/`runtime.c` already do — least churn, no new type
+- It is what `src/runtime/interp.c`/`src/runtime/runtime.c` already do — least churn, no new type
   system.
 - The locked spec (§4.4 of MASTER_PLAN) has no `int`/`float` keywords and wants
   the reserved-word list frozen at 11. A single `number` type keeps it there.
@@ -185,7 +185,7 @@ is explicitly out of scope for this proposal.
 
 ### 2.5 Lexer gaps (small, optional)
 
-`lex_number` (lexer.c:103-115) already accepts `3.14` (digit, dot, digit). It
+`lex_number` (src/frontend/lexer.c:103-115) already accepts `3.14` (digit, dot, digit). It
 does **not** accept:
 
 - exponent form `1e9`, `2.5e-3`
@@ -201,15 +201,15 @@ Recommend adding **exponent support only** (a `number` type is nothing without
 
 ## 3. Current-state map (for the implementer)
 
-| Concern | Interpreter (`interp.c`) | C backend (`runtime.c`) | Native (`nativegen.c`) |
+| Concern | Interpreter (`src/runtime/interp.c`) | C backend (`src/runtime/runtime.c`) | Native (`src/backends/native/nativegen.c`) |
 |---|---|---|---|
-| Value repr | `double num` (l.34) | `double num` (runtime.h:18) | **int64 in `rax`** |
-| Literal | `atof`-parsed double | `zl_num(<text>)` emitted (compile.c:160) | **`atoll(text)`** (l.142) → truncates |
-| `+ - *` | double ops | `zl_binop` double ops (runtime.c:146-148) | `add`/`sub`/`imul` GPR (l.98-100) |
-| `/` | **true division** | **true division** (runtime.c:148) | **`cqo;idiv`** integer (l.101) |
-| `%` | trunc remainder | `(long long)a % (long long)b` (runtime.c:149) | `cqo;idiv` rdx (l.102) |
+| Value repr | `double num` (l.34) | `double num` (src/runtime/runtime.h:18) | **int64 in `rax`** |
+| Literal | `atof`-parsed double | `zl_num(<text>)` emitted (src/backends/c/compile.c:160) | **`atoll(text)`** (l.142) → truncates |
+| `+ - *` | double ops | `zl_binop` double ops (src/runtime/runtime.c:146-148) | `add`/`sub`/`imul` GPR (l.98-100) |
+| `/` | **true division** | **true division** (src/runtime/runtime.c:148) | **`cqo;idiv`** integer (l.101) |
+| `%` | trunc remainder | `(long long)a % (long long)b` (src/runtime/runtime.c:149) | `cqo;idiv` rdx (l.102) |
 | compare | double compare | double compare | `cmp`+`setcc` (l.104-114) |
-| print | `%lld`/`%g` (l.77-81) | `%lld`/`%g` (runtime.c:77-80) | itoa loop `emit_print_int` (l.296) |
+| print | `%lld`/`%g` (l.77-81) | `%lld`/`%g` (src/runtime/runtime.c:77-80) | itoa loop `emit_print_int` (l.296) |
 
 **Reading it:** the two left columns are already float-capable and only need the
 *formatting* and *`//`* work (Stages 1). The right column needs the whole SSE
@@ -236,13 +236,13 @@ gate, matching the repo's existing methodology.
 
 Lowest risk, closes the *usability* gap immediately for the two mature engines.
 
-1. Replace the `%g` branch of `value_to_string` (interp.c:77-81) and its twin in
-   `runtime.c` (l.74-81) with a shared **canonical formatter** that both files
+1. Replace the `%g` branch of `value_to_string` (src/runtime/interp.c:77-81) and its twin in
+   `src/runtime/runtime.c` (l.74-81) with a shared **canonical formatter** that both files
    compile (put it in one small `.c`/`.h` so the two engines cannot drift).
 2. Add `//` to the parser precedence table (same level as `/`), and to the
-   interpreter's binop dispatch + `zl_binop` (runtime.c:144-149).
+   interpreter's binop dispatch + `zl_binop` (src/runtime/runtime.c:144-149).
 3. Add `fmt`, `round`, `floor`, `ceil`, `abs` to `call_builtin`
-   (interp.c:213…) and `zl_calln` (runtime.c:181…).
+   (src/runtime/interp.c:213…) and `zl_calln` (src/runtime/runtime.c:181…).
 4. Optional: exponent lexing (§2.5).
 
 - **Verify:** interpreter output == C-backend output == golden file, for every
@@ -251,7 +251,7 @@ Lowest risk, closes the *usability* gap immediately for the two mature engines.
 
 ### Stage 2 — Native backend: SSE2 `f64` arithmetic
 
-Turn `nativegen.c` from int64-only to `f64`. Represent **every** number as a
+Turn `src/backends/native/nativegen.c` from int64-only to `f64`. Represent **every** number as a
 double so the native model matches the interpreter exactly (uniform `f64` — do
 not try to keep a fast dual int/float path in v1; correctness and cross-engine
 agreement first, per MASTER_PLAN §5.4's "correctness first, optimizer later").
@@ -350,7 +350,7 @@ Stage 2's "uniform `f64`" decision is made with the endgame in view.
 |---|------|------|
 | 1 | **Rounding parity** | The one true hazard: interpreter (`snprintf`/libm) and the hand-rolled native printer must round *identically*. Mitigation: zl defines its own round-half-to-even at digit `P`; do **not** delegate to `%g`. The Stage-0 golden file is the contract. |
 | 2 | **Precision `P`** | Too large → long fractional loop and double-rounding artifacts; too small → visible precision loss. Pick empirically in Stage 0 against the golden vectors. |
-| 3 | **Self-hosting compiler regression** | `compiler.zl` assumes integer-valued doubles print as integers and that `/`-on-indices behaves. §2.1/§2.3 preserve both; still, re-run the fixpoint (`gen1.c == gen2.c`) after Stage 1. |
+| 3 | **Self-hosting compiler regression** | `src/selfhost/compiler.zl` assumes integer-valued doubles print as integers and that `/`-on-indices behaves. §2.1/§2.3 preserve both; still, re-run the fixpoint (`gen1.c == gen2.c`) after Stage 1. |
 | 4 | **`%` on floats** | Defined as truncated remainder (current behavior, written down). If `fmod`-style is ever wanted it is a separate decision. |
 | 5 | **NaN in comparisons** | Native `ucomisd` sets the parity flag on unordered; Stage 2 must handle it so `nan == nan` is false in all three engines. |
 | 6 | **Big magnitudes / `2^63` overflow in the printer** | `cvttsd2si` is undefined past int64 range; Stage 0 must define the large-value print path (full fixed-point vs. a token). |
@@ -365,4 +365,4 @@ Stage 2's "uniform `f64`" decision is made with the endgame in view.
 4. `run_tests.ps1` gains float programs and the comment "native backend is
    integer-only, use exact divisions" is **deleted** — because it is no longer
    true. All engines agree on `100 / 3`.
-5. `compiler.zl` still self-hosts to a byte-identical fixpoint.
+5. `src/selfhost/compiler.zl` still self-hosts to a byte-identical fixpoint.

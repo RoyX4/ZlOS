@@ -14,7 +14,7 @@
 # what let a dead 64-bit build sit behind three green gates.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 MODE="${1:-}"
 declare -a NAMES=() RESULTS=()
@@ -60,9 +60,9 @@ run "hazards"        tools/hazard-scan.sh
 
 if [ "$MODE" = "--boot" ] || [ "$MODE" = "--all" ]; then
     run_noskip "boot: bios32" kernel/verify.sh
-    run_noskip "boot: raw"    kernel/verify-raw.sh
-    run_noskip "boot: iso"    kernel/verify-iso.sh
-    run_noskip "boot: efi"    kernel/verify-efi.sh
+    run_noskip "boot: raw"    kernel/tools/checks/verify-raw.sh
+    run_noskip "boot: iso"    kernel/tools/checks/verify-iso.sh
+    run_noskip "boot: efi"    kernel/tools/checks/verify-efi.sh
 fi
 
 if [ "$MODE" = "--all" ]; then

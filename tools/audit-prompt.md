@@ -20,7 +20,7 @@ Two specifics that have already caused wrong findings:
 
 - **Only parameters and `for`-loop variables are frame-scoped.** Recursion works.
   A plain assignment inside a function **writes the global** of that name when one
-  exists — this is deliberate, and `compiler.zl` depends on it. Two functions'
+  exists — this is deliberate, and `src/selfhost/compiler.zl` depends on it. Two functions'
   locals do not collide; only top-level names leak in.
 - **The engines do not all implement the same language.** For
   `counter = 100; fn bump() { counter = 7 }; bump(); print(counter)` →
@@ -53,18 +53,18 @@ Skip generated and data files: `kernel/_gen*.c`, `kernel/out.c`,
 Work through it in this order, one area at a time. Do not try to hold it all at
 once — finish an area, write its findings, then move on:
 
-1. `lexer.c` `parser.c` `interp.c` — the front end and the reference semantics
-2. `compile.c` `compilef.c` `compilel.c` `nativegen.c` `nativeval.c` `nativert.c` — the backends
-3. `runtime.c` `os_linux.c` — the runtime
-4. `compiler.zl` — the self-hosted compiler
+1. `src/frontend/lexer.c` `src/frontend/parser.c` `src/runtime/interp.c` — the front end and the reference semantics
+2. `src/backends/c/compile.c` `src/backends/c/compilef.c` `src/backends/llvm/compilel.c` `src/backends/native/nativegen.c` `src/backends/native/nativeval.c` `src/backends/native/nativert.c` — the backends
+3. `src/runtime/runtime.c` `src/runtime/os_linux.c` — the runtime
+4. `src/selfhost/compiler.zl` — the self-hosted compiler
 5. `stdlib/*.zl` — 109 files
-6. `kernel/efi.c` `gdt64.c` `idt.c` `apic.c` `cpu.c` `smp.c` `support.c` — boot
-7. `kernel/fb.c` `fb3d.c` `bga.c` `vga.c` `virtio_gpu.c` — display
-8. `kernel/xhci.c` `input.c` `i2c_hid.c` — USB and input
-9. `kernel/wm.c` `ui.c` `wmglue.c` `term.c` `console.c` — the compositor
-10. `kernel/nvme.c` `sched.c` — storage and scheduling
-11. `kernel/kernel.zl` — the OS written in zl
-12. `kernel/intel.c` — read last, and read section 5 below first
+6. `kernel/boot/efi.c` `gdt64.c` `idt.c` `apic.c` `cpu.c` `smp.c` `support.c` — boot
+7. `kernel/src/graphics/framebuffer/fb.c` `fb3d.c` `bga.c` `vga.c` `virtio_gpu.c` — display
+8. `kernel/src/drivers/input/xhci.c` `input.c` `i2c_hid.c` — USB and input
+9. `kernel/src/graphics/windowing/wm.c` `ui.c` `wmglue.c` `term.c` `console.c` — the compositor
+10. `kernel/src/drivers/storage/nvme.c` `sched.c` — storage and scheduling
+11. `kernel/src/kernel.zl` — the OS written in zl
+12. `kernel/src/drivers/display/intel.c` — read last, and read section 5 below first
 
 ## What to look for, in priority order
 
@@ -99,7 +99,7 @@ edge cases, functions that silently do nothing on empty input.
 ## Hard rules
 
 - **Do not modify anything.** This is read-only. Report, do not fix.
-- **`kernel/intel.c` drives a real laptop panel.** Violating the 500 ms T12
+- **`kernel/src/drivers/display/intel.c` drives a real laptop panel.** Violating the 500 ms T12
   power-cycle delay, or driving AUX into an unpowered panel, can **damage
   hardware** — not merely fail. Read it, reason about it, and never suggest
   "try it and see" for anything touching panel power.

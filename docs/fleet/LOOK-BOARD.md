@@ -19,7 +19,7 @@ corrections are more useful than most of the findings:
 | the brief assumed | what an agent established |
 |---|---|
 | Motion may be absent; specify a minimum viable system | **Motion is not absent.** `wm.c:315-484` is a complete 5-kind timeline (OPEN/CLOSE/PRESS/PULSE/FADE) with integer easing tables, an 8-slot array, refusal-on-full, a real composited fade, and 12 assertions in `hosttest/wmtest.c:605-712` |
-| Gamma mismatch between glyph generator and compositor is the most likely text defect | **Not present.** The agent re-ran `gen_hd_font.py` into a scratch dir and reproduced the committed `kernel/font_aa.c` **byte-for-byte (279,043 bytes)**. Generator and compositor agree: linear area coverage, composited in linear light |
+| Gamma mismatch between glyph generator and compositor is the most likely text defect | **Not present.** The agent re-ran `gen_hd_font.py` into a scratch dir and reproduced the committed `kernel/src/graphics/fonts/font_aa.c` **byte-for-byte (279,043 bytes)**. Generator and compositor agree: linear area coverage, composited in linear light |
 | Colours are probably scattered literals; propose a token layer | **A real token layer exists and is better than implied.** `struct ui_theme` (`ui.h:31-54`) holds 12 roles, `ui_theme_init` (`ui.c:43-99`) is the only place C names a colour, and `grep -oE '0x[0-9A-Fa-f]{6}' wm.c` returns **0** |
 | Check the SSE paths for edge/tail divergence from scalar | *"I could not construct an input that makes either path differ from its scalar fallback."* `fill32` has a scalar prologue before any aligned store; `copy32` uses `loadu`/`storeu` and its only caller feeds disjoint buffers |
 

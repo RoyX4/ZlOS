@@ -2,7 +2,7 @@
 
 **2026-08-19 · worktree `zl-linux-fleet` · tree `3f00366` · both verified by hand**
 
-From the fleet's `silent-failure` bug-class sweep. Two defects in `kernel/intel.c`, found
+From the fleet's `silent-failure` bug-class sweep. Two defects in `kernel/src/drivers/display/intel.c`, found
 together, and each is the mirror of the other:
 
 - **A real failure reports success** — link training returns 1 on a panel the sink was
@@ -18,7 +18,7 @@ On a machine whose only diagnostic is the screen
 ## 1. `intel.c:2555` — link training reports success on a sink still in training
 
 ```c
-/* kernel/intel.c:2548-2560 */
+/* kernel/src/drivers/display/intel.c:2548-2560 */
 if (!intel_dpcd_write(port, DPCD_LANE_COUNT_SET, &lc, 1)) return 0;   /* checked */
 
 if (!train_clock_recovery(port, lanes)) return 0;                     /* checked */
@@ -41,7 +41,7 @@ If that AUX transaction fails or is NAK'd, the **source** proceeds to
 in training pattern and displays nothing. `intel_link_train()` returns 1, and every
 layer above it reports a successful modeset over a black panel.
 
-This is precisely the class `kernel/net.c:58-64` was written about, quoted here because
+This is precisely the class `kernel/src/net/net.c:58-64` was written about, quoted here because
 the reasoning is the repo's own:
 
 > **EVERY DROP PATH GETS A COUNTER.** This is not bookkeeping: `handle_ip` used to drop
@@ -72,14 +72,14 @@ The macros do differ, and the comment at `intel.c:3891` describes the intent cor
 `ms_do` does not know which one called it:
 
 ```c
-/* kernel/intel.c:3882 */
+/* kernel/src/drivers/display/intel.c:3882 */
 if (!result && !ms_failed_at) ms_failed_at = plan_step;
 ```
 
 and the sequence's verdict is:
 
 ```c
-/* kernel/intel.c:4089 */
+/* kernel/src/drivers/display/intel.c:4089 */
 return ms_failed_at ? 0 : 1;
 ```
 
@@ -118,7 +118,7 @@ The sweep's own framing is worth keeping:
 
 > The tree has **two populations**. `net.c`, `arena.c`, `wm.c`, `html.c`, `layout.c`,
 > `notify.c`, `virtio_net.c` and `tcp.c` follow the doctrine written at
-> `kernel/net.c:58-64` and are clean. **The display driver, the PCI power path, the xHCI
+> `kernel/src/net/net.c:58-64` and are clean. **The display driver, the PCI power path, the xHCI
 > firmware handoff and the whole input event path do not.**
 
 The doctrine exists, is written down, is well-argued, and is followed by half the

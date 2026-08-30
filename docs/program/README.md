@@ -67,7 +67,7 @@ and all required registry sections.
 When documents disagree, use this order:
 
 1. current source, generated artifacts and fresh reproducible receipts;
-2. [`kernel/docs/performance-architecture-implementation-2026-08-22.md`](../../kernel/docs/performance-architecture-implementation-2026-08-22.md)
+2. [`kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md`](../../kernel/docs/evidence/performance-architecture-implementation-2026-08-22.md)
    for the live locally verified implementation batch;
 3. this program for destination and ordering;
 4. [`docs/EXECUTION-ROADMAP.md`](../EXECUTION-ROADMAP.md) for the current
@@ -165,7 +165,7 @@ source file, package recipe, menu entry, screenshot or build target exists.
 ## Relationship to the research shelf
 
 The complete evidence shelf remains in
-[`../../zl/docs/research/starred-repositories/`](../../../zl/docs/research/starred-repositories/)
+[`../../zl-merge-all/docs/research/starred-repositories/`](../../../zl-merge-all/docs/research/starred-repositories/)
 when the two repositories are checked out as siblings. The front doors are:
 
 - `CANONICAL_COMPLETE_PRODUCT_FEATURE_CATALOG_2026-08-22.md` — 906 product
