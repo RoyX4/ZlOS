@@ -40,10 +40,27 @@ and command palette open; the settings toggles and sliders change real values.
 and, for the three that have a dark ladder, the same seven with `-dark`
 appended. `shift+D` toggles, as does the button top right.
 
+**If you like parts of several directions, read [`deciding.md`](deciding.md) first.**
+It decomposes the four into ten independent axes with a position and a stated cost
+each, a conflict matrix where every conflict carries a recomputed number (the
+knockout-on-Raking case, the L\* ≥ 89.6 that Datum's material law actually requires,
+the ≥3:1 floor free floating puts on the window boundary), the features that combine
+with anything, and the order to settle the axes in. It is written for deciding, not
+for reading.
+
+**[`prototypes/decide.html`](prototypes/decide.html) is that decomposition as an
+interactive picker.** Choose a position per axis, in settling order, with every
+option's cost visible on the option itself; the conflict matrix evaluates live and
+tells you whether the combination is buildable and why not. Free riders are
+separate toggles because they combine with anything. The three blends
+(`proto-blendpaper`, `proto-blendgraphite`, `proto-blendpage`) load as one-click
+presets and can be edited from there.
+
 **Round two is in [`round-two-candidates.md`](round-two-candidates.md).** Twelve new
-directions across four lanes (press / page / merge / linux), culled to six to build:
-**Apparatus, Deck, Neatline, Blueline, SPREAD, Shelf** — each with the one change it
-needs before it is built, and one line on why each of the other six died.
+directions across four lanes (press / page / merge / linux), culled to six and all six
+built: **Apparatus, Deck, Neatline, Blueline, SPREAD, Shelf** — each with the one change
+it needed before building, and one line on why each of the other six died. Summary in
+[Round two](#round-two-six-more-built) below. Eleven prototypes exist in total.
 
 ## The four
 
@@ -161,3 +178,102 @@ replay. Those were rebuilt from `specs/`.
 
 The rule this bought: **deliverables live in the repository from the first
 write.** The scratchpad is for genuinely disposable intermediates only.
+
+---
+
+## Round two: six more, built
+
+Round one asked "what could this be". Round two asked "more like PLATE and Folio,
+merge them, and give me one that looks like a Linux". Twelve candidates were
+generated across four lanes and culled to six, with the cull forced to keep at
+least one from every lane so no lane could be quietly wiped out.
+
+Every one of these ships light **and** dark from the first write, rather than
+having dark bolted on afterwards.
+
+| | lane | the move |
+|---|---|---|
+| **Blueline** | press | An engineering drawing, in diazo whiteprint: blue line on white, **no black anywhere**, cyanotype as the other mode. All persistent chrome collapses into a bottom-right title block carrying the revision list, view index, scale and sheet number. Window state is genuinely **line type** - present windows continuous, unfocused hidden, minimised phantom - with numbered view bubbles and grid coordinates on all four margins. |
+| **Neatline** | press | One map sheet. A full-perimeter marginal apron carries grid coordinates on three edges and the KEY on the fourth. It takes the third position on the seam PLATE and Folio disagree along: not one accent, not zero, but **five inks with a written contract on screen**, each lexical (water = I/O, wood = user data, contour = level, road = routes and actions), all forbidden as text, none carrying state. Its dark ladder is sourced from the IHO S-52 night colour table real ECDIS bridges use. |
+| **Apparatus** | page | Every window is a scholarly text with a critical apparatus: numbered lines in the outer margin, the machine's commentary at the foot keyed to line numbers. Focus means the apparatus **opens**. Its real contribution is the **cut edge** - the border you can see is drawn by the occluder, never the occluded - which is a direct answer to the one problem this whole family has, and it needs no new primitive. |
+| **Deck** | page | A front page that has been made up. **No window frames at all**: a story is bounded only by the rules it shares with its neighbours, which deletes the gutter, the mount and the reason for a shadow in one move. Hierarchy is by rank rather than z-order, so it is the only chrome in the set that is deliberately unequal - one window is the lead story. Focus means the deck line gets set. |
+| **SPREAD** | merge | Folio's 12-column page with PLATE's knockout lifted off the window entirely and hoisted into a **running head shared by the whole screen**. One head, one baseline, one page. |
+| **Shelf** | linux | A workstation, from the NeXTSTEP / IRIX line rather than the GNOME one. No bar anywhere: a **mid-grey hatched desk**, a left menu column that belongs to the focused application, and a right-edge dock where every item is a **live instrument** rather than an icon. |
+
+### Why the other six died
+
+Each kill names a defect, not a preference.
+
+| | why |
+|---|---|
+| Ledger | Its premise is a foot rule reconciling per-window CPU, memory and disk against capacity, and that instrumentation does not exist. A balance that cannot balance. |
+| Bradshaw | Buys cross-window horizontal alignment by changing `theme.row_h` from `dp(28)` to `dp(32)` at `ui.c:145`, re-laying out every list in every app. |
+| GALLEY | "PLATE with three of its four accent jobs deleted - that is an edit to the spec, not a direction." |
+| STIPPLE | Takes PLATE's rail, desk grid, module and knockout unmodified and bolts a sixth distinction channel onto Folio's law. |
+| Shingle | The whole pitch is finding a buried window by reading its tab, and the tabs stop being readable at around ten windows - exactly the case the idea exists to solve. |
+| Fascia | A full-width 72dp bottom taskbar with window buttons, a tray and a clock: the exact furniture all four round-one directions independently deleted. |
+
+### The two sharpenings worth knowing about
+
+Both were applied before building, and both are the same class of mistake this
+project keeps catching:
+
+- **Blueline** was told to move line type off the 1px weight axis. As sketched,
+  focused was continuous-2px and unfocused dashed-1px, so state was carried
+  partly by a hairline - which is precisely the failure Raking was marked down
+  for, and it does not survive a real panel.
+- **SPREAD** was told to define its non-disjoint fallback *before* drawing a
+  single head segment, because the running head is undrawable for any window
+  that cannot own a disjoint horizontal span.
+
+**Apparatus** also had its own stated blind spot deleted as simply wrong: a top
+sheet lying entirely inside a lower one has its whole boundary over another
+sheet, so the cut-edge rule already draws all four edges at 16.20:1. That is the
+mechanism's loudest case, not its silent one. The genuinely silent case is a
+fully covered lower sheet, which has nothing to disambiguate anyway.
+
+## Round three: one blend, built per axis rather than per direction
+
+**The Graphite Blend** (`prototypes/proto-blendgraphite.html`) is the first
+prototype here assembled from `deciding.md`'s axes instead of from a single
+brief. It takes Raking's warm-graphite ground and 1px light-direction depth,
+PLATE's numbered register rail, and Datum's instrumentation, and it answers the
+one thing Raking's own implementer called its weakest link.
+
+Two results are worth lifting out of it, because they are arithmetic rather than
+taste and they apply to any dark direction this project ships:
+
+- **On a dark ground the >=3:1 overlap boundary cannot be met by a groove, at
+  any value.** `ZD_BASE` has Y = 0.02552, so the largest ratio pure black can
+  reach against it is 1.510:1; against `ZD_FLOAT` it is 1.772:1. Free floating
+  therefore forces the occluding edge to be the LIGHT, not the shadow, and the
+  blend adds one token for it - `ZD_EDGE_OVER #8A8279`, which clears 3:1 on
+  every surface in the ladder (3.67 BASE / 3.13 FLOAT / 4.14 VOID / 3.37 RAISE /
+  4.44 WELL). Apparatus's cut-edge rule then says who draws it.
+- **Raking's focus signal can be fixed by spending area instead of contrast.**
+  A 3dp `ZD_STEEL` bezel plus a `ZD_FOCUS_WASH` ramp across the title band moves
+  17,976 px of a 600x420 plate, 7.13%, against Raking's 1,019 px / 0.404% - and
+  it does it with the maximum contrast left exactly where Raking had it, 6.19:1.
+  PLATE's knockout would have been 11.92:1 and would have inverted the light's
+  sign on the one object it lands on.
+
+It is **dark native**: `:root` carries the derived work-light ladder and
+`:root[data-theme="dark"]` carries the home one, so `#desktop-dark` is the
+direction and `#desktop` is its second ladder. The derivation is not an
+inversion - the light stays upper-left in both, and what changes is which edge
+has the headroom to carry depth (graphite: struck edge 1.993:1, groove 1.332:1;
+work light: groove 1.831:1, struck edge 1.241:1).
+
+Its settings pane computes every number on this page at run time from the
+tokens as the browser resolved them, and two of its toggles exist to make the
+argument falsifiable rather than readable: turning the occlusion edge off drops
+the boundary back to 1.332:1 so the failure is visible, and switching the raster
+strip's clock from composite to frame restores Datum's 215,993 idle wakeups per
+hour so the standing tax is countable.
+
+### Still unverified, for all ten
+
+Every judgement in this directory was made against a headless browser render.
+None of it has been through `fb.c` on a 2560x1440 panel, and the prototypes
+flatter the target in at least one known way: CSS gives letter-spacing free,
+where `fb_text_role` cannot track text without a new primitive.

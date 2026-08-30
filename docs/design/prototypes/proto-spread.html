@@ -675,7 +675,7 @@ div.r2 { height: calc(var(--zd-row) * 2); flex: none; display: flex; align-items
         <span class="t-l">enter</span><span class="t-d i2">run</span>
         <span class="t-l">up down</span><span class="t-d i2">select</span>
         <span class="t-l">esc</span><span class="t-d i2">dismiss</span>
-        <span class="t-d i2 sp">28 dp plate, off the baseline on purpose</span>
+        <span class="t-d i2 sp">28 dp plate, off the grid</span>
       </div>
     </div>
   </div>
@@ -1203,21 +1203,21 @@ R.net = () => {
     ['udp', '0.0.0.0:68', '0.0.0.0:*', 'bound'],
     ['udp', '10.0.2.15:123', '162.159.200.1:123', 'bound']]
     .map(s => TR([s[0], s[1], s[2], { t: '<span class="t-l">' + s[3] + '</span>' }]));
-  const routes = [['0.0.0.0/0', '10.0.2.2', 'enp0s31f6', '100'],
-    ['10.0.2.0/24', 'link', 'enp0s31f6', '100'], ['127.0.0.0/8', 'link', 'lo', '0']]
-    .map(r => TR([r[0], r[1], r[2], { t: r[3], c: 'r' }]));
+  const routes = [['0.0.0.0/0', '10.0.2.2', 'enp0s31f6'],
+    ['10.0.2.0/24', 'link', 'enp0s31f6'], ['127.0.0.0/8', 'link', 'lo']]
+    .map(r => TR([r[0], r[1], r[2]]));
   return head2('interfaces', 'virtio-net, 3 devices') +
-    TBL([{ h: 'device', w: '28%' }, { h: 'state', w: '16%' }, { h: 'address', w: '28%' },
-      { h: 'rx k/s', w: '14%', r: 1 }, { h: 'tx k/s', w: '14%', r: 1 }], ifs) +
+    TBL([{ h: 'device', w: '28%' }, { h: 'state', w: '16%' }, { h: 'address', w: '30%' },
+      { h: 'rx', w: '13%', r: 1 }, { h: 'tx', w: '13%', r: 1 }], ifs) +
     head2('throughput', 'rx, 72 s') +
     '<div style="flex:1;min-height:calc(var(--zd-row) * 2);display:flex">' +
     plot(S.hist.mem.map(v => Math.min(100, v + Math.round(S.rx / 12))), 100) + '</div>' +
     head2('sockets', '5 open') +
-    TBL([{ h: 'proto', w: '14%' }, { h: 'local', w: '30%' }, { h: 'peer', w: '32%' },
+    TBL([{ h: 'pro', w: '13%' }, { h: 'local', w: '31%' }, { h: 'peer', w: '32%' },
       { h: 'state', w: '24%' }], socks) +
     head2('routes', 'kernel table') +
-    TBL([{ h: 'destination', w: '32%' }, { h: 'gateway', w: '26%' }, { h: 'device', w: '26%' },
-      { h: 'metric', w: '16%', r: 1 }], routes);
+    TBL([{ h: 'destination', w: '36%' }, { h: 'gateway', w: '30%' },
+      { h: 'device', w: '34%' }], routes);
 };
 
 R.clock = () => {
@@ -1324,13 +1324,15 @@ R.proc = () => {
     ['57', 'hid', 'S', '0.3', '1.4 MiB', '0.0', 'boot report'],
     ['61', 'soak', 'R', '31.2', '64.0 MiB', '0.0', 'power cycle 3'],
     ['66', 'wguard', 'S', '0.0', '0.9 MiB', '0.0', 'idle']]
+    /* five columns, not seven. The io figure and the note both live in the
+       foot line already, and a table that ellipsises is not a table. */
     .map(p => TR([p[0], p[1],
       { t: p[2] === 'R' || p[2] === 'S' ? p[2] : '<span class="i0 bd">' + p[2] + '</span>' },
-      { t: p[3], c: 'r' }, { t: p[4], c: 'r' }, { t: p[5], c: 'r' }, p[6]], 'class="pick"'));
+      { t: p[3], c: 'r' }, { t: p[4].replace(' MiB', ''), c: 'r' }, p[6]], 'class="pick"'));
   return head2('tasks', '42 total &middot; 4 running &middot; 1 zombie &middot; 1 blocked') +
-    '<div class="scr">' + TBL([{ h: 'pid', w: '9%' }, { h: 'task', w: '17%' }, { h: 'st', w: '8%' },
-      { h: 'cpu', w: '11%', r: 1 }, { h: 'rss', w: '17%', r: 1 }, { h: 'io ms', w: '12%', r: 1 },
-      { h: 'note', w: '26%' }], rows) + '</div>' +
+    '<div class="scr">' + TBL([{ h: 'pid', w: '11%' }, { h: 'task', w: '21%' }, { h: 'st', w: '9%' },
+      { h: 'cpu', w: '14%', r: 1 }, { h: 'rss', w: '15%', r: 1 },
+      { h: 'note', w: '30%' }], rows) + '</div>' +
     '<div class="hr2"></div><div class="r">' +
     '<span class="btn" data-act="toast" data-arg="reap">' + lab('reap 42') + '</span>' +
     '<span class="btn" data-act="toast" data-arg="renice">' + lab('renice 61') + '</span>' +

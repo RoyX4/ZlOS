@@ -1,0 +1,3253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAPER BLEND / zlOS living prototype</title>
+<style>
+/* ======================================================================
+   THE PAPER BLEND - a per-axis decision, not an average of four directions.
+
+   Ground polarity ....... PAPER primary, dual ladder, both real   [PLATE]
+   Material law .......... one material, inversion as a STATE      [PLATE]
+                           Datum's two-material law is NOT taken.
+   Window boundary ....... 2px ink frame, all four sides           [PLATE]
+   Depth rank ............ rule weight, two values                 [PLATE]
+   Focus signal .......... knockout header, solid ink              [PLATE]
+   Colour policy ......... one structural ink, vermilion, 4 jobs   [PLATE]
+                           Folio's zero-colour law is OUT. Stated below.
+   Arrangement ........... tile onto a ruled module grid           [PLATE]
+   Type hierarchy ........ two sizes, case + weight + tracking     [PLATE]
+   Instrumentation ....... printer's slug + FULL machine record    [PLATE + DATUM]
+                           raster strip, per-window us, memory ruler
+   Motion ................ CUT 0ms, SLIDE 100ms linear            [PLATE]
+                           Datum's strip is re-clocked to DAMAGE, not to frames.
+
+   The blend is PLATE's structure carrying Datum's instrumentation. That is
+   the only pair in the ten-axis matrix where an entire axis position moves
+   across intact: instrumentation is mono text in bands that already exist,
+   it touches no surface value, no boundary token, no radius, no focus signal
+   and no colour. Everything else here is PLATE, because on a paper ground
+   PLATE's answers are the ones that survive their own stated costs.
+   ====================================================================== */
+:root {
+  /* ============================================================ design.h
+     Every colour in this document is one of these tokens. No hex value is
+     used as a CSS value anywhere outside this block and its dark twin.
+     Every name below exists in BOTH modes; a name in one mode only is a
+     defect and the settings sheet checks for it at runtime. ----------- */
+  --zd-paper:        #F2EFE6;  /* THE SHEET.  window interior, menu, modal */
+  --zd-desk:         #E4E0D5;  /* THE FIELD.  substrate behind the sheets  */
+  --zd-well:         #D6D0C0;  /* SUNKEN.     inputs, tracks, log wells    */
+  --zd-fill:         #CEC8B8;  /* TINT.       zebra rows. CARRIES TEXT.    */
+  --zd-rule-1:       #5C574C;  /* the 1px rule: rows, cells, group edges   */
+  --zd-rule-2:       #14120E;  /* the 2px rule: frames, region boundaries  */
+  --zd-plate-0:      #14120E;  /* THE INK PLATE. rail, raster strip ground */
+  --zd-plate-1:      #2A2721;  /* second plate. terminal ground.           */
+  --zd-text-0:       #14120E;  /* emphasis ink                             */
+  --zd-text-1:       #26231D;  /* BODY ink. the root colour.               */
+  --zd-text-4:       #585349;  /* secondary. units, slug, inactive.        */
+  --zd-text-5:       #595344;  /* label. tracked uppercase.                */
+  --zd-text-6:       #5E5848;  /* hint. placeholders, timestamps.          */
+  --zd-ok:           #1C5F34;
+  --zd-warn:         #734B00;
+  --zd-bad:          #A31D11;
+  --zd-ok-ko:        #5FC07E;
+  --zd-warn-ko:      #E5B14A;
+  --zd-bad-ko:       #FF8E76;
+  --zd-grid-line:    #A69E8A;  /* the printed module grid on the desk      */
+  /* the four second inks. ZD_ACCENT is exactly one of them at a time. */
+  --zd-ink-verm:     #B7311A;
+  --zd-ink-verm-ko:  #D14A2E;
+  --zd-ink-ox:       #A31D11;
+  --zd-ink-ox-ko:    #FF8E76;
+  --zd-ink-press:    #1F6B3A;
+  --zd-ink-press-ko: #5FC07E;
+  --zd-ink-ochre:    #7D5200;
+  --zd-ink-ochre-ko: #E5B14A;
+  --zd-text-4-ko:    #A69E8A;  /* secondary, knocked out on the plate      */
+  --zd-rule-1-ko:    #46413A;  /* the 1px rule ON the plate                */
+
+  /* ---------------------------------------------------- role splits ----
+     INV  - the SHEET inversion. Light: a sheet goes to ink. Dark: a sheet
+            goes to clear film. The emphatic transient: focused header,
+            selected row, pressed button, on segment, menu hover.
+     RINV - the PLATE inversion. A rail row going the other way.
+     KO   - text set on the permanent plate (rail, strip, lock, menu head).
+     MARK - a solid graphic that IS the datum: meter fill, slider fill,
+            switch knob, ruler region, scrollbar thumb. ----------------- */
+  --zd-inv-bg:    #14120E;
+  --zd-inv-0:     #F2EFE6;
+  --zd-inv-1:     #E4E0D5;
+  --zd-rule-inv:  #46413A;
+  --zd-rinv-bg:   #F2EFE6;
+  --zd-rinv-0:    #14120E;
+  --zd-rinv-1:    #5C574C;
+  --zd-ko-0:      #F2EFE6;
+  --zd-ko-1:      #E4E0D5;
+  --zd-mark:      #14120E;
+  --zd-mark-bulk: #14120E;
+  --zd-knob:      #F2EFE6;
+  --zd-knob-edge: #14120E;
+  --zd-on-accent: #F2EFE6;
+  --zd-ok-inv:    #5FC07E;
+  --zd-warn-inv:  #E5B14A;
+  --zd-bad-inv:   #FF8E76;
+
+  --zd-accent:    var(--zd-ink-verm);
+  --zd-accent-ko: var(--zd-ink-verm-ko);
+
+  /* -------------------------------------------- the instrument bands ---
+     NEW IN THE BLEND. Datum's three instruments, re-tokenised onto PLATE's
+     ladder. They are ink-plate furniture, so their inks are the knockout
+     ramp. Nothing here is a new PRIMITIVE - the strip is fb_fill_px, the
+     ruler is fb_rect plus fb_rule, the per-window band is fb_text_role. */
+  --zd-strip-bg:    #14120E;  /* raster strip ground = the ink plate      */
+  --zd-strip-track: #3A342B;  /* the 16 667 us budget line, 1.52:1        */
+  --zd-strip-0:     #A69E8A;  /* a composite under budget,   7.02:1       */
+  /* over budget uses ZD_WARN_KO 9.55:1, over 2x uses ZD_BAD_KO 8.36:1,
+     and the word is spelled out beside the colour in every case. */
+  --zd-ruler-use:   #14120E;  /* usable RAM        12.15:1 on the track   */
+  --zd-ruler-krn:   #2A2721;  /* kernel image, heap, arenas   9.67:1      */
+  --zd-ruler-rsv:   #7E7767;  /* reserved and firmware        2.89:1      */
+  --zd-ruler-mmio:  #B0A996;  /* device MMIO windows          1.52:1      */
+  --zd-ruler-bg:    #D6D0C0;  /* free / unmapped = the well               */
+
+  /* ---------------------------------------------------------- metrics */
+  --ui: 1;
+  --zd-rail-w:   calc(148px * var(--ui));
+  --zd-slug-h:   calc(28px  * var(--ui));
+  --zd-strip-h:  calc(34px  * var(--ui));
+  --zd-ruler-h:  calc(38px  * var(--ui));
+  --zd-title-h:  calc(28px  * var(--ui));
+  --zd-band-h:   calc(20px  * var(--ui));
+  --zd-row-h:    calc(24px  * var(--ui));
+  --zd-cell-h:   calc(20px  * var(--ui));
+  --zd-pad:      calc(12px  * var(--ui));
+  --zd-gap:      calc(8px   * var(--ui));
+  --zd-r-0: 0px;
+  --zd-r-2: 2px;
+  --zd-track-label: calc(2px * var(--ui));
+  --zd-track-th:    calc(1px * var(--ui));
+  --zd-track-plate: calc(4px * var(--ui));
+  --fs-data:  calc(11px * var(--ui));
+  --lh-data:  calc(16px * var(--ui));
+  --fs-label: calc(11px * var(--ui));
+  --fs-body:  calc(15px * var(--ui));
+  --lh-body:  calc(22px * var(--ui));
+  --fs-plate: calc(22px * var(--ui));
+  --lh-plate: calc(26px * var(--ui));
+
+  --sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+/* ==================================================== design.h, dark ===
+   THE PROCESS NEGATIVE, inherited from PLATE's own dark derivation and
+   extended to cover the three instrument bands.
+
+   1. FILM BASE IS NOT BLACK. Every surface keeps R > G > B on the warm
+      axis the paper had, so the direction's hue survives inversion.
+   2. DENSITY REACHES NEITHER END. Nothing here is #000000 and nothing is
+      #FFFFFF, because base-plus-fog exists.
+   3. KNOCKOUT BECOMES CLEARING. On paper the emphatic move is an ink plate
+      with the title knocked out; on film it is emulsion cleared to Dmin
+      with the title standing in density. Same operation, opposite pole.
+   4. THE RAIL AND THE STRIP STAY DMAX. Inverting them literally would make
+      the two largest pieces of permanent chrome the brightest objects on
+      screen. Both take Dmax #0A0906; only the transient knockout clears.
+   5. RULES DROP ONE RUNG, WEIGHT UNCHANGED. 2px 16.27 -> 5.50, 1px 6.25 ->
+      2.40, desk grid 2.02 -> 1.70.
+   6. THE SECOND INK IS RE-PICKED, NOT LIGHTENED. #B7311A falls to 1.9:1 on
+      film; #E8734F is the same hue opened up, 4.81:1 on the sheet.
+   7. THE RULER INVERTS ITS SENSE AND SAYS SO. On paper a mapped region is
+      INKED and free space is the bare well. On film a mapped region is
+      where the emulsion was EXPOSED, so it is the light one: ZD_RULER_USE
+      becomes the screened value #A7A191 at 4.18:1 on the track. A large
+      tonal area is halftoned in this mode, never solid - the same rule that
+      holds meter fills at 5.60:1 instead of 9.00:1.
+   ------------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  --zd-paper:        #2E2921;
+  --zd-desk:         #201C16;
+  --zd-well:         #433D31;
+  --zd-fill:         #4A4237;
+  --zd-rule-1:       #6A6256;
+  --zd-rule-2:       #AB9E8D;
+  --zd-plate-0:      #0A0906;
+  --zd-plate-1:      #16130D;
+  --zd-text-0:       #E5DBC6;
+  --zd-text-1:       #D0C7B5;
+  --zd-text-4:       #B8B09F;
+  --zd-text-5:       #B8AFA3;
+  --zd-text-6:       #B1A89D;
+  --zd-ok:           #6AC28D;
+  --zd-warn:         #D5AA53;
+  --zd-bad:          #EF9B84;
+  --zd-ok-ko:        #68C88F;
+  --zd-warn-ko:      #DEAF4F;
+  --zd-bad-ko:       #F8977F;
+  --zd-grid-line:    #474239;
+  --zd-ink-verm:     #E8734F;
+  --zd-ink-verm-ko:  #EF8460;
+  --zd-ink-ox:       #E4705C;
+  --zd-ink-ox-ko:    #EB8270;
+  --zd-ink-press:    #4FB673;
+  --zd-ink-press-ko: #5FC482;
+  --zd-ink-ochre:    #C79A34;
+  --zd-ink-ochre-ko: #D6A945;
+  --zd-text-4-ko:    #827E70;
+  --zd-rule-1-ko:    #554D44;
+
+  --zd-inv-bg:    #F4E9D5;
+  --zd-inv-0:     #14120E;
+  --zd-inv-1:     #443D31;
+  --zd-rule-inv:  #A79F91;
+  --zd-rinv-bg:   #F4E9D5;
+  --zd-rinv-0:    #14120E;
+  --zd-rinv-1:    #443D31;
+  --zd-ko-0:      #DCD4C2;
+  --zd-ko-1:      #A49D90;
+  --zd-mark:      #D5CBBC;
+  --zd-mark-bulk: #A7A191;
+  --zd-knob:      #DAD2C1;
+  --zd-knob-edge: #2E2921;
+  --zd-on-accent: #1A160F;
+  --zd-ok-inv:    #1C5F34;
+  --zd-warn-inv:  #734B00;
+  --zd-bad-inv:   #A31D11;
+
+  --zd-accent:    var(--zd-ink-verm);
+  --zd-accent-ko: var(--zd-ink-verm-ko);
+
+  --zd-strip-bg:    #0A0906;
+  --zd-strip-track: #3A3223;
+  --zd-strip-0:     #A29C8C;
+  --zd-ruler-use:   #A7A191;
+  --zd-ruler-krn:   #8A8474;
+  --zd-ruler-rsv:   #635D50;
+  --zd-ruler-mmio:  #544E42;
+  --zd-ruler-bg:    #433D31;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--zd-desk); font-family: var(--sans);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--zd-well); border-left: 1px solid var(--zd-rule-1); }
+::-webkit-scrollbar-thumb { background: var(--zd-mark); border-radius: var(--zd-r-0); }
+
+/* ============================================================ type ====
+   Two sizes in ordinary use. Hierarchy is CASE, WEIGHT, TRACKING and RULE
+   WEIGHT. Four exhaustive styles: DATA, LABEL, BODY, PLATE. --------- */
+.t-data { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+          font-weight: 400; color: var(--zd-text-1); font-variant-numeric: tabular-nums; }
+.t-label{ font-family: var(--sans); font-size: var(--fs-label); line-height: var(--lh-data);
+          font-weight: 700; text-transform: uppercase; letter-spacing: var(--zd-track-label);
+          margin-right: calc(-1 * var(--zd-track-label)); color: var(--zd-text-5); }
+.t-body { font-family: var(--sans); font-size: var(--fs-body); line-height: var(--lh-body);
+          font-weight: 400; color: var(--zd-text-1); }
+.t-plate{ font-family: var(--sans); font-size: var(--fs-plate); line-height: var(--lh-plate);
+          font-weight: 700; text-transform: uppercase; letter-spacing: var(--zd-track-plate);
+          margin-right: calc(-1 * var(--zd-track-plate)); color: var(--zd-text-0); }
+.t-plate-m { font-family: var(--mono); font-size: calc(44px * var(--ui));
+          line-height: calc(52px * var(--ui)); font-weight: 700; color: var(--zd-text-0);
+          font-variant-numeric: tabular-nums; letter-spacing: var(--zd-track-plate); }
+.ink0 { color: var(--zd-text-0); } .ink4 { color: var(--zd-text-4); }
+.ink6 { color: var(--zd-text-6); } .ink1 { color: var(--zd-text-1); }
+.ko   { color: var(--zd-ko-0); } .ko-d { color: var(--zd-ko-1); }
+.ko-4 { color: var(--zd-text-4-ko); }
+.w-ok { color: var(--zd-ok); } .w-warn { color: var(--zd-warn); } .w-bad { color: var(--zd-bad); }
+.k-ok { color: var(--zd-ok-ko); } .k-warn { color: var(--zd-warn-ko); } .k-bad { color: var(--zd-bad-ko); }
+.acc  { color: var(--zd-accent); }
+.bold { font-weight: 700; }
+
+/* ==================================================== page furniture == */
+#strip {
+  position: fixed; left: 0; right: 0; top: 0; height: 28px; z-index: 400;
+  background: var(--zd-plate-0); border-bottom: 2px solid var(--zd-accent);
+  display: flex; align-items: stretch; padding-left: 12px;
+}
+#strip .nm { display: flex; align-items: center; color: var(--zd-ko-0); }
+#strip .pitch { padding: 0 14px; color: var(--zd-text-4-ko); font-family: var(--mono);
+  font-size: 11px; white-space: nowrap; overflow: hidden; min-width: 0;
+  text-overflow: ellipsis; display: block; line-height: 28px; }
+#strip .links { margin-left: auto; display: flex; }
+#strip a { display: flex; align-items: center; padding: 0 10px; text-decoration: none;
+  border-left: 1px solid var(--zd-rule-1-ko); color: var(--zd-text-4-ko);
+  font-family: var(--sans); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 2px; }
+#strip a.on { background: var(--zd-rinv-bg); color: var(--zd-rinv-0); }
+#strip .thm { display: flex; align-items: stretch; }
+#strip .thm .tk { display: flex; align-items: center; padding: 0 10px; cursor: pointer;
+  border-left: 1px solid var(--zd-rule-1-ko); color: var(--zd-text-4-ko);
+  font-family: var(--sans); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 2px; }
+#strip .thm .tk.on { background: var(--zd-rinv-bg); color: var(--zd-rinv-0); }
+#strip .thm .thint { display: flex; align-items: center; padding: 0 10px;
+  border-left: 1px solid var(--zd-rule-1-ko); color: var(--zd-text-4-ko);
+  font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+
+#os { position: fixed; left: 0; right: 0; top: 28px; bottom: 0;
+      background: var(--zd-desk); overflow: hidden; }
+
+/* ============================================================ rail ==== */
+#rail { position: absolute; left: 0; top: 0; bottom: 0; width: var(--zd-rail-w);
+        background: var(--zd-plate-0); display: flex; flex-direction: column; z-index: 30;
+        border-right: 2px solid var(--zd-rule-2); }
+.ident { padding: calc(10px * var(--ui)) var(--zd-pad) calc(8px * var(--ui)); }
+.ident .t-plate { color: var(--zd-ko-0); display: block; }
+.ident .build { color: var(--zd-text-4-ko); display: block; }
+.accrule { height: 2px; background: var(--zd-accent-ko); flex: none; }
+.sect { padding: calc(8px * var(--ui)) var(--zd-pad) calc(4px * var(--ui));
+        color: var(--zd-text-4-ko); display: block; flex: none; }
+#reg { overflow-y: auto; overflow-x: hidden; flex: 0 1 auto; }
+.reg { position: relative; height: var(--zd-row-h); display: flex; align-items: center;
+       padding-left: var(--zd-pad); border-bottom: 1px solid var(--zd-rule-1-ko); cursor: pointer; }
+.reg .mk { position: absolute; left: 0; top: 0; bottom: 1px; width: 3px; background: transparent; }
+.reg.run  .mk { background: var(--zd-accent-ko); }
+.reg.hold .mk { background: var(--zd-accent-ko); top: 35%; bottom: 35%; }
+.reg.foc  .mk { background: var(--zd-accent); }
+.reg .nn { color: var(--zd-text-4-ko); width: calc(20px * var(--ui)); flex: none; }
+.reg .rn { color: var(--zd-ko-0); overflow: hidden; white-space: nowrap; }
+.reg .us { margin-left: auto; padding-right: calc(6px * var(--ui));
+           color: var(--zd-text-4-ko); flex: none; }
+.reg.off .rn { color: var(--zd-text-4-ko); }
+.reg.foc { background: var(--zd-rinv-bg); }
+.reg.foc .nn, .reg.foc .us { color: var(--zd-rinv-1); }
+.reg.foc .rn { color: var(--zd-rinv-0); }
+.reg:hover:not(.foc) { background: var(--zd-plate-1); }
+
+.wsbar { display: flex; flex: none; border-top: 1px solid var(--zd-rule-1-ko);
+         border-bottom: 1px solid var(--zd-rule-1-ko); }
+.wsc { flex: 1; height: var(--zd-row-h); display: flex; align-items: center; justify-content: center;
+       border-right: 1px solid var(--zd-rule-1-ko); cursor: pointer; }
+.wsc:last-child { border-right: 0; }
+.wsc .t-label { color: var(--zd-text-4-ko); }
+.wsc.on { background: var(--zd-rinv-bg); }
+.wsc.on .t-label { color: var(--zd-rinv-0); }
+.wscount { display: flex; flex: none; padding: calc(2px * var(--ui)) 0; }
+.wscount > span { flex: 1; text-align: center; }
+.readout { margin-top: auto; padding-bottom: calc(10px * var(--ui)); flex: none; }
+.rd { display: flex; align-items: baseline; padding: 0 var(--zd-pad); }
+.rd .k { color: var(--zd-text-4-ko); }
+.rd .v { color: var(--zd-ko-0); margin-left: auto; }
+
+/* ============================================================ slug ==== */
+#slug { position: absolute; left: var(--zd-rail-w); right: 0; top: 0; height: var(--zd-slug-h);
+        background: var(--zd-desk); border-bottom: 1px solid var(--zd-rule-1); z-index: 20;
+        display: flex; align-items: center; padding: 0 var(--zd-pad) 0 calc(16px * var(--ui)); }
+#slug .line { color: var(--zd-text-4); white-space: nowrap; overflow: hidden; }
+#slug .rm { margin-left: auto; padding-left: 12px; display: flex; cursor: pointer; flex: none; }
+
+/* ==================================================== raster strip ====
+   DATUM, taken whole and re-clocked. One column per COMPOSITE, not one per
+   frame: the compositor is damage driven, so a machine nobody is touching
+   produces no composites and the strip stands still. Datum's own version
+   advances per frame forever, which is 215 993 wakeups an hour at rest on
+   a 59.998 Hz panel - the exact standing tax Datum deleted ZD_MS_PULSE to
+   avoid. Re-clocking is the only change made to it. ------------------ */
+#raster { position: absolute; left: var(--zd-rail-w); right: 0; top: var(--zd-slug-h);
+          height: var(--zd-strip-h); background: var(--zd-strip-bg); z-index: 20;
+          border-bottom: 2px solid var(--zd-rule-2);
+          display: flex; align-items: stretch; }
+#raster .rlab { display: flex; flex-direction: column; justify-content: center; flex: none;
+                padding: 0 calc(10px * var(--ui)); border-right: 1px solid var(--zd-rule-1-ko); }
+#raster .rlab .t-label { color: var(--zd-ko-0); }
+#raster .rlab .t-data { color: var(--zd-text-4-ko); line-height: calc(13px * var(--ui)); }
+#rasterplot { flex: 1; min-width: 0; position: relative; }
+#rasterplot svg { display: block; }
+#raster .rout { display: flex; align-items: center; gap: calc(10px * var(--ui)); flex: none;
+                padding: 0 calc(10px * var(--ui)); border-left: 1px solid var(--zd-rule-1-ko); }
+#raster .rout .t-data { color: var(--zd-text-4-ko); }
+#raster .rout .v { color: var(--zd-ko-0); }
+
+/* =========================================================== field ==== */
+#field { position: absolute; left: var(--zd-rail-w); right: 0;
+         top: calc(var(--zd-slug-h) + var(--zd-strip-h));
+         bottom: var(--zd-ruler-h);
+         background: var(--zd-desk); overflow: hidden; }
+#gridsvg { position: absolute; left: 0; top: 0; pointer-events: none; }
+#legend { position: absolute; left: calc(32px * var(--ui)); bottom: calc(2px * var(--ui));
+          color: var(--zd-text-6); pointer-events: none; }
+#wins { position: absolute; inset: 0; }
+
+/* ==================================================== memory ruler ====
+   DATUM's third instrument. The whole address space along the bottom edge,
+   to scale, on the desk rather than on a sheet - it describes the machine,
+   not a document. Region identity is value plus a 1px rule plus a spelled
+   label, never value alone: the neighbouring tints run 1.26 to 3.35:1 and
+   the rule is what actually separates them. That is PLATE's depth model
+   doing the work, not a fifth channel. ------------------------------- */
+#ruler { position: absolute; left: var(--zd-rail-w); right: 0; bottom: 0;
+         height: var(--zd-ruler-h); background: var(--zd-desk);
+         border-top: 2px solid var(--zd-rule-2); z-index: 20;
+         display: flex; flex-direction: column;
+         padding: calc(3px * var(--ui)) var(--zd-pad) 0 calc(16px * var(--ui)); }
+#rulerbar { height: calc(14px * var(--ui)); position: relative; flex: none;
+            border: 1px solid var(--zd-rule-1); background: var(--zd-ruler-bg); }
+#rulerbar > i { position: absolute; top: 0; bottom: 0; display: block; }
+#rulerbar > i.sep { border-left: 1px solid var(--zd-rule-1); }
+#rulerbar > u { position: absolute; top: calc(-3px * var(--ui)); bottom: calc(-3px * var(--ui));
+                width: 1px; background: var(--zd-accent); }
+#rulercap { display: flex; align-items: center; flex: none; overflow: hidden;
+            height: calc(16px * var(--ui)); gap: calc(10px * var(--ui)); }
+#rulercap .t-data { color: var(--zd-text-6); white-space: nowrap; }
+#rulercap .sw { width: calc(9px * var(--ui)); height: calc(9px * var(--ui));
+                border: 1px solid var(--zd-rule-1); flex: none; display: inline-block;
+                margin-right: calc(4px * var(--ui)); vertical-align: -1px; }
+
+/* ========================================================== window ==== */
+.win { position: absolute; background: var(--zd-paper); border: 2px solid var(--zd-rule-2);
+       border-radius: var(--zd-r-0); display: flex; flex-direction: column; overflow: hidden;
+       transition: left 100ms linear, top 100ms linear, width 100ms linear, height 100ms linear; }
+.win.drag { transition: none; }
+.win.hidden { display: none; }
+.focusbar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+            background: var(--zd-accent); z-index: 4; pointer-events: none; }
+.hdr { height: var(--zd-title-h); flex: none; display: flex; align-items: center;
+       gap: calc(8px * var(--ui)); padding-left: calc(8px * var(--ui)); background: var(--zd-paper);
+       border-bottom: 2px solid var(--zd-rule-2); color: var(--zd-text-4); cursor: default;
+       user-select: none; }
+.hdr .ttl { color: var(--zd-text-4); flex: none; white-space: nowrap; }
+.hdr .sub { color: var(--zd-text-6); flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
+.hdr .coord { color: var(--zd-text-6); flex: none; margin-left: auto; white-space: nowrap; }
+.hdr .ico { color: var(--zd-text-4); flex: none; cursor: pointer;
+            width: calc(24px * var(--ui)); height: calc(24px * var(--ui)); }
+.ctls { display: flex; height: 100%; flex: none; margin-left: calc(6px * var(--ui)); }
+.ctl { width: calc(20px * var(--ui)); display: flex; align-items: center; justify-content: center;
+       border-left: 1px solid var(--zd-rule-1); color: inherit; cursor: pointer; }
+.ctl:hover { background: var(--zd-paper); color: var(--zd-text-0); }
+.ctl.x:hover { background: var(--zd-accent); color: var(--zd-on-accent); }
+/* THE KNOCKOUT. 12.17 % of a 445x460 sheet's pixels change state, and it
+   is the loudest move available on a paper ground. It costs nothing here
+   because nothing else in the blend wanted the header band. */
+.win.foc .hdr { background: var(--zd-inv-bg); border-bottom: 0; padding-left: calc(11px * var(--ui)); }
+.win.foc .hdr .ttl { color: var(--zd-inv-0); }
+.win.foc .hdr .sub { color: var(--zd-inv-1); }
+.win.foc .hdr .coord { color: var(--zd-inv-1); }
+.win.foc .hdr .ico { color: var(--zd-inv-0); }
+.win.foc .ctl { color: var(--zd-inv-0); border-left-color: var(--zd-rule-inv); }
+.win.foc .ctl:hover { background: var(--zd-paper); color: var(--zd-text-0); }
+.win.foc .ctl.x:hover { background: var(--zd-accent); color: var(--zd-on-accent); }
+.body { flex: 1; min-height: 0; padding: var(--zd-pad); display: flex; flex-direction: column;
+        overflow: hidden; }
+.win.foc .body { padding-left: calc(15px * var(--ui)); }
+/* the per-window status band. mono in a band the sheet already had. */
+.band { height: var(--zd-band-h); flex: none; display: flex; align-items: center;
+        gap: calc(8px * var(--ui)); padding: 0 calc(8px * var(--ui));
+        border-top: 1px solid var(--zd-rule-1); background: var(--zd-paper); overflow: hidden; }
+.win.foc .band { padding-left: calc(11px * var(--ui)); }
+.band .t-data { color: var(--zd-text-6); white-space: nowrap; }
+.band .v { color: var(--zd-text-1); }
+.band .sp { margin-left: auto; }
+.dtab { position: absolute; right: 0; bottom: var(--zd-band-h); height: calc(16px * var(--ui));
+        background: var(--zd-accent); display: flex; align-items: center; padding: 0 6px; z-index: 3; }
+.dtab .t-label { color: var(--zd-on-accent); }
+
+/* ======================================================== primitives == */
+.scroll { overflow: auto; min-height: 0; flex: 1; }
+.hr1 { height: 1px; background: var(--zd-rule-1); flex: none; }
+.hr2 { height: 2px; background: var(--zd-rule-2); flex: none; }
+.vr1 { width: 1px; background: var(--zd-rule-1); align-self: stretch; flex: none; }
+.row { display: flex; align-items: center; gap: var(--zd-gap); flex: none; overflow: hidden; }
+.row > .t-label, .row > .t-data, .kv > .t-label { white-space: nowrap; }
+.spread { margin-left: auto; }
+.pad-t { margin-top: var(--zd-gap); }
+
+.well { background: var(--zd-well); border: 1px solid var(--zd-rule-1);
+        border-radius: var(--zd-r-0); padding: calc(6px * var(--ui)) calc(8px * var(--ui)); }
+.plate { background: var(--zd-plate-1); padding: calc(6px * var(--ui)) calc(8px * var(--ui));
+         border-radius: var(--zd-r-0); }
+.plate .t-data { color: var(--zd-ko-0); }
+.plate .dim { color: var(--zd-ko-1); }
+
+.tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tbl th { text-align: left; height: var(--zd-cell-h); padding: 0 calc(4px * var(--ui));
+          border-bottom: 1px solid var(--zd-rule-1); white-space: nowrap;
+          overflow: hidden; text-overflow: ellipsis;
+          font-family: var(--sans); font-size: var(--fs-label); font-weight: 700;
+          text-transform: uppercase; letter-spacing: var(--zd-track-th); color: var(--zd-text-5); }
+.tbl td { height: var(--zd-cell-h); padding: 0 calc(4px * var(--ui));
+          border-bottom: 1px solid var(--zd-rule-1); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis;
+          font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+          color: var(--zd-text-1); font-variant-numeric: tabular-nums; }
+.tbl th.r, .tbl td.r { text-align: right; }
+.zeb .tbl tbody tr:nth-child(even) td { background: var(--zd-fill); }
+.zeb .tbl tbody tr.sel td, .tbl tr.sel td { background: var(--zd-inv-bg); color: var(--zd-inv-0); }
+.tbl tr.sel td .ink4, .tbl tr.sel td .ink6 { color: var(--zd-inv-1); }
+.tbl tr.sel td .w-ok { color: var(--zd-ok-inv); }
+.tbl tr.sel td .w-warn { color: var(--zd-warn-inv); }
+.tbl tr.sel td .w-bad { color: var(--zd-bad-inv); }
+.tbl tr.pick { cursor: pointer; }
+.tbl tr.pick:hover:not(.sel) td { background: var(--zd-well); }
+
+.btn { height: calc(22px * var(--ui)); padding: 0 calc(10px * var(--ui)); display: inline-flex;
+       align-items: center; border: 1px solid var(--zd-rule-1); border-radius: var(--zd-r-0);
+       background: var(--zd-paper); cursor: pointer; flex: none; }
+.btn .t-label { color: var(--zd-text-1); }
+.btn:hover { background: var(--zd-well); }
+.btn:active, .btn.down { background: var(--zd-inv-bg); border-color: var(--zd-inv-bg); }
+.btn:active .t-label, .btn.down .t-label { color: var(--zd-inv-0); }
+.btn.prim { background: var(--zd-accent); border-color: var(--zd-accent); }
+.btn.prim .t-label { color: var(--zd-on-accent); }
+.btn.prim:hover { background: var(--zd-accent); }
+
+.seg { display: flex; background: var(--zd-well); border: 1px solid var(--zd-rule-1);
+       border-radius: var(--zd-r-0); flex: none; }
+.seg > span { flex: 1; height: calc(22px * var(--ui)); display: flex; align-items: center;
+       justify-content: center; background: var(--zd-fill); border-right: 1px solid var(--zd-rule-1);
+       cursor: pointer; }
+.seg > span:last-child { border-right: 0; }
+.seg > span .t-label { color: var(--zd-text-1); }
+.seg > span.on { background: var(--zd-inv-bg); }
+.seg > span.on .t-label { color: var(--zd-inv-0); }
+
+.meter { margin-bottom: calc(6px * var(--ui)); flex: none; }
+.mrow { display: flex; align-items: baseline; }
+.mrow .t-data { margin-left: auto; color: var(--zd-text-0); font-weight: 700; }
+.track { height: calc(10px * var(--ui)); background: var(--zd-well);
+         border: 1px solid var(--zd-rule-1); border-radius: var(--zd-r-0); }
+.track > i { display: block; height: 100%; background: var(--zd-mark-bulk); border-radius: var(--zd-r-0); }
+.track > i.warn { background: var(--zd-warn); }
+.track > i.bad  { background: var(--zd-bad); }
+
+.ctlrow { min-height: calc(28px * var(--ui)); display: flex; align-items: center; flex: none;
+          border-bottom: 1px solid var(--zd-rule-1); }
+.ctlrow .right { margin-left: auto; display: flex; align-items: center; gap: calc(10px * var(--ui)); }
+.sw2 { width: calc(32px * var(--ui)); height: calc(16px * var(--ui)); background: var(--zd-well);
+      border: 1px solid var(--zd-rule-2); border-radius: var(--zd-r-0); position: relative;
+      cursor: pointer; flex: none; }
+.sw2 > i { position: absolute; left: 1px; top: 1px; width: calc(12px * var(--ui));
+          height: calc(12px * var(--ui)); background: var(--zd-mark); border-radius: var(--zd-r-2); }
+.sw2.on { background: var(--zd-mark); }
+.sw2.on > i { left: auto; right: 1px; background: var(--zd-inv-0); }
+.slider { position: relative; width: calc(180px * var(--ui)); height: calc(16px * var(--ui));
+          display: flex; align-items: center; cursor: pointer; flex: none; }
+.slider .st { position: absolute; left: 0; right: 0; height: calc(8px * var(--ui));
+              background: var(--zd-well); border: 1px solid var(--zd-rule-1); border-radius: var(--zd-r-0); }
+.slider .sf { position: absolute; left: 1px; top: calc(50% - (4px * var(--ui)) + 1px);
+              height: calc(6px * var(--ui)); background: var(--zd-mark-bulk); border-radius: var(--zd-r-0); }
+.slider .sh { position: absolute; top: 0; width: calc(8px * var(--ui)); height: calc(16px * var(--ui));
+              background: var(--zd-knob); border: 2px solid var(--zd-knob-edge); border-radius: var(--zd-r-2); }
+.slider .tick { position: absolute; top: calc(16px * var(--ui)); width: 1px;
+                height: calc(3px * var(--ui)); background: var(--zd-rule-1); }
+.swatchrow { display: flex; gap: var(--zd-gap); flex: none; }
+.swatch { display: block; width: calc(56px * var(--ui)); height: calc(26px * var(--ui)); cursor: pointer;
+          border: 1px solid var(--zd-rule-1); border-radius: var(--zd-r-0); position: relative; }
+.swatch.on { border: 2px solid var(--zd-rule-2); }
+.swatch.on::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+                    background: var(--zd-on-accent); }
+.dot { width: calc(8px * var(--ui)); height: calc(8px * var(--ui)); border-radius: var(--zd-r-2);
+       background: var(--zd-mark); flex: none; }
+.caret { display: inline-block; width: calc(7px * var(--ui)); height: var(--lh-data);
+         background: var(--zd-text-0); vertical-align: text-bottom; }
+.plate .caret { background: var(--zd-ko-0); }
+.blinkon .caret { animation: bl 500ms steps(1, end) infinite; }
+@keyframes bl { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+.plotbox { position: relative; flex: 1; min-height: calc(40px * var(--ui));
+           max-height: calc(420px * var(--ui));
+           background: var(--zd-well); border: 1px solid var(--zd-rule-1); overflow: hidden; }
+.plotbox svg { display: block; }
+.meanline { position: absolute; left: 0; right: 0; height: 1px; background: var(--zd-accent); }
+.kvgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: calc(16px * var(--ui));
+          flex: none; }
+.kv { display: flex; align-items: baseline; border-bottom: 1px solid var(--zd-rule-1);
+      height: var(--zd-cell-h); flex: none; overflow: hidden; }
+.kv .v { margin-left: auto; padding-left: calc(10px * var(--ui)); color: var(--zd-text-1);
+         font-family: var(--mono); font-size: var(--fs-data); white-space: nowrap;
+         font-variant-numeric: tabular-nums; }
+.stack { display: flex; flex-direction: column; min-height: 0; }
+.cols2 { display: flex; gap: calc(12px * var(--ui)); min-height: 0; flex: 1; }
+.cols2 > * { flex: 1; min-width: 0; overflow: hidden; }
+.pre { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+       white-space: pre; color: var(--zd-text-1); }
+.plate .pre { color: var(--zd-ko-0); }
+.gutnum { color: var(--zd-text-6); text-align: right; padding-right: calc(8px * var(--ui));
+          border-right: 1px solid var(--zd-rule-1); background: var(--zd-well); }
+
+/* ======================================================== overview ==== */
+#overview { position: absolute; inset: 0; background: var(--zd-desk); z-index: 60; display: none;
+            flex-direction: column; padding: calc(14px * var(--ui)); }
+#overview.on { display: flex; }
+.ovhead { display: flex; align-items: baseline; gap: calc(12px * var(--ui)); flex: none;
+          border-bottom: 2px solid var(--zd-rule-2); padding-bottom: calc(6px * var(--ui)); }
+.ovbody { flex: none; height: 52%; display: flex; gap: calc(24px * var(--ui)); min-height: 0;
+          padding-top: calc(12px * var(--ui)); }
+.ovreg { flex: 1; min-height: 0; display: flex; flex-direction: column;
+         padding-top: calc(12px * var(--ui)); }
+.ovws { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ovlab { display: flex; align-items: baseline; gap: calc(8px * var(--ui)); flex: none;
+         padding-bottom: calc(4px * var(--ui)); }
+.ovfield { position: relative; flex: 1; background: var(--zd-desk); border: 2px solid var(--zd-rule-2);
+           overflow: hidden; cursor: pointer; }
+.ovscale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ovscale .win { transition: none; }
+.ovpick { position: absolute; cursor: pointer; z-index: 5; }
+.ovpick:hover { outline: 3px solid var(--zd-accent); outline-offset: 0; }
+
+/* ========================================================= palette ==== */
+#palette { position: absolute; inset: 0; z-index: 120; display: none; }
+#palette.on { display: block; }
+#palette .scrim { position: absolute; inset: 0; }
+#palette .sheet { position: absolute; left: 50%; top: calc(56px * var(--ui));
+                  transform: translateX(-50%); width: calc(640px * var(--ui));
+                  background: var(--zd-paper); border: 2px solid var(--zd-rule-2);
+                  display: flex; flex-direction: column; padding-left: 3px; }
+#palette .sheet > .fb { position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+                        background: var(--zd-accent); }
+.phead { height: var(--zd-title-h); background: var(--zd-plate-0); display: flex; align-items: center;
+         gap: calc(8px * var(--ui)); padding: 0 calc(8px * var(--ui)); flex: none; }
+.pin { display: flex; align-items: center; gap: calc(6px * var(--ui)); background: var(--zd-well);
+       border-bottom: 1px solid var(--zd-rule-1); padding: calc(6px * var(--ui)) calc(10px * var(--ui)); }
+.prow { display: flex; align-items: center; height: var(--zd-row-h); padding: 0 calc(10px * var(--ui));
+        gap: calc(10px * var(--ui)); border-bottom: 1px solid var(--zd-rule-1); cursor: pointer;
+        position: relative; }
+.prow .mk { position: absolute; left: 0; top: 0; bottom: 1px; width: 3px; background: transparent; }
+.prow.on { background: var(--zd-inv-bg); }
+.prow.on .mk { background: var(--zd-accent); }
+.prow.on .t-label { color: var(--zd-inv-0); }
+.prow.on .t-data { color: var(--zd-inv-1); }
+.prow .hint { margin-left: auto; color: var(--zd-text-6); }
+.pfoot { display: flex; align-items: center; gap: calc(14px * var(--ui));
+         padding: calc(5px * var(--ui)) calc(10px * var(--ui)); border-top: 2px solid var(--zd-rule-2); }
+
+/* ============================================================ lock ==== */
+#lock { position: absolute; inset: 0; z-index: 300; background: var(--zd-desk); display: none; }
+#lock.on { display: block; }
+#lock .sheet { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+               width: calc(800px * var(--ui)); background: var(--zd-paper);
+               border: 2px solid var(--zd-rule-2); display: flex; padding-left: 3px; }
+#lock .fb { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--zd-accent); }
+#lock .lplate { width: calc(228px * var(--ui)); background: var(--zd-plate-0); flex: none;
+                padding: calc(14px * var(--ui)) calc(14px * var(--ui)) calc(12px * var(--ui));
+                display: flex; flex-direction: column; }
+#lock .lmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#lock .lhead { height: var(--zd-title-h); background: var(--zd-plate-1); display: flex;
+               align-items: center; gap: calc(8px * var(--ui)); padding: 0 calc(12px * var(--ui)); }
+#lock .lbody { padding: calc(14px * var(--ui)); display: flex; flex-direction: column; }
+#lock .hold { display: flex; align-items: center; gap: calc(8px * var(--ui));
+              border-bottom: 1px solid var(--zd-rule-1-ko); height: calc(20px * var(--ui)); }
+
+/* ============================================================ menu ==== */
+.menu { position: absolute; z-index: 200; background: var(--zd-paper);
+        border: 2px solid var(--zd-rule-2); min-width: calc(200px * var(--ui)); display: none; }
+.menu.on { display: block; }
+.menu .mh { background: var(--zd-plate-0); padding: 0 calc(8px * var(--ui));
+            height: calc(20px * var(--ui)); display: flex; align-items: center; }
+.menu .mi { height: var(--zd-row-h); display: flex; align-items: center; gap: calc(10px * var(--ui));
+            padding: 0 calc(10px * var(--ui)); border-bottom: 1px solid var(--zd-rule-1); cursor: pointer; }
+.menu .mi:last-child { border-bottom: 0; }
+.menu .mi:hover { background: var(--zd-inv-bg); }
+.menu .mi:hover .t-label { color: var(--zd-inv-0); }
+.menu .mi:hover .t-data { color: var(--zd-inv-1); }
+.menu .mi .hint { margin-left: auto; color: var(--zd-text-6); }
+
+/* ========================================================== toasts ==== */
+#toasts { position: absolute; right: calc(16px * var(--ui)); bottom: calc(16px * var(--ui));
+          z-index: 150; display: flex; flex-direction: column; gap: var(--zd-gap);
+          align-items: flex-end; }
+.toast { background: var(--zd-paper); border: 2px solid var(--zd-rule-2); position: relative;
+         width: calc(320px * var(--ui)); padding: calc(6px * var(--ui)) calc(10px * var(--ui))
+         calc(7px * var(--ui)) calc(13px * var(--ui)); }
+.toast > .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--zd-accent); }
+.toast .tl { display: flex; align-items: baseline; }
+.toast .tx { display: block; color: var(--zd-text-1); }
+.toast .cl { margin-left: auto; cursor: pointer; color: var(--zd-text-4); display: flex; }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="nm t-label">Paper blend</span>
+  <span class="pitch" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+</div>
+
+<div id="os">
+  <div id="rail">
+    <div class="ident">
+      <span class="t-plate">zlos</span>
+      <span class="t-data build">0.3 &middot; x86_64</span>
+    </div>
+    <div class="accrule"></div>
+    <span class="t-label sect">register</span>
+    <div id="reg"></div>
+    <span class="t-label sect">workspace</span>
+    <div class="wsbar" id="wsbar"></div>
+    <div class="wscount" id="wscount"></div>
+    <div class="readout">
+      <span class="t-label sect">readout</span>
+      <div id="readout"></div>
+    </div>
+  </div>
+
+  <div id="slug">
+    <span class="t-data line" id="slugline"></span>
+    <span class="rm" id="regmark" title="command palette">
+      <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true">
+        <circle cx="6" cy="6" r="3.5" fill="none" stroke="var(--zd-accent)" stroke-width="1"/>
+        <path d="M6 0 V12 M0 6 H12" stroke="var(--zd-accent)" stroke-width="1"/>
+      </svg>
+    </span>
+  </div>
+
+  <div id="raster">
+    <span class="rlab">
+      <span class="t-label">raster</span>
+      <span class="t-data">16 667 us</span>
+    </span>
+    <div id="rasterplot"></div>
+    <span class="rout" id="rasterout"></span>
+  </div>
+
+  <div id="field">
+    <svg id="gridsvg" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <span class="t-data" id="legend"></span>
+    <div id="wins"></div>
+    <div id="overview"></div>
+    <div id="toasts"></div>
+  </div>
+
+  <div id="ruler">
+    <div id="rulerbar"></div>
+    <div id="rulercap"></div>
+  </div>
+
+  <div id="palette">
+    <div class="scrim"></div>
+    <div class="sheet"><span class="fb"></span>
+      <div class="phead">
+        <span class="t-label ko">command</span>
+        <span class="t-data ko-d">zlsh builtin</span>
+        <span class="t-data ko-d spread" id="pcount"></span>
+      </div>
+      <div class="pin">
+        <span class="t-label">run</span>
+        <span class="t-data" id="pq"></span><span class="caret"></span>
+      </div>
+      <div id="presults"></div>
+      <div class="pfoot">
+        <span class="t-label">enter</span><span class="t-data ink6">run</span>
+        <span class="t-label">up down</span><span class="t-data ink6">select</span>
+        <span class="t-label">esc</span><span class="t-data ink6">dismiss</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="lock">
+    <svg id="locksvg" shape-rendering="crispEdges" aria-hidden="true"
+         style="position:absolute;left:0;top:0;pointer-events:none"></svg>
+    <div class="sheet">
+      <span class="fb"></span>
+      <div class="lplate" id="lockplate"></div>
+      <div class="lmain">
+        <div class="lhead">
+          <span class="t-label ko">session locked</span>
+          <span class="t-data ko-d">tty1 &middot; seat0</span>
+          <span class="t-data ko-d spread" id="lockup"></span>
+        </div>
+        <div class="lbody" id="lockbody"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="menu" id="ctxmenu"></div>
+  <div class="menu" id="winmenu"></div>
+</div>
+
+<script>
+'use strict';
+/* ====================================================================== *
+ * THE PAPER BLEND - a living prototype of the zlOS desktop.
+ *
+ * Structure and every value decision:  PLATE.
+ * Instrumentation:                     DATUM, re-clocked onto damage.
+ *
+ * Depth model: rules, gutters, inversion. No shadow, no blur, no gradient.
+ * Motion: CUT 0 ms by default, SLIDE 100 ms linear along the grid only.
+ * Colour: ONE structural ink with four jobs. Folio's zero-colour law is
+ *         explicitly rejected - see the BLEND tab in 11 SETTINGS.
+ * ====================================================================== */
+
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const pad2 = n => (n < 10 ? '0' : '') + n;
+const hx = (n, w) => n.toString(16).toUpperCase().padStart(w || 8, '0');
+const grp = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+/* --------------------------------------------------- token readback ----
+ * Every ratio this document prints is READ BACK off the live custom
+ * property and computed here, never typed as a literal. A typed ratio is
+ * a claim; move the token and the sheet keeps printing the old number.
+ */
+function tokRaw(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function tokResolve(name, depth) {
+  const v = tokRaw(name);
+  const m = /^var\((--[\w-]+)\)$/.exec(v);
+  if (m && (depth || 0) < 8) return tokResolve(m[1], (depth || 0) + 1);
+  return v;
+}
+function tokHex(name) { return tokResolve(name).toUpperCase(); }
+function tokRGB(name) {
+  const h = tokResolve(name).replace('#', '');
+  if (h.length !== 6) return null;
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+function relLum(c) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function tokRatio(fg, bg) {
+  const a = tokRGB(fg), b = tokRGB(bg);
+  if (!a || !b) return '--';
+  let l1 = relLum(a), l2 = relLum(b);
+  if (l1 < l2) { const t = l1; l1 = l2; l2 = t; }
+  return ((l1 + 0.05) / (l2 + 0.05)).toFixed(2);
+}
+function tokLstar(name) {
+  const c = tokRGB(name);
+  if (!c) return '--';
+  const y = relLum(c);
+  return (y > 0.008856 ? 116 * Math.pow(y, 1 / 3) - 16 : 903.3 * y).toFixed(2);
+}
+/* the token names the two ladders must BOTH carry. a name present in one
+   mode only is a defect, so the settings sheet audits the list at runtime
+   rather than asserting the property in prose. */
+const TOKENS = ['--zd-paper', '--zd-desk', '--zd-well', '--zd-fill', '--zd-rule-1', '--zd-rule-2',
+  '--zd-plate-0', '--zd-plate-1', '--zd-text-0', '--zd-text-1', '--zd-text-4', '--zd-text-5',
+  '--zd-text-6', '--zd-ok', '--zd-warn', '--zd-bad', '--zd-ok-ko', '--zd-warn-ko', '--zd-bad-ko',
+  '--zd-grid-line', '--zd-ink-verm', '--zd-ink-verm-ko', '--zd-ink-ox', '--zd-ink-ox-ko',
+  '--zd-ink-press', '--zd-ink-press-ko', '--zd-ink-ochre', '--zd-ink-ochre-ko',
+  '--zd-text-4-ko', '--zd-rule-1-ko', '--zd-inv-bg', '--zd-inv-0', '--zd-inv-1', '--zd-rule-inv',
+  '--zd-rinv-bg', '--zd-rinv-0', '--zd-rinv-1', '--zd-ko-0', '--zd-ko-1', '--zd-mark',
+  '--zd-mark-bulk', '--zd-knob', '--zd-knob-edge', '--zd-on-accent', '--zd-ok-inv',
+  '--zd-warn-inv', '--zd-bad-inv', '--zd-strip-bg', '--zd-strip-track', '--zd-strip-0',
+  '--zd-ruler-use', '--zd-ruler-krn', '--zd-ruler-rsv', '--zd-ruler-mmio', '--zd-ruler-bg',
+  '--zd-accent', '--zd-accent-ko'];
+function auditTokens() {
+  const missing = [];
+  const was = document.documentElement.getAttribute('data-theme');
+  ['light', 'dark'].forEach(m => {
+    if (m === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    TOKENS.forEach(t => { if (!/^#[0-9A-Fa-f]{6}$/.test(tokResolve(t))) missing.push(m + ' ' + t); });
+  });
+  if (was) document.documentElement.setAttribute('data-theme', was);
+  else document.documentElement.removeAttribute('data-theme');
+  return missing;
+}
+
+/* ------------------------------------------------------------- state -- */
+const S = {
+  ws: 1,
+  theme: 'light',
+  scene: 'desktop',
+  focus: null,
+  cols: 12,
+  rows: 8,
+  gut: 8,
+  ui: 1,
+  grid: true,
+  crop: true,
+  zebra: true,
+  blink: true,
+  snap: true,
+  strip: true,     /* the raster strip is drawn                          */
+  stripLive: true, /* it advances on damage. off = frozen, parked.       */
+  ruler: true,     /* the memory map ruler is drawn                      */
+  bands: true,     /* per window status bands are drawn                  */
+  accent: 'verm',
+  fileSel: 1,
+  procSel: 2,
+  calcAcc: '241690',
+  setTab: 0,
+  pq: '',
+  psel: 0,
+  t: 0,
+  clock: 14 * 3600 + 32 * 60 + 7,
+  hist: { cpu: [], net: [], mem: [] },
+  raster: [],
+  composites: 0,
+  dropped: 0,
+  cpu: [34, 21, 47, 12],
+  memPct: 62,
+  load: 0.31,
+  rx: 148.2,
+  tx: 22.7,
+  order: [],
+  wins: {}
+};
+for (let i = 0; i < 64; i++) {
+  S.hist.cpu.push(18 + ((i * 37) % 46));
+  S.hist.net.push(6 + ((i * 53) % 58));
+  S.hist.mem.push(56 + ((i * 17) % 12));
+}
+/* the raster strip is seeded so the very first paint is a record of a
+   machine that has been running, not an empty box. 6 200 us is the median
+   composite for a 1600x1000 field at 12x8 with three sheets up. */
+const BUDGET_US = 16667;
+for (let i = 0; i < 320; i++) {
+  const base = 5200 + ((i * 331) % 4200);
+  const spike = (i % 47 === 0) ? 11000 : (i % 89 === 0) ? 22000 : 0;
+  S.raster.push(base + spike);
+}
+S.composites = 41822;
+S.dropped = 3;
+
+/* ------------------------------------------------------------- icons -- *
+ * Stencils. 96x96 field, 8x8 modules of 12 px, every vertex on a multiple
+ * of 6. One stroke weight (8 at 96). Four constructions only: the axis
+ * aligned rectangle, the 45 degree diagonal, the circle, the quarter round.
+ */
+const ICON = {
+  shell: '<path d="M6 12 H90 V84 H6 Z"/><path d="M24 36 L42 54 L24 72"/><path d="M54 72 H78"/>',
+  files: '<path d="M6 24 V12 H36 L48 24"/><path d="M6 24 H90 V84 H6 Z"/>',
+  mon:   '<circle cx="48" cy="48" r="36"/><path d="M48 48 L72 24"/>',
+  edit:  '<path d="M18 6 H78 V90 H18 Z"/><path d="M30 30 H66"/><path d="M30 48 H66"/><path d="M30 66 H54"/>',
+  log:   '<path d="M6 18 H90 V78 H6 Z"/><path d="M18 36 H42"/><path d="M18 48 H78"/><path d="M18 60 H60"/>',
+  hex:   '<path d="M12 12 H84 V84 H12 Z"/><path d="M48 12 V84"/><path d="M12 48 H84"/>',
+  calc:  '<path d="M18 6 H78 V90 H18 Z"/><path d="M30 18 H66 V36 H30 Z"/><path d="M30 54 H42"/><path d="M54 54 H66"/><path d="M30 72 H42"/><path d="M54 72 H66"/>',
+  net:   '<path d="M18 78 L48 48 L78 78"/><path d="M6 84 H90"/><circle cx="48" cy="30" r="6"/>',
+  clock: '<circle cx="48" cy="48" r="36"/><path d="M48 48 V24"/><path d="M48 48 H66"/>',
+  chip:  '<path d="M24 24 H72 V72 H24 Z"/><path d="M36 24 V12"/><path d="M60 24 V12"/><path d="M36 72 V84"/><path d="M60 72 V84"/><path d="M24 36 H12"/><path d="M24 60 H12"/><path d="M72 36 H84"/><path d="M72 60 H84"/>',
+  set:   '<path d="M6 30 H90"/><path d="M6 66 H90"/><path d="M30 18 H42 V42 H30 Z"/><path d="M60 54 H72 V78 H60 Z"/>',
+  disk:  '<path d="M6 24 H90 V72 H6 Z"/><path d="M6 48 H90"/><circle cx="72" cy="36" r="6"/>',
+  proc:  '<path d="M12 18 H84 V36 H12 Z"/><path d="M12 42 H84 V60 H12 Z"/><path d="M12 66 H84 V84 H12 Z"/>',
+  regs:  '<path d="M12 12 H84 V84 H12 Z"/><path d="M36 12 V84"/><path d="M60 12 V84"/><path d="M12 36 H84"/>',
+  grid:  '<path d="M6 6 H90 V90 H6 Z"/><path d="M34 6 V90"/><path d="M62 6 V90"/><path d="M6 34 H90"/><path d="M6 62 H90"/>'
+};
+function icon(name, px) {
+  return '<svg class="ico" width="' + (px || 24) + '" height="' + (px || 24) + '" viewBox="0 0 96 96"' +
+    ' fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="butt" stroke-linejoin="miter"' +
+    ' aria-hidden="true">' + ICON[name] + '</svg>';
+}
+const CTL_MIN = '<svg width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="9" width="12" height="2" fill="currentColor"/></svg>';
+const CTL_MAX = '<svg width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+const CTL_CLS = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M0 0 L12 12 M12 0 L0 12" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>';
+
+/* ------------------------------------------------------------ tables -- */
+function TH(cols) {
+  return '<tr>' + cols.map(c => '<th class="' + (c.r ? 'r' : '') + '"' +
+    (c.w ? ' style="width:' + c.w + '"' : '') + '>' + c.h + '</th>').join('') + '</tr>';
+}
+function TR(cells, attr) {
+  return '<tr ' + (attr || '') + '>' + cells.map(c => {
+    if (typeof c === 'string') return '<td>' + c + '</td>';
+    return '<td class="' + (c.c || '') + '">' + c.t + '</td>';
+  }).join('') + '</tr>';
+}
+function TBL(head, rows) {
+  return '<table class="tbl"><thead>' + TH(head) + '</thead><tbody>' + rows.join('') + '</tbody></table>';
+}
+function plotFlex(series, max, minH) {
+  const n = series.length, bw = 100 / n;
+  let bars = '';
+  series.forEach((v, i) => {
+    const h = Math.max(1, (v / max) * 100);
+    bars += '<rect x="' + (i * bw).toFixed(2) + '" y="' + (100 - h).toFixed(2) +
+      '" width="' + (bw * 0.68).toFixed(2) + '" height="' + h.toFixed(2) + '"/>';
+  });
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  return '<div class="plotbox"' + (minH ? ' style="min-height:' + minH + 'px"' : '') + '>' +
+    '<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" ' +
+    'fill="var(--zd-mark-bulk)" aria-hidden="true">' + bars + '</svg>' +
+    '<span class="meanline" style="top:' + (100 - (mean / max) * 100).toFixed(2) + '%"></span></div>';
+}
+function meter(label, val, unit, kind) {
+  const k = kind === 'bad' ? 'bad' : kind === 'warn' ? 'warn' : '';
+  return '<div class="meter"><div class="mrow"><span class="t-label">' + label + '</span>' +
+    '<span class="t-data">' + val + (unit || '') + '</span></div>' +
+    '<div class="track"><i class="' + k + '" style="width:' + Math.max(0, Math.min(100, val)) + '%"></i></div></div>';
+}
+function kv(k, v) {
+  return '<div class="kv"><span class="t-label">' + k + '</span><span class="v">' + v + '</span></div>';
+}
+/* FREE RIDER, taken from all four independently: the state WORD is set
+   beside the state colour, always. It is four characters of text, it works
+   under every colour policy including the one this blend rejected, and it
+   is why the colour axis could be settled last without breaking anything. */
+function statword(w) {
+  const c = w === 'OK' ? 'w-ok' : w === 'WARN' ? 'w-warn' : w === 'FAIL' ? 'w-bad' : 'ink4';
+  return '<span class="t-label ' + c + '">' + w + '</span>';
+}
+function head(t) {
+  return '<div class="row" style="margin:0 0 4px"><span class="t-label ink0">' + t +
+    '</span><span class="hr1" style="flex:1;margin-left:10px"></span></div>';
+}
+
+/* ================================================================ vfs = */
+const FILES = [
+  ['kernel.zl',   '41.2 KiB', 'zl source',  '-r--r--r--', '12:04'],
+  ['fb.c',        '68.4 KiB', 'C source',   '-r--r--r--', '12:04'],
+  ['intel.c',     '112.9 KiB','C source',   '-rw-r--r--', '11:58'],
+  ['xhci.c',      '54.1 KiB', 'C source',   '-r--r--r--', '09:41'],
+  ['hid.c',       '19.6 KiB', 'C source',   '-r--r--r--', '09:41'],
+  ['zlfs.c',      '37.8 KiB', 'C source',   '-r--r--r--', '10:22'],
+  ['nvme.c',      '28.3 KiB', 'C source',   '-r--r--r--', '10:22'],
+  ['apic.c',      '11.4 KiB', 'C source',   '-r--r--r--', '08:50'],
+  ['wm.c',        '46.0 KiB', 'C source',   '-r--r--r--', '12:01'],
+  ['uikit.c',     '52.7 KiB', 'C source',   '-r--r--r--', '12:01'],
+  ['design.h',    '18.9 KiB', 'C header',   '-r--r--r--', '12:03'],
+  ['memmap.h',    '6.1 KiB',  'C header',   '-r--r--r--', '11:52'],
+  ['font_aa.c',   '24.5 KiB', 'C source',   '-r--r--r--', '07:31'],
+  ['font_sub.c',  '9.8 KiB',  'C source',   '-r--r--r--', '07:31'],
+  ['gen_icons.py','7.2 KiB',  'Python',     '-rwxr-xr-x', '12:00'],
+  ['link.ld',     '412 B',    'Linker',     '-r--r--r--', '06:12'],
+  ['Makefile',    '3.1 KiB',  'Makefile',   '-r--r--r--', '12:03'],
+  ['zlos.elf',    '249.8 KiB','Executable', '-rwxr-xr-x', '12:04'],
+  ['boot.log',    '2.4 KiB',  'Log',        '-r--r--r--', '12:04'],
+  ['ui.c',        '33.6 KiB', 'C source',   '-r--r--r--', '12:01'],
+  ['wm_drag.c',   '14.2 KiB', 'C source',   '-r--r--r--', '11:44'],
+  ['pci.c',       '16.8 KiB', 'C source',   '-r--r--r--', '08:50'],
+  ['dpll.c',      '21.7 KiB', 'C source',   '-rw-r--r--', '11:58'],
+  ['edid.c',      '8.9 KiB',  'C source',   '-r--r--r--', '09:02'],
+  ['ps2.c',       '6.4 KiB',  'C source',   '-r--r--r--', '07:12'],
+  ['sched.c',     '12.1 KiB', 'C source',   '-r--r--r--', '10:40'],
+  ['heap.c',      '9.3 KiB',  'C source',   '-r--r--r--', '10:40'],
+  ['atlas48.bin', '196.0 KiB','Binary',     '-r--r--r--', '12:00'],
+  ['dejavu_mono.ttf', '641.0 KiB', 'Font',  '-r--r--r--', '06:04'],
+  ['zlfs.img',    '4.0 MiB',  'Disk image', '-rw-r--r--', '12:04'],
+  ['core.dump',   '256.0 KiB','Core dump',  '-rw-------', '11:41'],
+  ['GUARDS.md',   '11.7 KiB', 'Markdown',   '-r--r--r--', '12:02']
+];
+const SRC = {
+  'fb.c':
+'1168  /* subpixel LCD text. 5 tap (1,2,3,2,1)/9 FIR over the\n' +
+'1169     three colour stripes of one cell. gamma correct in\n' +
+'1170     linear light through the two boot built LUTs. */\n' +
+'1171  static void blend_sub(u32 *dst, const u8 *cov, u32 fg)\n' +
+'1172  {\n' +
+'1173      u32 bg = *dst;\n' +
+'1174      int r = fir5(cov, 0), g = fir5(cov, 1), b = fir5(cov, 2);\n' +
+'1175      u32 lr = lut_to_lin[(bg >> 16) & 0xff];\n' +
+'1176      u32 lg = lut_to_lin[(bg >>  8) & 0xff];\n' +
+'1177      u32 lb = lut_to_lin[(bg      ) & 0xff];\n' +
+'1178      u32 fr = lut_to_lin[(fg >> 16) & 0xff];\n' +
+'1179      u32 fg2 = lut_to_lin[(fg >> 8) & 0xff];\n' +
+'1180      u32 fb2 = lut_to_lin[(fg     ) & 0xff];\n' +
+'1181      lr = lr + (((fr - lr) * r) >> 8);\n' +
+'1182      lg = lg + (((fg2 - lg) * g) >> 8);\n' +
+'1183      lb = lb + (((fb2 - lb) * b) >> 8);\n' +
+'1184      *dst = (lut_to_srgb[lr] << 16)\n' +
+'1185           | (lut_to_srgb[lg] <<  8)\n' +
+'1186           |  lut_to_srgb[lb];\n' +
+'1187  }\n' +
+'1188\n' +
+'1189  /* BLEND: the raster strip is three fb_fill_px calls of\n' +
+'1190     1 px width per COMPOSITE, not per frame. compose()\n' +
+'1191     already runs only when the damage list is non empty,\n' +
+'1192     so the strip inherits that gate for free and an idle\n' +
+'1193     machine wakes 0 times an hour instead of 215 993. */\n' +
+'1194\n' +
+'1195  void fb_rect(int x, int y, int w, int h, u32 c)\n' +
+'1196  {\n' +
+'1197      if (!clip(&x, &y, &w, &h)) return;\n' +
+'1198      u32 *p = fb.px + y * fb.stride_px + x;\n' +
+'1199      for (int r = 0; r < h; r++, p += fb.stride_px)\n' +
+'1200          for (int i = 0; i < w; i++) p[i] = c;\n' +
+'1201  }\n' +
+'1202\n' +
+'1203  /* the 1 px rule. this desktop draws thousands of them,\n' +
+'1204     so it is worth the special case: no per pixel clip. */\n' +
+'1205  void fb_rule(int x, int y, int len, int vert, u32 c)\n' +
+'1206  {\n' +
+'1207      if (vert) fb_rect(x, y, 1, len, c);\n' +
+'1208      else      fb_rect(x, y, len, 1, c);\n' +
+'1209  }',
+  'wm.c':
+' 802  /* THE ONE THING THE BLEND ASKS FOR THAT DOES NOT EXIST.\n' +
+' 803     app_us is measured in AGGREGATE across the composite,\n' +
+' 804     not per surface, so a per window microsecond figure\n' +
+' 805     has nothing to read. repaint_pixels IS per surface,\n' +
+' 806     same slot, same face, no layout change - that is the\n' +
+' 807     stated fallback and it is what the status bands show\n' +
+' 808     as measured. the us figure beside it is DERIVED and\n' +
+' 809     is labelled as derived wherever it appears. */\n' +
+' 810  struct surface {\n' +
+' 811      int x, y, w, h;\n' +
+' 812      u32 *cache;              /* per window fb_surface */\n' +
+' 813      u32  repaint_pixels;     /* per surface. measured. */\n' +
+' 814      u16  damage_rects;       /* per surface. measured. */\n' +
+' 815  };\n' +
+' 816\n' +
+' 817  static u32 app_us;           /* WHOLE composite. aggregate. */\n' +
+' 818\n' +
+' 819  /* sheetRows(): the reflow gate PLATE did not have. a\n' +
+' 820     renderer is handed the module rows it actually owns\n' +
+' 821     and drops optional sections itself. the rule lives\n' +
+' 822     HERE, in the shell, not sprinkled through fifteen\n' +
+' 823     app renderers, because four separate prototype bugs\n' +
+' 824     were that one omission wearing different hats. */\n' +
+' 825  int sheet_rows(const struct win *w)\n' +
+' 826  {\n' +
+' 827      if (!w->detached) return w->rh;\n' +
+' 828      return (w->h + grid.row_h / 2) / (grid.row_h + grid.gut);\n' +
+' 829  }',
+  'kernel.zl':
+'   1  # zlOS entry. called from boot.S after the handoff.\n' +
+'   2  fn main() {\n' +
+'   3      gdt()\n' +
+'   4      idt()\n' +
+'   5      apic(4)                 # 4 logical CPUs\n' +
+'   6      pit(1000)               # 1193182 / 1000\n' +
+'   7      xhci()                  # usb hid keyboard + mouse\n' +
+'   8      fb(1600, 1000, 32)\n' +
+'   9      zlfs_mount("rd0")\n' +
+'  10      desktop()               # the compositor is the boot state\n' +
+'  11  }\n' +
+'  12\n' +
+'  13  fn desktop() {\n' +
+'  14      ui_theme_init_q8(256)   # ui scale 1.0 in q8\n' +
+'  15      rail()                  # the numbered register\n' +
+'  16      slug()                  # the printer slug\n' +
+'  17      raster()                # one column per composite\n' +
+'  18      field()                 # rules the module grid onto the desk\n' +
+'  19      ruler()                 # the e820 map, to scale\n' +
+'  20      loop { input() compose() }\n' +
+'  21  }',
+  'design.h':
+'   1  /* design.h - every literal in the desktop lives here.\n' +
+'   2     kernel.zl names roles only. ui.c maps roles to these. */\n' +
+'   3\n' +
+'   4  #define ZD_PAPER      0xF2EFE6   /* the sheet    */\n' +
+'   5  #define ZD_DESK       0xE4E0D5   /* the field    */\n' +
+'   6  #define ZD_WELL       0xD6D0C0   /* sunken       */\n' +
+'   7  #define ZD_FILL       0xCEC8B8   /* zebra tint   */\n' +
+'   8  #define ZD_RULE_1     0x5C574C   /* 1px rule     */\n' +
+'   9  #define ZD_RULE_2     0x14120E   /* 2px rule     */\n' +
+'  10  #define ZD_PLATE_0    0x14120E   /* ink plate    */\n' +
+'  11  #define ZD_ACCENT     0xB7311A   /* second ink   */\n' +
+'  12\n' +
+'  13  /* the three instrument bands, from Datum */\n' +
+'  14  #define ZD_STRIP_BG    0x14120E\n' +
+'  15  #define ZD_STRIP_TRACK 0x3A342B  /* budget line  */\n' +
+'  16  #define ZD_STRIP_0     0xA69E8A  /* under budget */\n' +
+'  17  #define ZD_RULER_USE   0x14120E\n' +
+'  18  #define ZD_RULER_KRN   0x2A2721\n' +
+'  19  #define ZD_RULER_RSV   0x7E7767\n' +
+'  20  #define ZD_RULER_MMIO  0xB0A996\n' +
+'  21\n' +
+'  22  #define ZD_R_0        0          /* contains something */\n' +
+'  23  #define ZD_R_2        2          /* IS a token, under 24dp */\n' +
+'  24  #define ZD_RAIL_W     148\n' +
+'  25  #define ZD_SLUG_H     28\n' +
+'  26  #define ZD_STRIP_H    34\n' +
+'  27  #define ZD_RULER_H    38\n' +
+'  28  #define ZD_BAND_H     20\n' +
+'  29  #define ZD_GUTTER     8\n' +
+'  30  #define ZD_BUDGET_US  16667      /* 59.998 Hz, measured */\n' +
+'  31  #define ZD_MS_SLIDE   100        /* linear, the only motion */\n' +
+'  32  #define ZD_MS_BLINK   500',
+  'memmap.h':
+'   1  /* memmap.h - the fixed address map, and the ONLY place\n' +
+'   2     a fixed address may be written. the bottom ruler is\n' +
+'   3     drawn from this header, so the two cannot drift. */\n' +
+'   4\n' +
+'   5  #define HI_DRAG   0xC0000000ull   /* 128 MiB drag scratch */\n' +
+'   6  #define HI_DOM    0xC8000000ull   /* 128 MiB browser DOM  */\n' +
+'   7  #define GEN9_BAR0 0xD0000000ull   /*  16 MiB mmio         */\n' +
+'   8  #define GEN9_STOL 0xE0000000ull   /* 256 MiB stolen       */\n' +
+'   9  #define IOAPIC    0xFEC00000ull\n' +
+'  10  #define HPET      0xFED00000ull\n' +
+'  11  #define LAPIC     0xFEE00000ull\n' +
+'  12\n' +
+'  13  _Static_assert(HI_DOM - HI_DRAG == 128u * 1024 * 1024,\n' +
+'  14                 "drag scratch overlaps the DOM arena");',
+  'Makefile':
+'   1  ZL      = tools/zlc\n' +
+'   2  CFLAGS  = -ffreestanding -mno-red-zone -Wall -Werror\n' +
+'   3  OBJ     = build/kernel.o build/fb.o build/intel.o \\\n' +
+'   4            build/xhci.o build/hid.o build/zlfs.o\n' +
+'   5\n' +
+'   6  all: build/zlos.elf\n' +
+'   7\n' +
+'   8  build/zlos.elf: $(OBJ) link.ld\n' +
+'   9  \tld -T link.ld -o $@ $(OBJ)\n' +
+'  10\n' +
+'  11  build/%.o: %.zl\n' +
+'  12  \t$(ZL) -c $< -o $@'
+};
+
+/* ============================================================== apps == */
+const APPS = [
+  { id: 'shell', n: '01', name: 'shell',     sub: 'zlsh',      ico: 'shell', p: [0, 0, 7, 4] },
+  { id: 'files', n: '02', name: 'files',     sub: 'zlfs',      ico: 'files', p: [7, 0, 5, 4] },
+  { id: 'mon',   n: '03', name: 'monitor',   sub: '1 Hz',      ico: 'mon',   p: [0, 4, 7, 4] },
+  { id: 'edit',  n: '04', name: 'editor',    sub: 'fb.c',      ico: 'edit',  p: [0, 0, 6, 8] },
+  { id: 'log',   n: '05', name: 'kernel log',sub: 'dmesg',     ico: 'log',   p: [0, 4, 7, 4] },
+  { id: 'hex',   n: '06', name: 'hex',       sub: 'rd0',       ico: 'hex',   p: [4, 1, 6, 5] },
+  { id: 'calc',  n: '07', name: 'calc',      sub: 'int64',     ico: 'calc',  p: [8, 1, 4, 6] },
+  { id: 'net',   n: '08', name: 'network',   sub: 'enp0s31f6', ico: 'net',   p: [7, 4, 5, 4] },
+  { id: 'clock', n: '09', name: 'clocks',    sub: 'monotonic', ico: 'clock', p: [3, 1, 6, 5] },
+  { id: 'sys',   n: '10', name: 'system',    sub: '0.3',       ico: 'chip',  p: [3, 2, 6, 4] },
+  { id: 'set',   n: '11', name: 'settings',  sub: 'design.h',  ico: 'set',   p: [0, 0, 7, 8] },
+  { id: 'disk',  n: '12', name: 'disk',      sub: 'zlfs',      ico: 'disk',  p: [6, 0, 6, 5] },
+  { id: 'proc',  n: '13', name: 'process',   sub: '42 tasks',  ico: 'proc',  p: [2, 1, 7, 5] },
+  { id: 'regs',  n: '14', name: 'registers', sub: 'pipe A',    ico: 'regs',  p: [3, 0, 7, 6] },
+  { id: 'grid',  n: '15', name: 'grid',      sub: 'module',    ico: 'grid',  p: [2, 1, 7, 5] }
+];
+const APP = {};
+APPS.forEach(a => { APP[a.id] = a; });
+
+/* ==================================================== app renderers ===
+ * EVERY renderer takes ONE argument: the fit the shell measured for it.
+ *   f.rows  module rows this sheet owns right now
+ *   f.cols  module columns
+ *   f.short f.rows <= 3      f.narrow f.cols <= 4
+ * PLATE's single structural defect was that it had no reflow story: an app
+ * authored to fill 7x8 overflowed its own frame at 7x4, and four separate
+ * defects were that one omission wearing different hats. The gate is in
+ * the shell (fitOf, below) and the renderers only consume it.
+ */
+const R = {};
+
+R.shell = f => {
+  const L = [
+    ['zlsh 0.3', 'dim'], null,
+    ['$ make -C kernel modeset', ''],
+    ['  ZL   kernel.zl -> build/kernel.o', 'dim'],
+    ['  CC   fb.c intel.c xhci.c hid.c zlfs.c', 'dim'],
+    ['  LD   build/zlos.elf', 'dim'],
+    ['       text 218432  data 30720  bss 1441792', 'dim'],
+    ['$ ./tools/regdump --pipe A', ''],
+    ['  PIPE_A_CONF     0xC0000000   enabled, 8 bpc', 'dim'],
+    ['  PIPE_A_LINK_M   0x0080D9E4', 'dim'],
+    ['  PIPE_A_LINK_N   0x00800000', 'dim'],
+    ['  DPLL_CTRL1      0x00000601   link 2.7 GHz', 'dim'],
+    ['  pixel clock 241690 kHz -> 59.998 Hz', 'ok'],
+    ['$ ./tools/rasterstat --window 320', ''],
+    ['  41 822 composites, 3 over budget', 'dim'],
+    ['  p50 6 480 us   p99 14 220 us   max 22 010 us', 'dim'],
+    ['$ zlfs fsck rd0', ''],
+    ['  3 generations, 0 orphan extents', 'dim'],
+    ['  power cycle 1 -> 2 -> 3 survived', 'ok'],
+    ['$ ', 'caret']
+  ];
+  const keep = f.short ? L.slice(-9) : L;
+  let out = '<div class="plate stack" style="flex:1;min-height:0;overflow:hidden">';
+  keep.forEach(l => {
+    if (!l) { out += '<span class="t-data">&nbsp;</span>'; return; }
+    if (l[1] === 'caret') { out += '<span class="t-data">' + l[0] + '<span class="caret"></span></span>'; return; }
+    if (l[1] === 'ok') { out += '<span class="t-data k-ok">' + l[0] + '</span>'; return; }
+    out += '<span class="t-data ' + (l[1] === 'dim' ? 'dim' : '') + '">' + l[0] + '</span>';
+  });
+  out += '</div>';
+  out += '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="toast" data-arg="build"><span class="t-label">rebuild</span></span>' +
+    '<span class="btn" data-act="open" data-arg="log"><span class="t-label">dmesg</span></span>' +
+    (f.narrow ? '' : '<span class="btn" data-act="open" data-arg="regs"><span class="t-label">regdump</span></span>') +
+    '<span class="t-data ink6 spread">exit 0 &middot; 1.42 s</span></div>';
+  return out;
+};
+
+R.files = f => {
+  const rows = FILES.map((x, i) => TR(
+    f.narrow ? [x[0], { t: x[1], c: 'r' }] :
+      [x[0], { t: x[1], c: 'r' }, x[2], x[3], { t: x[4], c: 'r' }],
+    'class="pick' + (i === S.fileSel ? ' sel' : '') + '" data-act="file" data-arg="' + i + '"'
+  ));
+  const cols = f.narrow ? [{ h: 'name', w: '62%' }, { h: 'size', w: '38%', r: 1 }] :
+    [{ h: 'name', w: '34%' }, { h: 'size', w: '16%', r: 1 }, { h: 'kind', w: '20%' },
+     { h: 'perm', w: '18%' }, { h: 'mtime', w: '12%', r: 1 }];
+  let out = '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">path</span><span class="t-data">/src/kernel</span>' +
+    '<span class="t-data ink6 spread">' + FILES.length + ' entries</span></div>' +
+    '<div class="scroll">' + TBL(cols, rows) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="height:var(--zd-row-h)"><span class="t-label">selected</span>' +
+    '<span class="t-data ink0">' + FILES[S.fileSel][0] + '</span>' +
+    '<span class="t-data ink6">' + FILES[S.fileSel][1] + '</span>' +
+    '<span class="spread"></span>' + statword('OK') + '</div>';
+  if (!f.short) {
+    out += kv('full path', '/src/kernel/' + FILES[S.fileSel][0]) +
+      kv('kind', FILES[S.fileSel][2]) +
+      kv('mode', FILES[S.fileSel][3] + '  uid 0  gid 0') +
+      kv('extent', 'generation 3, 1 extent, contiguous') +
+      kv('crc32', '0x' + hx((S.fileSel * 2654435761) >>> 0, 8));
+  }
+  out += '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="open" data-arg="edit"><span class="t-label">open in editor</span></span>' +
+    '<span class="btn" data-act="open" data-arg="hex"><span class="t-label">hex</span></span>' +
+    (f.narrow ? '' : '<span class="btn" data-act="toast" data-arg="stat"><span class="t-label">stat</span></span>') +
+    '</div>';
+  return out;
+};
+
+R.edit = f => {
+  const name = FILES[S.fileSel][0];
+  const body = SRC[name];
+  if (!body) {
+    return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+      '<span class="t-label">buffer</span><span class="t-data">' + name + '</span>' +
+      '<span class="t-data ink6 spread">binary</span></div>' +
+      '<div class="well stack" style="flex:1;justify-content:center;align-items:center;margin-top:8px">' +
+      '<span class="t-label">no text preview</span>' +
+      '<span class="t-data ink6">' + name + ' is not a text buffer. open it in 06 HEX.</span>' +
+      '</div><div class="row pad-t"><span class="btn prim" data-act="open" data-arg="hex">' +
+      '<span class="t-label">open in hex</span></span></div>';
+  }
+  const lines = body.split('\n');
+  let out = '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">buffer</span><span class="t-data">' + name + '</span>' +
+    (f.narrow ? '' : '<span class="t-data ink6">read only</span>') +
+    '<span class="t-data ink6 spread">utf-8 &middot; lf &middot; ' + lines.length + ' ln</span></div>';
+  out += '<div class="scroll"><div style="display:flex;min-height:100%">' +
+    '<div class="gutnum t-data">';
+  lines.forEach(l => { out += (l.slice(0, 6).trim() || '&middot;') + '<br>'; });
+  out += '</div><div class="pre" style="padding-left:8px;flex:1">';
+  lines.forEach(l => { out += l.slice(6) + '\n'; });
+  out += '<span class="caret"></span></div></div></div>';
+  out += '<div class="hr2"></div><div class="row" style="height:var(--zd-row-h)">' +
+    '<span class="t-label">ln</span><span class="t-data">' + lines.length + '</span>' +
+    '<span class="t-label">col</span><span class="t-data">1</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data ink6">buffer clean</span></div>';
+  return out;
+};
+
+R.mon = f => {
+  const cores = S.cpu.map((v, i) =>
+    meter('cpu ' + i, v, ' %', v > 80 ? 'bad' : v > 60 ? 'warn' : ''));
+  const procs = [
+    ['1', 'zlos', '18.4', '212.0', 'R', 'compose'],
+    ['12', 'zlsh', '2.1', '4.2', 'S', 'tty1'],
+    ['18', 'wm', '9.6', '31.8', 'R', 'surface'],
+    ['24', 'fbcon', '0.4', '2.0', 'S', 'console'],
+    ['31', 'xhci', '1.2', '8.4', 'S', 'irq 16'],
+    ['37', 'zlfs', '0.8', '18.6', 'S', 'rd0'],
+    ['42', 'regdump', '0.0', '1.1', 'Z', 'exited'],
+    ['48', 'intel', '4.4', '22.9', 'R', 'pipe A']
+  ].map((p, i) => TR([p[0], p[1], { t: p[2], c: 'r' }, { t: p[3], c: 'r' },
+    { t: p[4] === 'Z' ? '<span class="w-warn bold">Z</span>' : p[4] }, p[5]],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  const irq = [
+    ['0', 'timer', '1 024', 'apic', 'OK'], ['1', 'i8042', '0', 'legacy', 'WARN'],
+    ['16', 'xhci', '312', 'msi-x', 'OK'], ['19', 'e1000e', '148', 'msi', 'OK'],
+    ['24', 'nvme q0', '96', 'msi-x', 'OK'], ['25', 'nvme q1', '41', 'msi-x', 'OK'],
+    ['33', 'intel vbl', '60', 'msi', 'OK'], ['255', 'spurious', '0', 'apic', 'OK']
+  ].map(r => TR([r[0], r[1], { t: r[2], c: 'r' }, r[3], { t: statword(r[4]) }]));
+  const left = '<div class="stack">' + cores.join('') +
+    meter('memory', S.memPct, ' %', S.memPct > 85 ? 'warn' : '') +
+    '<div class="row"><span class="t-label">cpu history</span>' +
+    '<span class="t-data ink6 spread">64 s &middot; 1 Hz &middot; mean ruled in accent</span></div>' +
+    '<div class="stack" style="flex:1;margin-top:4px">' + plotFlex(S.hist.cpu, 100, 48) + '</div>' +
+    (f.short ? '' :
+      '<div class="row pad-t"><span class="t-label">resident</span>' +
+      '<span class="t-data ink6 spread">15.4 GiB total</span></div>' +
+      kv('kernel image', '218 KiB text, 30 KiB data') +
+      kv('back buffer', '6.4 MiB') +
+      kv('surface caches', '3.1 MiB across ' + Object.keys(S.wins).length + ' sheets') +
+      kv('drag scratch', '128 MiB at 0xC0000000')) +
+    '</div>';
+  const right = '<div class="stack" style="min-height:0">' +
+    TBL([{ h: 'pid', w: '13%' }, { h: 'task', w: '24%' },
+      { h: 'cpu', w: '16%', r: 1 }, { h: 'mem', w: '18%', r: 1 },
+      { h: 'st', w: '11%' }, { h: 'note', w: '18%' }], procs) +
+    '<div class="row pad-t"><span class="t-label">interrupts</span>' +
+    '<span class="t-data ink6 spread">since boot &middot; per second</span></div>' +
+    TBL([{ h: 'vec', w: '14%' }, { h: 'source', w: '30%' }, { h: 'rate', w: '20%', r: 1 },
+      { h: 'route', w: '20%' }, { h: 'st', w: '16%' }], irq) +
+    (f.rows < 6 ? '' :
+      '<div class="row pad-t"><span class="t-label">composite</span>' +
+      '<span class="t-data ink6 spread">the strip, as numbers</span></div>' +
+      kv('budget', grp(BUDGET_US) + ' us at 59.998 Hz') +
+      kv('p50', grp(pct(50)) + ' us') +
+      kv('p99', grp(pct(99)) + ' us') +
+      kv('max in window', grp(Math.max.apply(null, S.raster)) + ' us') +
+      kv('over budget', S.dropped + ' of ' + grp(S.composites)) +
+      kv('wakeups at rest', '0 per hour, damage driven')) +
+    '</div>';
+  return (f.narrow || f.short ? '<div class="stack" style="flex:1;min-height:0">' + left + '</div>' :
+    '<div class="cols2">' + left + right + '</div>') +
+    '<div class="hr2 pad-t"></div>' +
+    '<div class="row" style="height:var(--zd-row-h)">' +
+    '<span class="t-label">load</span><span class="t-data ink0">' + S.load.toFixed(2) + '</span>' +
+    '<span class="t-label">tasks</span><span class="t-data">42</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data ink6">scheduler nominal</span></div>';
+};
+
+function pct(p) {
+  const s = S.raster.slice().sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * p / 100))];
+}
+
+R.log = f => {
+  const L = [
+    ['0.000000', 'OK', 'zlOS 0.3 x86_64, built from 11 files'],
+    ['0.000412', 'OK', 'e820: usable 0x0000000000100000 - 0x00000000bffdffff'],
+    ['0.001980', 'OK', 'apic: I/O APIC id 2, 24 redirection entries'],
+    ['0.004221', 'OK', 'tsc: 2904.001 MHz, invariant'],
+    ['0.010884', 'OK', 'pci: 0000:00:02.0 8086:5916 gen9 display'],
+    ['0.011240', 'OK', 'pci: bar0 64 bit, 0x00000000d0000000 len 16 MiB'],
+    ['0.028119', 'WARN', 'intel: PSR armed, deferring PIPE_CONF write'],
+    ['0.031002', 'OK', 'intel: PIPE_A_LINK_M/N 0x0080D9E4 / 0x00800000'],
+    ['0.031440', 'OK', 'intel: pixel clock 241690 kHz, refresh 59.998 Hz'],
+    ['0.048210', 'OK', 'fb: 1600x1000x32 stride 6400, gamma LUTs built'],
+    ['0.061773', 'OK', 'xhci: 0000:00:14.0, 16 slots, 4 ports'],
+    ['0.062114', 'WARN', 'xhci: BIOS owns the controller, requesting handoff'],
+    ['0.079003', 'OK', 'xhci: handoff complete after 16.9 ms'],
+    ['0.081550', 'OK', 'xhci: scratchpad buffers 8 x 4 KiB'],
+    ['0.094612', 'OK', 'hid: keyboard on slot 1, 8 byte boot report'],
+    ['0.095004', 'OK', 'hid: mouse on slot 2, depth 1, 125 Hz'],
+    ['0.121880', 'FAIL', 'nvme: admin queue timeout after 500 ms, retrying'],
+    ['0.640210', 'OK', 'nvme: identify ok, 1 namespace, 476.9 GiB'],
+    ['0.712004', 'OK', 'zlfs: rd0 mounted, generation 3, 0 orphans'],
+    ['0.804119', 'OK', 'ui: theme_init_q8(256), 55 roles bound, 2 ladders'],
+    ['0.812440', 'OK', 'wm: field 12 x 8 modules, gutter 8'],
+    ['0.814002', 'OK', 'wm: raster strip armed, budget 16667 us, damage gated'],
+    ['0.816110', 'OK', 'wm: e820 ruler drawn from memmap.h, 11 regions'],
+    ['0.819003', 'OK', 'desktop: compositor is the boot state, 3 sheets']
+  ].map(l => TR(f.narrow ? [{ t: statword(l[1]) }, l[2]] :
+    [{ t: '[ ' + l[0] + ' ]', c: 'ink6' }, { t: statword(l[1]) }, l[2]]));
+  const cols = f.narrow ? [{ h: 'state', w: '22%' }, { h: 'record', w: '78%' }] :
+    [{ h: 'time', w: '16%' }, { h: 'state', w: '9%' }, { h: 'record', w: '75%' }];
+  return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">ring buffer</span><span class="t-data">64 KiB</span>' +
+    '<span class="t-data ink6 spread">24 records &middot; 2 warn &middot; 1 fail</span></div>' +
+    '<div class="scroll">' + TBL(cols, L) + '</div>';
+};
+
+R.hex = f => {
+  const base = 0x0011A4C0;
+  const rows = [];
+  const seed = [0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00];
+  const n = f.short ? 8 : 18;
+  for (let r = 0; r < n; r++) {
+    let bytes = [], asc = '';
+    for (let i = 0; i < 16; i++) {
+      const v = r === 0 && i < 8 ? seed[i] : ((r * 37 + i * 11 + 0x21) & 0xff);
+      bytes.push(hx(v, 2));
+      asc += (v >= 32 && v < 127) ? String.fromCharCode(v) : '.';
+    }
+    const mark = r === 0 ? ' class="sel"' : '';
+    rows.push('<tr' + mark + '><td>' + hx(base + r * 16, 8) + '</td><td>' +
+      bytes.slice(0, 8).join(' ') + '</td><td>' + bytes.slice(8).join(' ') + '</td><td>' +
+      asc.replace(/</g, '&lt;') + '</td></tr>');
+  }
+  return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">source</span><span class="t-data">/dev/rd0</span>' +
+    '<span class="t-label">offset</span><span class="t-data">0x' + hx(base) + '</span>' +
+    '<span class="t-data ink6 spread">width 16 &middot; ascii</span></div>' +
+    '<div class="scroll">' + '<table class="tbl"><thead>' +
+    TH([{ h: 'address', w: '17%' }, { h: '00 .. 07', w: '28%' }, { h: '08 .. 0f', w: '28%' },
+        { h: 'ascii', w: '27%' }]) + '</thead><tbody>' + rows.join('') + '</tbody></table></div>' +
+    '<div class="hr2"></div><div class="row" style="height:var(--zd-row-h)">' +
+    '<span class="t-label">signature</span><span class="t-data ink0">7F 45 4C 46</span>' +
+    '<span class="t-data ink6">elf64, little endian</span>' +
+    '<span class="spread"></span>' + statword('OK') + '</div>';
+};
+
+R.calc = f => {
+  const keys = [
+    ['hex', 'dec', 'bin', 'clr'],
+    ['7', '8', '9', 'div'],
+    ['4', '5', '6', 'mul'],
+    ['1', '2', '3', 'sub'],
+    ['0', 'dot', 'eq', 'add']
+  ];
+  const n = parseInt(S.calcAcc, 10) || 0;
+  let grid = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;' +
+    'border:1px solid var(--zd-rule-1);flex:1;min-height:0">';
+  keys.forEach(row => row.forEach(k => {
+    const label = { div: '/', mul: 'x', sub: '-', add: '+', eq: '=', dot: '.', clr: 'c' }[k] || k;
+    const prim = k === 'eq';
+    grid += '<span class="ckey" data-act="calc" data-arg="' + k + '" style="' +
+      'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+      'border-right:1px solid var(--zd-rule-1);border-bottom:1px solid var(--zd-rule-1);' +
+      'background:var(' + (prim ? '--zd-accent' : '--zd-paper') + ')">' +
+      '<span class="t-label" style="color:var(' + (prim ? '--zd-on-accent' : '--zd-text-1') + ')">' +
+      label + '</span></span>';
+  }));
+  grid += '</div>';
+  return '<div class="well" style="text-align:right;flex:none">' +
+    '<span class="t-label" style="float:left">acc</span>' +
+    '<span class="t-data ink0 bold" style="font-size:calc(18px * var(--ui))">' + S.calcAcc + '</span></div>' +
+    (f.short ? '' : '<div class="pad-t" style="flex:none">' +
+      kv('hex', '0x' + hx(n, 8)) +
+      kv('bin', n.toString(2).padStart(24, '0').replace(/(.{8})/g, '$1 ').trim()) +
+      kv('oct', '0o' + n.toString(8)) + kv('kHz to Hz', grp(n * 1000)) + '</div>') +
+    '<div class="pad-t stack" style="flex:1;min-height:0">' + grid + '</div>';
+};
+
+R.net = f => {
+  const ifs = [
+    ['enp0s31f6', 'UP', '10.0.2.15/24', S.rx.toFixed(1), S.tx.toFixed(1), '1500'],
+    ['wlp3s0', 'DOWN', '-', '0.0', '0.0', '1500'],
+    ['lo', 'UP', '127.0.0.1/8', '0.4', '0.4', '65536']
+  ].map(x => TR([x[0], { t: statword(x[1] === 'UP' ? 'OK' : 'WARN') + ' <span class="t-data">' + x[1] + '</span>' },
+    x[2], { t: x[3], c: 'r' }, { t: x[4], c: 'r' }, { t: x[5], c: 'r' }]));
+  const socks = [
+    ['tcp', '10.0.2.15:22', '10.0.2.2:51402', 'ESTABLISHED', '12'],
+    ['tcp', '10.0.2.15:8080', '0.0.0.0:*', 'LISTEN', '18'],
+    ['tcp', '10.0.2.15:5900', '10.0.2.2:44118', 'ESTABLISHED', '18'],
+    ['udp', '0.0.0.0:68', '0.0.0.0:*', 'BOUND', '9'],
+    ['udp', '10.0.2.15:123', '162.159.200.1:123', 'BOUND', '9']
+  ].map(s => TR([s[0], s[1], s[2], { t: '<span class="t-label ink4">' + s[3] + '</span>' }, { t: s[4], c: 'r' }]));
+  const routes = [
+    ['0.0.0.0/0', '10.0.2.2', 'enp0s31f6', '100', 'static'],
+    ['10.0.2.0/24', 'link', 'enp0s31f6', '100', 'kernel'],
+    ['127.0.0.0/8', 'link', 'lo', '0', 'kernel'],
+    ['169.254.0.0/16', 'link', 'enp0s31f6', '1000', 'fallback']
+  ].map(r => TR([r[0], r[1], r[2], { t: r[3], c: 'r' }, r[4]]));
+  const arp = [
+    ['10.0.2.2', '52:54:00:12:35:02', 'REACHABLE', '4 s'],
+    ['10.0.2.3', '52:54:00:12:35:03', 'STALE', '312 s'],
+    ['10.0.2.15', '08:00:27:9a:4c:11', 'PERMANENT', '-']
+  ].map(r => TR([r[0], r[1], { t: '<span class="t-label ink4">' + r[2] + '</span>' }, { t: r[3], c: 'r' }]));
+  let out = '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">throughput</span>' +
+    '<span class="t-data ink0">rx ' + S.rx.toFixed(1) + ' KiB/s</span>' +
+    '<span class="t-data ink0">tx ' + S.tx.toFixed(1) + ' KiB/s</span>' +
+    '<span class="t-data ink6 spread">rtt 0.42 ms</span></div>' +
+    '<div class="stack" style="flex:1;margin:8px 0 6px;min-height:0">' + plotFlex(S.hist.net, 80, 52) + '</div>' +
+    TBL([{ h: 'iface', w: '18%' }, { h: 'state', w: '22%' }, { h: 'address', w: '22%' },
+      { h: 'rx kib', w: '13%', r: 1 }, { h: 'tx kib', w: '13%', r: 1 }, { h: 'mtu', w: '12%', r: 1 }], ifs);
+  if (!f.short) {
+    out += '<div class="row pad-t"><span class="t-label">sockets</span>' +
+      '<span class="t-data ink6 spread">5 open &middot; 0 timewait</span></div>' +
+      TBL([{ h: 'proto', w: '14%' }, { h: 'local', w: '26%' },
+        { h: 'remote', w: '28%' }, { h: 'state', w: '24%' }, { h: 'pid', w: '8%', r: 1 }], socks) +
+      '<div class="row pad-t"><span class="t-label">routes</span>' +
+      '<span class="t-data ink6 spread">4 entries</span></div>' +
+      TBL([{ h: 'destination', w: '28%' }, { h: 'via', w: '19%' }, { h: 'dev', w: '22%' },
+        { h: 'metric', w: '15%', r: 1 }, { h: 'proto', w: '16%' }], routes) +
+      '<div class="row pad-t"><span class="t-label">neighbours</span>' +
+      '<span class="t-data ink6 spread">arp cache</span></div>' +
+      '<div class="scroll">' + TBL([{ h: 'address', w: '28%' }, { h: 'hardware', w: '34%' },
+        { h: 'state', w: '24%' }, { h: 'age', w: '14%', r: 1 }], arp) + '</div>';
+  }
+  return out;
+};
+
+function hhmmss(s) {
+  s = ((s % 86400) + 86400) % 86400;
+  return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60);
+}
+R.clock = f => {
+  const t = S.clock;
+  const zones = [['local', 0, 'Europe/London'], ['utc', 0, 'Etc/UTC'],
+    ['new york', -18000, 'America/New_York'], ['tokyo', 32400, 'Asia/Tokyo']];
+  const rows = zones.map(z => TR([z[0], { t: hhmmss(t + z[1]), c: 'r ink0' }, z[2],
+    { t: (z[1] >= 0 ? '+' : '') + (z[1] / 3600).toFixed(0) + ' h', c: 'r' }]));
+  const sec = t % 60, min = Math.floor(t / 60) % 60, hr = Math.floor(t / 3600) % 12;
+  const ang = (deg, len) => {
+    const a = (deg - 90) * Math.PI / 180;
+    return { x: 48 + Math.cos(a) * len, y: 48 + Math.sin(a) * len };
+  };
+  const hp = ang(hr * 30 + min * 0.5, 22), mp = ang(min * 6, 33), sp = ang(sec * 6, 36);
+  const dial = '<svg width="120" height="120" viewBox="0 0 96 96" fill="none" ' +
+    'stroke="var(--zd-text-1)" stroke-width="2" aria-hidden="true">' +
+    '<circle cx="48" cy="48" r="42" stroke="var(--zd-rule-2)" stroke-width="2"/>' +
+    [0, 3, 6, 9].map(h => {
+      const a = ang(h * 30, 42), b = ang(h * 30, 34);
+      return '<path d="M' + a.x + ' ' + a.y + ' L' + b.x + ' ' + b.y + '" stroke-width="3"/>';
+    }).join('') +
+    '<path d="M48 48 L' + hp.x.toFixed(1) + ' ' + hp.y.toFixed(1) + '" stroke-width="4"/>' +
+    '<path d="M48 48 L' + mp.x.toFixed(1) + ' ' + mp.y.toFixed(1) + '" stroke-width="2"/>' +
+    '<path d="M48 48 L' + sp.x.toFixed(1) + ' ' + sp.y.toFixed(1) + '" stroke="var(--zd-accent)" stroke-width="1"/>' +
+    '<circle cx="48" cy="48" r="2" fill="var(--zd-text-0)" stroke="none"/></svg>';
+  const timers = [['build watch', '00:04:12', 'RUN'], ['soak test', '02:41:55', 'RUN'],
+    ['pomodoro', '00:00:00', 'IDLE']].map(x => TR([x[0], { t: x[1], c: 'r ink0' },
+      { t: '<span class="t-label ' + (x[2] === 'RUN' ? 'w-ok' : 'ink4') + '">' + x[2] + '</span>' }]));
+  const left = '<div class="stack">' +
+    TBL([{ h: 'zone', w: '26%' }, { h: 'time', w: '26%', r: 1 }, { h: 'tz', w: '34%' },
+      { h: 'off', w: '14%', r: 1 }], rows) +
+    (f.short ? '' : '<div class="row pad-t"><span class="t-label">timers</span>' +
+      '<span class="t-data ink6 spread">2 running</span></div>' +
+      TBL([{ h: 'name', w: '46%' }, { h: 'elapsed', w: '30%', r: 1 }, { h: 'state', w: '24%' }], timers)) +
+    '</div>';
+  if (f.narrow) return left;
+  return '<div class="cols2">' + left +
+    '<div class="stack" style="align-items:center;flex:0 0 auto;padding-left:12px">' +
+    dial + '<span class="t-data ink0 bold pad-t" style="font-size:calc(16px * var(--ui))">' +
+    hhmmss(t) + '</span><span class="t-label">local</span>' +
+    '<div class="hr1" style="width:100%;margin:8px 0"></div>' +
+    kv('uptime', hhmmss(4211 + S.t)) + kv('monotonic', (4211 + S.t) + '.004 s') +
+    kv('tsc', '2904.001 MHz') + '</div></div>';
+};
+
+R.sys = f => {
+  const left = '<div class="stack">' +
+    '<span class="t-plate">zlOS 0.3</span>' +
+    '<div class="row" style="gap:12px;margin:6px 0 10px">' +
+    '<span class="t-data">no host OS</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data">no libc</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data">no GPU</span></div>' +
+    kv('kernel', 'zlos 0.3 x86_64') + kv('language', 'zl, self hosting') +
+    kv('lines', '11 374 hand written') + kv('cpu', 'core i5-7300U, 4 threads') +
+    kv('tsc', '2904.001 MHz invariant') + kv('memory', '15.4 GiB, ' + S.memPct + ' % used') +
+    kv('framebuffer', '1600 x 1000 x 32') + kv('stride', '6400 B') +
+    kv('pixel clock', '241 690 kHz') + kv('refresh', '59.998 Hz') +
+    (f.short ? '' : kv('composites', grp(S.composites)) +
+      kv('over budget', S.dropped + ' since boot') +
+      kv('uptime', hhmmss(4211 + S.t)) +
+      '<div class="plate pad-t" style="flex:1;min-height:calc(52px * var(--ui));overflow:hidden">' +
+      '<span class="pre">zlOS 0.3 x86_64\n' +
+      'link 12:04 &middot; 11 objects &middot; 218 432 B text\n' +
+      'no host OS &middot; no libc &middot; no GPU driver stack\n' +
+      'self hosting since generation 3</span></div>') +
+    '</div>';
+  if (f.narrow) return left;
+  return '<div class="cols2">' + left + '<div class="stack">' +
+    '<span class="t-label">pci topology</span>' +
+    TBL([{ h: 'slot', w: '32%' }, { h: 'id', w: '26%' }, { h: 'driver', w: '23%' }, { h: 'st', w: '19%' }],
+      [['0000:00:02.0', '8086:5916', 'intel', 'OK'], ['0000:00:14.0', '8086:9d2f', 'xhci', 'OK'],
+       ['0000:00:1f.6', '8086:15d8', 'e1000e', 'OK'], ['0000:02:00.0', '144d:a808', 'nvme', 'WARN'],
+       ['0000:00:1f.3', '8086:9d71', 'none', 'FAIL']]
+        .map(p => TR([p[0], p[1], p[2], { t: statword(p[3]) }]))) +
+    '<div class="row pad-t"><span class="t-label">subsystems</span></div>' +
+    kv('display', 'gen9 modeset, real DPLL') + kv('input', 'xHCI + HID boot protocol') +
+    kv('storage', 'zlfs on nvme, generation 3') + kv('text', 'subpixel LCD, 5 tap FIR') +
+    '<div class="row pad-t"><span class="t-label">memory map</span>' +
+    '<span class="t-data ink6 spread">memmap.h, the ruler draws from this</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'base', w: '34%' }, { h: 'length', w: '25%', r: 1 },
+      { h: 'kind', w: '42%' }],
+      MMAP.map(m => TR([m.base, { t: m.len, c: 'r' }, m.kind]))) + '</div>' +
+    '</div></div>';
+};
+
+R.disk = f => {
+  const mounts = [
+    ['/', 'zlfs', '476.9 GiB', '182.4 GiB', 38],
+    ['/boot', 'fat32', '512.0 MiB', '108.2 MiB', 21],
+    ['/src', 'zlfs', '64.0 GiB', '54.9 GiB', 86],
+    ['/dev/rd0', 'ramfs', '4.0 MiB', '3.8 MiB', 95]
+  ];
+  const rows = mounts.map(m => TR([m[0], m[1], { t: m[2], c: 'r' }, { t: m[3], c: 'r' },
+    { t: m[4] + ' %', c: 'r ' + (m[4] > 90 ? 'w-bad bold' : m[4] > 80 ? 'w-warn bold' : '') },
+    { t: statword(m[4] > 90 ? 'FAIL' : m[4] > 80 ? 'WARN' : 'OK') }]));
+  const blocks = [['build', 62, '--zd-ruler-use'], ['src', 21, '--zd-ruler-krn'],
+    ['docs', 9, '--zd-ruler-rsv'], ['tmp', 5, '--zd-ruler-mmio'], ['free', 3, '--zd-ruler-bg']];
+  let bar = '<div style="display:flex;height:calc(26px * var(--ui));border:1px solid var(--zd-rule-1)">';
+  blocks.forEach(b => {
+    bar += '<div style="width:' + b[1] + '%;background:var(' + b[2] +
+      ');border-right:1px solid var(--zd-rule-1)"></div>';
+  });
+  bar += '</div>';
+  return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">volume</span><span class="t-data">nvme0n1</span>' +
+    '<span class="t-data ink6 spread">4 mounts &middot; generation 3</span></div>' +
+    '<div class="pad-t">' + TBL([{ h: 'mount', w: '22%' }, { h: 'fs', w: '14%' },
+      { h: 'size', w: '18%', r: 1 }, { h: 'used', w: '18%', r: 1 },
+      { h: 'pct', w: '13%', r: 1 }, { h: 'st', w: '15%' }], rows) + '</div>' +
+    '<div class="row pad-t"><span class="t-label">/src by directory</span>' +
+    '<span class="t-data ink6 spread">54.9 GiB</span></div>' +
+    '<div style="margin-top:4px">' + bar + '</div>' +
+    '<div class="row" style="margin-top:4px;gap:14px">' + blocks.map(b =>
+      '<span class="t-data ink4">' + b[0] + ' ' + b[1] + '%</span>').join('') + '</div>' +
+    (f.short ? '' : '<div class="scroll pad-t">' + TBL([{ h: 'path', w: '52%' },
+      { h: 'size', w: '24%', r: 1 }, { h: 'files', w: '24%', r: 1 }],
+      [['/src/kernel', '34.1 GiB', '11 374'], ['/src/kernel/build', '18.2 GiB', '486'],
+       ['/src/docs', '1.9 GiB', '208'], ['/src/tools', '0.6 GiB', '44'],
+       ['/src/tests', '0.1 GiB', '312']].map(d => TR([d[0], { t: d[1], c: 'r' }, { t: d[2], c: 'r' }]))) +
+      '</div>');
+};
+
+R.proc = f => {
+  const rows = [
+    ['1', 'zlos', 'R', '18.4', '212.0 MiB', '0.0', 'compose'],
+    ['12', 'zlsh', 'S', '2.1', '4.2 MiB', '0.0', 'tty1 read'],
+    ['18', 'wm', 'R', '9.6', '31.8 MiB', '0.2', 'surface blit'],
+    ['24', 'fbcon', 'S', '0.4', '2.0 MiB', '0.0', 'console'],
+    ['31', 'xhci', 'S', '1.2', '8.4 MiB', '1.1', 'irq 16'],
+    ['37', 'zlfs', 'S', '0.8', '18.6 MiB', '4.4', 'rd0 flush'],
+    ['42', 'regdump', 'Z', '0.0', '1.1 MiB', '0.0', 'exit 0'],
+    ['48', 'intel', 'R', '4.4', '22.9 MiB', '0.0', 'pipe A'],
+    ['51', 'nvme', 'D', '0.9', '9.8 MiB', '12.6', 'admin queue'],
+    ['57', 'hid', 'S', '0.3', '1.4 MiB', '0.0', 'boot report'],
+    ['61', 'soak', 'R', '31.2', '64.0 MiB', '0.0', 'power cycle 3'],
+    ['66', 'toast', 'S', '0.0', '0.9 MiB', '0.0', 'idle']
+  ].map(p => TR([p[0], p[1],
+    { t: '<span class="' + (p[2] === 'Z' ? 'w-warn bold' : p[2] === 'D' ? 'w-bad bold' : '') + '">' + p[2] + '</span>' },
+    { t: p[3], c: 'r' }, { t: p[4], c: 'r' }, { t: p[5], c: 'r' }, p[6]],
+    'class="pick" data-act="none"'));
+  return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">tasks</span><span class="t-data">42</span>' +
+    '<span class="t-label">running</span><span class="t-data">4</span>' +
+    '<span class="t-label">zombie</span><span class="t-data w-warn bold">1</span>' +
+    '<span class="t-label">blocked</span><span class="t-data w-bad bold">1</span>' +
+    '<span class="t-data ink6 spread">sort by cpu</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'pid', w: '9%' }, { h: 'task', w: '17%' }, { h: 'st', w: '8%' },
+      { h: 'cpu', w: '11%', r: 1 }, { h: 'rss', w: '17%', r: 1 }, { h: 'io ms', w: '12%', r: 1 },
+      { h: 'note', w: '26%' }], rows) + '</div>' +
+    '<div class="hr2"></div><div class="row" style="height:var(--zd-row-h)">' +
+    '<span class="btn" data-act="toast" data-arg="reap"><span class="t-label">reap 42</span></span>' +
+    (f.narrow ? '' : '<span class="btn" data-act="toast" data-arg="renice"><span class="t-label">renice 61</span></span>') +
+    '<span class="spread"></span>' + statword('WARN') +
+    '<span class="t-data ink6">nvme 51 blocked 12.6 ms</span></div>';
+};
+
+R.regs = f => {
+  const regs = [
+    ['PIPE_A_CONF', '0x70008', 'C0000000', 'enable=1 bpc=8 gamma=split'],
+    ['PIPE_A_SRCSZ', '0x6001C', '063F03E7', '1600 x 1000'],
+    ['PIPE_A_LINK_M', '0x60040', '0080D9E4', 'M = 8444388'],
+    ['PIPE_A_LINK_N', '0x60044', '00800000', 'N = 8388608'],
+    ['PIPE_A_DATA_M', '0x60030', '7E03D090', 'tu = 63'],
+    ['DPLL_CTRL1', '0x6C058', '00000601', 'link 2.7 GHz, ssc off'],
+    ['DPLL_CTRL2', '0x6C05C', '00007A80', 'ddi A clk sel 0'],
+    ['TRANS_DDI_FUNC', '0x60400', '81000000', 'ddi A, edp, 8 bpc'],
+    ['PSR_STATUS', '0x64840', '00000000', 'idle, safe to write'],
+    ['PLANE_CTL_A', '0x70180', 'C4000000', 'enable=1 xrgb8888'],
+    ['PLANE_STRIDE_A', '0x70188', '00000032', '6400 B'],
+    ['PLANE_SURF_A', '0x7019C', 'D0000000', 'ggtt offset 0'],
+    ['WM_LINETIME_A', '0x45270', '0000003B', '59 us'],
+    ['HTOTAL_A', '0x60000', '0731063F', 'hactive 1600 htotal 1842'],
+    ['VTOTAL_A', '0x6000C', '040803E7', 'vactive 1000 vtotal 1033']
+  ].map(r => TR(f.narrow ? [r[0], { t: r[2], c: 'r ink0 bold' }] :
+    [r[0], { t: r[1], c: 'r ink6' }, { t: r[2], c: 'r ink0 bold' }, r[3]]));
+  const cols = f.narrow ? [{ h: 'register', w: '58%' }, { h: 'value', w: '42%', r: 1 }] :
+    [{ h: 'register', w: '28%' }, { h: 'offset', w: '14%', r: 1 },
+     { h: 'value', w: '18%', r: 1 }, { h: 'decoded', w: '40%' }];
+  return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">device</span><span class="t-data">0000:00:02.0 gen9</span>' +
+    '<span class="t-label">bar0</span><span class="t-data">0xD0000000</span>' +
+    '<span class="t-data ink6 spread">read via mmio</span></div>' +
+    '<div class="scroll">' + TBL(cols, regs) + '</div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="height:calc(30px * var(--ui))">' +
+    '<span class="t-label">derived</span>' +
+    '<span class="t-data">pixel clock</span><span class="t-data ink0 bold">241 690 kHz</span>' +
+    (f.narrow ? '' : '<span class="t-data">refresh</span><span class="t-data ink0 bold">59.998 Hz</span>') +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data ink6">matches firmware</span></div>';
+};
+
+R.grid = f => {
+  const g = GRID;
+  let cells = '<div style="display:grid;gap:2px;grid-template-columns:repeat(' + S.cols +
+    ',1fr);border:1px solid var(--zd-rule-1);padding:2px;background:var(--zd-well)">';
+  for (let r = 0; r < S.rows; r++) {
+    for (let c = 0; c < S.cols; c++) {
+      const occupied = Object.values(S.wins).some(w => !w.det && w.ws === S.ws && !w.min &&
+        c >= w.c && c < w.c + w.cw && r >= w.r && r < w.r + w.rh);
+      cells += '<span style="height:calc(12px * var(--ui));background:var(' +
+        (occupied ? '--zd-ruler-use' : '--zd-ruler-bg') + ')"></span>';
+    }
+  }
+  cells += '</div>';
+  return '<div class="row" style="border-bottom:2px solid var(--zd-rule-2);height:var(--zd-row-h)">' +
+    '<span class="t-label">module</span><span class="t-data ink0">' + S.cols + ' x ' + S.rows + '</span>' +
+    '<span class="t-label">gutter</span><span class="t-data">' + g.gut + '</span>' +
+    '<span class="t-data ink6 spread">integer division only, no float</span></div>' +
+    '<div class="pad-t">' + cells + '</div>' +
+    '<div class="well pad-t"><span class="pre">' +
+    'content_w = ' + g.W + ' - 2 x ' + g.mar + ' = ' + (g.W - 2 * g.mar) + '\n' +
+    'col_w     = (' + (g.W - 2 * g.mar) + ' - ' + (S.cols - 1) + ' x ' + g.gut + ') / ' + S.cols +
+    ' = ' + g.cwBase + ' r ' + g.cwRem + '\n' +
+    'row_h     = (' + (g.H - 2 * g.mar) + ' - ' + (S.rows - 1) + ' x ' + g.gut + ') / ' + S.rows +
+    ' = ' + g.rhBase + ' r ' + g.rhRem +
+    '</span></div>' +
+    (f.short ? '' : '<div class="cols2 pad-t">' +
+      '<div class="stack"><span class="t-label">column ledger</span>' +
+      '<div class="scroll">' + TBL([{ h: 'col', w: '24%' }, { h: 'x', w: '38%', r: 1 },
+        { h: 'width', w: '38%', r: 1 }],
+        g.colX.map((x, i) => TR([pad2(i + 1), { t: String(x), c: 'r' },
+          { t: g.colW[i] + (i < g.cwRem ? '  +1' : ''), c: 'r' + (i < g.cwRem ? ' ink0 bold' : '') }]))) +
+      '</div></div>' +
+      '<div class="stack"><span class="t-label">row ledger</span>' +
+      '<div class="scroll">' + TBL([{ h: 'row', w: '24%' }, { h: 'y', w: '38%', r: 1 },
+        { h: 'height', w: '38%', r: 1 }],
+        g.rowY.map((y, i) => TR([pad2(i + 1), { t: String(y), c: 'r' },
+          { t: g.rowH[i] + (i < g.rhRem ? '  +1' : ''), c: 'r' + (i < g.rhRem ? ' ink0 bold' : '') }]))) +
+      '</div></div></div>') +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="height:var(--zd-row-h)">' + statword('OK') +
+    '<span class="t-data ink6">' + Object.values(S.wins).filter(w => w.ws === S.ws && !w.det && !w.min).length +
+    ' tiled, ' + Object.values(S.wins).filter(w => w.det && w.ws === S.ws).length + ' detached</span>' +
+    '<span class="spread"></span>' +
+    '<span class="btn" data-act="toast" data-arg="retile"><span class="t-label">retile all</span></span></div>';
+};
+
+/* ------------------------------------------------------ settings app -- */
+const ACCENTS = [
+  ['verm', 'vermilion', '--zd-ink-verm', '--zd-ink-verm-ko'],
+  ['ox', 'oxblood', '--zd-ink-ox', '--zd-ink-ox-ko'],
+  ['press', 'press green', '--zd-ink-press', '--zd-ink-press-ko'],
+  ['ochre', 'ochre', '--zd-ink-ochre', '--zd-ink-ochre-ko']
+];
+const UI_STEPS = [0.9, 1.0, 1.1, 1.25];
+const COL_STEPS = [8, 10, 12, 14];
+const GUT_STEPS = [4, 8, 12, 16, 20];
+
+function sliderHTML(name, steps, val) {
+  const i = steps.indexOf(val);
+  const pct2 = steps.length === 1 ? 0 : i / (steps.length - 1);
+  const ticks = steps.map((s, k) => '<span class="tick" style="left:' +
+    (steps.length === 1 ? 0 : (k / (steps.length - 1)) * 100) + '%"></span>').join('');
+  return '<span class="slider" data-slider="' + name + '">' +
+    '<span class="st"></span>' +
+    '<span class="sf" style="width:calc(' + (pct2 * 100) + '% - 2px)"></span>' +
+    '<span class="sh" style="left:calc(' + (pct2 * 100) + '% - ' + (pct2 * 8) + 'px)"></span>' +
+    ticks + '</span>';
+}
+function toggleRow(label, key, note) {
+  return '<div class="ctlrow"><span class="t-label">' + label + '</span>' +
+    (note ? '<span class="t-data ink6" style="margin-left:10px">' + note + '</span>' : '') +
+    '<span class="right"><span class="t-label ink0">' + (S[key] ? 'on' : 'off') + '</span>' +
+    '<span class="sw2' + (S[key] ? ' on' : '') + '" data-toggle="' + key + '"><i></i></span>' +
+    '</span></div>';
+}
+
+/* THE BLEND TAB. The decision itself, on screen, with the conflicts it had
+   to resolve named. A blend that quietly violates an exclusive pair is a
+   failure, so the pairs are printed rather than assumed. */
+const AXES = [
+  ['ground polarity', 'PLATE', 'paper primary, dual ladder, both re-derived'],
+  ['material law', 'PLATE', 'one material. inversion is a STATE, not a substance'],
+  ['window boundary', 'PLATE', '2px ink frame, four sides, 16.27:1 on a sheet'],
+  ['depth rank', 'PLATE', 'rule weight. 1px between rows, 2px between regions'],
+  ['focus signal', 'PLATE', 'knockout header, 12.17 % of the sheet inverts'],
+  ['colour policy', 'PLATE', 'one structural ink, four jobs, never status'],
+  ['arrangement', 'PLATE', 'tile onto the ruled module grid, DETACHED is explicit'],
+  ['type hierarchy', 'PLATE', 'two sizes. case, weight, tracking, rule weight'],
+  ['instrumentation', 'DATUM', 'raster strip, per sheet us, memory ruler, plus the slug'],
+  ['motion', 'PLATE', 'cut 0 ms, slide 100 ms linear, blink 500 ms']
+];
+const RESOLVED = [
+  ['EXCLUSIVE', 'Folio zero colour law vs PLATE vermilion',
+   'PLATE wins. The one primary action per view is a vermilion fill at 5.27:1 ' +
+   'on the sheet. Folio would fill it with ink at 16.18:1, which is HIGHER, and ' +
+   'that cost is accepted knowingly: the accent can never carry text anywhere in ' +
+   'this system, so it is a fill or a mark and nothing else. Folio is out.'],
+  ['EXCLUSIVE', 'PLATE knockout vs Folio running head',
+   'No conflict left, because Folio lost the axis above and its running head went ' +
+   'with it. The knockout needs a fillable header band and it has one.'],
+  ['REQUIRES', 'Datum material law needs a ground at L* >= 89.6',
+   'NOT TAKEN, and this is the load bearing call. The law dies below L* 65 and ' +
+   'measures 1.18:1 in Datum own dark mode. This blend ships two real ladders, so ' +
+   'the law would evaporate in half the product while its screen area did not. ' +
+   'Datum instrumentation is taken WITHOUT it: the strip and the ruler are ink ' +
+   'plate furniture, not a second material, and they carry no meaning that dies ' +
+   'with the luminance.'],
+  ['DEGRADES', 'Datum raster strip vs damage driven repaint',
+   'RE-CLOCKED. Datum advances one column per FRAME forever: 215 993 composite ' +
+   'wakeups an hour on a machine nobody is touching, the exact standing tax Datum ' +
+   'deleted ZD_MS_PULSE to avoid. Here a column is one COMPOSITE, and compose() ' +
+   'already runs only on a non empty damage list. At rest the strip stands still ' +
+   'and says PARKED. 0 wakeups an hour, same instrument.'],
+  ['INERT', 'Apparatus cut edge',
+   'NOT TAKEN. Its value is exactly zero under a tiling arrangement because ' +
+   'nothing overlaps. It would be the best answer in the set under free floating; ' +
+   'this blend does not float, so taking it would be decoration.'],
+  ['MISSING', 'per window app_us does not exist in wm.c',
+   'wm.c measures app_us in AGGREGATE across the whole composite. Every status ' +
+   'band therefore prints repaint_pixels and damage rects as MEASURED, and the us ' +
+   'figure beside them is labelled derived wherever it appears. That is Datum own ' +
+   'stated fallback: same slot, same face, no layout change.']
+];
+function setBlend() {
+  let out = head('the decision, per axis');
+  out += '<div class="scroll" style="max-height:calc(230px * var(--ui))">' +
+    TBL([{ h: 'axis', w: '26%' }, { h: 'from', w: '13%' }, { h: 'position', w: '61%' }],
+      AXES.map(a => TR([{ t: '<span class="t-label ink0">' + a[0] + '</span>' },
+        { t: '<span class="t-label ' + (a[1] === 'DATUM' ? 'acc' : 'ink4') + '">' + a[1] + '</span>' },
+        a[2]]))) + '</div>';
+  out += '<div class="row pad-t"><span class="t-label">conflicts resolved</span>' +
+    '<span class="t-data ink6 spread">' + RESOLVED.length + ' pairs, each named rather than assumed</span></div>';
+  RESOLVED.forEach(c => {
+    out += '<div class="well" style="margin-top:6px">' +
+      '<div class="row"><span class="t-label ' + (c[0] === 'EXCLUSIVE' ? 'w-bad' :
+        c[0] === 'REQUIRES' ? 'w-warn' : 'ink4') + '">' + c[0] + '</span>' +
+      '<span class="t-data ink0">' + c[1] + '</span></div>' +
+      '<span class="t-body" style="font-size:var(--fs-data);line-height:var(--lh-data);' +
+      'display:block;margin-top:3px">' + c[2] + '</span></div>';
+  });
+  out += '<div class="row pad-t"><span class="t-label">free riders taken</span>' +
+    '<span class="t-data ink6 spread">each combines with every axis position</span></div>';
+  out += '<div class="kvgrid">' +
+    kv('state word', 'OK WARN FAIL spelled beside the colour') +
+    kv('tabular mono', 'figures align by FACE, not by colour') +
+    kv('numbered register', '01 SHELL, 02 FILES, alt NN') +
+    kv('measured grid legend', 'the module AS COMPUTED, bottom left') +
+    kv('radius', '0 and 2, both through fb_rrect') +
+    kv('per sheet repaint', 'measured pixels, derived us') + '</div>';
+  out += '<div class="row pad-t"><span class="t-label">not taken, and why</span></div>';
+  out += '<div class="kvgrid">' +
+    kv('stacked rail clock', 'a 148dp rail fits 14:32:07 on one line') +
+    kv('apparatus cut edge', 'inert under tiling') +
+    kv('folio two tone mount', '1.71:1, and the frame axis is settled') +
+    kv('raking directional edge', 'a dark ground idea, no ground here') + '</div>';
+  return out;
+}
+
+function setInk() {
+  let out = '<div class="ctlrow" style="border-bottom:0"><span class="t-label">second ink</span>' +
+    '<span class="t-data ink6" style="margin-left:10px">one accent, four places, never for status</span></div>';
+  out += '<div class="swatchrow">' + ACCENTS.map(a =>
+    '<div style="width:calc(96px * var(--ui))">' +
+    '<span class="swatch' + (S.accent === a[0] ? ' on' : '') + '" data-accent="' + a[0] +
+    '" style="background:var(' + a[2] + ');width:100%"></span>' +
+    '<span class="t-label" style="display:block;margin-top:3px;color:var(' +
+    (S.accent === a[0] ? '--zd-text-0' : '--zd-text-5') + ')">' + a[1] + '</span></div>').join('') + '</div>';
+  out += '<div class="row pad-t"><span class="t-label">where the ink lands</span>' +
+    '<span class="t-data ink6 spread">four places, no fifth</span></div>';
+  out += '<div class="kvgrid">' + kv('run mark', 'rail row, 3 px') +
+    kv('focus mark', 'sheet, 3 px') +
+    kv('primary action', 'one per view') +
+    kv('register mark', 'ends the slug, and the ruler datum') +
+    kv('crop marks', 'four corners of the field') +
+    kv('everything else', 'never') + '</div>';
+  out += '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="toast" data-arg="ink"><span class="t-label">apply to design.h</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="revert"><span class="t-label">revert</span></span>' +
+    '<span class="t-data ink6 spread">ZD_ACCENT and ZD_ACCENT_KO move together</span></div>';
+  const dk = S.theme === 'dark';
+  out += '<div class="ctlrow pad-t"><span class="t-label">stock</span>' +
+    '<span class="t-data ink6" style="margin-left:10px">one role set, two ladders, ctrl i</span>' +
+    '<span class="right"><span class="seg" data-seg="stock" style="width:calc(190px * var(--ui))">' +
+    '<span class="' + (dk ? '' : 'on') + '" data-arg="0"><span class="t-label">paper</span></span>' +
+    '<span class="' + (dk ? 'on' : '') + '" data-arg="1"><span class="t-label">negative</span></span>' +
+    '</span></span></div>';
+  /* MEASURED, NOT TYPED. Read back off the live custom properties, so the
+     sheet cannot claim a ratio it does not actually render. */
+  const miss = auditTokens();
+  out += '<div class="row"><span class="t-data ink6">' +
+      'sheet ' + tokHex('--zd-paper') + ' L* ' + tokLstar('--zd-paper') +
+      ' &middot; rail ' + tokHex('--zd-plate-0') +
+      ' &middot; knockout ' + tokHex(dk ? '--zd-inv-bg' : '--zd-inv-0') +
+    '</span></div>' +
+    '<div class="scroll" style="max-height:calc(150px * var(--ui))">' +
+    TBL([{ h: 'pair', w: '46%' }, { h: 'value', w: '30%' }, { h: 'ratio', w: '24%', r: 1 }],
+      [['body on the sheet', '--zd-text-1', '--zd-paper'],
+       ['body on a zebra row', '--zd-text-1', '--zd-fill'],
+       ['label on a zebra row', '--zd-text-5', '--zd-fill'],
+       ['hint in a well', '--zd-text-6', '--zd-well'],
+       ['2px rule on the sheet', '--zd-rule-2', '--zd-paper'],
+       ['1px rule on the sheet', '--zd-rule-1', '--zd-paper'],
+       ['desk grid on the field', '--zd-grid-line', '--zd-desk'],
+       ['second ink on the sheet', '--zd-accent', '--zd-paper'],
+       ['second ink on the desk', '--zd-accent', '--zd-desk'],
+       ['knockout title', '--zd-inv-0', '--zd-inv-bg'],
+       ['strip column, under budget', '--zd-strip-0', '--zd-strip-bg'],
+       ['strip column, over budget', '--zd-warn-ko', '--zd-strip-bg'],
+       ['strip budget line', '--zd-strip-track', '--zd-strip-bg'],
+       ['ruler, usable RAM', '--zd-ruler-use', '--zd-ruler-bg'],
+       ['ruler, kernel arenas', '--zd-ruler-krn', '--zd-ruler-bg'],
+       ['ruler, device mmio', '--zd-ruler-mmio', '--zd-ruler-bg'],
+       ['rail label on the plate', '--zd-ko-0', '--zd-plate-0']]
+      .map(p => {
+        const r = Number(tokRatio(p[1], p[2]));
+        const w = r >= 4.5 ? '' : ' ink4';
+        return TR([p[0], { t: tokHex(p[1]) + ' on ' + tokHex(p[2]), c: 'ink6' },
+          { t: tokRatio(p[1], p[2]) + ':1', c: 'r ink0 bold' + w }]);
+      })) + '</div>' +
+    '<div class="row"><span class="t-data ink6">' +
+    'every ratio above is computed from the live token at paint time, never typed. ' +
+    'text pairs clear 4.5:1 in both ladders; rules, grid and instrument fills are ' +
+    'graphics and are held at their own floors.</span></div>' +
+    '<div class="row"><span class="t-label">ladder audit</span>' +
+    (miss.length ? statword('FAIL') + '<span class="t-data w-bad">' + miss.length +
+      ' token names exist in one mode only</span>'
+      : statword('OK') + '<span class="t-data ink6">all ' + TOKENS.length +
+      ' token names resolve to a hex value in BOTH ladders</span>') + '</div>';
+  return out;
+}
+
+function setMetric() {
+  const g = GRID;
+  let out = '<div class="ctlrow"><span class="t-label">ui scale</span>' +
+    '<span class="right"><span class="t-data ink0">' + S.ui.toFixed(2) + ' &middot; q8 ' +
+    Math.round(S.ui * 256) + '</span>' + sliderHTML('ui', UI_STEPS, S.ui) + '</span></div>';
+  out += '<div class="ctlrow"><span class="t-label">module columns</span>' +
+    '<span class="right"><span class="t-data ink0">' + S.cols + ' x ' + S.rows + '</span>' +
+    sliderHTML('cols', COL_STEPS, S.cols) + '</span></div>';
+  out += '<div class="ctlrow"><span class="t-label">gutter</span>' +
+    '<span class="right"><span class="t-data ink0">' + S.gut + ' dp &middot; ' + g.gut + ' px</span>' +
+    sliderHTML('gut', GUT_STEPS, S.gut) + '</span></div>';
+  out += '<div class="row pad-t"><span class="t-label">measured, this instant</span>' +
+    '<span class="t-data ink6 spread">integer division, remainder to the first R columns</span></div>';
+  out += '<div class="well" style="margin-top:4px"><span class="pre">' +
+    'field      ' + g.W + ' x ' + g.H + ' px\n' +
+    'margin     ' + g.mar + '   gutter ' + g.gut + '\n' +
+    'content    ' + (g.W - 2 * g.mar) + ' x ' + (g.H - 2 * g.mar) + '\n' +
+    'col_w      (' + (g.W - 2 * g.mar) + ' - ' + (S.cols - 1) + ' x ' + g.gut + ') / ' + S.cols +
+    ' = ' + g.cwBase + ' r ' + g.cwRem + '\n' +
+    'row_h      (' + (g.H - 2 * g.mar) + ' - ' + (S.rows - 1) + ' x ' + g.gut + ') / ' + S.rows +
+    ' = ' + g.rhBase + ' r ' + g.rhRem + '\n' +
+    'chrome     rail ' + Math.round(148 * S.ui) + '  slug ' + Math.round(28 * S.ui) +
+    '  strip ' + Math.round(34 * S.ui) + '  ruler ' + Math.round(38 * S.ui) +
+    '</span></div>';
+  out += '<div class="row pad-t"><span class="t-label">the reflow gate</span>' +
+    '<span class="t-data ink6 spread">sheet_rows(), in the shell</span></div>';
+  out += '<div class="scroll" style="max-height:calc(150px * var(--ui))">' +
+    TBL([{ h: 'sheet', w: '30%' }, { h: 'rows', w: '14%', r: 1 }, { h: 'cols', w: '14%', r: 1 },
+      { h: 'sections dropped', w: '42%' }],
+      Object.values(S.wins).length ? Object.values(S.wins).map(w => {
+        const fi = fitOf(w);
+        const drop = [];
+        if (fi.short) drop.push('short');
+        if (fi.narrow) drop.push('narrow');
+        return TR([{ t: '<span class="t-label ink0">' + APP[w.id].name + '</span>' },
+          { t: String(fi.rows), c: 'r' }, { t: String(fi.cols), c: 'r' },
+          { t: drop.length ? drop.join(' + ') : '<span class="ink6">none, full sheet</span>' }]);
+      }) : [TR(['<span class="ink6">no sheets open</span>', '', '', ''])]) + '</div>';
+  return out;
+}
+
+function setField() {
+  let out = toggleRow('desk grid', 'grid', 'rule the module grid onto the field');
+  out += toggleRow('crop marks', 'crop', 'the second ink, four corners');
+  out += toggleRow('zebra rows', 'zebra', 'ZD_FILL on alternate table rows');
+  out += toggleRow('caret blink', 'blink', '500 ms period, hard on off');
+  out += toggleRow('tile snap', 'snap', 'a dropped sheet returns to the module');
+  out += '<div class="row pad-t"><span class="t-label">instrument bands</span>' +
+    '<span class="t-data ink6 spread">Datum three, on PLATE ladder</span></div>';
+  out += toggleRow('raster strip', 'strip', 'one column per composite, full width');
+  out += toggleRow('strip advances', 'stripLive', 'off parks it: damage driven, so it stands still');
+  out += toggleRow('memory ruler', 'ruler', 'the e820 map to scale, bottom edge');
+  out += toggleRow('status bands', 'bands', 'per sheet repaint, measured, in every window');
+  out += '<div class="row pad-t"><span class="t-label">depth model</span>' +
+    '<span class="t-data ink6 spread">rule, gutter, inversion. nothing else.</span></div>';
+  out += '<div class="kvgrid">' + kv('shadow tokens', '0') + kv('blur tokens', '0') +
+    kv('gradients', '0') + kv('radius values', '0 and 2') +
+    kv('type sizes', '2') + kv('motion', 'cut, slide, blink') +
+    kv('self animating', S.stripLive ? '1, damage gated' : '0, parked') +
+    kv('wakeups at rest', '0 per hour') + '</div>';
+  out += '<div class="row pad-t">' +
+    '<span class="btn prim" data-act="toast" data-arg="proof"><span class="t-label">print proof sheet</span></span>' +
+    '<span class="btn" data-act="ov"><span class="t-label">overview</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="retile"><span class="t-label">retile</span></span></div>';
+  return out;
+}
+
+R.set = f => {
+  const tabs = ['blend', 'ink', 'metric', 'field'];
+  let out = '<div class="seg" data-seg="settab">' + tabs.map((t, i) =>
+    '<span class="' + (i === S.setTab ? 'on' : '') + '" data-arg="' + i + '"><span class="t-label">' +
+    t + '</span></span>').join('') + '</div><div class="scroll pad-t">';
+  if (S.setTab === 0) out += setBlend();
+  if (S.setTab === 1) out += head('ink') + setInk();
+  if (S.setTab === 2) out += head('metric') + setMetric();
+  if (S.setTab === 3) out += head('field') + setField();
+  out += '</div>';
+  return out;
+};
+
+/* ============================================================ grid ==== */
+let GRID = { W: 0, H: 0, mar: 16, gut: 8, colW: [], colX: [], rowH: [], rowY: [],
+  cwBase: 0, cwRem: 0, rhBase: 0, rhRem: 0 };
+
+function computeGrid() {
+  const f = $('#field');
+  const W = f.clientWidth, H = f.clientHeight;
+  const gut = Math.max(2, Math.round(S.gut * S.ui));
+  const mar = gut * 2;
+  const NC = S.cols, NR = S.rows;
+  const availW = W - 2 * mar - (NC - 1) * gut;
+  const availH = H - 2 * mar - (NR - 1) * gut;
+  const cwBase = Math.floor(availW / NC), cwRem = availW - cwBase * NC;
+  const rhBase = Math.floor(availH / NR), rhRem = availH - rhBase * NR;
+  const colW = [], colX = [], rowH = [], rowY = [];
+  let x = mar;
+  for (let i = 0; i < NC; i++) {
+    const w = cwBase + (i < cwRem ? 1 : 0);
+    colW.push(w); colX.push(x); x += w + gut;
+  }
+  let y = mar;
+  for (let i = 0; i < NR; i++) {
+    const h = rhBase + (i < rhRem ? 1 : 0);
+    rowH.push(h); rowY.push(y); y += h + gut;
+  }
+  GRID = { W, H, mar, gut, colW, colX, rowH, rowY, cwBase, cwRem, rhBase, rhRem };
+}
+function modRect(c, r, cw, rh) {
+  const g = GRID;
+  c = Math.max(0, Math.min(S.cols - 1, c));
+  r = Math.max(0, Math.min(S.rows - 1, r));
+  cw = Math.max(1, Math.min(S.cols - c, cw));
+  rh = Math.max(1, Math.min(S.rows - r, rh));
+  let w = 0, h = 0;
+  for (let i = 0; i < cw; i++) w += g.colW[c + i];
+  w += g.gut * (cw - 1);
+  for (let i = 0; i < rh; i++) h += g.rowH[r + i];
+  h += g.gut * (rh - 1);
+  return { x: g.colX[c], y: g.rowY[r], w, h, c, r, cw, rh };
+}
+function drawGrid() {
+  const svg = $('#gridsvg'), g = GRID;
+  svg.setAttribute('width', g.W); svg.setAttribute('height', g.H);
+  if (!S.grid && !S.crop) { svg.innerHTML = ''; $('#legend').textContent = ''; return; }
+  let s = '';
+  if (S.grid) {
+    g.colX.forEach((x, i) => {
+      s += '<rect x="' + x + '" y="' + g.mar + '" width="1" height="' + (g.H - 2 * g.mar) + '" fill="var(--zd-grid-line)"/>';
+      s += '<rect x="' + (x + g.colW[i] - 1) + '" y="' + g.mar + '" width="1" height="' + (g.H - 2 * g.mar) + '" fill="var(--zd-grid-line)"/>';
+    });
+    g.rowY.forEach((y, i) => {
+      s += '<rect x="' + g.mar + '" y="' + y + '" width="' + (g.W - 2 * g.mar) + '" height="1" fill="var(--zd-grid-line)"/>';
+      s += '<rect x="' + g.mar + '" y="' + (y + g.rowH[i] - 1) + '" width="' + (g.W - 2 * g.mar) + '" height="1" fill="var(--zd-grid-line)"/>';
+    });
+  }
+  if (S.crop) {
+    const L = 16, o = 6, m = g.mar, Rr = g.W - g.mar, B = g.H - g.mar;
+    const hz = (x, y) => '<rect x="' + x + '" y="' + y + '" width="' + L + '" height="1" fill="var(--zd-accent)"/>';
+    const vt = (x, y) => '<rect x="' + x + '" y="' + y + '" width="1" height="' + L + '" fill="var(--zd-accent)"/>';
+    s += hz(m, m - o) + vt(m - o, m);
+    s += hz(Rr - L, m - o) + vt(Rr + o, m);
+    s += hz(m, B + o) + vt(m - o, B - L);
+    s += hz(Rr - L, B + o) + vt(Rr + o, B - L);
+  }
+  svg.innerHTML = s;
+  /* FREE RIDER: the measured grid legend. The module AS COMPUTED at this
+     resolution, which doubles as a live check on where the integer division
+     remainder went. It is instrumentation ABOUT the layout, not part of it. */
+  const cwTxt = g.cwRem ? (g.cwBase + 1) + '/' + g.cwBase : String(g.cwBase);
+  const rhTxt = g.rhRem ? (g.rhBase + 1) + '/' + g.rhBase : String(g.rhBase);
+  $('#legend').textContent = 'MODULE ' + S.cols + ' x ' + S.rows + '  ·  ' +
+    cwTxt + ' x ' + rhTxt + ' px  ·  GUTTER ' + g.gut;
+}
+
+/* ==================================================== the raster strip =
+ * DATUM's instrument, re-clocked onto damage. One column is one COMPOSITE.
+ * damage() is the only thing that pushes a sample, and it is called from
+ * exactly the places wm.c would raise a damage rect from.
+ */
+function damage(kind, weight) {
+  S.composites += 1;
+  /* a composite costs roughly the blended area. a whole field relayout is
+     the expensive one; a focus flip repaints two headers. */
+  const base = { relayout: 11800, move: 8600, focus: 5200, tick: 6100, open: 13400 }[kind] || 6000;
+  const jitter = ((S.composites * 2654435761) % 2800);
+  let us = base + jitter + (weight || 0) * 420;
+  if (S.composites % 401 === 0) us += 9000;
+  if (us > BUDGET_US) S.dropped += 1;
+  if (S.stripLive) {
+    S.raster.push(us);
+    while (S.raster.length > 400) S.raster.shift();
+  }
+  Object.values(S.wins).forEach(w => {
+    if (w.ws !== S.ws || w.min) return;
+    const area = (w.det ? w.w * w.h : 0) || 180000;
+    w.rects = 1 + (S.composites + w.z) % 5;
+    w.px = Math.round(area * (0.05 + ((S.composites * 37 + w.z * 11) % 60) / 400));
+    w.us = Math.round(w.px / 44) + 60;
+  });
+  drawRaster();
+}
+function drawRaster() {
+  if (!S.strip) { $('#raster').style.display = 'none'; return; }
+  $('#raster').style.display = 'flex';
+  const host = $('#rasterplot');
+  const W = host.clientWidth, H = host.clientHeight;
+  if (W < 8 || H < 4) return;
+  const step = 3, bw = 2;               /* one composite = one 2 px column */
+  const n = Math.max(1, Math.floor(W / step));
+  const s = S.raster.slice(Math.max(0, S.raster.length - n));
+  const top = 2, bot = H - 2;
+  const scale = v => Math.max(1, Math.round((Math.min(v, BUDGET_US * 2) / (BUDGET_US * 2)) * (bot - top)));
+  const off = Math.max(0, (n - s.length) * step);
+  let out = '<svg width="' + W + '" height="' + H + '" shape-rendering="crispEdges" aria-hidden="true">';
+  /* the budget line. everything below it is inside 16 667 us. */
+  const by = bot - Math.round((BUDGET_US / (BUDGET_US * 2)) * (bot - top));
+  out += '<rect x="0" y="' + by + '" width="' + W + '" height="1" fill="var(--zd-strip-track)"/>';
+  s.forEach((v, i) => {
+    const h = scale(v);
+    const col = v > BUDGET_US * 2 ? '--zd-bad-ko' : v > BUDGET_US ? '--zd-warn-ko' : '--zd-strip-0';
+    out += '<rect x="' + (off + i * step) + '" y="' + (bot - h) + '" width="' + bw +
+      '" height="' + h + '" fill="var(' + col + ')"/>';
+  });
+  out += '</svg>';
+  host.innerHTML = out;
+  const mx = s.length ? Math.max.apply(null, s) : 0;
+  const mean = s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : 0;
+  const word = mx > BUDGET_US * 2 ? 'FAIL' : mx > BUDGET_US ? 'WARN' : 'OK';
+  $('#rasterout').innerHTML =
+    '<span class="t-data">mean</span><span class="t-data v">' + grp(mean) + ' us</span>' +
+    '<span class="t-data">max</span><span class="t-data v">' + grp(mx) + ' us</span>' +
+    '<span class="t-data">composites</span><span class="t-data v">' + grp(S.composites) + '</span>' +
+    '<span class="t-data">over</span><span class="t-data v">' + S.dropped + '</span>' +
+    '<span class="t-label ' + (word === 'OK' ? 'k-ok' : word === 'WARN' ? 'k-warn' : 'k-bad') + '">' +
+    word + '</span>' +
+    (S.stripLive ? '' : '<span class="t-label ko-4">parked</span>');
+}
+
+/* ==================================================== the memory ruler =
+ * DATUM's third instrument. The whole address space to scale along the
+ * bottom edge, drawn from the same table 10 SYSTEM prints, so the two
+ * cannot drift. Regions under 0.15 % of the space would be sub pixel; they
+ * are held at 2 px and the caption says so rather than quietly lying.
+ */
+const MMAP = [
+  { base: '0x00000000', b: 0, len: '640 KiB', n: 655360, kind: 'usable', c: 'use' },
+  { base: '0x000A0000', b: 655360, len: '384 KiB', n: 393216, kind: 'reserved', c: 'rsv' },
+  { base: '0x00100000', b: 1048576, len: '3.0 GiB', n: 3220176896, kind: 'usable', c: 'use' },
+  { base: '0xC0000000', b: 3221225472, len: '128 MiB', n: 134217728, kind: 'drag scratch', c: 'krn' },
+  { base: '0xC8000000', b: 3355443200, len: '128 MiB', n: 134217728, kind: 'browser dom', c: 'krn' },
+  { base: '0xD0000000', b: 3489660928, len: '16 MiB', n: 16777216, kind: 'gen9 bar0', c: 'mmio' },
+  { base: '0xE0000000', b: 3758096384, len: '256 MiB', n: 268435456, kind: 'gen9 stolen', c: 'mmio' },
+  { base: '0xFEC00000', b: 4273995776, len: '4 KiB', n: 4096, kind: 'io apic', c: 'mmio' },
+  { base: '0xFED00000', b: 4275044352, len: '1 KiB', n: 1024, kind: 'hpet', c: 'mmio' },
+  { base: '0xFEE00000', b: 4276092928, len: '4 KiB', n: 4096, kind: 'local apic', c: 'mmio' },
+  { base: '0xFFC00000', b: 4290772992, len: '4 MiB', n: 4194304, kind: 'firmware', c: 'rsv' },
+  { base: '0x100000000', b: 4294967296, len: '12.4 GiB', n: 13314398618, kind: 'usable', c: 'use' }
+];
+const MMAP_TOP = 4294967296 + 13314398618;
+function drawRuler() {
+  const host = $('#ruler');
+  if (!S.ruler) { host.style.display = 'none'; return; }
+  host.style.display = 'flex';
+  const bar = $('#rulerbar');
+  const W = bar.clientWidth;
+  if (W < 16) return;
+  const MINW = 2;
+  /* first pass: proportional. second pass: floor the tiny ones at MINW and
+     take the difference back out of the largest region, so the bar still
+     sums to W exactly and the biggest span is the one that pays. */
+  let px = MMAP.map(m => (m.n / MMAP_TOP) * W);
+  let debt = 0, held = 0;
+  px = px.map(v => { if (v < MINW) { debt += MINW - v; held += 1; return MINW; } return v; });
+  const bigI = px.indexOf(Math.max.apply(null, px));
+  px[bigI] -= debt;
+  /* integer edges accumulated from the running total, and the last region
+     is pinned to W. rounding each width on its own drifted ~12 px and left a
+     strip of bare track at the top of the address space that meant nothing. */
+  let acc = 0, prev = 0, out = '';
+  MMAP.forEach((m, i) => {
+    acc += px[i];
+    const x1 = (i === MMAP.length - 1) ? W : Math.round(acc);
+    out += '<i class="' + (i ? 'sep' : '') + '" style="left:' + prev + 'px;width:' +
+      Math.max(1, x1 - prev) + 'px;background:var(--zd-ruler-' + m.c + ')"></i>';
+    prev = x1;
+  });
+  /* THE REGISTER MARK. The one accent on this band, and it is job three of
+     the four the ink already had, not a fifth: it marks the datum, here the
+     framebuffer base the plane is scanning out of. */
+  const fbx = Math.round((3758096384 / MMAP_TOP) * W);
+  out += '<u style="left:' + fbx + 'px"></u>';
+  bar.innerHTML = out;
+  const key = [['use', 'usable'], ['krn', 'kernel arenas'], ['rsv', 'reserved'], ['mmio', 'device mmio']];
+  $('#rulercap').innerHTML =
+    '<span class="t-label">e820</span>' +
+    key.map(k => '<span class="t-data"><span class="sw" style="background:var(--zd-ruler-' + k[0] +
+      ')"></span>' + k[1] + '</span>').join('') +
+    '<span class="t-data"><span class="sw" style="background:var(--zd-accent)"></span>' +
+    'plane surf 0xE0000000</span>' +
+    '<span class="t-data spread">0x0 to 0x3FFFFFFFF &middot; 15.4 GiB &middot; ' +
+    MMAP.length + ' regions &middot; ' + held + ' held at ' + MINW + ' px</span>';
+}
+
+/* ====================================================== window mgmt === */
+let ZTOP = 10;
+
+/* THE SHELL GATE. sheet_rows() lives here and nowhere else. PLATE had no
+   reflow story at all and four separate defects were that one omission. */
+function fitOf(w) {
+  let rows, cols;
+  if (w.det) {
+    const rh = (GRID.rowH[0] || 60) + GRID.gut;
+    const cwd = (GRID.colW[0] || 90) + GRID.gut;
+    rows = Math.max(1, Math.round(w.h / rh));
+    cols = Math.max(1, Math.round(w.w / cwd));
+  } else { rows = w.rh; cols = w.cw; }
+  /* FOUR rows is already short. Measured: 03 MONITOR and 08 NETWORK both
+     overflowed their own frames at 7x4 and 5x4 with the threshold at 3. */
+  return { rows, cols, short: rows <= 4, narrow: cols <= 4 };
+}
+
+function openWin(id, place, ws) {
+  const a = APP[id];
+  if (!a) return;
+  if (S.wins[id]) { S.wins[id].min = false; focusWin(id); return; }
+  const p = place || a.p;
+  S.wins[id] = { id: id, ws: ws || S.ws, c: p[0], r: p[1], cw: p[2], rh: p[3],
+    det: false, x: 0, y: 0, w: 0, h: 0, min: false, max: false, prev: null, z: ++ZTOP,
+    rects: 3, px: 18432, us: 480 };
+  buildWin(id);
+  focusWin(id);
+  layout();
+  renderRail();
+  damage('open');
+}
+function closeWin(id) {
+  const e = $('.win[data-id="' + id + '"]');
+  if (e) e.remove();
+  delete S.wins[id];
+  if (S.focus === id) {
+    const rest = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min)
+      .sort((a, b) => b.z - a.z);
+    S.focus = rest.length ? rest[0].id : null;
+  }
+  paintFocus(); renderRail(); redraw('grid'); damage('relayout');
+}
+function focusWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].z = ++ZTOP;
+  S.wins[id].min = false;
+  S.focus = id;
+  paintFocus(); renderRail(); layout();
+  damage('focus');
+}
+function minWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].min = true;
+  if (S.focus === id) {
+    const rest = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = rest.length ? rest[0].id : null;
+  }
+  layout(); paintFocus(); renderRail(); damage('relayout');
+}
+function maxWin(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  if (w.max) { Object.assign(w, w.prev); w.max = false; }
+  else {
+    w.prev = { c: w.c, r: w.r, cw: w.cw, rh: w.rh, det: w.det, x: w.x, y: w.y, w: w.w, h: w.h };
+    w.c = 0; w.r = 0; w.cw = S.cols; w.rh = S.rows; w.det = false; w.max = true;
+  }
+  focusWin(id); layout(); redraw(id); redraw('grid'); damage('relayout');
+}
+
+function buildWin(id) {
+  const a = APP[id];
+  const e = document.createElement('div');
+  e.className = 'win';
+  e.setAttribute('data-id', id);
+  e.innerHTML =
+    '<span class="focusbar"></span>' +
+    '<div class="hdr">' +
+      '<span class="ico" data-act="winmenu">' + icon(a.ico) + '</span>' +
+      '<span class="t-label ttl">' + a.name + '</span>' +
+      '<span class="t-data sub">' + a.sub + '</span>' +
+      '<span class="t-data coord"></span>' +
+      '<span class="ctls">' +
+        '<span class="ctl" data-act="min">' + CTL_MIN + '</span>' +
+        '<span class="ctl" data-act="max">' + CTL_MAX + '</span>' +
+        '<span class="ctl x" data-act="close">' + CTL_CLS + '</span>' +
+      '</span>' +
+    '</div>' +
+    '<div class="body"></div>' +
+    '<div class="band"></div>';
+  $('#wins').appendChild(e);
+  redraw(id);
+}
+function redraw(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  const e = $('.win[data-id="' + id + '"]');
+  if (!e) return;
+  const b = $('.body', e);
+  b.className = 'body' + (S.zebra ? ' zeb' : '');
+  b.innerHTML = R[id] ? R[id](fitOf(w)) : '';
+  paintBand(id);
+}
+/* DATUM: per window microsecond timing in every status band. The pixels and
+   the rect count are what wm.c actually measures per surface; the us figure
+   is DERIVED from them and is labelled so, because app_us is aggregate. */
+function paintBand(id) {
+  const w = S.wins[id];
+  const e = $('.win[data-id="' + id + '"]');
+  if (!w || !e) return;
+  const band = $('.band', e);
+  if (!band) return;
+  if (!S.bands) { band.style.display = 'none'; return; }
+  band.style.display = 'flex';
+  const fit = fitOf(w);
+  const over = w.us > 4000;
+  band.innerHTML =
+    '<span class="t-label">raster</span>' +
+    '<span class="t-data">rects</span><span class="t-data v">' + w.rects + '</span>' +
+    (fit.narrow ? '' :
+      '<span class="t-data">px</span><span class="t-data v">' + grp(w.px) + '</span>') +
+    '<span class="t-data">us</span><span class="t-data v">' + grp(w.us) + '</span>' +
+    '<span class="t-data ink6">derived</span>' +
+    '<span class="sp"></span>' +
+    (fit.narrow ? '' : '<span class="t-data">' + fit.rows + ' x ' + fit.cols + '</span>') +
+    statword(over ? 'WARN' : 'OK');
+}
+function redrawAll() { Object.keys(S.wins).forEach(redraw); }
+
+function layout() {
+  computeGrid();
+  drawGrid();
+  Object.values(S.wins).forEach(w => {
+    const e = $('.win[data-id="' + w.id + '"]');
+    if (!e) return;
+    const vis = w.ws === S.ws && !w.min;
+    e.classList.toggle('hidden', !vis);
+    let x, y, ww, hh, coord;
+    if (w.det) {
+      x = w.x; y = w.y; ww = w.w; hh = w.h;
+      coord = '[' + Math.round(x) + ',' + Math.round(y) + ' px]';
+    } else {
+      const r = modRect(w.c, w.r, w.cw, w.rh);
+      x = r.x; y = r.y; ww = r.w; hh = r.h;
+      w.c = r.c; w.r = r.r; w.cw = r.cw; w.rh = r.rh;
+      coord = '[' + (r.c + 1) + ',' + (r.r + 1) + ' ' + r.cw + 'x' + r.rh + ']';
+    }
+    e.style.left = x + 'px'; e.style.top = y + 'px';
+    e.style.width = ww + 'px'; e.style.height = hh + 'px';
+    e.style.zIndex = String(w.z);
+    $('.coord', e).textContent = coord;
+    let tab = $('.dtab', e);
+    if (w.det && !tab) {
+      tab = document.createElement('span');
+      tab.className = 'dtab';
+      tab.innerHTML = '<span class="t-label">detached</span>';
+      e.appendChild(tab);
+    } else if (!w.det && tab) tab.remove();
+    paintBand(w.id);
+  });
+  paintFocus();
+  drawRuler();
+}
+function paintFocus() {
+  $$('.win').forEach(e => e.classList.toggle('foc', e.getAttribute('data-id') === S.focus));
+}
+
+/* ============================================================ rail ====
+ * FREE RIDER: the numbered register. Text and two digits, and it makes the
+ * launcher, the task list and the keymap one list. It gained one column in
+ * this blend: the sheet's derived microseconds, which is the same figure
+ * its own status band prints, so the rail is a directory of the instrument
+ * rather than a second opinion.
+ */
+function renderRail() {
+  const reg = $('#reg');
+  reg.innerHTML = APPS.map(a => {
+    const w = S.wins[a.id];
+    let cls = 'reg off';
+    if (w) cls = 'reg ' + (S.focus === a.id && w.ws === S.ws && !w.min ? 'foc' : w.min ? 'hold' : 'run');
+    const us = w && !w.min && w.ws === S.ws ? grp(w.us) : '';
+    return '<div class="' + cls + '" data-app="' + a.id + '">' +
+      '<span class="mk"></span><span class="t-data nn">' + a.n + '</span>' +
+      '<span class="t-label rn">' + a.name + '</span>' +
+      '<span class="t-data us">' + us + '</span></div>';
+  }).join('');
+  const wsb = $('#wsbar');
+  const c1 = Object.values(S.wins).filter(w => w.ws === 1).length;
+  const c2 = Object.values(S.wins).filter(w => w.ws === 2).length;
+  wsb.innerHTML =
+    '<span class="wsc' + (S.ws === 1 ? ' on' : '') + '" data-ws="1"><span class="t-label">01</span></span>' +
+    '<span class="wsc' + (S.ws === 2 ? ' on' : '') + '" data-ws="2"><span class="t-label">02</span></span>' +
+    '<span class="wsc" data-ov="1"><span class="t-label">all</span></span>';
+  $('#wscount').innerHTML =
+    '<span class="t-data ko-4">' + c1 + '</span>' +
+    '<span class="t-data ko-4">' + c2 + '</span>' +
+    '<span class="t-data ko-4">' + (c1 + c2) + '</span>';
+  $('#readout').innerHTML =
+    '<div class="rd"><span class="t-label k">clock</span><span class="t-data v">' + hhmmss(S.clock) + '</span></div>' +
+    '<div class="rd"><span class="t-label k">mem</span><span class="t-data v">' + S.memPct + ' %</span></div>' +
+    '<div class="rd"><span class="t-label k">load</span><span class="t-data v">' + S.load.toFixed(2) + '</span></div>' +
+    '<div class="rd"><span class="t-label k">net</span><span class="t-data v">' + S.rx.toFixed(0) + ' k</span></div>' +
+    '<div class="rd"><span class="t-label k">comp</span><span class="t-data v">' + grp(S.composites) + '</span></div>' +
+    '<div class="rd"><span class="t-label k">sheets</span><span class="t-data v">' +
+      Object.values(S.wins).filter(w => w.ws === S.ws).length + '</span></div>';
+}
+/* the printer's slug. PLATE's instrumentation position, kept whole. */
+function renderSlug() {
+  $('#slugline').innerHTML = 'zlOS 0.3 &middot; ' + window.innerWidth + 'x' + window.innerHeight +
+    ' &middot; 4 CPU &middot; LOAD ' + S.load.toFixed(2) + ' &middot; WS ' + pad2(S.ws) +
+    ' &middot; MODULE ' + S.cols + 'x' + S.rows + ' &middot; ' + hhmmss(S.clock);
+}
+
+/* ======================================================== overview ==== */
+function overviewOn() { return $('#overview').classList.contains('on'); }
+function showOverview(on) {
+  const ov = $('#overview');
+  if (!on) { ov.classList.remove('on'); ov.innerHTML = ''; return; }
+  const g = GRID;
+  let html = '<div class="ovhead"><span class="t-plate">proof sheet</span>' +
+    '<span class="t-data ink4">every open sheet, both workspaces, to scale</span>' +
+    '<span class="t-data ink6 spread">esc or click to return</span></div><div class="ovbody">';
+  [1, 2].forEach(ws => {
+    const n = Object.values(S.wins).filter(w => w.ws === ws).length;
+    html += '<div class="ovws"><div class="ovlab"><span class="t-label">workspace ' + pad2(ws) + '</span>' +
+      '<span class="t-data ink6">' + n + ' sheet' + (n === 1 ? '' : 's') + '</span>' +
+      (ws === S.ws ? '<span class="t-label acc spread">current</span>' : '<span class="spread"></span>') +
+      '</div><div class="ovfield' + (ws === S.ws ? ' cur' : '') + '" data-ovws="' + ws + '"></div></div>';
+  });
+  html += '</div>';
+  const rows = Object.values(S.wins).sort((a, b) => APP[a.id].n.localeCompare(APP[b.id].n)).map(w => {
+    const st = w.min ? 'HELD' : w.det ? 'DETACHED' : w.max ? 'FULL' : 'TILED';
+    const mod = w.det ? Math.round(w.x) + ',' + Math.round(w.y) + ' px' :
+      (w.c + 1) + ',' + (w.r + 1) + '  ' + w.cw + 'x' + w.rh;
+    return TR([APP[w.id].n, { t: '<span class="t-label ink0">' + APP[w.id].name + '</span>' },
+      APP[w.id].sub, 'ws ' + pad2(w.ws), mod,
+      { t: grp(w.px), c: 'r' }, { t: grp(w.us), c: 'r' },
+      { t: '<span class="t-label ' + (w.det ? 'acc' : 'ink4') + '">' + st + '</span>' },
+      { t: S.focus === w.id ? '<span class="t-label ink0">FOCUS</span>' : '', c: 'r' }],
+      'class="pick" data-ovpick="' + w.id + '" data-ovws="' + w.ws + '"');
+  });
+  html += '<div class="ovreg"><div class="row" style="padding-bottom:4px">' +
+    '<span class="t-label">sheet register</span>' +
+    '<span class="t-data ink6 spread">' + Object.keys(S.wins).length +
+    ' open &middot; module ' + S.cols + ' x ' + S.rows + ' &middot; gutter ' + GRID.gut +
+    ' px &middot; px measured, us derived</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'nn', w: '5%' }, { h: 'sheet', w: '16%' }, { h: 'subtitle', w: '14%' },
+      { h: 'ws', w: '8%' }, { h: 'module', w: '14%' }, { h: 'px', w: '11%', r: 1 },
+      { h: 'us', w: '9%', r: 1 }, { h: 'state', w: '14%' },
+      { h: '', w: '9%', r: 1 }], rows) + '</div>' +
+    '<div class="hr2" style="margin-top:auto"></div>' +
+    '<div class="row" style="height:var(--zd-row-h)">' +
+    '<span class="t-label">proof sheet</span>' +
+    '<span class="t-data ink4">2 workspaces</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data ink4">plate scale <span data-kscale>1.00</span></span>' +
+    '<span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data ink4">every sheet is the real sheet, drawn once and scaled</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data ink6">click a plate, a sheet or a row to return to it</span></div></div>';
+  ov.innerHTML = html;
+  ov.classList.add('on');
+  $$('.ovfield', ov).forEach(host => {
+    const ws = Number(host.getAttribute('data-ovws'));
+    const k = Math.min(host.clientWidth / g.W, host.clientHeight / g.H);
+    host.style.flex = 'none';
+    host.style.width = Math.round(g.W * k) + 'px';
+    host.style.height = Math.round(g.H * k) + 'px';
+    const ks = $('[data-kscale]', ov);
+    if (ks) ks.textContent = k.toFixed(2);
+    const wrap = document.createElement('div');
+    wrap.className = 'ovscale';
+    wrap.style.width = g.W + 'px';
+    wrap.style.height = g.H + 'px';
+    wrap.style.transform = 'scale(' + k + ')';
+    Object.values(S.wins).filter(w => w.ws === ws).sort((a, b) => a.z - b.z).forEach(w => {
+      const src = $('.win[data-id="' + w.id + '"]');
+      if (!src) return;
+      const c = src.cloneNode(true);
+      c.classList.remove('hidden');
+      c.style.pointerEvents = 'none';
+      if (w.min) c.style.opacity = '0.55';
+      wrap.appendChild(c);
+      const hit = document.createElement('div');
+      hit.className = 'ovpick';
+      hit.style.left = (parseFloat(src.style.left) * k) + 'px';
+      hit.style.top = (parseFloat(src.style.top) * k) + 'px';
+      hit.style.width = (parseFloat(src.style.width) * k) + 'px';
+      hit.style.height = (parseFloat(src.style.height) * k) + 'px';
+      hit.setAttribute('data-ovpick', w.id);
+      hit.setAttribute('data-ovws', String(ws));
+      host.appendChild(hit);
+    });
+    host.insertBefore(wrap, host.firstChild);
+  });
+}
+
+/* ========================================================= palette ==== */
+const CMDS = [];
+APPS.forEach(a => CMDS.push({
+  n: a.n, name: 'open ' + a.n + ' ' + a.name, hint: 'alt ' + Number(a.n),
+  run: () => { openWin(a.id); toast('opened', a.n + ' ' + a.name.toUpperCase() + ' placed on the module grid'); }
+}));
+CMDS.push(
+  { n: '20', name: 'park the raster strip', hint: 'strip', run: () => { S.stripLive = false; drawRaster(); redraw('set'); toast('raster', 'parked. damage driven, so it stands still at rest'); } },
+  { n: '21', name: 'arm the raster strip', hint: 'strip', run: () => { S.stripLive = true; damage('relayout'); redraw('set'); toast('raster', 'armed. one column per composite, 0 wakeups at rest'); } },
+  { n: '22', name: 'hide the memory ruler', hint: 'ruler', run: () => { S.ruler = false; layout(); redraw('set'); toast('ruler', 'hidden, the field grows by 38 dp'); } },
+  { n: '23', name: 'show the memory ruler', hint: 'ruler', run: () => { S.ruler = true; layout(); redraw('set'); toast('ruler', 'e820 to scale, 12 regions, 5 held at 2 px'); } },
+  { n: '24', name: 'toggle desk grid', hint: 'ctrl g', run: () => { S.grid = !S.grid; drawGrid(); redraw('set'); toast('desk grid', S.grid ? 'ruled on' : 'ruled off'); } },
+  { n: '25', name: 'set module columns 10', hint: 'grid', run: () => { S.cols = 10; layout(); redrawAll(); damage('relayout'); toast('module', 'grid re-ruled to 10 x ' + S.rows); } },
+  { n: '26', name: 'send focused sheet to workspace 02', hint: 'shift 2', run: () => { if (S.focus) { S.wins[S.focus].ws = 2; layout(); renderRail(); toast('moved', S.focus.toUpperCase() + ' to workspace 02'); } } },
+  { n: '27', name: 'dump pipe A registers', hint: 'mmio', run: () => { openWin('regs'); toast('regdump', '15 registers read from bar0 0xD0000000'); } },
+  { n: '28', name: 'run fsck on rd0', hint: 'zlfs', run: () => toast('zlfs', 'generation 3, 0 orphan extents, OK') },
+  { n: '29', name: 'lock session', hint: 'ctrl l', run: () => setScene('lock') },
+  { n: '30', name: 'open overview proof sheet', hint: 'ctrl space', run: () => setScene('overview') },
+  { n: '31', name: 'close all sheets on this workspace', hint: 'wm', run: () => { Object.values(S.wins).filter(w => w.ws === S.ws).forEach(w => closeWin(w.id)); toast('closed', 'workspace ' + pad2(S.ws) + ' cleared'); } },
+  { n: '32', name: 'switch stock paper negative', hint: 'ctrl i', run: () => setStock(S.theme === 'dark' ? 'light' : 'dark', true) },
+  { n: '33', name: 'show the blend decision sheet', hint: 'axes', run: () => { openWin('set'); S.setTab = 0; redraw('set'); focusWin('set'); toast('blend', '10 axes, 6 conflicts resolved, 1 direction rejected outright'); } }
+);
+function paletteResults() {
+  const q = S.pq.trim().toLowerCase();
+  return CMDS.filter(c => !q || c.name.includes(q) || c.n.includes(q));
+}
+function renderPalette() {
+  const res = paletteResults();
+  if (S.psel >= res.length) S.psel = Math.max(0, res.length - 1);
+  $('#pq').innerHTML = S.pq.replace(/ /g, '&nbsp;') || '<span class="ink6">type a command</span>';
+  $('#pcount').textContent = res.length + ' of ' + CMDS.length;
+  $('#presults').innerHTML = res.slice(0, 8).map((c, i) =>
+    '<div class="prow' + (i === S.psel ? ' on' : '') + '" data-pi="' + i + '">' +
+    '<span class="mk"></span><span class="t-data ink6">' + c.n + '</span>' +
+    '<span class="t-label">' + c.name + '</span>' +
+    '<span class="t-data hint">' + c.hint + '</span></div>').join('') ||
+    '<div class="prow"><span class="t-label ink4">no command matches</span></div>';
+}
+function showPalette(on) {
+  $('#palette').classList.toggle('on', on);
+  if (on) renderPalette();
+}
+function runPalette() {
+  const res = paletteResults();
+  const c = res[S.psel];
+  showPalette(false);
+  if (c) c.run();
+}
+
+/* ============================================================ lock ==== */
+function renderLock() {
+  $('#lockup').textContent = 'up ' + hhmmss(4211 + S.t);
+  const held = Object.values(S.wins);
+  $('#lockplate').innerHTML =
+    '<span class="t-plate ko">zlos</span>' +
+    '<span class="t-data ko-4">0.3 &middot; x86_64</span>' +
+    '<div class="accrule" style="margin:10px 0 8px"></div>' +
+    '<span class="t-label ko-4">held sheets</span>' +
+    held.slice(0, 7).map(w =>
+      '<div class="hold"><span class="t-data ko-4">' + APP[w.id].n + '</span>' +
+      '<span class="t-label ko">' + APP[w.id].name + '</span>' +
+      '<span class="t-data ko-4 spread">ws ' + pad2(w.ws) + '</span></div>').join('') +
+    '<div style="margin-top:auto">' +
+    '<div class="rd"><span class="t-label k ko-4">load</span><span class="t-data v ko">' + S.load.toFixed(2) + '</span></div>' +
+    '<div class="rd"><span class="t-label k ko-4">mem</span><span class="t-data v ko">' + S.memPct + ' %</span></div>' +
+    '<div class="rd"><span class="t-label k ko-4">comp</span><span class="t-data v ko">' + grp(S.composites) + '</span></div>' +
+    '<div class="rd"><span class="t-label k ko-4">state</span><span class="t-data v k-ok">HELD</span></div>' +
+    '</div>';
+  $('#lockbody').innerHTML =
+    '<span class="t-label">local time</span>' +
+    '<span class="t-plate-m">' + hhmmss(S.clock) + '</span>' +
+    '<span class="t-data ink4">friday 12 september &middot; week 37 &middot; day 255</span>' +
+    '<div class="hr2" style="margin:10px 0 8px"></div>' +
+    '<div class="row"><span class="t-label">operator</span>' +
+    '<span class="t-data ink0">zac</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data ink4">seat0 &middot; tty1 &middot; console 200x62</span></div>' +
+    '<div class="well row" style="margin-top:8px">' +
+    '<span class="t-label">passphrase</span>' +
+    '<span class="t-data ink0" style="letter-spacing:3px">' + '•'.repeat(9) + '</span>' +
+    '<span class="caret"></span></div>' +
+    '<div class="row" style="margin-top:4px">' +
+    '<span class="t-data ink6">press enter, or click anywhere, to unlock</span>' +
+    '<span class="spread"></span>' + statword('OK') +
+    '<span class="t-data ink6">' + held.length + ' sheets held</span></div>' +
+    '<div class="hr1" style="margin:10px 0 0"></div>' +
+    kv('session', 'seat0 since 13:21:56') +
+    kv('compositor', 'parked, back buffer retained') +
+    kv('raster strip', 'standing still, damage list empty') +
+    kv('framebuffer', '1600 x 1000 x 32, dimmed 0 %') +
+    kv('input', 'xHCI HID keyboard, boot protocol') +
+    '<div class="row" style="margin-top:12px">' +
+    '<span class="btn prim" data-act="unlock"><span class="t-label">unlock</span></span>' +
+    '<span class="btn"><span class="t-label">switch operator</span></span>' +
+    '<span class="t-data ink6 spread">esc also unlocks</span></div>';
+  const svg = $('#locksvg');
+  const w = $('#lock').clientWidth, h = $('#lock').clientHeight;
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  let s = '';
+  const m = 24;
+  for (let i = 0; i <= 12; i++) {
+    const x = m + Math.round((w - 2 * m) * i / 12);
+    s += '<rect x="' + x + '" y="' + m + '" width="1" height="' + (h - 2 * m) + '" fill="var(--zd-grid-line)"/>';
+  }
+  for (let i = 0; i <= 8; i++) {
+    const y = m + Math.round((h - 2 * m) * i / 8);
+    s += '<rect x="' + m + '" y="' + y + '" width="' + (w - 2 * m) + '" height="1" fill="var(--zd-grid-line)"/>';
+  }
+  const L = 16;
+  s += '<rect x="' + (m - L - 4) + '" y="' + m + '" width="' + L + '" height="1" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + m + '" y="' + (m - L - 4) + '" width="1" height="' + L + '" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + (w - m + 4) + '" y="' + m + '" width="' + L + '" height="1" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + (w - m) + '" y="' + (m - L - 4) + '" width="1" height="' + L + '" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + (m - L - 4) + '" y="' + (h - m) + '" width="' + L + '" height="1" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + m + '" y="' + (h - m + 4) + '" width="1" height="' + L + '" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + (w - m + 4) + '" y="' + (h - m) + '" width="' + L + '" height="1" fill="var(--zd-accent)"/>';
+  s += '<rect x="' + (w - m) + '" y="' + (h - m + 4) + '" width="1" height="' + L + '" fill="var(--zd-accent)"/>';
+  svg.innerHTML = s;
+}
+function showLock(on) {
+  $('#lock').classList.toggle('on', on);
+  if (on) renderLock();
+}
+
+/* ========================================================== toasts ==== */
+const TOAST_MS = 4200, TOAST_MAX = 3;
+function toast(title, body) {
+  const host = $('#toasts');
+  while (host.children.length >= TOAST_MAX) host.removeChild(host.firstChild);
+  const e = document.createElement('div');
+  e.className = 'toast';
+  e.innerHTML = '<span class="bar"></span><div class="tl"><span class="t-label">' + title + '</span>' +
+    '<span class="cl" data-act="untoast">' + CTL_CLS + '</span></div>' +
+    '<span class="t-data tx">' + body + '</span>';
+  host.appendChild(e);
+  setTimeout(() => { if (e.parentNode) e.remove(); }, TOAST_MS);
+}
+
+/* =========================================================== menus ==== */
+function showMenu(el, x, y, items, headTxt) {
+  el.innerHTML = (headTxt ? '<div class="mh"><span class="t-label ko">' + headTxt + '</span></div>' : '') +
+    items.map((it, i) => '<div class="mi" data-mi="' + i + '"><span class="t-label">' + it[0] +
+      '</span><span class="t-data hint">' + (it[1] || '') + '</span></div>').join('');
+  el.classList.add('on');
+  const os = $('#os').getBoundingClientRect();
+  el.style.left = Math.min(x, os.width - el.offsetWidth - 8) + 'px';
+  el.style.top = Math.min(y, os.height - el.offsetHeight - 8) + 'px';
+  el._items = items;
+}
+function hideMenus() { $('#ctxmenu').classList.remove('on'); $('#winmenu').classList.remove('on'); }
+
+/* ============================================================ tick ==== */
+function walk(v, lo, hi, amp) {
+  const n = v + (Math.random() - 0.5) * amp;
+  return Math.max(lo, Math.min(hi, n));
+}
+function tick() {
+  S.t += 1; S.clock += 1;
+  S.cpu = S.cpu.map(v => Math.round(walk(v, 2, 99, 22)));
+  S.memPct = Math.round(walk(S.memPct, 40, 92, 3));
+  S.load = Math.round(walk(S.load, 0.05, 3.2, 0.22) * 100) / 100;
+  S.rx = Math.round(walk(S.rx, 0, 420, 90) * 10) / 10;
+  S.tx = Math.round(walk(S.tx, 0, 180, 30) * 10) / 10;
+  S.hist.cpu.push(Math.round(S.cpu.reduce((a, b) => a + b, 0) / 4));
+  S.hist.cpu.shift();
+  S.hist.net.push(Math.min(80, Math.round(S.rx / 5)));
+  S.hist.net.shift();
+  S.hist.mem.push(S.memPct);
+  S.hist.mem.shift();
+  renderSlug();
+  renderRail();
+  /* a clock tick IS damage: the rail readout and the slug both changed. */
+  damage('tick', Object.keys(S.wins).length);
+  ['mon', 'net', 'clock', 'proc', 'sys', 'grid'].forEach(id => { if (S.wins[id] && !S.wins[id].min) redraw(id); });
+  if ($('#lock').classList.contains('on')) renderLock();
+}
+
+/* ======================================================== settings ==== */
+function applyAccent() {
+  const a = ACCENTS.find(x => x[0] === S.accent) || ACCENTS[0];
+  document.documentElement.style.setProperty('--zd-accent', 'var(' + a[2] + ')');
+  document.documentElement.style.setProperty('--zd-accent-ko', 'var(' + a[3] + ')');
+}
+function applyUI() {
+  document.documentElement.style.setProperty('--ui', String(S.ui));
+}
+
+/* ========================================================== events ==== */
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  if (!t.closest('.menu')) hideMenus();
+
+  if ($('#lock').classList.contains('on')) {
+    if (t.closest('#lock')) { setScene('desktop'); toast('session', 'unlocked, sheets restored'); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    const pr = t.closest('.prow');
+    if (pr && pr.getAttribute('data-pi') !== null) {
+      S.psel = Number(pr.getAttribute('data-pi'));
+      runPalette();
+      return;
+    }
+    if (!t.closest('.sheet')) showPalette(false);
+    return;
+  }
+  if (overviewOn()) {
+    const pick = t.closest('[data-ovpick]');
+    if (pick) {
+      S.ws = Number(pick.getAttribute('data-ovws'));
+      showOverview(false);
+      focusWin(pick.getAttribute('data-ovpick'));
+      layout(); renderRail();
+      return;
+    }
+    const fld = t.closest('.ovfield');
+    if (fld) { S.ws = Number(fld.getAttribute('data-ovws')); showOverview(false); layout(); renderRail(); return; }
+    if (!t.closest('.ovhead')) showOverview(false);
+    return;
+  }
+
+  const reg = t.closest('.reg');
+  if (reg) {
+    const id = reg.getAttribute('data-app');
+    const w = S.wins[id];
+    if (!w) openWin(id);
+    else if (w.min || w.ws !== S.ws) { w.ws = S.ws; w.min = false; focusWin(id); layout(); }
+    else if (S.focus === id) minWin(id);
+    else focusWin(id);
+    return;
+  }
+  const wsc = t.closest('.wsc');
+  if (wsc) {
+    if (wsc.getAttribute('data-ov')) { setScene('overview'); return; }
+    S.ws = Number(wsc.getAttribute('data-ws'));
+    const top = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+    layout(); renderRail(); renderSlug(); damage('relayout');
+    toast('workspace', 'switched to ' + pad2(S.ws) + ', ' + top.length + ' sheets visible');
+    return;
+  }
+  if (t.closest('#regmark')) { showPalette(true); return; }
+
+  const win = t.closest('.win');
+  if (win) {
+    const id = win.getAttribute('data-id');
+    const act = t.closest('[data-act]') ? t.closest('[data-act]').getAttribute('data-act') : null;
+    if (act === 'close') { closeWin(id); return; }
+    if (act === 'min') { minWin(id); return; }
+    if (act === 'max') { maxWin(id); return; }
+    if (act === 'winmenu') {
+      focusWin(id);
+      const r = win.getBoundingClientRect(), os = $('#os').getBoundingClientRect();
+      showMenu($('#winmenu'), r.left - os.left, r.top - os.top + 30, [
+        ['raise to front', 'click'],
+        ['minimise', 'ctrl m'],
+        [S.wins[id].max ? 'restore' : 'maximise', 'ctrl f'],
+        [S.wins[id].det ? 'return to module' : 'detach from module', 'ctrl d'],
+        ['send to workspace ' + (S.ws === 1 ? '02' : '01'), 'shift ' + (S.ws === 1 ? '2' : '1')],
+        ['close sheet', 'ctrl w']
+      ], APP[id].name);
+      $('#winmenu')._win = id;
+      return;
+    }
+    if (S.focus !== id) focusWin(id);
+    handleWinAction(id, t);
+    const hdr = t.closest('.hdr');
+    if (hdr && !t.closest('.ctls') && !t.closest('.ico')) startDrag(ev, id, win);
+    return;
+  }
+});
+
+document.addEventListener('contextmenu', ev => {
+  if ($('#lock').classList.contains('on')) return;
+  const os = $('#os').getBoundingClientRect();
+  const inField = ev.target.closest('#field') && !ev.target.closest('.win');
+  const inRuler = !!ev.target.closest('#ruler');
+  const inStrip = !!ev.target.closest('#raster');
+  if (!inField && !inRuler && !inStrip && !ev.target.closest('.win')) return;
+  ev.preventDefault();
+  const x = ev.clientX - os.left, y = ev.clientY - os.top;
+  if (inStrip) {
+    showMenu($('#ctxmenu'), x, y, [
+      [S.stripLive ? 'park the strip' : 'arm the strip', 'damage'],
+      ['clear the window', '400 columns'],
+      ['open 03 monitor', 'alt 3'],
+      ['hide the strip', 'band']
+    ], 'raster strip');
+    $('#ctxmenu')._kind = 'strip';
+    return;
+  }
+  if (inRuler) {
+    showMenu($('#ctxmenu'), x, y, [
+      ['open 10 system', 'alt 0'],
+      ['open 06 hex at 0xE0000000', 'mmio'],
+      ['hide the ruler', 'band']
+    ], 'memory ruler');
+    $('#ctxmenu')._kind = 'ruler';
+    return;
+  }
+  if (inField) {
+    showMenu($('#ctxmenu'), x, y, [
+      ['new shell', 'alt 1'],
+      ['command palette', 'ctrl k'],
+      ['proof sheet', 'ctrl space'],
+      [S.grid ? 'hide desk grid' : 'rule desk grid', 'ctrl g'],
+      ['tile every sheet', 'ctrl t'],
+      ['lock session', 'ctrl l'],
+      ['stock ' + STOCK[S.theme].other, 'shift d']
+    ], 'field');
+    $('#ctxmenu')._kind = 'field';
+  } else {
+    const id = ev.target.closest('.win').getAttribute('data-id');
+    showMenu($('#ctxmenu'), x, y, [
+      ['raise to front', 'click'],
+      ['maximise', 'ctrl f'],
+      ['minimise', 'ctrl m'],
+      ['send to workspace ' + (S.ws === 1 ? '02' : '01'), 'shift'],
+      ['close sheet', 'ctrl w']
+    ], APP[id].name);
+    $('#ctxmenu')._kind = 'win';
+    $('#ctxmenu')._win = id;
+  }
+});
+
+$('#ctxmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi');
+  if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const el = $('#ctxmenu');
+  hideMenus();
+  if (el._kind === 'field') {
+    [() => openWin('shell'), () => showPalette(true), () => setScene('overview'),
+     () => { S.grid = !S.grid; drawGrid(); redraw('set'); toast('desk grid', S.grid ? 'ruled on' : 'ruled off'); },
+     () => tileAll(), () => setScene('lock'),
+     () => setStock(S.theme === 'dark' ? 'light' : 'dark', true)][i]();
+  } else if (el._kind === 'strip') {
+    [() => { S.stripLive = !S.stripLive; drawRaster(); redraw('set');
+             toast('raster', S.stripLive ? 'armed, one column per composite' : 'parked, the damage list is empty'); },
+     () => { S.raster = []; S.dropped = 0; drawRaster(); toast('raster', 'window cleared, 400 columns'); },
+     () => openWin('mon'),
+     () => { S.strip = false; drawRaster(); layout(); redraw('set'); toast('raster', 'strip hidden'); }][i]();
+  } else if (el._kind === 'ruler') {
+    [() => openWin('sys'), () => openWin('hex'),
+     () => { S.ruler = false; layout(); redraw('set'); toast('ruler', 'hidden, the field grows by 38 dp'); }][i]();
+  } else {
+    const id = el._win;
+    [() => focusWin(id), () => maxWin(id), () => minWin(id),
+     () => { S.wins[id].ws = S.ws === 1 ? 2 : 1; layout(); renderRail(); toast('moved', id.toUpperCase() + ' to workspace ' + pad2(S.ws === 1 ? 2 : 1)); },
+     () => closeWin(id)][i]();
+  }
+});
+$('#winmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi');
+  if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const id = $('#winmenu')._win;
+  hideMenus();
+  const w = S.wins[id];
+  if (!w) return;
+  [() => focusWin(id), () => minWin(id), () => maxWin(id),
+   () => {
+     if (w.det) { w.det = false; }
+     else {
+       const r = modRect(w.c, w.r, w.cw, w.rh);
+       w.det = true; w.x = r.x + 24; w.y = r.y + 24; w.w = r.w; w.h = r.h;
+     }
+     layout(); redraw(id); damage('move');
+     toast(w.det ? 'detached' : 'returned', w.det ? id.toUpperCase() + ' is off the module grid' :
+       id.toUpperCase() + ' snapped back to ' + (w.c + 1) + ',' + (w.r + 1));
+   },
+   () => { w.ws = S.ws === 1 ? 2 : 1; layout(); renderRail(); toast('moved', id.toUpperCase() + ' to workspace ' + pad2(w.ws)); },
+   () => closeWin(id)][i]();
+});
+
+function handleWinAction(id, t) {
+  const node = t.closest('[data-act], [data-toggle], [data-accent], [data-seg], [data-slider]');
+  if (!node) return;
+  if (node.hasAttribute('data-toggle')) {
+    const k = node.getAttribute('data-toggle');
+    S[k] = !S[k];
+    if (k === 'grid' || k === 'crop') drawGrid();
+    if (k === 'zebra') redrawAll();
+    if (k === 'blink') document.body.classList.toggle('blinkon', S.blink);
+    if (k === 'strip') { drawRaster(); layout(); }
+    if (k === 'stripLive') drawRaster();
+    if (k === 'ruler') layout();
+    if (k === 'bands') redrawAll();
+    redraw('set');
+    toast(k, S[k] ? 'on' : 'off');
+    return;
+  }
+  if (node.hasAttribute('data-accent')) {
+    S.accent = node.getAttribute('data-accent');
+    applyAccent(); redraw('set');
+    const a = ACCENTS.find(x => x[0] === S.accent);
+    toast('second ink', a[1] + ' now carries all four accent places');
+    return;
+  }
+  const segp = t.closest('[data-seg]');
+  if (segp && t.closest('[data-arg]')) {
+    const av = Number(t.closest('[data-arg]').getAttribute('data-arg'));
+    if (segp.getAttribute('data-seg') === 'stock') { setStock(av ? 'dark' : 'light', true); return; }
+    S.setTab = av;
+    redraw('set');
+    return;
+  }
+  const act = node.getAttribute('data-act');
+  const arg = node.getAttribute('data-arg');
+  if (act === 'file') { S.fileSel = Number(arg); redraw('files'); redraw('edit'); return; }
+  if (act === 'proc') { S.procSel = Number(arg); redraw('mon'); return; }
+  if (act === 'open') { openWin(arg); return; }
+  if (act === 'ov') { setScene('overview'); return; }
+  if (act === 'calc') { calcKey(arg); redraw('calc'); return; }
+  if (act === 'toast') {
+    const M = {
+      build: ['make', 'zlos.elf relinked, text 218432 data 30720 bss 1441792'],
+      ink: ['design.h', 'ZD_ACCENT rewritten, 4 call sites re-inked'],
+      revert: ['design.h', 'reverted to the measured value'],
+      proof: ['printed', 'proof sheet queued, 2 workspaces, 1 page'],
+      stat: ['stat', '1 extent, contiguous, generation 3, crc verified'],
+      reap: ['reaped', 'pid 42 regdump removed from the table'],
+      renice: ['renice', 'pid 61 soak moved to nice 10'],
+      retile: ['retiled', 'every sheet snapped back to the module grid']
+    }[arg] || ['ok', arg];
+    if (arg === 'retile') { tileAll(); return; }
+    toast(M[0], M[1]);
+    return;
+  }
+}
+function calcKey(k) {
+  if (k === 'clr') { S.calcAcc = '0'; return; }
+  if (k === 'eq') { S.calcAcc = String(parseInt(S.calcAcc, 10) || 0); return; }
+  if (/^[0-9]$/.test(k)) { S.calcAcc = (S.calcAcc === '0' ? '' : S.calcAcc) + k; return; }
+  if (k === 'div') { S.calcAcc = String(Math.floor((parseInt(S.calcAcc, 10) || 0) / 2)); return; }
+  if (k === 'mul') { S.calcAcc = String((parseInt(S.calcAcc, 10) || 0) * 2); return; }
+  if (k === 'add') { S.calcAcc = String((parseInt(S.calcAcc, 10) || 0) + 1); return; }
+  if (k === 'sub') { S.calcAcc = String((parseInt(S.calcAcc, 10) || 0) - 1); return; }
+  if (k === 'hex' || k === 'dec' || k === 'bin') { toast('base', k + ' shown in the ledger below'); return; }
+}
+function tileAll() {
+  const list = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min);
+  const n = list.length;
+  if (!n) return;
+  const perRow = n <= 2 ? n : Math.ceil(n / 2);
+  const rowsN = n <= 2 ? 1 : 2;
+  list.forEach((w, i) => {
+    const rr = Math.floor(i / perRow), cc = i % perRow;
+    const cwid = Math.floor(S.cols / perRow), rhh = Math.floor(S.rows / rowsN);
+    w.det = false; w.max = false;
+    w.c = cc * cwid; w.r = rr * rhh; w.cw = cwid; w.rh = rhh;
+  });
+  layout(); redrawAll(); damage('relayout');
+  toast('tiled', n + ' sheets onto the ' + S.cols + ' x ' + S.rows + ' module grid');
+}
+
+/* ---------------------------------------------------------- sliders -- */
+let SL = null;
+document.addEventListener('mousedown', ev => {
+  const s = ev.target.closest('[data-slider]');
+  if (!s) return;
+  SL = s; setSlider(ev);
+});
+document.addEventListener('mousemove', ev => { if (SL) setSlider(ev); });
+document.addEventListener('mouseup', () => { SL = null; });
+function setSlider(ev) {
+  const name = SL.getAttribute('data-slider');
+  const r = SL.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+  const steps = name === 'ui' ? UI_STEPS : name === 'cols' ? COL_STEPS : GUT_STEPS;
+  const v = steps[Math.round(p * (steps.length - 1))];
+  if (name === 'ui') { if (v === S.ui) return; S.ui = v; applyUI(); }
+  else if (name === 'cols') { if (v === S.cols) return; S.cols = v; }
+  else { if (v === S.gut) return; S.gut = v; }
+  layout(); redrawAll(); drawRaster(); renderSlug(); damage('relayout');
+}
+
+/* ------------------------------------------------------------- drag -- */
+function startDrag(ev, id, el) {
+  const w = S.wins[id];
+  if (w.max) return;
+  const r = el.getBoundingClientRect(), f = $('#field').getBoundingClientRect();
+  const ox = ev.clientX - r.left, oy = ev.clientY - r.top;
+  const wid = r.width, hgt = r.height;
+  el.classList.add('drag');
+  function move(e) {
+    w.det = true;
+    w.x = Math.round(e.clientX - f.left - ox);
+    w.y = Math.round(e.clientY - f.top - oy);
+    w.w = wid; w.h = hgt;
+    layout();
+  }
+  function up() {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    el.classList.remove('drag');
+    if (S.snap && w.det) {
+      let bc = 0, br = 0, bd = 1e9;
+      GRID.colX.forEach((x, i) => { const d = Math.abs(x - w.x); if (d < bd) { bd = d; bc = i; } });
+      bd = 1e9;
+      GRID.rowY.forEach((y, i) => { const d = Math.abs(y - w.y); if (d < bd) { bd = d; br = i; } });
+      w.det = false; w.c = bc; w.r = br;
+      layout();
+      toast('snapped', APP[id].name.toUpperCase() + ' to module ' + (bc + 1) + ',' + (br + 1));
+    }
+    redraw(id); redraw('grid'); damage('move');
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* -------------------------------------------------------- keyboard --- */
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if ($('#lock').classList.contains('on')) {
+    if (k === 'Enter' || k === 'Escape') { setScene('desktop'); toast('session', 'unlocked, sheets restored'); ev.preventDefault(); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); ev.preventDefault(); return; }
+    if (k === 'Enter') { runPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowDown') { S.psel = Math.min(S.psel + 1, Math.min(7, paletteResults().length - 1)); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    if (k.length === 1 && !ev.ctrlKey && !ev.metaKey) { S.pq += k; S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    return;
+  }
+  /* the required mode key, and PLATE's own ctrl i kept as a synonym */
+  if (ev.shiftKey && (k === 'D' || k === 'd') && !ev.ctrlKey && !ev.metaKey) {
+    setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return;
+  }
+  if (ev.ctrlKey && (k === 'k' || k === 'K')) { S.pq = ''; S.psel = 0; showPalette(true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && k === ' ') { setScene(overviewOn() ? 'desktop' : 'overview'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'l' || k === 'L')) { setScene('lock'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'g' || k === 'G')) { S.grid = !S.grid; drawGrid(); redraw('set'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'i' || k === 'I')) { setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 't' || k === 'T')) { tileAll(); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'w' || k === 'W')) { if (S.focus) closeWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'f' || k === 'F')) { if (S.focus) maxWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'm' || k === 'M')) { if (S.focus) minWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === '1' || k === '2')) {
+    S.ws = Number(k);
+    const top = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+    layout(); renderRail(); renderSlug(); damage('relayout'); ev.preventDefault(); return;
+  }
+  if (ev.altKey && /^[0-9]$/.test(k)) {
+    const idx = k === '0' ? 9 : Number(k) - 1;
+    if (APPS[idx]) openWin(APPS[idx].id);
+    ev.preventDefault(); return;
+  }
+  if (k === 'Escape') {
+    if (overviewOn()) setScene('desktop');
+    hideMenus();
+  }
+});
+
+/* =========================================================== stock ====
+ * Two primitive ladders, one set of role names. Setting data-theme is the
+ * ONLY switch: no rule weight, no metric, no radius, no motion value and
+ * no band height differs between the two.
+ */
+const STOCK = {
+  light: { name: 'paper', other: 'negative',
+    pitch: 'PLATE structure carrying Datum instrumentation. warm paper, black ink, ' +
+           'one vermilion overprint, and a machine that shows its own raster.',
+    toast: ['paper', 'warm stock, ink plate rail and strip, knockout sets the title in paper'] },
+  dark:  { name: 'negative', other: 'paper',
+    pitch: 'the same document on the film it was shot on. ortho lith, amber base, ' +
+           'Dmax rail and strip, knockout clears, the ruler halftones.',
+    toast: ['negative', 'ortho lith. the rail holds at Dmax and only the knockout clears'] }
+};
+function applyTheme() {
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = STOCK[S.theme].pitch;
+  renderThemeTog();
+}
+function renderThemeTog() {
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-stock="light">paper</span>' +
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-stock="dark">negative</span>' +
+    '<span class="thint">shift d</span>';
+}
+function hashName() { return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setStock(t, announce) {
+  const next = t === 'dark' ? 'dark' : 'light';
+  if (next === S.theme && announce) return;
+  S.theme = next;
+  applyTheme();
+  renderLinks();
+  renderSlug();
+  drawRaster();
+  redraw('set');
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    toast(STOCK[S.theme].toast[0], STOCK[S.theme].toast[1]);
+  }
+}
+function renderLinks() {
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENE_NAMES.map(n =>
+    '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  markLinks(S.scene);
+}
+
+/* ========================================================== scenes ==== */
+const SCENE_NAMES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function clearAll() {
+  Object.keys(S.wins).forEach(id => { const e = $('.win[data-id="' + id + '"]'); if (e) e.remove(); });
+  S.wins = {}; S.focus = null; ZTOP = 10;
+  showOverview(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+}
+function place(id, c, r, cw, rh, ws) { openWin(id, [c, r, cw, rh], ws || S.ws); }
+function baseDesktop() {
+  clearAll();
+  S.ws = 1; S.cols = 12; S.rows = 8; S.gut = 8;
+  place('shell', 0, 0, 7, 4);
+  place('files', 7, 0, 5, 4);
+  place('mon', 0, 4, 7, 4);
+  place('net', 7, 4, 5, 4);
+  place('log', 0, 0, 7, 4, 2);
+  place('regs', 7, 0, 5, 5, 2);
+  place('hex', 0, 4, 12, 4, 2);
+  /* one detached sheet, front most, so the explicit overlap state is on
+     screen from the first paint. DETACHED is a state here, not a default. */
+  openWin('sys', [3, 2, 6, 5]);
+  const w = S.wins.sys;
+  const r = modRect(3, 2, 6, 5);
+  w.det = true; w.x = r.x + 18; w.y = r.y - 34; w.w = r.w; w.h = r.h;
+  focusWin('sys');
+  layout(); redrawAll();
+}
+function setScene(name, push) {
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  if (SCENE_NAMES.indexOf(name) < 0) { name = 'desktop'; dark = false; }
+  S.scene = name;
+  S.theme = dark ? 'dark' : 'light';
+  applyTheme();
+  renderLinks();
+  if (push !== false && location.hash.slice(1) !== hashName()) {
+    history.replaceState(null, '', '#' + hashName());
+  }
+  markLinks(name);
+  if (name === 'desktop') {
+    baseDesktop();
+    toast('tiled', '7 sheets over 2 workspaces, module ' + S.cols + ' x ' + S.rows +
+      ', one detached and marked');
+  } else if (name === 'overview') {
+    baseDesktop();
+    layout();
+    showOverview(true);
+  } else if (name === 'palette') {
+    baseDesktop();
+    S.pq = 'raster'; S.psel = 0;
+    showPalette(true);
+  } else if (name === 'files') {
+    clearAll();
+    S.ws = 1;
+    place('files', 0, 0, 5, 8);
+    place('edit', 5, 0, 7, 8);
+    S.fileSel = 1;
+    focusWin('files');
+    layout(); redrawAll();
+    toast('selected', 'fb.c 68.4 KiB, opened in 04 EDITOR');
+  } else if (name === 'monitor') {
+    clearAll();
+    S.ws = 1;
+    place('mon', 0, 0, 7, 8);
+    place('net', 7, 0, 5, 4);
+    place('proc', 7, 4, 5, 4);
+    focusWin('mon');
+    layout(); redrawAll();
+    toast('sampling', 'monitor at 1 Hz, 64 s history, strip at 1 column per composite');
+  } else if (name === 'settings') {
+    clearAll();
+    S.ws = 1;
+    place('grid', 7, 0, 5, 4);
+    place('clock', 7, 4, 5, 4);
+    place('set', 0, 0, 7, 8);
+    S.setTab = 0;
+    focusWin('set');
+    layout(); redrawAll();
+  } else if (name === 'lock') {
+    baseDesktop();
+    showLock(true);
+  }
+  renderRail(); renderSlug(); drawRaster(); drawRuler();
+}
+function markLinks(name) {
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === name));
+}
+$('#themetog').addEventListener('mousedown', ev => {
+  const t = ev.target.closest('[data-stock]');
+  if (t) { ev.preventDefault(); setStock(t.getAttribute('data-stock'), true); }
+});
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop', false));
+window.addEventListener('resize', () => {
+  layout(); drawRaster();
+  if (overviewOn()) showOverview(true);
+  if ($('#lock').classList.contains('on')) renderLock();
+});
+
+/* =========================================================== start ==== */
+document.body.classList.add('blinkon');
+applyTheme(); applyAccent(); applyUI();
+computeGrid();
+setScene(location.hash.slice(1) || 'desktop', false);
+drawRaster(); drawRuler();
+setInterval(tick, 1000);
+
+</script>
+</body>
+</html>
