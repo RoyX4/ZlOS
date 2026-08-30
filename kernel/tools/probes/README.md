@@ -46,6 +46,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-image.py`
 - `probe-kbd-survives.py`
 - `probe-keys.py`
+- `probe-klog.py`
 - `probe-lock.py`
 - `probe-mesh.py`
 - `probe-mouse-range.py`

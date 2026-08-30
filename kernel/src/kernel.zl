@@ -3181,6 +3181,19 @@ fn draw_slug(sx, sy) {
     text_aa(sx, sy, "  GUT ", col)
     sx = sx + 6 * cw
     sx = legend_num(sx, sy, grid_gut(), col)
+    # ---- the ladder, which the slug went straight past ----------------------
+    # proto:2511-2512 prints `GUT ... LADDER <name> MIN STEP ...` and this went
+    # from GUT to MIN STEP. The accounting comment below lists LOAD and SKEW as
+    # deliberate drops and does not mention this one, so it was an omission
+    # rather than a decision. The name is not typed: seg_name(SEG_LADDER, 0) is
+    # the same string the LADDER tab's control shows.
+    lad = seg_name(SEG_LADDER, seg_sel(SEG_LADDER))
+    w = 10 * cw + ui_tw(lad, PW_SM, PW_MONO)
+    if slug_fit(sx, se, w) == 0 { return 0 }
+    text_aa(sx, sy, "  LADDER ", col)
+    sx = sx + 9 * cw
+    text_aa(sx, sy, lad, col)
+    sx = sx + ui_tw(lad, PW_SM, PW_MONO)
     # ---- THE THREE FIGURES THE SLUG SAID IT COULD NOT MEASURE ---------------
     #
     # A comment in this file declared MIN STEP, KNOCK and SKEW unmeasurable:
