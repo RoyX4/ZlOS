@@ -107,6 +107,9 @@ inventory, writes a current-runner inventory, and executes the receipt runner
 before booting QEMU. The generated CI receipt is intentionally ephemeral: it
 exists to make the host/QEMU join truthful for that runner, while the checked-in
 receipt remains the durable evidence from its named host and toolchain.
+The Ubuntu job installs `gcc-multilib` explicitly because `HT-042 jmptest32`
+must compile and run; omitting the 32-bit libc headers is a failed host evidence
+build, not an allowed unavailable target.
 
 ## Commands
 

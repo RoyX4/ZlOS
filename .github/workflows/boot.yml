@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            gcc clang nasm llvm lld \
+            gcc gcc-multilib clang nasm llvm lld \
             qemu-system-x86 ovmf \
             mtools dosfstools gdisk parted \
             xorriso grub-pc-bin grub-efi-amd64-bin
