@@ -385,6 +385,11 @@ static const struct cmd table[] = {
     { "disku",    215 }, { "sysinfo",  216 },
     { "typepane", 217 }, { "specimen", 217 },
     { "syspane",  218 },
+    /* THE FONT ATLAS HAD NO WORD AT ALL - reachable only by opening the
+     * catalogue and finding its tile. Every other pane in this block got one
+     * for the reason the comment above gives: a pane that cannot be put on
+     * screen cannot be checked against the reference. This one was missed. */
+    { "font",     221 }, { "atlas",    221 },
     { "sysmon",   219 }, { "monitor",  219 },
     { "settings", 220 }, { "prefs",    220 },
     { "mouse",   120 }, { "snake",   103 },

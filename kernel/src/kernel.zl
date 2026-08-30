@@ -5789,6 +5789,7 @@ fn run_command(cmd, arg) {
     if cmd == 217 { if wm_run() == 0 { return needs_wm("the type pane") }  return open_typepane() }
     if cmd == 219 { if wm_run() == 0 { return needs_wm("the monitor") }  return reopen_mon() }
     if cmd == 220 { if wm_run() == 0 { return needs_wm("settings") }  return reg_open(APP_SETTINGS) }
+    if cmd == 221 { if wm_run() == 0 { return needs_wm("the font atlas") }  return reg_open(45) }
     if cmd == 206 {
         if wm_run() == 0 { return needs_wm("the lock sheet") }
         ov_mode = OV_LOCK
@@ -7914,6 +7915,26 @@ fn files_draw_name(slot, x, y, colour) {
 #               and harder to spot because it looks like every other filesystem.
 #   crc32       nothing computes one. Summing the file on every frame to fill a
 #               row would be work done for a decoration.
+#   verdict     R.files puts sw('OK') on the selected row, and I drew it -
+#               unconditionally, with no test behind it, in a block whose whole
+#               comment is a list of things it refuses to invent. zlfs computes
+#               no per-file checksum and fs.c exposes no health field, so a
+#               green OK is a claim about INTEGRITY: the one thing a user would
+#               act on, and the strongest form an invented figure takes in this
+#               design system.
+#
+#               Deleted rather than replaced with a dash. The dashes that work
+#               elsewhere sit in table columns under printed headers - "Mode",
+#               "Checksum" - and the header supplies the question the dash
+#               declines. This position has no label at all, so a floating "-"
+#               at the right edge would answer a question nobody asked.
+#
+#               And NOT replaced with an extent-bounds check either, which is
+#               the tempting version: fs.c already validates every entry at
+#               mount and refuses to mount on failure, so the test is true by
+#               construction on any volume this pane can reach - a one-state
+#               swatch with a two-state legend, which is the fault fixed in the
+#               System Monitor two days ago.
 FILES_BTN_GAP = 8
 
 fn files_kv_row(x, y, w, k) {
@@ -7938,8 +7959,7 @@ fn files_detail(ax, ay, aw, ah, sel) {
     files_draw_name(sel, fdx + 76 * fdu, fdy, theme(TH_TEXT_HI))
     fdsz = fs_bytes(sel)
     num_aa(fdx + fdw - 60 * fdu - s3_numw(fdsz), fdy, fdsz, theme(TH_TEXT_2))
-    ui_txt(fdx + fdw - 60 * fdu + s3_numw(fdsz) - s3_numw(fdsz), fdy, "", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
-    pw_sw(fdx + fdw - ui_capsw("OK", PW_SM) - 12 * fdu, fdy, "OK", theme(TH_OK))
+
     fdy = fdy + pw_kvh()
     # ---- full path. zlfs is flat, so this is the whole of it.
     files_kv_row(fdx, fdy, fdw, "FULL PATH")

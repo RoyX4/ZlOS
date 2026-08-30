@@ -977,6 +977,53 @@ fn fa_atlas_here() {
     return 0
 }
 
+# THE ATLAS, DRAWN. The canvas was a flat fill with a four-segment zoom picker
+# over it, and ft_zoom had four occurrences in the whole tree: its declaration,
+# the picker's own selected index, and the line that writes it. Nothing scaled
+# because nothing was drawn to scale - the pane named after a font atlas showed
+# no glyphs at all.
+#
+# It could not: char_aa draws at the console cell and nothing else, and ui_txt
+# needs a STRING, which zl cannot build from a byte value. fb_glyph_scaled has
+# been in fb.c the whole time and was not bound. It is now, as char_sc, and the
+# zoom picker's 2x / 3x / 4x / 6x are the scales it passes.
+#
+# 95 glyphs, FONT_FIRST (space, 32) to FONT_LAST - the printable ASCII range
+# the atlas actually holds, which is the same 95 the caption reports from
+# atlas_g(). Rows wrap on the canvas width, and the loop stops when it runs out
+# of canvas rather than drawing off the bottom.
+FT_FIRST = 32
+FT_LAST  = 126
+
+fn ft_scale() {
+    if ft_zoom == 0 { return 2 }
+    if ft_zoom == 1 { return 3 }
+    if ft_zoom == 2 { return 4 }
+    return 6
+}
+
+fn ft_atlas(ax, ay, aw, ch) {
+    fau = ui()
+    fasc = ft_scale()
+    facw = cell_w() * fasc
+    fach = cell_h() * fasc
+    fax0 = ax + 12 * fau
+    fay0 = ay + 12 * fau
+    facols = idiv(aw - 24 * fau, facw)
+    if facols < 1 { return 0 }
+    fac = FT_FIRST
+    fai = 0
+    while fac <= FT_LAST {
+        fax = fax0 + (fai - idiv(fai, facols) * facols) * facw
+        fay = fay0 + idiv(fai, facols) * fach
+        if fay + fach > ay + ch - 12 * fau { return 0 }
+        char_sc(fax, fay, fac, fasc, ui_ink(S2_IK_HI))
+        fai = fai + 1
+        fac = fac + 1
+    }
+    return 0
+}
+
 fn ft_ui(ax, ay, aw, ah, dm) {
     u = ui()
     tbh = ui_tb_h()
@@ -984,6 +1031,7 @@ fn ft_ui(ax, ay, aw, ah, dm) {
     hit = 0 - 1
 
     s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+    if dm == 1 { ft_atlas(ax, ay, aw, ch) }
 
     ty = ay + ah - tbh
     ui_tb(ax, ty, aw, tbh, 1)

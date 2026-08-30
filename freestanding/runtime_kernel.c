@@ -960,6 +960,7 @@ extern void wm_resize(int win, int w, int h);
  * for on a freestanding target where an implicit int return is a real bug. */
 extern unsigned int fb_bits_per_pixel(void);
 extern unsigned int fb_pitch_bytes(void);
+extern void fb_glyph_scaled(int px, int py, char c, int scale, unsigned int fg);
 extern unsigned int intel_refresh_mhz_derived(void);
 extern void wm_move(int win, int x, int y);
 extern void wm_minimize(int win);
@@ -2439,6 +2440,13 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "text_big"))  { if (a[2].type==V_STR) console_text_aa2x((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "num_aa"))    { console_num_aa((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "char_aa"))   { console_char_aa((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    /* ONE GLYPH AT A CHOSEN SCALE. char_aa draws at the console cell and
+     * nothing else, and ui_txt needs a STRING - which zl cannot build from a
+     * byte value, having string literals and no string values. So the Font
+     * Atlas pane had no way to draw its own atlas, and its canvas was a flat
+     * fill with a zoom picker over it that scaled nothing. This is the missing
+     * primitive; fb_glyph_scaled has existed in fb.c all along. */
+    if (streq(name, "char_sc"))   { fb_glyph_scaled((int)a[0].num,(int)a[1].num,(char)(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "text_box"))  { console_set_text_box((int)a[0].num,(int)a[1].num); return zl_nil(); }
     if (streq(name, "cube"))      { console_cube((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mpoint"))    { console_pointer_show((int)a[0].num,(int)a[1].num); return zl_nil(); }
