@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — ci: provision the pinned AX201 host fixture (2d6cb8f)
+
+`codex/consolidate-all-2026-08-30` · 2 files changed, 16 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `.github/workflows/boot.yml`
+- `docs/evidence/host-test-build-identity-2026-08-28.md`
+
+</details>
+
 ## 2026-08-30 — ci: install 32-bit headers for EFI host evidence (c525b82)
 
 `codex/consolidate-all-2026-08-30` · 2 files changed, 4 insertions(+), 1 deletion(-)
