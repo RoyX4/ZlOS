@@ -58,6 +58,21 @@ jobs:
       - name: build the zl toolchain
         run: ./build.sh
 
+      # The EFI receipts join live QEMU markers to process-memory, PMM and
+      # page-table host evidence.  build-identity.json deliberately includes
+      # the exact compiler/toolchain, so a receipt produced on Kali is foreign
+      # to an Ubuntu runner even when the source tree is byte-identical.  Build
+      # and execute the host inventory on this runner before attempting that
+      # join; copying the checked-in receipt would turn a different toolchain
+      # into false "current build" evidence.
+      - name: build current-runner host evidence required by EFI receipts
+        if: matrix.script == 'kernel/tools/checks/verify-efi.sh'
+        run: |
+          python3 kernel/tools/generators/gen-build-identity.py --write --selftest
+          kernel/tests/host/build.sh
+          python3 kernel/tools/generators/gen-test-inventory.py --write --selftest
+          python3 kernel/tools/run/run-host-tests.py --run --selftest
+
       - name: ${{ matrix.script }}
         run: |
           set -o pipefail

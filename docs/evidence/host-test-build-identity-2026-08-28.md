@@ -93,13 +93,28 @@ generated receipt rather than this historical sequence.
 
 Exact current maturity counts remain in generated `program/FEATURE-STATUS.json`.
 
+## CI runner binding
+
+PR #8 exposed a missing consumer step rather than an EFI boot defect. The
+native-UEFI64 job reached every required guest marker, then correctly rejected
+`kernel/tests/host/test-run-receipt.json` as foreign. The checked-in receipt was
+produced with Kali's toolchain, while `build-identity.json` includes the exact
+compiler binary and tool versions and GitHub Actions rebuilt with Ubuntu's
+toolchain.
+
+The EFI workflow now regenerates the build identity, builds the full host-test
+inventory, writes a current-runner inventory, and executes the receipt runner
+before booting QEMU. The generated CI receipt is intentionally ephemeral: it
+exists to make the host/QEMU join truthful for that runner, while the checked-in
+receipt remains the durable evidence from its named host and toolchain.
+
 ## Commands
 
 ```sh
 ./build.sh
 (cd kernel/tests/host && ./build.sh)
 python3 kernel/tools/generators/gen-build-identity.py --write --selftest
-python3 kernel/tools/generators/gen-test-inventory.py --check --selftest
+python3 kernel/tools/generators/gen-test-inventory.py --write --selftest
 python3 kernel/tools/run/run-host-tests.py --run --selftest
 python3 kernel/tools/generators/gen-evidence-registry.py --write --selftest
 python3 kernel/tools/generators/gen-evidence-registry.py --check --selftest
