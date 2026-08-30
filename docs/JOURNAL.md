@@ -7,6 +7,17 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — Merge pull request #8 from RoyX4/codex/consolidate-all-2026-08-30 (f7f2e24)
+
+`main` · 602 files changed, 101066 insertions(+), 4153 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
 ## 2026-08-30 — ci: provision the pinned AX201 host fixture (2d6cb8f)
 
 `codex/consolidate-all-2026-08-30` · 2 files changed, 16 insertions(+), 1 deletion(-)
