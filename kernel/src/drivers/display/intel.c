@@ -1158,6 +1158,15 @@ u32 intel_data_m1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_DATA_M1); }
 u32 intel_data_n1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_DATA_N1); }
 u32 intel_link_m1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_LINK_M1); }
 u32 intel_link_n1_reg(void) { return mmio_r(trans_base() + TRANS_OFF_LINK_N1); }
+u32 intel_link_m1_field(void) { return intel_link_m1_reg() & M_N_FIELD_MASK; }
+u32 intel_link_n1_field(void) { return intel_link_n1_reg() & M_N_FIELD_MASK; }
+
+u32 intel_link_symbol_clock_khz(void)
+{
+    if (!intel_present() || trans_base() != TRANS_EDP_BASE) return 0;
+    int pll = intel_ddi_clock_select(0);
+    return intel_dp_link_symbol_khz(intel_dpll_link_rate(pll));
+}
 
 /* ==== the DPLLs =========================================================
  * This is the part a real modesetting driver lives or dies on, and the part

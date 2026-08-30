@@ -317,11 +317,17 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     hx2 = hx2 + ui_tnw(kl_lines(), S2_SM, 0) + 4 * u
     ui_txt(hx2, ay + 6 * u, "lines", theme(TH_TEXT_DIM), S2_SM, 0)
     # THE RING IS DESCRIBED, NOT ITS LOSSES. "0 dropped" was asserted about a
-    # ring that did not exist; this one is real and DOES drop - it is 160 rows
+    # ring that did not exist; this one is real and DOES drop - its capacity is
+    # read from term.c rather than repeated here
     # and wraps - but nothing counts what fell off the back, so the honest thing
     # is to say how deep it is and not to claim a figure for what it lost.
-    klrw = ui_tw("scrollback ring, 160 rows, view held at the newest", S2_SM, 0)
-    ui_txt(ax + aw - 10 * u - klrw, ay + 6 * u, "scrollback ring, 160 rows, view held at the newest", theme(TH_TEXT_DIM), S2_SM, 0)
+    klrw = ui_tw("scrollback ring, ", S2_SM, 0) + ui_tnw(term_rows(), S2_SM, 0) + ui_tw(" rows, newest held", S2_SM, 0)
+    klrx = ax + aw - 10 * u - klrw
+    ui_txt(klrx, ay + 6 * u, "scrollback ring, ", theme(TH_TEXT_DIM), S2_SM, 0)
+    klrx = klrx + ui_tw("scrollback ring, ", S2_SM, 0)
+    ui_txtn(klrx, ay + 6 * u, term_rows(), theme(TH_TEXT_DIM), S2_SM, 0)
+    klrx = klrx + ui_tnw(term_rows(), S2_SM, 0)
+    ui_txt(klrx, ay + 6 * u, " rows, newest held", theme(TH_TEXT_DIM), S2_SM, 0)
 
     # ---- the table ----------------------------------------------------------
     ty2 = ay + hdh
@@ -671,8 +677,7 @@ fn rd_tick(win) {
 # and pushes the ASCII column off the end. Four-byte groups are 35 characters,
 # and the row comes to 514 px inside a 548 px content box.
 # ==============================================================================
-HX_BASE = 0x100000                  # where boot.S is loaded; always mapped
-hx_page = 0
+hx_off = 0
 
 # HOW MANY ROWS AND HOW BIG A PAGE, FROM THE CLIENT HEIGHT.
 #
@@ -690,6 +695,17 @@ fn hx_rows(ah) {
     return hr
 }
 fn hx_pagesz(ah) { return hx_rows(ah) * 16 }
+fn hx_maxoff(ah) {
+    hm = kernel_end() - kernel_start() - hx_pagesz(ah)
+    if hm < 0 { return 0 }
+    return hm
+}
+fn hx_clamp(ah) {
+    if hx_off < 0 { hx_off = 0 }
+    hm = hx_maxoff(ah)
+    if hx_off > hm { hx_off = hm }
+    return hx_off
+}
 
 fn hx_ui(ax, ay, aw, ah, dm) {
     u = ui()
@@ -697,6 +713,7 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     tbh = ui_tb_h()
     sbh = ui_sb_h()
     hit = 0 - 1
+    hx_clamp(ah)
 
     # ---- the header row: label, path/size well, three page chips ----------
     ui_tb(ax, ay, aw, tbh, 0)
@@ -717,7 +734,7 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     # already flushes itself.
     w0 = ui_chip_w("<")
     w1 = ui_chip_w(">")
-    w2 = ui_tnw(hx_page * hx_pagesz(ah), S2_MD, S2_MONO)
+    w2 = ui_tnw(hx_off, S2_MD, S2_MONO)
     chh = ui_chip_h()
     chy = ay + (tbh - chh) / 2
     cx2 = ax + aw - 8 * u - w2
@@ -735,10 +752,10 @@ fn hx_ui(ax, ay, aw, ah, dm) {
         # NOT "/dev/kmem". There is no /dev on this system - zlfs has no device
         # nodes at all - so that label named a path nobody can open and implied
         # a Unix indirection that does not exist here. What this pane actually
-        # reads is HX_BASE, the physical address boot.S is loaded at, straight
-        # through peek8. Saying so is both true and more useful: it tells the
-        # reader what they are looking at.
-        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "phys 0x100000, the loaded image", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
+        # reads is the linker-bounded loaded image, straight through peek8.
+        # Saying so is both true and more useful: it tells the reader what they
+        # are looking at without retyping the link address.
+        ui_txt(lx + 9 * u, s2_mcy(wy, wh), "physical loaded kernel image", ui_ink(S2_IK_HI), S2_MD, S2_MONO)
         # "256 B/page" WAS WRITTEN AND THE PANE DELIVERS WHAT IT CAN DRAW.
         # Eight rows of sixteen bytes is 128 at the shipped geometry, not 256,
         # and the number sits in the slot the reference fills with a computed
@@ -755,7 +772,7 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     # instead of the first three pages of it.
     # THE PAGE TEST DISABLES, IT DOES NOT ACTIVATE.
     #
-    # This passed `hx_page > 0` as ui_chip's ACTIVE argument, which uikit.c
+    # This passed the old page index as ui_chip's ACTIVE argument, which uikit.c
     # forwards to ctl_state - and ctl_state returns UI_ST_ON before it tests
     # hover or press, so pill_face paints the chip with UI_COLOR_KNOCK, the KO
     # edge and reversed-out ink. Off page 0 the back chip therefore latched
@@ -763,9 +780,9 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     # pointer; the forward chip on the next line passes a literal 0 and renders
     # correctly, which is why the pair looked like two different controls.
     # proto:1783-1784 draws both as plain buttons.
-    if ui_chip(cx0, chy, "<", 0) == 1 { hit = 0 }
-    if ui_chip(cx1, chy, ">", 0) == 1 { hit = 1 }
-    ui_txtn(cx2, chy + 4 * u, hx_page * hx_pagesz(ah), ui_ink(S2_IK_T5), S2_MD, S2_MONO)
+    if ui_chip_st(cx0, chy, "<", 0, hx_off == 0) == 1 { hit = 0 }
+    if ui_chip_st(cx1, chy, ">", 0, hx_off >= hx_maxoff(ah)) == 1 { hit = 1 }
+    ui_txtn(cx2, chy + 4 * u, hx_off, ui_ink(S2_IK_T5), S2_MD, S2_MONO)
 
     # ---- the column header, as the reference has it -------------------------
     # R.hex is a TBL of offset / bytes / ascii at 16, 62 and 22 percent, and the
@@ -793,7 +810,7 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     r = 0
     while r < hx_rows(ah) {
         if by + lh <= py + ph {
-            addr = HX_BASE + hx_page * hx_pagesz(ah) + r * 16
+            addr = kernel_start() + hx_off + r * 16
             if dm == 1 { ac_draw_base(bx, by, addr, 8, 16, ui_ink(S2_IK_DIM)) }
             if dm == 1 { char_aa(as0, by, 124, ui_ink(S2_IK_DIM)) }
             if dm == 1 { char_aa(as0 + 17 * cw, by, 124, ui_ink(S2_IK_DIM)) }
@@ -829,24 +846,20 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     # happened to hold sixteen rows, and drifted further from the address in
     # the rows above it at every other size. `ah` is in scope here; it is the
     # same value the loop three lines up paged with.
-    if dm == 1 { ac_draw_base(tx, ty, hx_page * hx_pagesz(ah), 4, 16, ui_ink(S2_IK_T5)) }
+    if dm == 1 { ac_draw_base(tx, ty, hx_off, 4, 16, ui_ink(S2_IK_T5)) }
     ui_txt(ax + aw - 9 * u - ui_tw("16 bytes/row - read only", S2_SM, S2_MONO), ty, "16 bytes/row - read only", ui_ink(S2_IK_T5), S2_SM, S2_MONO)
     return hit
 }
 
 # THE CHIPS ARE A CURSOR NOW, so the hit is a direction and not a page number.
-# hx_page = g worked when g was 0, 1 or 2 and the chips were "+0/+256/+512";
-# with back and forward it has to step. Clamped at zero, and at the top by the
-# image this pane can actually reach - HX_BASE is the load address and there is
-# no accessor for the image's length, so the ceiling is stated as what it is:
-# a bound this pane cannot read, held at 64 pages so a wrong keypress cannot
-# walk the viewer off into unmapped memory and fault the machine.
-HX_MAXPAGE = 64
-fn hx_apply(g) {
-    if g == 0 { hx_page = hx_page - 1 }
-    if g == 1 { hx_page = hx_page + 1 }
-    if hx_page < 0 { hx_page = 0 }
-    if hx_page > HX_MAXPAGE { hx_page = HX_MAXPAGE }
+# The old three fixed offsets became back and forward steps. Clamp at zero and
+# at the linker-exported end of the loaded image, so resize can change the page
+# size without changing which byte the cursor names or walking into unmapped
+# memory.
+fn hx_apply(g, ah) {
+    if g == 0 { hx_off = hx_off - hx_pagesz(ah) }
+    if g == 1 { hx_off = hx_off + hx_pagesz(ah) }
+    hx_clamp(ah)
     return 0
 }
 
@@ -1325,7 +1338,7 @@ fn sys2_event(id, win, ety, ecode, ex, ey) {
     if g < 0 { return 0 }
     if id == APP_KLOG { kl_apply(g) }
     if id == APP_REND { rd_apply(g) }
-    if id == APP_HEXV { hx_apply(g) }
+    if id == APP_HEXV { hx_apply(g, wm_ch(win)) }
     if id == APP_FBUF { fbv_apply(g) }
     if id == APP_TTY  { cn_apply(g) }
     if id == APP_FONT { ft_apply(g) }

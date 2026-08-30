@@ -68,19 +68,16 @@
 #define EASE_MS_PULSE     1000
 #define EASE_MS_PULSE_SLOW 2600
 #define EASE_MS_OV         160
-#define EASE_MS_TOAST      160
 #define EASE_MS_SWEEP     7000
 
 /* The transforms each animation starts from, thousandths.
  * zwin  from opacity 0, scale(.965) translateY(10px)
  * zpop  from opacity 0, translateY(-6px) scale(.98)
  * zov   from opacity 0, scale(1.03)   - note it starts ABOVE 1 */
-#define EASE_WIN_FROM_SCALE  965
-#define EASE_WIN_FROM_DY      10   /* pixels, at 1x */
 #define EASE_POP_FROM_SCALE  980
 #define EASE_POP_FROM_DY      -6   /* pixels, at 1x - upward */
 #define EASE_OV_FROM_SCALE  1030
-#define EASE_TOAST_FROM_DY    10
+#define EASE_TOAST_FROM_DY     4   /* proto:966 translateY(4px) */
 
 /* Evaluate a named curve at time x (0..1000). Returns progress 0..1000. */
 int ease_apply(int curve, int x);

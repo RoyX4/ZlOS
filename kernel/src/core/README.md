@@ -25,12 +25,18 @@ Core kernel services shared across boot routes and subsystems.
 
 ## Direct tracked contents
 
+- `anon_memory.c`
+- `anon_memory.h`
 - `arena.c`
 - `console.c`
 - `crash.c`
 - `crash.h`
 - `exec.c`
 - `heap.c`
+- `pmm.c`
+- `pmm.h`
+- `process_memory.c`
+- `process_memory.h`
 - `sched.c`
 - `telemetry.h`
 - `version.h`

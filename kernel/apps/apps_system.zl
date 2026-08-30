@@ -310,13 +310,14 @@ fn si_draw(ax, ay, aw, ah) {
     if apic_on() == 0 { label(sidx + 12 * u, ay + 6 * u, "pic only", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
 
     # the table: the reference's 30 / 24 / 46
+    siwh = 72 * u
     ui_grid("150|90|*")
     ui_colhead(ax, ay + hdh, aw, "register|value|decode", 0 - 1, 0)
     ry = ay + hdh + ui_colhead_h()
     rh = ui_growh()
     i = 0
     while i < SI_N {
-        if ry + rh <= ay + ah - 8 * u {
+        if ry + rh <= ay + ah - siwh - 8 * u {
             ui_grow(ax, ry, aw, i, 0)
             ui_gcell(ax, aw, ry, rh, 0, si_reg(i), theme(TH_TEXT_2), SI_M_MONO)
             if si_isflag(i) == 1 {
@@ -329,6 +330,28 @@ fn si_draw(ax, ay, aw, ah) {
         }
         i = i + 1
     }
+
+    # THE DERIVATION WELL. These are the three live operands intel.c uses for
+    # the eDP pixel-clock result: link symbol clock, PIPE_LINK_M1 and
+    # PIPE_LINK_N1. Zero propagates as unknown on hardware without that block;
+    # no prototype fixture is substituted.
+    wy = ay + ah - siwh
+    ui_mono(ax + 10 * u, wy, aw - 20 * u, siwh - 6 * u, 0)
+    label(ax + 20 * u, wy + 8 * u, "dpll_from_link: link kHz x M / N", theme(TH_TEXT_2), T_CAPTION, W_REG)
+    sx = ax + 20 * u
+    sy = wy + 27 * u
+    label_num(sx, sy, gpu_link_khz(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    sx = sx + s3_numw(gpu_link_khz()) + 5 * u
+    label(sx, sy, "x", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    sx = sx + 12 * u
+    label_num(sx, sy, gpu_link_m(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    sx = sx + s3_numw(gpu_link_m()) + 5 * u
+    label(sx, sy, "/", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    sx = sx + 12 * u
+    label_num(sx, sy, gpu_link_n(), theme(TH_TEXT_HI), T_CAPTION, W_REG)
+    label(ax + 20 * u, wy + 46 * u, "=", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label_num(ax + 34 * u, wy + 46 * u, gpu_clk(), theme(TH_TEXT_HI), T_CAPTION, W_BOLD)
+    label(ax + 34 * u + s3_numw(gpu_clk()) + 5 * u, wy + 46 * u, "kHz pixel clock", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     return 0
 }
 

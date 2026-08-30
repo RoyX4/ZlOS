@@ -599,6 +599,7 @@ extern int  fs_why(void);
 extern unsigned fs_generation(void);
 extern int  smp_ready(void);
 extern int  term_lines(void);
+extern int  term_rows(void);
 extern int  term_ch(int line, int col);
 extern int  wm_win_us(int win);   /* per-window app time; wm_frame_us is the whole frame */
 extern int  wm_set_win_ws(int win, int n);
@@ -618,6 +619,7 @@ extern int ui_metric(int role);
  * and this tree has already paid for that once, so all five are registered
  * below and check-zlcalls.py resolves every zl call site against this list. */
 extern unsigned ui_ratio_q4(unsigned a, unsigned b);
+extern unsigned ui_lstar_q2(unsigned rgb);
 extern unsigned ui_ceil_dn_q4(unsigned rgb);
 extern unsigned ui_ceil_up_q4(unsigned rgb);
 extern int ui_knockout_get(void);
@@ -632,6 +634,15 @@ extern int  ui_track_get(void);
 extern int  ui_track_set(int on);
 extern int ui_focus_bar_dp(void);
 extern int ui_focus_bar_set(int n);
+extern int ui_focus_bar_min_dp(void);
+extern int ui_focus_bar_max_dp(void);
+#ifdef ZL_EFI
+extern unsigned long long efi_kernel_image_start(void);
+extern unsigned long long efi_kernel_image_end(void);
+#else
+extern char __kernel_start[];
+extern char __kernel_end[];
+#endif
 extern unsigned ui_ref_color(int which);
 extern int ui_ref_num(int which);
 /* THE LABEL AND DISPLAY STYLES, and the ATLAS TABLE - what the SYSTEM and TYPE
@@ -726,6 +737,7 @@ extern void ui_card(int x, int y, int w, int h);
 extern int  ui_chip_w(const char *s);
 extern int  ui_chip_h(void);
 extern int  ui_chip(int x, int y, const char *s, int active);
+extern int  ui_chip_state(int x, int y, const char *s, int active, int disabled);
 extern int  ui_badge_w(const char *s);
 extern int  ui_badge_h(void);
 extern void ui_badge(int x, int y, const char *s, unsigned rgb);
@@ -1018,6 +1030,9 @@ extern int  intel_vtotal(void);
 extern int  intel_vactive(void);
 extern unsigned int intel_refresh_mhz(void);
 extern unsigned int intel_pixel_clock_khz(void);
+extern unsigned int intel_link_m1_field(void);
+extern unsigned int intel_link_n1_field(void);
+extern unsigned int intel_link_symbol_clock_khz(void);
 extern int  intel_read_edid(void);
 extern int  intel_edid_pin(void);
 extern int  intel_edid_vendor_char(int i);
@@ -1670,6 +1685,9 @@ Value zl_calln(const char *name, int n, ...)
         return zl_num((double)(d_ ? d_ : intel_refresh_mhz()));
     }
     if (streq(name, "gpu_clk"))    return zl_num((double)intel_pixel_clock_khz());
+    if (streq(name, "gpu_link_m")) return zl_num((double)intel_link_m1_field());
+    if (streq(name, "gpu_link_n")) return zl_num((double)intel_link_n1_field());
+    if (streq(name, "gpu_link_khz")) return zl_num((double)intel_link_symbol_clock_khz());
     if (streq(name, "edid_read"))  return zl_num((double)intel_read_edid());
     if (streq(name, "edid_pin"))   return zl_num((double)intel_edid_pin());
     if (streq(name, "edid_vc"))    return zl_num((double)intel_edid_vendor_char((int)a[0].num));
@@ -1732,6 +1750,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "term_hide_boot")) { term_hide_boot(); return zl_nil(); }
     if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
     if (streq(name, "term_lines")) return zl_num((double)term_lines());
+    if (streq(name, "term_rows"))  return zl_num((double)term_rows());
     if (streq(name, "term_ch"))    return zl_num((double)term_ch((int)a[0].num, (int)a[1].num));
     if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
                                                (unsigned int)(unsigned long long)a[4].num,
@@ -1849,6 +1868,7 @@ Value zl_calln(const char *name, int n, ...)
      * kernel.zl's set_dec() prints it. Order-independent - the ratio is
      * defined lighter over darker, so no caller has to know which is on top. */
     if (streq(name, "ui_ratio"))   return zl_num((double)ui_ratio_q4((unsigned)a[0].num,(unsigned)a[1].num));
+    if (streq(name, "ui_lstar"))   return zl_num((double)ui_lstar_q2((unsigned)a[0].num));
     if (streq(name, "ui_ceil_dn")) return zl_num((double)ui_ceil_dn_q4((unsigned)a[0].num));
     if (streq(name, "ui_ceil_up")) return zl_num((double)ui_ceil_up_q4((unsigned)a[0].num));
     /* the two live controls. Both return the state they SETTLED on, not the
@@ -1864,6 +1884,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_knock_on"))return zl_num((double)ui_knockout_get());
     if (streq(name, "ui_fbar"))    return zl_num((double)ui_focus_bar_set((int)a[0].num));
     if (streq(name, "ui_fbar_dp")) return zl_num((double)ui_focus_bar_dp());
+    if (streq(name, "ui_fbar_min"))return zl_num((double)ui_focus_bar_min_dp());
+    if (streq(name, "ui_fbar_max"))return zl_num((double)ui_focus_bar_max_dp());
     /* the comparison ladder. design.h's ZD_REF_* block by index, so kernel.zl
      * can compute against the parent designs with no colour literal of its
      * own - see ui.h's enum for the numbering. */
@@ -2036,6 +2058,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_chip_w"))  { if (a[0].type==V_STR) return zl_num((double)ui_chip_w(a[0].str)); return zl_num(0.0); }
     if (streq(name, "ui_chip_h"))  return zl_num((double)ui_chip_h());
     if (streq(name, "ui_chip"))    { if (a[2].type==V_STR) return zl_num((double)ui_chip((int)a[0].num,(int)a[1].num,a[2].str,(int)a[3].num)); return zl_num(0.0); }
+    if (streq(name, "ui_chip_st")) { if (a[2].type==V_STR) return zl_num((double)ui_chip_state((int)a[0].num,(int)a[1].num,a[2].str,(int)a[3].num,(int)a[4].num)); return zl_num(0.0); }
     if (streq(name, "ui_badge_w")) { if (a[0].type==V_STR) return zl_num((double)ui_badge_w(a[0].str)); return zl_num(0.0); }
     if (streq(name, "ui_badge_h")) return zl_num((double)ui_badge_h());
     if (streq(name, "ui_badge"))   { if (a[2].type==V_STR) ui_badge((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num); return zl_nil(); }
@@ -2619,6 +2642,20 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "arena_hw"))      return zl_num((double)arena_high_water());
     if (streq(name, "arena_refused")) return zl_num((double)arena_refusals());
     if (streq(name, "arena_base"))    return zl_num((double)arena_base_addr());
+    if (streq(name, "kernel_start")) {
+#ifdef ZL_EFI
+        return zl_num((double)efi_kernel_image_start());
+#else
+        return zl_num((double)(zl_uptr)__kernel_start);
+#endif
+    }
+    if (streq(name, "kernel_end")) {
+#ifdef ZL_EFI
+        return zl_num((double)efi_kernel_image_end());
+#else
+        return zl_num((double)(zl_uptr)__kernel_end);
+#endif
+    }
     if (streq(name, "arena_resets"))  return zl_num((double)arena_resets());
     /* The one that makes the rest of the design work, and it was missed on the
      * first pass: without a reset exposed, a bump allocator is a one-shot.

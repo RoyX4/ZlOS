@@ -25,6 +25,7 @@ x86 and x86-64 CPU, interrupt, paging, syscall, and low-level support.
 
 ## Direct tracked contents
 
+- `address_space_contract.json`
 - `apic.c`
 - `cpu.c`
 - `divmod.c`
@@ -32,11 +33,15 @@ x86 and x86-64 CPU, interrupt, paging, syscall, and low-level support.
 - `idt.c`
 - `ksetjmp.S`
 - `memmap.h`
+- `page_table_txn.c`
+- `page_table_txn.h`
 - `paging.c`
 - `pci.c`
 - `rtc.c`
 - `smp.c`
 - `support.c`
+- `user_syscalls.json`
+- `user_syscalls_generated.h`
 - `usermode.c`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../../docs/CODE-MAP.md)

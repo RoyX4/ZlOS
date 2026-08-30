@@ -3,7 +3,7 @@
 **Status: FROZEN CONTRACT.** Four implementation agents build from this document
 without talking to each other or to the author. Where this document and any
 other document in the tree disagree, **this document wins** — including
-`docs/design/desktop-look.md`, whose ranked bug list is partially stale (see
+`kernel/docs/desktop/desktop-look.md`, whose ranked bug list is partially stale (see
 §0.3), and including `design.h`'s own header comment, which becomes false the
 moment this lands and is rewritten in the same commit (§10.1).
 
@@ -78,7 +78,7 @@ Everything else is PLATE. The result reads as one direction: a printed page.
 ### 0.3 Two phantom prerequisites, struck
 
 PLATE's plan makes two items hard blockers. **Both are already fixed in this
-tree. Do not do either. Do not cite `docs/design/desktop-look.md` for them.**
+tree. Do not do either. Do not cite `kernel/docs/desktop/desktop-look.md` for them.**
 
 - **Icon atlas.** `fb_icon24` (`fb.c:3635-3656`) selects the native atlas per
   scale and bilinear-resamples only for scales neither atlas covers.
@@ -1208,7 +1208,7 @@ one thing this kernel does well.
 
 Any change that discards one of these is a regression, not a redesign.
 
-**`kernel/font_sub.c`, `kernel/fb.c:1394-1417` (`draw_glyph`'s subpixel
+**`kernel/src/graphics/fonts/font_sub.c`, `kernel/src/graphics/framebuffer/fb.c:1394-1417` (`draw_glyph`'s subpixel
 branch), `blend_sub`** — subpixel LCD text rendering, three alphas per pixel.
 **Preserved byte-for-byte, and its reach is NOT extended (§0.4).** Note for the
 record: `gen_subfont.py:39-43` explicitly rejects the (1,2,3,2,1)/9 FIR as
@@ -1218,39 +1218,39 @@ bias** and a light substrate flips fringe polarity without adding a cast. Any
 risk item claiming "the light ground may show a warm/cool cast from the FIR" is
 naming the wrong mechanism.
 
-**`kernel/fb.c:195-273`** — gamma-correct blending in **linear light**, the two
+**`kernel/src/graphics/framebuffer/fb.c:195-273`** — gamma-correct blending in **linear light**, the two
 boot-built LUTs, no floating point. Preserved and **load-bearing**: 1px black
 rules on warm paper and 16:1 text edges are precisely where a non-linear blend
 shows as a coloured fringe. This direction stresses the LUTs *harder* than the
 dark palette did, and in a better part of the ramp — `srgb_to_lin[0..7]` all
 collapse to linear 0, so the dark end is degenerate and the light end is not.
 
-**`kernel/font_aa.c`** (DejaVu Sans Mono, FreeType-hinted) and
-**`kernel/gen_prop_font.py`** (DejaVu Sans at 16/24/32, regular and bold, with
+**`kernel/src/graphics/fonts/font_aa.c`** (DejaVu Sans Mono, FreeType-hinted) and
+**`kernel/tools/generators/gen_prop_font.py`** (DejaVu Sans at 16/24/32, regular and bold, with
 per-glyph advances) — both faces kept, both used more deliberately: **mono owns
 data, proportional bold owns labels.**
 
-**`kernel/fb.c:1984-2031` (`fb_rrect`)** — anti-aliased rounded corners, 4x4
+**`kernel/src/graphics/framebuffer/fb.c:1984-2031` (`fb_rrect`)** — anti-aliased rounded corners, 4x4
 supersampled per-corner coverage. **Kept and still called**: its radius-0 path
 draws every frame in the system, and its corner supersampling is what makes
 `ZD_R_2` a defensible threshold rather than an arbitrary number (§2.1).
 
-**`kernel/fb.c:2453` (`fb_line`)** — Wu's algorithm, 16.16 accumulator. Already
+**`kernel/src/graphics/framebuffer/fb.c:2453` (`fb_line`)** — Wu's algorithm, 16.16 accumulator. Already
 anti-aliased; the sparkline diagonals and the close glyph both depend on it.
 
-**`kernel/fb.c:3635-3656` (`fb_icon24`) and `kernel/icons.c`** — the native
+**`kernel/src/graphics/framebuffer/fb.c:3635-3656` (`fb_icon24`) and `kernel/src/graphics/icons/icons.c`** — the native
 24 and 48 atlases and the per-scale selection. **Must not be reintroduced as a
 nearest-neighbour upscale.**
 
-**`kernel/gen_icons.py`** — icons as geometry drawn at a supersampled master and
+**`kernel/tools/generators/gen_icons.py`** — icons as geometry drawn at a supersampled master and
 box-filtered, with `render()` building a separate master per output size. Kept,
 and given the module/stroke/construction grammar of §7 rather than replaced.
 
-**`kernel/ui.h` `UI_DP()` and the q8 UI scale** — the metric mechanism, kept
+**`kernel/src/graphics/ui/ui.h` `UI_DP()` and the q8 UI scale** — the metric mechanism, kept
 exactly. Four values are retuned (`row_h` 28→24, `radius` 16→0, `title_h` 36→28;
 `pad` 12 and `gap` 8 unchanged) and ten are added (§3.2).
 
-**`kernel/ui.h`'s 29-role `UI_COLOR` enum and `struct ui_theme`'s field order.**
+**`kernel/src/graphics/ui/ui.h`'s 29-role `UI_COLOR` enum and `struct ui_theme`'s field order.**
 **This is the highest-probability way to break the port and it must be read
 before touching `ui.h`.** `ui_color()` indexes `&theme.bg` by an integer role
 (`ui.c:154-159`), and `kernel.zl` passes role **numbers** (`TH_BG = 0` …
@@ -1263,14 +1263,14 @@ ui_color() index moves."*
 > field order is changed in lockstep. `title_off_bot` stays after the
 > zl-visible contiguous array. No exceptions.**
 
-**`kernel/ui.c`'s immediate-mode layout cursor and the hit-test-by-redraw
+**`kernel/src/graphics/ui/ui.c`'s immediate-mode layout cursor and the hit-test-by-redraw
 contract** — no widget takes an action as an argument. Nothing in this design
 needs retained state.
 
-**`kernel/ui.c:353-365` (`ui_luminance_q16`, `ui_ink_on`)** — verified correct
+**`kernel/src/graphics/ui/ui.c:353-365` (`ui_luminance_q16`, `ui_ink_on`)** — verified correct
 against the new palette (§1.7). **Do not touch.**
 
-**`kernel/wm.c`'s window manager** — z-order, drag, resize, tabs, and its
+**`kernel/src/graphics/windowing/wm.c`'s window manager** — z-order, drag, resize, tabs, and its
 per-window `fb_surface` cache. `shell_state_key` already carries `focused`, so
 the inversion-based focus signal re-keys correctly. Tiling reduces how often the
 drag path runs; it does not change what it does.
@@ -1280,9 +1280,9 @@ maps primitives to semantic roles, `kernel.zl` names only roles. Not merely
 preserved but **tightened**: `dock_fill()` and `island_fill()` disappear with
 their call sites, and every surviving literal routes through `ui_color()`.
 
-**`kernel/fb.c:459-512` (`fb_gradient`'s ordered 4x4 dither),
+**`kernel/src/graphics/framebuffer/fb.c:459-512` (`fb_gradient`'s ordered 4x4 dither),
 `fb.c:574` (`fb_shadow`), `fb_glow`, `fb_blur_paint`, `fb_grad_conic`,
-`fb_grad_radial`, `fb_rrect_grad_top`, `kernel/ease.c`** — **code preserved
+`fb_grad_radial`, `fb_rrect_grad_top`, `kernel/src/graphics/ui/ease.c`** — **code preserved
 untouched. The desktop shell calls none of them.** Apps and the browser may
 still call them. **This is the single largest rot risk in the spec and §10.3 is
 its mitigation, not a comment.**

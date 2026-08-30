@@ -228,6 +228,7 @@ int ui_atlas_for_role(int role, int weight); /* which one, at this scale, now */
  * caller damages afterwards, because surfaces belong to wm.c and this layer
  * must not know about them. */
 unsigned ui_ratio_q4(unsigned a, unsigned b);
+unsigned ui_lstar_q2(unsigned rgb);       /* CIE L* x100, from live sRGB     */
 unsigned ui_ceil_dn_q4(unsigned rgb);   /* room downward: ratio to black    */
 unsigned ui_ceil_up_q4(unsigned rgb);   /* room upward:   ratio to white    */
 int ui_us_get(void);                    /* 0 measured, 1 repaint, 2 off     */
@@ -245,6 +246,8 @@ int ui_track_set(int on);
 #define UI_FBAR_MAX 6
 int ui_focus_bar_dp(void);
 int ui_focus_bar_set(int n);
+int ui_focus_bar_min_dp(void);
+int ui_focus_bar_max_dp(void);
 
 /* THE COMPARISON LADDER, by index. design.h's ZD_REF_* block - the PARENT
  * designs' tokens, kept so the settings pane can COMPUTE the comparison rather
@@ -415,11 +418,11 @@ int wm_region_fragmentation_probe(void);
  * a decision rather than a shortcut. An animation NEVER changes what exists:
  * it draws, and the caller decides lifetime. */
 #define ANIM_NONE   0
-#define ANIM_OPEN   1   /* scale 82 -> 100, the window open        */
-#define ANIM_CLOSE  2   /* scale 100 -> 70, its mirror             */
 #define ANIM_PRESS  3   /* scale 100 -> 96 -> 100, zpress          */
 #define ANIM_PULSE  4   /* opacity 0 -> 40 -> 0, zpulse            */
-#define ANIM_FADE   5   /* opacity up, zov / zpop / ztoast         */
+#define ANIM_FADE   5   /* opacity up, zov / zpop                  */
+#define ANIM_FOCUS  6   /* RISE transition for a value flip        */
+#define ANIM_TOAST  7   /* toast rise/fade, ZD_MS_TOAST            */
 
 int  wm_anim(int win, int kind);      /* 0 = refused, every slot busy */
 int  wm_anim_running(int win);        /* the kind, or 0               */
@@ -431,18 +434,15 @@ int  wm_anim_alpha(int win);          /* 0..255, 255 when settled     */
  * because wm.c does not know where the dock is. The id must be negative or it
  * collides with a window index and wm_anim_at refuses. */
 #define WM_FX_TOAST  (-1)     /* wm.c's own: ztoast                          */
-#define WM_FX_GHOST  (-2)     /* wm.c's own: ANIM_CLOSE, the closing window  */
 #define WM_FX_USER   (-16)    /* the policy layer's, -16 and downward        */
 
 int  wm_anim_at(int id, int kind, int x, int y, int w, int h);
 int  wm_anim_scale(int id);           /* thousandths; 1000 when settled      */
 int  wm_anim_progress(int id, int kind);  /* eased 0..1000, or -1 if not run */
 
-/* zpulse and zsweep are `infinite` in the reference and so hold no slot at
- * all - an entry that never ends would take a quarter of the timeline for the
- * life of the boot. This is a pure function of the clock: opacity 0..255,
- * never below the reference's .55 floor, and 255 when animations are off. */
+/* Slot-free steps(1) clock: 255/0, steady 255 with motion off. */
 int  wm_pulse(int period_ms);
+void wm_caret_watch(int x, int y, int w, int h);
 
 /* zsweep, the wallpaper band. OFF until asked - the reference keeps it behind
  * its CRT toggle too - and gated by wm_set_anim on top of that. */
@@ -450,8 +450,8 @@ void wm_set_sweep(int on);
 int  wm_sweep_enabled(void);
 int  wm_sweep_y(void);            /* the band's quantised top edge, or 0 off */
 
-/* Close it AND shrink a ghost of it away - the gesture form of wm_close.
- * wm_close() stays instantaneous, because teardown loops and policy use it. */
+/* Gesture entry point. PRESSWORK closes immediately; no drawable after-image
+ * survives the model entry being removed. */
 void wm_close_fx(int win);
 
 void wm_damage(int x, int y, int w, int h);   /* mark a screen region dirty  */
@@ -815,6 +815,7 @@ int  ui_search(int x, int y, int w, const char *text, const char *placeholder);
 int  ui_chip_w(const char *s);
 int  ui_chip_h(void);
 int  ui_chip(int x, int y, const char *s, int active);
+int  ui_chip_state(int x, int y, const char *s, int active, int disabled);
 
 /* ---- item lists ----------------------------------------------------------- */
 int  ui_items_count(const char *items);

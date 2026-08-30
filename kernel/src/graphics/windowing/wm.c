@@ -1102,8 +1102,6 @@ void wm_damage_win(int win)
  *
  * WHAT EACH KIND IS, and which are drawn rather than merely stored:
  *
- *   ANIM_OPEN    scale from 82% to 100%   - the window open (was `anim`)
- *   ANIM_CLOSE   scale from 100% to 82%   - its mirror
  *   ANIM_PRESS   scale 100 -> 96 -> 100   - zpress, a control acknowledging
  *   ANIM_PULSE   opacity 0 -> 40 -> 0     - zpulse, attention without motion
  *   ANIM_FADE    opacity 0 -> 100         - zov/zpop/ztoast, the opacity fades
@@ -1115,8 +1113,6 @@ void wm_damage_win(int win)
 #define ANIM_MAX 8
 
 #define ANIM_NONE   0
-#define ANIM_OPEN   1
-#define ANIM_CLOSE  2
 #define ANIM_PRESS  3
 #define ANIM_PULSE  4
 #define ANIM_FADE   5
@@ -1130,15 +1126,13 @@ void wm_damage_win(int win)
  * one frame - the refused option, shipped. The prototype transitions six
  * properties on this change; this animates the one that carries it, the
  * header band, over RISE. */
-#define ANIM_FOCUS  6
 
 /* THE FURNITURE IDS. Negative, so they cannot collide with a window index, and
  * named, so a reader of a wm_anim_at() call can tell what is animating. wm.c
- * keeps -1 and -2 for the two things it draws itself; everything at or below
+ * keeps -1 for the toast it draws itself; everything at or below
  * WM_FX_USER belongs to the policy layer, which is the only code that knows
  * where a dock tile is. ui.h publishes the same three. */
 #define WM_FX_TOAST  (-1)      /* ztoast, the notification's entry     */
-#define WM_FX_GHOST  (-2)      /* ANIM_CLOSE, the closing window       */
 #define WM_FX_USER   (-16)     /* kernel.zl's, -16 and downward        */
 
 /* Durations are wall-clock ticks, not frame counts. The old four-step tables
@@ -1158,7 +1152,7 @@ void wm_damage_win(int win)
  * symmetric, and that is a choice rather than a measurement. */
 #define MS_TO_TICKS(ms) (((ms) + 5) / 10)
 
-/* THE DURATIONS COME FROM design.h NOW, AND THERE ARE THREE OF THEM.
+/* THE DURATIONS COME FROM design.h NOW, AND THERE ARE THREE VALUES.
  *
  * These read ease.h's EASE_MS_*, whose own comment says they are "exactly as
  * the reference states them" and cites ds-reference.html - the SUPERSEDED
@@ -1166,9 +1160,8 @@ void wm_damage_win(int win)
  * 160, 7000.
  *
  * design.h replaced that with three - RISE 90, TRAVEL 160, SETTLE 240 - and
- * defined ZD_MS_WIN / ZD_MS_PRESS / ZD_MS_OV / ZD_MS_PULSE as names mapped onto
- * them, with the comment "They keep their names so wm.c's timeline keeps
- * compiling; there are three values here, not ten, and that is the point."
+ * maps ZD_MS_PRESS / ZD_MS_OV / ZD_MS_PULSE / ZD_MS_TOAST onto them. Ordinary
+ * window open and close have no transform and therefore no duration.
  *
  * wm.c never took them up. The mapping was written, the old header stayed
  * wired, and every animation in the compositor has been running on the
@@ -1178,12 +1171,13 @@ void wm_damage_win(int win)
  * another instance of it. */
 static const unsigned char anim_ticks[] = {
     /* NONE  */ 0,
-    /* OPEN  */ MS_TO_TICKS(ZD_MS_WIN),       /* TRAVEL 160 */
-    /* CLOSE */ MS_TO_TICKS(ZD_MS_WIN),       /* its mirror */
+    /* 1 unused: PRESSWORK has no window-open transform */ 0,
+    /* 2 unused: PRESSWORK has no window-close transform */ 0,
     /* PRESS */ MS_TO_TICKS(ZD_MS_PRESS),     /* RISE    90 */
     /* PULSE */ MS_TO_TICKS(ZD_MS_PULSE),     /* SETTLE 240 */
     /* FADE  */ MS_TO_TICKS(ZD_MS_OV),        /* TRAVEL 160 */
     /* FOCUS */ MS_TO_TICKS(ZD_MS_RISE),      /* RISE    90 */
+    /* TOAST */ MS_TO_TICKS(ZD_MS_TOAST),     /* RISE    90 */
 };
 
 /* ONE CURVE. THE COMMENT THAT USED TO BE HERE ARGUED THE OPPOSITE AND CITED
@@ -1213,12 +1207,13 @@ static const unsigned char anim_ticks[] = {
  * giving it EASE_WIN would be a curve for an animation that does not run. */
 static const unsigned char anim_curve[] = {
     /* NONE  */ EASE_LINEAR,
-    /* OPEN  */ EASE_WIN,
-    /* CLOSE */ EASE_WIN,
+    /* 1 unused */ EASE_LINEAR,
+    /* 2 unused */ EASE_LINEAR,
     /* PRESS */ EASE_WIN,
     /* PULSE */ EASE_WIN,
     /* FADE  */ EASE_WIN,
     /* FOCUS */ EASE_WIN,
+    /* TOAST */ EASE_WIN,
 };
 
 /* THE ID IS NOT ALWAYS A WINDOW.
@@ -1300,12 +1295,6 @@ static void anim_cancel(int id)
 {
     for (int i = 0; i < ANIM_MAX; i++)
         if (anims[i].kind && anims[i].win == id) anims[i].kind = ANIM_NONE;
-}
-
-static void anim_cancel_kind(int id, int kind)
-{
-    for (int i = 0; i < ANIM_MAX; i++)
-        if (anims[i].kind == kind && anims[i].win == id) anims[i].kind = ANIM_NONE;
 }
 
 /* Start one. Returns 0 and says so if every slot is busy - the same refusal
@@ -1402,6 +1391,8 @@ int wm_anim_alpha(int win)
 {
     int p = anim_progress(win, ANIM_FADE);
     if (p >= 0) return 48 + 207 * p / 1000;
+    p = anim_progress(win, ANIM_TOAST);
+    if (p >= 0) return 48 + 207 * p / 1000;
     p = anim_progress(win, ANIM_PULSE);
     if (p >= 0) {
         int tri = p <= 500 ? p * 2 : (1000 - p) * 2;
@@ -1449,9 +1440,9 @@ static void anim_tick(void)
     for (int i = 0; i < ANIM_MAX; i++) {
         if (!anims[i].kind) continue;
         anim_damage(&anims[i]);
-        /* AN ANIMATION NEVER CHANGES WINDOW LIFETIME. It was tempting to have
-         * ANIM_CLOSE call wm_close() when it finishes, so a closing window
-         * shrinks away; that would make "the window closed" depend on a free
+        /* AN ANIMATION NEVER CHANGES WINDOW LIFETIME. The removed close effect
+         * called wm_close() only when its timeline finished; that made
+         * "the window closed" depend on a free
          * animation slot, and wm_anim() is allowed to refuse. A window that
          * sometimes does not close when every slot is busy is a far worse bug
          * than a window that closes without a flourish. The timeline draws;
@@ -1477,26 +1468,24 @@ int  wm_anim_enabled(void) { return anim_on; }
  * opaque. Both are pure reads - nothing here starts, stops or damages. */
 int wm_anim_progress(int id, int kind) { return anim_progress(id, kind); }
 
-/* ---- the two INFINITE animations ------------------------------------------
- * zpulse (1s / 2.6s) and zsweep (7s) are `infinite` in the reference, and an
- * infinite entry in a fixed array of eight NEVER FREES ITS SLOT - two of them
- * and a quarter of the timeline is gone for the life of the boot, which shows
- * up later as "the UI stopped animating after a while".
- *
- * They do not need a slot. An animation with no beginning and no end is a pure
- * function of the clock, so it is computed on demand and stores nothing at
- * all. That is also why it cannot be refused, and why turning animations off
- * is the only thing that stops it.
- *
- * Returns an opacity 0..255. The floor is the reference's own .55, so this
- * never returns less than 140 - a pulse that reached zero would be a blink. */
+/* The slot-free one-second steps(1) clock used by the caret. */
 int wm_pulse(int period_ms)
 {
     if (!anim_on) return 255;
     unsigned d = (unsigned)MS_TO_TICKS(period_ms);
     if (!d) d = 1;
-    int p = (int)((idt_ticks() % d) * 1000u / d);
-    return 255 * ease_pulse(p) / 1000;
+    return (idt_ticks() % d) < (d + 1u) / 2u ? 255 : 0;
+}
+
+static struct { int live, x, y, w, h; unsigned seen, phase; } caret_watch;
+
+void wm_caret_watch(int x, int y, int w, int h)
+{
+    caret_watch.live = w > 0 && h > 0;
+    caret_watch.x = x; caret_watch.y = y;
+    caret_watch.w = w; caret_watch.h = h;
+    caret_watch.seen = idt_ticks();
+    caret_watch.phase = (caret_watch.seen / 50u) & 1u;
 }
 
 /* How big window `win` should be DRAWN this frame, in THOUSANDTHS.
@@ -1507,25 +1496,12 @@ int wm_pulse(int period_ms)
  * frame lands, and it is visible as a jump. Thousandths throughout, matching
  * ease.h, so no unit conversion happens at a call site.
  *
- * ONE MECHANISM. The open scale used to be a counter in the window struct and
- * the timeline was a second thing beside it that nothing triggered - so wm.c
- * carried two animation systems, one of which never ran. wm_open() starts an
- * ANIM_OPEN now and this reads it, which means the open scale and every other
- * kind share a code path and a bug in one is a bug you can actually see.
+ * PRESSWORK has no window open/close transform. This scale is therefore only
+ * the finite press acknowledgement used by controls.
  */
 static int anim_permille(int win)
 {
-    /* THE OPEN SCALE WAS 82%. The reference's is 96.5% - ds-reference.html
-     * line 15, `scale(.965)`. 82% is a window that leaps at you from a sixth
-     * of its size; 96.5% is a window that is essentially already there and
-     * settles. Same duration, same curve, completely different gesture. */
-    int p = anim_progress(win, ANIM_OPEN);
-    if (p >= 0)
-        return EASE_WIN_FROM_SCALE + (1000 - EASE_WIN_FROM_SCALE) * p / 1000;
-    p = anim_progress(win, ANIM_CLOSE);
-    if (p >= 0)
-        return 1000 - (1000 - EASE_WIN_FROM_SCALE) * p / 1000;
-    p = anim_progress(win, ANIM_PRESS);
+    int p = anim_progress(win, ANIM_PRESS);
     if (p >= 0) return ease_press_scale(p);
     return 1000;
 }
@@ -1537,37 +1513,6 @@ static int anim_permille(int win)
  * what keeps kernel.zl's dock on the reference's curve and duration without
  * kernel.zl knowing what a cubic-bezier is. */
 int wm_anim_scale(int id) { return anim_permille(id); }
-
-/* ---- the closing window's GHOST -------------------------------------------
- * ANIM_CLOSE has existed since the timeline was written, anim_permille has
- * always known how to shrink for it, and NOTHING EVER STARTED ONE. The reason
- * is in anim_tick above: a closing window cannot be drawn by the repaint's
- * z-order walk, because by the time there is anything to draw it is no longer
- * in the z-order - and keeping it there until the animation finished would
- * make "the window closed" depend on a free animation slot, which that comment
- * refuses to allow and is right to refuse.
- *
- * So the window closes IMMEDIATELY, exactly as before, and what shrinks is a
- * GHOST: a rectangle and a colour. It is not in `wins`, not in the z-order,
- * not hit-testable, has no app and receives no events. Nothing can ask it a
- * question. If the timeline refuses the animation the ghost is simply never
- * armed and the window vanishes without a flourish, which is the right way for
- * decoration to fail.
- *
- * ONE ghost, not WM_MAX of them. Closing two windows inside 200 ms and seeing
- * only the second shrink is not a defect anybody can perceive, and an array
- * here would be more state with a lifetime - the thing this file is trying to
- * have less of. */
-static struct { int live, x, y, w, h, reach; } ghost;
-
-static void ghost_clear(void)
-{
-    if (!ghost.live) return;
-    ghost.live = 0;
-    wm_damage(ghost.x - ghost.reach, ghost.y - ghost.reach,
-              ghost.w + 2 * ghost.reach, ghost.h + 2 * ghost.reach);
-    anim_cancel(WM_FX_GHOST);
-}
 
 /* ---- zsweep ---------------------------------------------------------------
  * ds-reference.html:66 - a band 34% of the screen tall, filled with
@@ -1657,15 +1602,6 @@ static void anim_rect(int win, int *x, int *y, int *w, int *h)
     *x = W->x + (W->w - *w) / 2;
     *y = W->y + (W->h - *h) / 2;
 
-    /* zwin is `scale(.965) translateY(10px)`: the window does not only grow,
-     * it RISES the last 10 px into place. Dropping the translate leaves a
-     * scale-only pop, which is the animation this file already had. The offset
-     * is scaled with the UI so it is 10 design pixels, not 10 device ones. */
-    int op = anim_progress(win, ANIM_OPEN);
-    if (op >= 0) {
-        int dy = EASE_WIN_FROM_DY * ui_metric(UI_METRIC_SCALE_Q8) / 256;
-        *y += dy - dy * op / 1000;
-    }
 }
 
 /* ---- z-order ------------------------------------------------------------- */
@@ -1918,11 +1854,11 @@ void wm_init(void)
     nwd = 0;
     focus_win = -1;
     ws_cur = 1;
-    /* THE TIMELINE IS STATE AND wm_init MEANS "none of it happened". A ghost
-     * or a running press left over from a previous session would be drawn over
+    /* THE TIMELINE IS STATE AND wm_init MEANS "none of it happened". A
+     * running press left over from a previous session would be drawn over
      * a window table that no longer contains what it is a picture of. */
     for (int i = 0; i < ANIM_MAX; i++) anims[i].kind = ANIM_NONE;
-    ghost.live = 0;
+    caret_watch.live = 0;
     sweep_last_top = 0;
     snap_reset();
     snap_preview_zone = 0;
@@ -2168,10 +2104,6 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
         focus_win = i;
         window_surfaces_prepare(i);
         wm_lifecycle("open", i, app, wins[i].generation, nz);
-        /* A refusal here degrades gracefully: every slot busy means the window
-         * opens without a flourish, which is the right way for an animation to
-         * fail. */
-        if (anim_on) wm_anim(i, ANIM_OPEN);   /* Settings can turn this off */
         wm_damage_win(i);
         zlt_operation_result(ZLLOG_SUB_DISPLAY, operation_id,
                              ZLLOG_OP_WINDOW_OPEN, i, 0u, (unsigned)app);
@@ -2198,30 +2130,12 @@ int wm_open(int app, const char *title, int x, int y, int w, int h)
  * declared with the routing, further down. */
 static void wm_drop_grab(int win);
 
-/* Close it, and shrink a ghost of it away. THE GESTURE form of wm_close.
- *
- * The split is deliberate. wm_close() is called by teardown loops, by policy
- * reshuffling windows, and by wm_init-adjacent code that wants the table empty
- * - none of which is a moment anybody is watching, and all of which would look
- * wrong animated. The ✕ box, Ctrl+W and dismissing a modal are the three
- * places a HUMAN closed something, and those are the three callers of this. */
+/* Gesture and programmatic close share the same immediate lifetime change.
+ * PRESSWORK defines no open/close transform; the only window transition is
+ * the RISE border/header focus change. */
 void wm_close_fx(int win)
 {
-    if (!wm_is_open(win)) return;
-    int visible = win_visible(win);
-    int gx = wins[win].x, gy = wins[win].y;
-    int gw = wins[win].w, gh = wins[win].h;
-    int reach = shadow_reach(win);
     wm_close(win);
-    if (!anim_on || !visible) return;
-    ghost_clear();                       /* at most one; the newer wins */
-    /* The rectangle is the SETTLED one plus its shadow reach: the ghost only
-     * ever shrinks inside it, so this is the largest thing that has to be
-     * erased on the frame the animation ends. */
-    if (!wm_anim_at(WM_FX_GHOST, ANIM_CLOSE, gx - reach, gy - reach,
-                    gw + 2 * reach, gh + 2 * reach)) return;
-    ghost.live = 1;  ghost.reach = reach;
-    ghost.x = gx;    ghost.y = gy;    ghost.w = gw;  ghost.h = gh;
 }
 
 void wm_close(int win)
@@ -2380,13 +2294,9 @@ void wm_set_modal(int win, int on)
      * or a caller that re-asserts modality every frame restarts the fade every
      * frame and the overlay never finishes appearing.
      *
-     * ANIM_OPEN is cancelled first. wm_open started one a moment ago and a
-     * modal is not a window that grows - the reference gives it zov, which is
-     * a fade from scale(1.03), the opposite direction. Two scale animations on
-     * one id would also both be read by anim_permille, and the first match
-     * wins, so the fade would be drawn at the open animation's size. */
+     * A modal gets the pop/fade directly; ordinary windows have no entry
+     * transform in the authority. */
     if (on && !was) {
-        anim_cancel_kind(win, ANIM_OPEN);
         if (anim_on) wm_anim(win, ANIM_FADE);
     }
 }
@@ -3108,7 +3018,7 @@ static void chrome_focus_bar(const struct win *W, int r, int focused)
  * painting. Two functions would be two copies of the same six advances, and
  * the first time one of them gained a field the code would start landing in
  * the wrong place on windows with a subtitle only. */
-static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
+static int chrome_title_run(int win, const struct win *W, int focused, int hh, int draw)
 {
     const struct ui_theme *t = ui_theme();
     /* the prototype's `.hdr` is 11dp of padding inside a 1px ring, which is
@@ -3132,6 +3042,12 @@ static int chrome_title_run(const struct win *W, int focused, int hh, int draw)
      * the whole reason the name reads as the name. This drew the title at
      * text_dim, i.e. at the same value as its own qualifiers. */
     unsigned ink_ttl = focused ? t->knock_ink : t->text_2;
+    int fp = anim_progress(win, ANIM_FOCUS);
+    if (fp >= 0) {
+        int mix = focused ? fp : 1000 - fp;
+        ink_dim = blend_rgb(t->text_dim, t->knock_ink2, mix);
+        ink_ttl = blend_rgb(t->text_2, t->knock_ink, mix);
+    }
 
     int cy_mono = W->y + (hh - fb_cell_h()) / 2;
     int cy_ttl  = W->y + (hh - ui_text_h(UI_MD)) / 2;
@@ -3239,7 +3155,7 @@ static void chrome_module(int win, int focused)
         tab_rect(win, W->ntab - 1, &tx, &ty, &tw, &th);
         x = tx + (W->x - wins[win].x) + tw + gut;
     } else {
-        x = chrome_title_run(W, focused, hh, 0);
+        x = chrome_title_run(win, W, focused, hh, 0);
     }
     int stop = title_cluster_x(W, t) - gut;
 
@@ -3484,7 +3400,7 @@ static void chrome_shell(int win, int focused)
          * centre its text below its own foot. */
         int hh = t->title_h;
         if (hh > W->h) hh = W->h;
-        if (hh >= 2) (void)chrome_title_run(W, focused, hh, 1);
+        if (hh >= 2) (void)chrome_title_run(win, W, focused, hh, 1);
     }
 
     /* One window-control component, three actions. Shared geometry keeps the
@@ -3792,14 +3708,12 @@ static void toast_rect(int *x, int *y, int *w, int *h)
 }
 
 /* How far a toast still has to RISE, in device pixels.
- * ztoast is `from{opacity:0;transform:translateY(10px)}` - ds-reference.html
- * line 20 - so it comes up ten design pixels as it fades in, the same gesture
- * zwin makes and the same constant. */
+ * proto:966 starts the toast four design pixels low and resolves it over RISE. */
 static int toast_dy(void)
 {
     const struct ui_theme *t = ui_theme();
     int dy = EASE_TOAST_FROM_DY * t->scale;
-    int p = anim_progress(WM_FX_TOAST, ANIM_FADE);
+    int p = anim_progress(WM_FX_TOAST, ANIM_TOAST);
     if (p < 0) return 0;
     return dy - dy * p / 1000;
 }
@@ -3882,28 +3796,6 @@ static void toast_draw(int rx0, int ry0, int rx1, int ry1)
         fb_stash_blend(stash, cx, cy, 255 - alpha);
         fb_blur_free(stash);
     }
-}
-
-/* ---- the ghost, and the sweep, both drawn by wm_repaint ------------------- */
-static void ghost_draw(int rx0, int ry0, int rx1, int ry1)
-{
-    if (!ghost.live) return;
-    int p = anim_progress(WM_FX_GHOST, ANIM_CLOSE);
-    if (p < 0) { ghost.live = 0; return; }    /* anim_tick already damaged it */
-
-    /* wm_anim_scale, not a second copy of the shrink: ANIM_CLOSE's curve and
-     * end point live in anim_permille and this reads them. */
-    int s = wm_anim_scale(WM_FX_GHOST);
-    int w = ghost.w * s / 1000, h = ghost.h * s / 1000;
-    int x = ghost.x + (ghost.w - w) / 2, y = ghost.y + (ghost.h - h) / 2;
-    int cx, cy, cw, ch;
-    if (!isect(x, y, x + w, y + h, rx0, ry0, rx1, ry1, &cx, &cy, &cw, &ch))
-        return;
-    fb_clip(cx, cy, cw, ch);
-    const struct ui_theme *t = ui_theme();
-    /* It fades as it shrinks. A ghost that stayed opaque to the last frame
-     * pops out of existence, which is the thing the animation exists to stop. */
-    fb_rrect_blend(x, y, w, h, t->radius, t->panel, 255 - 255 * p / 1000);
 }
 
 static void sweep_draw(int rx0, int ry0, int rx1, int ry1)
@@ -4137,14 +4029,7 @@ void wm_repaint(void)
             }
         }
 
-        /* The closing window's ghost goes where the window would have been in
-         * the walk above - on top of everything behind it. It is drawn after
-         * the loop rather than inside it because it is not IN the loop's list:
-         * it left the z-order the instant it was closed. */
-        phase_started = paint_begin();
-        ghost_draw(rx0, ry0, rx1, ry1);
-
-        /* ...and the toast on top of all of them, still inside this damage
+        /* The toast sits on top of all windows, still inside this damage
          * rectangle. Added, not woven in: the loop above is unchanged. */
         toast_draw(rx0, ry0, rx1, ry1);
 
@@ -4153,8 +4038,8 @@ void wm_repaint(void)
          * repaint costs the menu and not the screen.
          *
          * RESTORE THE SCISSOR FIRST - the window loop above narrows it to each
-         * window's frame and then to its client, and leaves it there. ghost_draw
-         * and toast_draw survive that because each sets its own clip; an
+         * window's frame and then to its client, and leaves it there. toast_draw
+         * survives that because it sets its own clip; an
          * overlay that does not would be clipped to whichever window happened
          * to be painted last. That is not a hypothetical: the command palette
          * drew only across the Terminal, and the System Monitor beside it
@@ -4945,6 +4830,18 @@ void wm_frame(void)
     unsigned int now = idt_ticks();
     unsigned int frame_started_tick = now;
     last_tick = now;
+    if (caret_watch.live) {
+        if (!ui_motion_get() || now - caret_watch.seen > 100u) {
+            caret_watch.live = 0;
+        } else {
+            unsigned phase = (now / 50u) & 1u;
+            if (phase != caret_watch.phase) {
+                caret_watch.phase = phase;
+                wm_damage(caret_watch.x, caret_watch.y,
+                          caret_watch.w, caret_watch.h);
+            }
+        }
+    }
     /* apps-in-windows timed the frame with the 64-bit cpu_tsc(); this tree
      * uses the 32-bit cpu_tsc_lo(). Both declarations survived the merge and
      * shadowed each other on the same name. One timer. */
@@ -4998,18 +4895,18 @@ void wm_frame(void)
         const struct ui_theme *t = ui_theme();
         int reach = OFFPLANE_OFF(t) + OFFPLANE_SOFT(t);
         /* The rectangle has to cover the RISE as well as the panel: ztoast
-         * starts ten design pixels low, so a toast damaged at its settled
+         * starts four design pixels low, so a toast damaged at its settled
          * height leaves its first frames' bottom edge on the wallpaper. */
         int rise = EASE_TOAST_FROM_DY * t->scale;
         wm_damage(tx - reach, ty - reach,
                   tw + 2 * reach, th + 2 * reach + rise);
-        /* ztoast: .16s ease-out, opacity 0->1 with translateY(10px)->0.
+        /* Toast entry: RISE, opacity 0->1 with translateY(4px)->0.
          * notify_tick returns 1 for an arrival AND for a retirement; only an
          * arrival has something to animate, and notify_active() is what tells
          * them apart. Refusal is graceful - the toast is simply already
          * there, which is what it did before this existed. */
         if (anim_on && notify_active())
-            wm_anim_at(WM_FX_TOAST, ANIM_FADE, tx - reach, ty - reach,
+            wm_anim_at(WM_FX_TOAST, ANIM_TOAST, tx - reach, ty - reach,
                        tw + 2 * reach, th + 2 * reach + rise);
     }
 

@@ -138,6 +138,7 @@ void term_putc(char c)
  * the newest against the prompt). Both are correct for their caller; they must
  * not be confused, so the ring arithmetic lives here once. */
 int term_lines(void) { return s_live; }
+int term_rows(void)  { return TERM_ROWS; }
 
 int term_ch(int line, int col)
 {

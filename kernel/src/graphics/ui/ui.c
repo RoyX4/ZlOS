@@ -24,6 +24,14 @@
 #include "ui.h"
 #include "design.h"
 
+/* ui.c is also linked by standalone host probes without the compositor. Weak
+ * settled fallbacks keep that boundary real; wm.c's strong definitions replace
+ * them in the kernel and compositor harnesses. */
+__attribute__((weak)) int wm_anim_at(int id, int kind, int x, int y, int w, int h)
+{ (void)id; (void)kind; (void)x; (void)y; (void)w; (void)h; return 0; }
+__attribute__((weak)) int wm_anim_progress(int id, int kind)
+{ (void)id; (void)kind; return -1; }
+
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
@@ -369,6 +377,36 @@ static unsigned ui_lum(unsigned rgb)
     return (unsigned)((y + 5000) / 10000);
 }
 
+/* CIE L* x100, without libm. The forward L*->Y function is monotone, so a
+ * fourteen-step integer binary search gives the nearest hundredth over the
+ * complete 0..100 range. Y uses ui_lum's x1e7 scale; the cubic branch stays
+ * within u64 even at white (11600^3 * 1e7 < 2^64). */
+static unsigned long long lum_from_lstar_q2(unsigned lq2)
+{
+    if (lq2 <= 800u)
+        return ((unsigned long long)lq2 * 10000000ULL + 45165ULL) / 90330ULL;
+    unsigned long long p = (unsigned long long)lq2 + 1600ULL;
+    unsigned long long p3 = p * p * p;
+    return (p3 * 10000000ULL + 780448000000ULL) / 1560896000000ULL;
+}
+
+unsigned ui_lstar_q2(unsigned rgb)
+{
+    unsigned long long y = ui_lum(rgb);
+    unsigned lo = 0, hi = 10000;
+    while (lo < hi) {
+        unsigned mid = lo + (hi - lo + 1) / 2;
+        if (lum_from_lstar_q2(mid) <= y) lo = mid;
+        else hi = mid - 1;
+    }
+    if (lo < 10000) {
+        unsigned long long yl = lum_from_lstar_q2(lo);
+        unsigned long long yh = lum_from_lstar_q2(lo + 1);
+        if (yh - y < y - yl) return lo + 1;
+    }
+    return lo;
+}
+
 /* WCAG contrast x 10^4. Order-independent: the ratio is defined lighter over
  * darker, so ui_ratio(a,b) == ui_ratio(b,a) and no caller has to know which of
  * its two colours is on top. 0.05 in these units is 500,000. */
@@ -502,6 +540,8 @@ int ui_knockout_set(int on)
  * slider range: 1 is the thinnest run the framebuffer can draw and 6 is where
  * the bar stops reading as a register mark and starts reading as a panel. */
 int ui_focus_bar_dp(void) { return fbar_dp; }
+int ui_focus_bar_min_dp(void) { return UI_FBAR_MIN; }
+int ui_focus_bar_max_dp(void) { return UI_FBAR_MAX; }
 int ui_focus_bar_set(int n)
 {
     if (n < UI_FBAR_MIN) n = UI_FBAR_MIN;
@@ -981,7 +1021,8 @@ void ui_bar(int pct)
  * kind (ui_pill's UI_BTN_PRIMARY) and there is one per view. */
 int ui_button(const char *s)
 {
-    int w = text_w(s) + 2 * UI_S3(&theme), h = theme.row_h;
+    int px = UI_DP(&theme, ZD_BUTTON_PX);
+    int w = text_w(s) + 2 * px, h = UI_DP(&theme, ZD_BUTTON_H);
     int x, y;
     place(w, h, &x, &y);
     int over = hit(x, y, w, h);
@@ -996,7 +1037,7 @@ int ui_button(const char *s)
             ui_seat_raised(x, y, w, h, r, theme.panel_hi,
                            over ? theme.edge_over : theme.cut, 1);
         }
-        fb_text_prop(x + UI_S3(&theme), y + (h - text_h()) / 2, s,
+        fb_text_prop(x + px, y + (h - text_h()) / 2, s,
                      over ? theme.text_hi : theme.text_2);
         focus_ring(x, y, w, h);
     }
@@ -1017,9 +1058,22 @@ void ui_space(int n)
     (void)x; (void)y;
 }
 
-/* Note the int* - the widget owns no state. The app already has the variable;
- * a retained toolkit would have made a second copy of it and then needed a way
- * to keep the two in step. */
+/* The app owns the settled boolean. This tiny table retains only the transient
+ * edge needed to interpolate the authority's RISE transition; pointer identity
+ * is stable because every shipped switch state is a global/static integer. */
+#define TOGGLE_ANIM_N 16
+struct toggle_anim_state { int *key; };
+static struct toggle_anim_state toggle_anim[TOGGLE_ANIM_N];
+
+static int toggle_anim_slot(int *key)
+{
+    for (int i = 0; i < TOGGLE_ANIM_N; i++)
+        if (toggle_anim[i].key == key) return i;
+    for (int i = 0; i < TOGGLE_ANIM_N; i++)
+        if (!toggle_anim[i].key) { toggle_anim[i].key = key; return i; }
+    return 0;
+}
+
 int ui_toggle(const char *s, int *on)
 {
     /* A SWITCH IS A BOLTED RECTANGLE, NOT A PILL - the prototype's `.sw2`.
@@ -1053,13 +1107,24 @@ int ui_toggle(const char *s, int *on)
     if (kh > h) h = kh;
     place(w, h, &x, &y);
     int fired = fire(x, y, w, h);
-    if (fired) *on = !*on;
+    int ty = y + (h - kh) / 2;
+    int as = toggle_anim_slot(on);
+    int aid = WM_FX_USER - 96 - as;
+    if (fired) {
+        *on = !*on;
+        wm_anim_at(aid, ANIM_FOCUS, x, ty, kw, kh);
+    }
     if (L.mode == UI_DRAW) {
-        int ty = y + (h - kh) / 2;            /* centre the track in the row  */
         int r  = UI_DP(&theme, ZD_SW_R);
         if (*on) ui_seat_face(x, ty, kw, kh, r, theme.knock, theme.knock);
         else     ui_seat_sunken(x, ty, kw, kh, r, theme.surf_1);
-        int kx = *on ? x + kw - pad - d : x + pad;
+        int offx = x + pad, onx = x + kw - pad - d;
+        int kx = *on ? onx : offx;
+        int p = wm_anim_progress(aid, ANIM_FOCUS);
+        if (p >= 0) {
+            if (*on) kx = offx + (onx - offx) * p / 1000;
+            else     kx = onx - (onx - offx) * p / 1000;
+        }
         fb_fill_px(kx, ty + pad, d, d, *on ? theme.knock_ink : theme.surf_7);
         fb_text_prop(x + kw + theme.gap, y + (h - text_h()) / 2, s, theme.text);
         focus_ring(x, y, w, h);

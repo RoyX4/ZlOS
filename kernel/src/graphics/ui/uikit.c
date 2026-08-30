@@ -109,6 +109,11 @@
 #include "ui.h"
 #include "design.h"
 
+__attribute__((weak)) int wm_pulse(int period_ms)
+{ (void)period_ms; return 255; }
+__attribute__((weak)) void wm_caret_watch(int x, int y, int w, int h)
+{ (void)x; (void)y; (void)w; (void)h; }
+
 /* ---- fb.c, the layer below ------------------------------------------------ */
 void fb_fill_px(int x, int y, int w, int h, unsigned int rgb);
 void fb_fill_blend(int x, int y, int w, int h, unsigned int rgb, int a);
@@ -640,31 +645,22 @@ static unsigned state_ring(int st)
  * window it sits in takes ZD_R_PLATE, 9dp. Under the old scale both of them
  * were an 11-to-13px pill and the two objects claimed the same amount of
  * mobility, which is the specific thing PRESSWORK's four-value radius system
- * exists to stop. design.h now points ZD_PILL_*_R at ZD_R_CHIP for all three
- * sizes; the sizes differ in padding only, which is what a size is.
- *
- * The three paddings stay the reference's - the collapse from twenty-six
- * near-identical pills to three is unchanged and still costs 1-4px against
- * the original in places. That was accepted before PRESSWORK and PRESSWORK
- * does not revisit it.
+ * exists to stop. design.h now carries the authority's one 22dp by 10dp
+ * geometry. SM and MD remain useful text rungs, not separate shapes.
  * ========================================================================= */
 static void pill_metrics(int size, int *py, int *px, int *r)
 {
-    switch (clamp(size, UI_SM, UI_LG)) {
-    case UI_SM: *py = DP(ZD_PILL_SM_PY); *px = DP(ZD_PILL_SM_PX);
-                *r  = DP(ZD_PILL_SM_R);  break;
-    case UI_LG: *py = DP(ZD_PILL_LG_PY); *px = DP(ZD_PILL_LG_PX);
-                *r  = DP(ZD_PILL_LG_R);  break;
-    default:    *py = DP(ZD_PILL_MD_PY); *px = DP(ZD_PILL_MD_PX);
-                *r  = DP(ZD_PILL_MD_R);  break;
-    }
+    (void)size;
+    *py = 0;
+    *px = DP(ZD_BUTTON_PX);
+    *r = DP(ZD_BUTTON_R);
 }
 
 int ui_pill_h(int size)
 {
     int py, px, r;
     pill_metrics(size, &py, &px, &r);
-    return 2 * py + ui_text_h(size);
+    return DP(ZD_BUTTON_H);
 }
 
 int ui_pill_w(const char *s, int size, int flags)
@@ -1870,8 +1866,7 @@ void ui_kv(int x, int y, int w, const char *k, const char *v,
      * pass measured off the prototype, and moving it would be a guess. */
     lab_text(x + DP(13), text_cy(y, h, UI_SM, UI_F_BOLD), k,
              ui_color(UI_COLOR_TEXT_DIM));
-    int vw = ui_text_w(v, UI_SM, UI_F_MONO);
-    ui_text(x + w - DP(13) - vw, text_cy(y, h, UI_SM, UI_F_MONO), v,
+    ui_text(x + DP(ZD_KV_KEY_W), text_cy(y, h, UI_SM, UI_F_MONO), v,
             v_rgb ? v_rgb : ui_color(UI_COLOR_TEXT_HI), UI_SM, UI_F_MONO);
 }
 
@@ -1999,7 +1994,8 @@ void ui_modal(int x, int y, int w, int h, const char *title)
 
 int ui_toast_h(void)
 {
-    return 2 * DP(ZD_TOAST_PY) + ui_text_h(UI_MD) + DP(3) + ui_text_h(UI_SM);
+    return DP(ZD_TOAST_PY_T) + ui_text_h(UI_MD) + DP(3) + ui_text_h(UI_SM)
+         + DP(ZD_TOAST_PY_B);
 }
 
 /* `.toast` - the third object off the plane.
@@ -2029,7 +2025,7 @@ int ui_toast_h(void)
 void ui_toast_draw(int x, int y, int w, const char *title, const char *body,
                    unsigned kind_rgb)
 {
-    int h = ui_toast_h(), py = DP(ZD_TOAST_PY), px = DP(ZD_TOAST_PX);
+    int h = ui_toast_h(), py = DP(ZD_TOAST_PY_T);
     int bw = imax(1, DP(ZD_FOCUS_BAR)), r = DP(ZD_TOAST_R);
     if (ui_mode_get() != UI_DRAW) return;
     lift_shadow(x, y, w, h, r);
@@ -2037,7 +2033,7 @@ void ui_toast_draw(int x, int y, int w, const char *title, const char *body,
               ui_color(UI_COLOR_EDGE_OVER));
     fb_fill_px(x + 1, y + r, bw, h - 2 * r,
                kind_rgb ? kind_rgb : ui_color(UI_COLOR_ACCENT));
-    int tx = x + px + bw;
+    int tx = x + DP(ZD_TOAST_PL);
     ui_text(tx, y + py, title, ui_color(UI_COLOR_TEXT_HI), UI_MD, UI_F_BOLD);
     ui_text(tx, y + py + ui_text_h(UI_MD) + DP(3), body,
             ui_color(UI_COLOR_TEXT_2), UI_SM, 0);
@@ -2214,9 +2210,8 @@ int ui_search_h(void) { return DP(ZD_SEARCH_H); }
  *
  * THE CARET IS DRAWN. `.caret` is a 7 x 13dp vermilion block, overprint on a
  * pit; without it a focused empty field and an unfocused one differ only at
- * the left margin. It does not blink - there is no per-frame clock at this
- * layer and a caret that blinks in one app and not another is worse than one
- * that does not blink at all.
+ * the left margin. It blinks on wm.c's slot-free one-second steps(1) clock;
+ * motion off leaves it steadily visible.
  *
  * THE PLACEHOLDER IS ZD_TEXT_3 AND NOT ZD_TEXT_INERT. It was ZD_TEXT_6, which
  * design.h now aliases onto ZD_TEXT_3, so the pixels are already right - but
@@ -2251,6 +2246,8 @@ static int input_body(int x, int y, int w, int h, int r, const char *text,
     if (focused) {
         fb_fill_px(x + 1, y + 1, bw, h - 2, ui_color(UI_COLOR_ACCENT));
         if (cx + cw < x + w - 1)
+            wm_caret_watch(cx, text_cy(y, h, UI_MD, 0), cw, ui_text_h(UI_MD));
+        if (cx + cw < x + w - 1 && wm_pulse(1000) > 127)
             fb_fill_px(cx, text_cy(y, h, UI_MD, 0), cw, ui_text_h(UI_MD),
                        ui_color(UI_COLOR_ACCENT));
     }
@@ -2306,16 +2303,21 @@ int ui_chip_w(const char *s)
  * ZD_CHIP_R is ZD_R_CHIP, which is the radius named after this widget: 2dp,
  * the smallest object on screen. Under the old sixteen-value scale it was an
  * 8px pill and shared a corner with a window. */
-int ui_chip(int x, int y, const char *s, int active)
+int ui_chip_state(int x, int y, const char *s, int active, int disabled)
 {
     int w = ui_chip_w(s), h = ui_chip_h(), r = DP(ZD_CHIP_R);
-    int st = ctl_state(x, y, w, h, active, 0);
-    int fired = ui_fire(x, y, w, h);
+    int st = disabled ? UI_ST_DIS : ctl_state(x, y, w, h, active, 0);
+    int fired = disabled ? 0 : ui_fire(x, y, w, h);
     if (ui_mode_get() == UI_DRAW) {
         unsigned ink = ui_color(UI_COLOR_TEXT_2);
         pill_face(x, y, w, h, r, UI_BTN_NEUTRAL, st, &ink);
         ui_text(x + DP(ZD_CHIP_PX), text_cy(y, h, UI_SM, 0), s, ink, UI_SM, 0);
-        ui_ring(x, y, w, h);
+        if (!disabled) ui_ring(x, y, w, h);
     }
     return fired;
+}
+
+int ui_chip(int x, int y, const char *s, int active)
+{
+    return ui_chip_state(x, y, s, active, 0);
 }

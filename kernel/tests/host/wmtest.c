@@ -271,9 +271,8 @@ static void t_desk(int x, int y, int w, int h)
     int tw = TILE_W * s / 1000;
     fb_fill_px(TILE_X + (TILE_W - tw) / 2, TILE_Y + (TILE_W - tw) / 2,
                tw, tw, TILE_COL);
-    /* ...and the running-app dot, at zpulse's opacity - dock_running_bar()'s */
-    fb_fill_blend(DOT_X, DOT_Y, DOT_W, DOT_W, DOT_COL,
-                  wm_pulse(EASE_MS_PULSE_SLOW));
+    /* ...and the steady running-app dot; PRESSWORK deleted its pulse. */
+    fb_fill_px(DOT_X, DOT_Y, DOT_W, DOT_W, DOT_COL);
 }
 
 /* ---- assertions ----------------------------------------------------------- */
@@ -619,12 +618,8 @@ int main(void)
      * repaints, so it has to start from a clean frame or it measures the
      * previous test instead of this one.
      *
-     * ONE frame() used to be enough and is not any more. Every wm_open above
-     * starts an ANIM_OPEN, and the reference's zwin runs 200 ms where zlOS's
-     * old open ran 160 - so a window was still animating here, repainting
-     * itself, and this assertion failed for a reason that had nothing to do
-     * with app_tick. Settle for the full duration instead of a frame, which
-     * is what "start from a clean frame" meant in the first place. */
+     * Settle for the bounded timeline because modal focus fades above are
+     * still allowed; ordinary window opens themselves consume no slot. */
     for (int i = 0; i < ANIM_SETTLE; i++) frame();
     draw_calls[4] = 0;
     tick_returns = 0;
@@ -669,10 +664,9 @@ int main(void)
     ok("a toggle flips only when it is the thing hit", on == 0 || on == 1);
 
     /* ------------------------------------------------------------ animation
-     * Four frames of growth, then settled. The properties that matter are not
-     * "it moves" but: it ENDS, it ends at exactly the requested geometry, and
-     * HIT TESTING NEVER SEES THE INTERMEDIATE SIZE - a click that misses
-     * because the target was still growing is worse than no animation. */
+     * PRESSWORK opens ordinary windows as a cut at settled geometry. Hit
+     * testing and pixels must agree from frame zero, and no timeline slot may
+     * be consumed for a transform the authority deleted. */
     for (int i = 0; i < WM_MAX; i++) wm_close(i);
     frame();
     int an = wm_open(7, "anim", 300, 300, 400, 300);
@@ -682,18 +676,18 @@ int main(void)
        gw2 == 400 && gh2 == 300);
     ok("...and so is hit testing, mid-animation", wm_at(310, 310) == an);
 
-    /* the drawn window must actually be smaller on the first frame */
+    /* The drawn window is already at the settled left edge on frame one. */
     frame();
-    int grew = 0;
+    int full = 1;
     for (int x = 300; x < 320; x++)
-        if (fb_get_px(x, 450) == WALL) grew = 1;   /* left edge not yet reached */
-    ok("the first frame is drawn SMALLER than the settled rect", grew);
+        if (fb_get_px(x, 450) == WALL) full = 0;
+    ok("the first frame is drawn at the settled rect", full);
 
     for (int i = 0; i < ANIM_SETTLE; i++) frame();
     int settled = 1;
     for (int x = 302; x < 316; x++)
         if (fb_get_px(x, 450) == WALL) settled = 0;
-    ok("...and after four frames it has settled at full size", settled);
+    ok("...and later frames retain that full size", settled);
 
     int before_calls = draw_calls[7];
     frame(); frame();
@@ -781,6 +775,7 @@ int main(void)
     int avail = bw - 2 * UI_S3(th) - UI_S6(th);
     int step = avail / 3;
     if (step > UI_S6(th) * 5) step = UI_S6(th) * 5;
+    draw_calls[1] = draw_calls[2] = draw_calls[3] = 0;
     pointer(bx + UI_S2(th) + step + step / 4, strip_y, 1);
     ok("clicking a tab selects it", wm_tab(tw) == 1);
     int ax2, ay2;
@@ -788,7 +783,6 @@ int main(void)
     ok("...and does NOT drag the window", ax2 == bx && ay2 == by);
     pointer(bx + UI_S2(th) + step + step / 4, strip_y + 200, 0);
 
-    draw_calls[1] = draw_calls[2] = draw_calls[3] = 0;
     frame();
     ok("...and now the SECOND tab's app is the one that draws",
        draw_calls[2] > 0 && draw_calls[1] == 0);
@@ -901,10 +895,8 @@ int main(void)
      *
      * So this measures the FRAMEBUFFER. It finds the drawn left edge of a
      * window by scanning a row for the first pixel that differs from the
-     * background, once per frame, and asserts the edge is in a different place
-     * on consecutive frames while zwin runs - and in the same place once it
-     * settles. A scale animation that never repaints gives a constant edge and
-     * fails here while passing every assertion above. */
+     * background. PRESSWORK has no window-open transform, so the first frame
+     * must land at the settled rectangle and stay there. */
     {
         int probe_y = 0, edges[10], n = 0;
         for (int i = 0; i < WM_MAX; i++) wm_close(i);
@@ -919,13 +911,10 @@ int main(void)
                 if (fb_get_px(x, probe_y) != bg) { e = x; break; }
             edges[n] = e;
         }
+        ok("the window is actually on the framebuffer", edges[0] >= 0);
         int moved = 0;
         for (int i = 1; i < n; i++) if (edges[i] != edges[i - 1]) moved++;
-        printf("    zwin drawn left edge, frames 1..10: ");
-        for (int i = 0; i < n; i++) printf("%d ", edges[i]);
-        printf("\n");
-        ok("the window is actually on the framebuffer", edges[0] >= 0);
-        ok("zwin MOVES PIXELS - the drawn edge changes between frames", moved >= 2);
+        ok("window open is a cut at its settled x", edges[0] == 300 && moved == 0);
 
         for (int i = 0; i < ANIM_SETTLE; i++) frame();
         int settled = -1;
@@ -950,12 +939,7 @@ int main(void)
 
     /* ANIM_MAX IS A REFUSAL, not a silent drop - the same discipline as
      * wm_open's WM_MAX.
-     *
-     * The windows are opened and then LET SETTLE first, deliberately: wm_open
-     * starts an ANIM_OPEN of its own now, so opening and animating in the same
-     * loop measures "how many slots are left after the opens" rather than the
-     * ceiling. That is exactly the confusion this assertion exists to avoid,
-     * and it caught the change that introduced it. */
+     * Ordinary opens consume no animation slots. */
     for (int i = 0; i < WM_MAX; i++) wm_close(i);
     frame();
     int wins2[WM_MAX], nw2 = 0;
@@ -963,10 +947,9 @@ int main(void)
         int w2 = wm_open(1, "x", 10 + i * 30, 10, 60, 40);
         if (w2 >= 0) wins2[nw2++] = w2;
     }
-    for (int i = 0; i < ANIM_SETTLE; i++) frame();
     int still = 0;
     for (int i = 0; i < nw2; i++) if (wm_anim_running(wins2[i])) still++;
-    ok("every open animation has finished before this", still == 0);
+    ok("ordinary window opens consume no animation slots", still == 0);
 
     int started = 0, refused = 0;
     for (int i = 0; i < nw2; i++) {
@@ -1060,9 +1043,8 @@ int main(void)
      * ease.c implemented all seven of the reference's curves correctly and
      * easetest asserted twenty things about them, which made them look
      * finished. They were not: grepping the whole tree for callers of
-     * wm_anim() found FOUR, one of which was a window open. zpress, ztoast
-     * and ANIM_CLOSE had no caller anywhere, zpulse had one on a shell error,
-     * and zsweep did not exist.
+     * wm_anim() found only a partial set. The blocks below prove the effects
+     * PRESSWORK actually retains and the caret's slot-free clock.
      *
      * "A green build proves nothing" is the standard the zwin block above
      * sets, so every one of these does what it does: sample the framebuffer
@@ -1131,53 +1113,24 @@ int main(void)
         desk_fx = 0;
     }
 
-    /* ------------------------------------------------ zpulse, on the DOT
-     * zpulse's one caller was term_bad() - the shell flashing a window red on
-     * a bad command. The reference pulses the dot under a RUNNING dock app,
-     * `zpulse 2.6s ease-in-out infinite`, and infinite is the word that
-     * matters: an entry in a fixed array of eight that never ends is a
-     * quarter of the timeline gone for the life of the boot. wm_pulse holds
-     * no slot at all. */
+    /* ------------------------------------------------ caret blink clock
+     * PRESSWORK's only infinite animation is the caret: one second, steps(1).
+     * wm_pulse is its slot-free clock, so prove both hard phases and prove the
+     * motion switch forces the visible phase. */
     {
-        desk_fx = 1;
-        unsigned int cols[10];
-        int n, changed = 0;
-        /* A 2.6 s period is 260 ticks, so sample a tenth of it at a time -
-         * consecutive ticks differ by fractions of an alpha step and would
-         * make this a test of rounding rather than of motion. */
-        for (n = 0; n < 10; n++) {
-            fake_ticks += 25;
-            wm_damage(DOT_X - 2, DOT_Y - 2, DOT_W + 4, DOT_W + 4);
-            frame();
-            cols[n] = fb_get_px(DOT_X + DOT_W / 2, DOT_Y + DOT_W / 2);
-        }
-        printf("    zpulse dot colour, 1/10 period apart: ");
-        for (int i = 0; i < n; i++) printf("%06x ", cols[i] & 0xFFFFFFu);
-        printf("\n");
-        for (int i = 1; i < n; i++) if (cols[i] != cols[i - 1]) changed++;
-        ok("zpulse MOVES PIXELS - the dot's colour changes between frames",
-           changed >= 4);
-        ok("...and it never blinks out - the reference's floor is .55, not 0",
-           wm_pulse(EASE_MS_PULSE_SLOW) >= 255 * EASE_PULSE_FLOOR / 1000);
-
-        /* the control: the SAME loop with animation off. Without it, "the
-         * colour changed" would also pass on a dot drawn at a random alpha. */
+        fake_ticks = 0;
+        ok("caret blink starts in its visible phase", wm_pulse(1000) == 255);
+        fake_ticks = 49;
+        ok("...holds that phase for exactly half a second", wm_pulse(1000) == 255);
+        fake_ticks = 50;
+        ok("...then cuts fully off with steps(1)", wm_pulse(1000) == 0);
+        fake_ticks = 99;
+        ok("...and holds hidden to the period boundary", wm_pulse(1000) == 0);
+        fake_ticks = 100;
+        ok("...then repeats without a timeline slot", wm_pulse(1000) == 255);
         wm_set_anim(0);
-        unsigned int fixed[6];
-        int still = 0;
-        for (int i = 0; i < 6; i++) {
-            fake_ticks += 25;
-            wm_damage(DOT_X - 2, DOT_Y - 2, DOT_W + 4, DOT_W + 4);
-            frame();
-            fixed[i] = fb_get_px(DOT_X + DOT_W / 2, DOT_Y + DOT_W / 2);
-            if (i && fixed[i] != fixed[i - 1]) still++;
-        }
-        printf("    control, animation off: %06x, %d change(s) in 6 frames\n",
-               fixed[0] & 0xFFFFFFu, still);
-        ok("control: with animation off the dot is one constant colour",
-           still == 0);
+        ok("control: motion off leaves the caret visible", wm_pulse(1000) == 255);
         wm_set_anim(1);
-        desk_fx = 0;
     }
 
     /* --------------------------------------------------- zov / zpop, MODALS
@@ -1235,8 +1188,8 @@ int main(void)
 
     /* ------------------------------------------------------------- ztoast
      * notify.c has had no animation call in it since it was written. The
-     * entry is a rise and a fade over .16 s, and the rise is what makes it
-     * measurable: the toast's drawn TOP EDGE is ten design pixels low on the
+     * entry is a rise and a fade over RISE, and the rise is what makes it
+     * measurable: the toast's drawn TOP EDGE is four design pixels low on the
      * first frame and climbs. */
     {
         for (int i = 0; i < WM_MAX; i++) wm_close(i);
@@ -1291,7 +1244,7 @@ int main(void)
         }
         ok("ztoast MOVES PIXELS - the toast's top edge changes between frames",
            moved >= 2);
-        ok("...and it RISES: translateY(10px) -> 0, never the other way",
+        ok("...and it RISES: translateY(4px) -> 0, never the other way",
            rose >= 2 && moved == rose);
         printf("    ztoast body pixel: fading %06x  settled %06x\n",
                body_mid & 0xFFFFFFu, flat_body & 0xFFFFFFu);
@@ -1316,11 +1269,9 @@ int main(void)
         frame();
     }
 
-    /* -------------------------------------------------------- ANIM_CLOSE
-     * The mirror of zwin, and the one animation whose absence had a REASON:
-     * a closing window leaves the z-order immediately, so the repaint's walk
-     * has nothing to draw. wm.c keeps a ghost instead - a rectangle, not a
-     * window - so that closing never depends on a free animation slot. */
+    /* ------------------------------------------------------- immediate close
+     * PRESSWORK defines no window close transform. Gesture close and teardown
+     * both remove the plate immediately and leave no drawable ghost. */
     {
         for (int i = 0; i < WM_MAX; i++) wm_close(i);
         wm_damage(0, 0, W, H);
@@ -1334,22 +1285,8 @@ int main(void)
         wm_close_fx(gw);
         ok("...and closing it removes it from the model IMMEDIATELY",
            !wm_is_open(gw));
-        int edges[10], n, moved = 0, inward = 0;
-        for (n = 0; n < 10; n++) {
-            frame();
-            edges[n] = row_ink(probe_y, WALL);
-        }
-        printf("    ANIM_CLOSE ghost left edge, frames 1..10: ");
-        for (int i = 0; i < n; i++) printf("%d ", edges[i]);
-        printf("   (settled window edge was %d)\n", settled);
-        for (int i = 1; i < n; i++) if (edges[i] != edges[i - 1]) moved++;
-        for (int i = 0; i < n; i++) if (edges[i] > settled) inward++;
-        ok("ANIM_CLOSE MOVES PIXELS - the ghost's edge changes between frames",
-           moved >= 2);
-        ok("...and it shrinks INWARD, the mirror of zwin", inward >= 2);
-
-        for (int i = 0; i < ANIM_SETTLE; i++) frame();
-        ok("...and the ghost is gone, leaving nothing but wallpaper",
+        frame();
+        ok("...and the next frame contains only wallpaper, with no ghost",
            row_ink(probe_y, WALL) == -1 &&
            all_wallpaper(300 - 60, 200 - 60, 300 + 400 + 60, 200 + 300 + 60));
 
@@ -1362,7 +1299,7 @@ int main(void)
         ok("a second window is drawn in the same place", row_ink(probe_y, WALL) == 300);
         wm_close_fx(gw2);
         frame();
-        ok("control: animations off, a closed window leaves NO ghost",
+        ok("control: motion off uses the same immediate close",
            row_ink(probe_y, WALL) == -1);
         wm_set_anim(1);
     }

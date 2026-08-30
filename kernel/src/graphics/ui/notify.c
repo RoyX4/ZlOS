@@ -24,8 +24,8 @@
  *
  * ZTOAST IS NOT IN THIS FILE, AND THAT IS DELIBERATE
  * --------------------------------------------------
- * The reference's `ztoast` - `.16s ease-out`, opacity 0 to 1 with
- * translateY(10px) to 0 - is the toast's ENTRY, and for a while this file was
+ * PRESSWORK's toast rise - opacity 0 to 1 with translateY(4px) to 0 over
+ * RISE - is the toast's ENTRY, and for a while this file was
  * the obvious place to look for it. It is not here and should not be: this
  * file owns the QUEUE and nothing else, which is why notify_rect() is the
  * only geometry in it and why even that is computed from a screen size handed

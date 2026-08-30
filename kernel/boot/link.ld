@@ -11,6 +11,7 @@ PHDRS
 SECTIONS
 {
     . = 1M;
+    __kernel_start = .;
     .multiboot : { *(.multiboot) } :text
     .text      : { *(.text*)     } :text
     .rodata    : { *(.rodata*)   } :ro

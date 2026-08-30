@@ -18,6 +18,7 @@ PHDRS
 SECTIONS
 {
     . = 0x100000;
+    __kernel_start = .;
     .text : {
         *(.text.rawentry)     /* _rawstart at exactly 0x100000 */
         *(.text*)

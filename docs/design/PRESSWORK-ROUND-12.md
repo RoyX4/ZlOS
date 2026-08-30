@@ -4,6 +4,42 @@ round-eleven list lived in /tmp and /tmp has eaten four prototypes on this box. 
 
 # PRESSWORK Round 12 — fleet audit
 
+**Status: COMPLETE in the consolidated tree (2026-08-30).** All 56 confirmed
+findings are implemented: the earlier Sections A-E checkpoint covered 32, and
+the consolidated landing completed the remaining 24 (#5, #6, #7, #9, #15,
+#16, #17, #19-#22, #25, #39, and #46-#56). The ranked list and fix text below
+remain the audit record; they are no longer an open queue.
+
+### Consolidated landing receipt
+
+- The hex pane now walks the actual loaded image range. ELF gets that range
+  from linker-exported start/end symbols; native EFI gets the relocated base
+  and size from `EFI_LOADED_IMAGE_PROTOCOL`.
+- Live values replace the remaining typed machine facts: terminal capacity,
+  focus bounds, Intel link M/N/clock inputs, kernel extent, and window identity.
+- The complete five-column L* ladder, smallest-step summary, missing rungs,
+  composites readout, token geometry, and actual-row Activities layout now
+  match the authority.
+- Motion now matches PRESSWORK: ordinary window open/close are cuts, toast is a
+  four-dp RISE animation, caret blink is one-second `steps(1)`, switch travel
+  interpolates, and focused title ink fades.
+
+Verification on the final working tree:
+
+| Gate | Result |
+|---|---|
+| app manifest | 63 named implementations + 1 catalogue surface, 24 games |
+| dead-state scan | 977 module names, 24 listed known-dead, 0 new |
+| host suite | 58 passed, 0 failed, 0 not-built, 13 explicit skips |
+| 32-bit kernel | 0 undefined symbols, multiboot header present |
+| 64-bit kernel | ELF64, 0 undefined symbols |
+| native EFI | `BOOTX64.EFI` and `ZLOS.EFI` linked cleanly |
+| QEMU transcript | kernel booted, shell responded, transcript matched golden |
+
+The 13 host skips are hardware probes, benchmarks, fuzz/manual instruments, or
+render writers; they are not counted as passes. No physical-hardware boot or
+live Intel register proof was run for this landing.
+
 **Tree:** `/home/roy/Documents/repos/zl-linux-presswork`, branch `design/presswork`, HEAD `a1bb161`.
 **Authority:** `docs/design/presswork-prototype.html` and nothing else.
 
@@ -265,7 +301,7 @@ The ink half survives the remap correctly; the rule half does not. proto:688 sen
 
 ---
 
-## Do these three first
+## Historical implementation order (completed)
 
 **1. `kernel/src/kernel.zl:9750` — `return 6 * set_rowh()` → `7 * set_rowh()`.** One token. It currently draws a caption, a rule and the head of a twelve-line well *inside* the live `per window timing` row (proto:2188), which makes that control unreadable — and that control is finding 11's subject, so nothing on the PRESS tab can be reviewed until this lands. Highest value per character in the whole set, and the stale comment at 9677 goes with it.
 

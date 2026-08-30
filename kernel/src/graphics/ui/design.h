@@ -509,25 +509,18 @@
 #define ZD_MS_TRAVEL  160
 #define ZD_MS_SETTLE  240
 
-/* the named animation slots, mapped onto the three durations above. They keep
- * their names so wm.c's timeline keeps compiling; there are three values here,
- * not ten, and that is the point. */
-#define ZD_MS_WIN       ZD_MS_TRAVEL   /* window open / close                */
-#define ZD_MS_POP       ZD_MS_RISE     /* menus, chips, tiles                */
-#define ZD_MS_POP_FAST  ZD_MS_RISE
-#define ZD_MS_POP_SLOW  ZD_MS_RISE
+/* The live timeline roles, mapped onto the three durations above. Ordinary
+ * window open/close are cuts and carry no duration of their own. */
 #define ZD_MS_PRESS     ZD_MS_RISE     /* a button taking a press            */
 #define ZD_MS_OV        ZD_MS_TRAVEL   /* overlays, modals                   */
-#define ZD_MS_TOAST     ZD_MS_TRAVEL
-#define ZD_MS_PULSE     ZD_MS_SETTLE   /* "activating" - one settle, not a   */
-#define ZD_MS_PULSE_SLOW ZD_MS_SETTLE  /* forever loop. see below.           */
+#define ZD_MS_TOAST     ZD_MS_RISE     /* proto:966 rise keyframe             */
+#define ZD_MS_PULSE     ZD_MS_SETTLE   /* activating: one settle, not a loop */
 
 /* THE INFINITE PULSE IS DELETED. A machine that breathes at rest is decoration
  * and it costs a repaint every frame forever. ZD_MS_SWEEP, the 7s wallpaper
  * sweep, goes with it: the raking light does not move, because a lamp in a
- * room does not move. Both names survive at their old values ONLY so a call
- * site that still references them compiles; the alpha floor is 255, i.e. the
- * pulse does not dip, i.e. it does nothing. */
+ * room does not move. The alpha floor stays 255, i.e. the deleted pulse does
+ * not dip and cannot animate a reading. */
 #define ZD_MS_SWEEP   7000
 #define ZD_PULSE_FLOOR 255
 
@@ -586,18 +579,12 @@
  * disagrees with one of those, the one above wins.
  */
 
-/* the button. PRESSWORK has no pills: a control is a rectangle with a 1px
- * ZD_CUT ring and an inset 1px ZD_LIT top run, radius ZD_R_CHIP. The three
- * size names survive; the radii all resolve to the chip. */
-#define ZD_PILL_SM_PY    3
-#define ZD_PILL_SM_PX    9
-#define ZD_PILL_SM_R     ZD_R_CHIP
-#define ZD_PILL_MD_PY    6
-#define ZD_PILL_MD_PX   13
-#define ZD_PILL_MD_R     ZD_R_CHIP
-#define ZD_PILL_LG_PY    7
-#define ZD_PILL_LG_PX   15
-#define ZD_PILL_LG_R     ZD_R_CHIP
+/* the button. proto:758-760 defines one 22dp control with 10dp horizontal
+ * padding; SM and MD have shipped callers and differ only in their text rung.
+ * There is no second geometry ladder in the authority. */
+#define ZD_BUTTON_H     22
+#define ZD_BUTTON_PX    10
+#define ZD_BUTTON_R     ZD_R_CHIP
 
 /* the segmented control - one 1px ZD_CUT ring around the set, 1px ZD_CUT
  * between items, no gap and no inner radius. A segmented control is a switch
@@ -735,11 +722,12 @@
 
 /* cards and key/value */
 #define ZD_CARD_R       ZD_R_INSET
-#define ZD_CARD_PY      10      /* == ZD_PAD */
-#define ZD_CARD_PX      10
+#define ZD_CARD_PY       6      /* proto:748 */
+#define ZD_CARD_PX       8
 #define ZD_CARD_HEAD_H  20      /* == ZD_BAND_H */
-#define ZD_KV_H         20
-#define ZD_KV_GAP       16
+#define ZD_KV_H         19      /* proto:795 */
+#define ZD_KV_GAP        8
+#define ZD_KV_KEY_W     132     /* proto:799 */
 
 /* overlays. The menu, the modal and the toast are the three things genuinely
  * off the plane, so these are the only widgets that carry ZD_LIFT. */
@@ -767,8 +755,10 @@
 #define ZD_MODAL_FOOT_H 40
 #define ZD_TOAST_W     340      /* .toast { width: calc(340px * var(--ui)) } */
 #define ZD_TOAST_R      ZD_R_INSET
-#define ZD_TOAST_PY     10
-#define ZD_TOAST_PX     10
+#define ZD_TOAST_PY_T    6      /* proto:963-964 */
+#define ZD_TOAST_PY_B    7
+#define ZD_TOAST_PX     11
+#define ZD_TOAST_PL     14
 #define ZD_TOAST_GAP     8      /* #toasts { gap: var(--zd-gap) } */
 #define ZD_TOAST_ICON   20
 #define ZD_TOAST_ICON_R ZD_R_CHIP

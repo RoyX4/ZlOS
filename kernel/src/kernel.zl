@@ -480,7 +480,12 @@ CROP_OFF    = 7                    # ZD_CROP_OFF - how far outside the margin
 
 fn rail_w()   { rm = ui_metric(UM_RAIL_W)    if rm > 0 { return rm }  return RAIL_W_D * ui() }
 fn strip_h()  { sm = ui_metric(UM_STRIP_H)   if sm > 0 { return sm }  return STRIP_H_D * ui() }
-fn foot_h()   { fm = ui_metric(UM_FOOT_H)    if fm > 0 { return fm }  return FOOT_H_D * ui() }
+fn foot_h() {
+    if desk_ruler_on == 0 { if desk_slug_on == 0 { return 0 } }
+    fm = ui_metric(UM_FOOT_H)
+    if fm > 0 { return fm }
+    return FOOT_H_D * ui()
+}
 fn band_h()   { bm = ui_metric(UM_BAND_H)    if bm > 0 { return bm }  return BAND_H_D * ui() }
 fn row_h()    { wm = ui_metric(UM_ROW_H)     if wm > 0 { return wm }  return ROW_H_D * ui() }
 fn pad_d()    { pm = ui_metric(UM_PAD)       if pm > 0 { return pm }  return PAD_D * ui() }
@@ -927,10 +932,9 @@ fn rail_status(slot) {
     # durable. Copying that label would advertise the opposite of Ctrl+S.
     if slot == 3 { return "read write" }
     if slot == 4 { return "ring buffer" }
-    # "rd0 - 4 MiB" in the reference. hx_ui reads HX_BASE = 0x100000 - the
-    # kernel image at its load address - with +0/+256/+512 page chips. It has
-    # never been able to open a file, so naming a volume here would point at
-    # something it does not show.
+    # "rd0 - 4 MiB" in the reference. hx_ui walks the loaded kernel image
+    # between linker-exported start/end symbols. It has never been able to open
+    # a file, so naming a volume here would point at something it does not show.
     if slot == 5 { return "kernel image" }
     if slot == 6 { return "int64" }
     if slot == 7 { return s3nw_drv(1) }
@@ -2454,7 +2458,6 @@ desk_legend_on = 1
 fn draw_grid() {
     if desk_grid_on == 0 {
         if desk_crop_on == 1 { draw_crop_marks() }
-        if desk_legend_on == 1 { draw_grid_legend() }
         return 0
     }
     # `u = ui()` used to sit here and is gone: the only reader left was the crop
@@ -2651,7 +2654,6 @@ fn draw_grid_legend() {
 # it is drawn as a slice of the heap rather than beside it. Drawing both would
 # count those megabytes twice and inflate the total under exactly the condition
 # - many open windows - where the reading matters most.
-RULER_BASE = 0x00100000            # where the kernel image is loaded
 # The driver map, drawn AS ONE SPAN and not as its thirteen regions, which is a
 # deliberate imprecision and worth naming. memmap.h places png.c's pictures, the
 # EDID page, virtio_net's rings, the browser's document store, fb.c's back
@@ -2722,7 +2724,7 @@ fn ruler_lo() {
     # arena_base() crosses a file boundary, and a negative width here would be
     # subtracted from the total and then drawn as nothing, so the bar would be
     # quietly wrong in two places at once instead of loudly wrong in one.
-    lo = arena_base() - RULER_BASE
+    lo = arena_base() - kernel_start()
     if lo < 0 { lo = 0 }
     return lo
 }
@@ -3027,7 +3029,7 @@ fn draw_foot_ruler() {
     stl = theme(TH_TEXT_DIM)
         if rdc > 0 {
             text_aa(rx, ry, "0x", dim)
-            hexat(rx + 2 * cw, ry, RULER_BASE, stl)
+            hexat(rx + 2 * cw, ry, kernel_start(), stl)
             text_aa(rx + 10 * cw, ry, " .. 0x", dim)
             hexat(rx + 16 * cw, ry, mem_top(), stl)
         }
@@ -3802,10 +3804,10 @@ fn ed_foot(fx, fy, fw) {
 # THE BINARY BRANCH THE EDITOR NEVER HAD.
 #
 # The reference's empty state says "open it in 06 HEX", and this OS must not:
-# hx_ui reads HX_BASE = 0x100000, which is kernel memory at the load address,
-# with +0/+256/+512 page chips. It cannot view a file at all. Sending someone
-# there would land them on the kernel image and call it their file, so the
-# sentence says what is true instead and names the measurement that decided it.
+# hx_ui reads the linker-bounded loaded kernel image. It cannot view a file at
+# all. Sending someone there would land them on the kernel image and call it
+# their file, so the sentence says what is true instead and names the
+# measurement that decided it.
 fn ed_binary_body(bx, by, bw, bh) {
     bu = ui()
     pw_well(bx, by, bw, bh)
@@ -8631,8 +8633,8 @@ fn files_event(win, ety, ecode, ex, ey) {
             # THE HEX PILL CANNOT SHOW THIS FILE, and now says so instead of
             # opening something else. reg_open takes an app id and nothing
             # else - files_sel was never handed over - and the Hex Viewer has
-            # no file binding of ANY kind: HX_BASE is 0x100000, where boot.S is
-            # loaded, and it reads straight through peek8. So "hex" on a file
+            # no file binding of ANY kind: it starts at the linker's kernel
+            # image boundary and reads straight through peek8. So "hex" on a file
             # opened a viewer of PHYSICAL RAM, which looks like the file's bytes
             # to anyone who does not know the pane.
             #
@@ -8641,7 +8643,7 @@ fn files_event(win, ety, ecode, ex, ey) {
             # reference has the pill and memory is worth looking at - and the
             # toast says what is on screen.
             if fbn == 1 {
-                note_say2("06 HEX reads memory, not files", "it is showing physical RAM from 0x100000 - zlfs has no mapping into the viewer", 900)
+                note_say2("06 HEX reads memory, not files", "it is showing the loaded kernel image - zlfs has no mapping into the viewer", 900)
                 return reg_open(APP_HEXV)
             }
             if fbn == 2 { return files_stat_say() }
@@ -9943,13 +9945,13 @@ fn set_focus_ctl(x, y, w) {
         # WHAT THE CONTROL DOES rather than a description of the setting.
         text_aa(x + w - 46 * cell_w(), setfc_y + (set_rowh() - cell_h()) / 2, "off falls back to graphite's wash in the same band", theme(TH_TEXT_DIM))
     }
-    # ROW 2 - the focus bar, 1..6 dp. UI_FBAR_MIN/MAX in ui.h are the clamp and
+    # ROW 2 - the focus bar. UI_FBAR_MIN/MAX in ui.h are the clamp and
     # these are the same two numbers; ui_fbar() returns the value it SETTLED
     # on, so the thumb can never be drawn past the end of its own track.
     setfc_y = set_row2_y(y)
     if set_vis(setfc_y, set_rowh()) == 1 {
         label(x, setfc_y + (set_rowh() - label_h(T_BODY)) / 2, "focus bar", theme(TH_TEXT), T_BODY, W_REG)
-        set_slider(set_trk_x(x), setfc_y + (set_rowh() - set_trkh()) / 2, set_trk_w(x, w), ui_fbar_dp(), 1, 6)
+        set_slider(set_trk_x(x), setfc_y + (set_rowh() - set_trkh()) / 2, set_trk_w(x, w), ui_fbar_dp(), ui_fbar_min(), ui_fbar_max())
         num_aa(x + w - 3 * cell_w() - s3_numw(ui_fbar_dp()), setfc_y + (set_rowh() - cell_h()) / 2, ui_fbar_dp(), theme(TH_TEXT_HI))
         text_aa(x + w - 3 * cell_w(), setfc_y + (set_rowh() - cell_h()) / 2, " dp", theme(TH_TEXT_HI))
     }
@@ -10299,15 +10301,21 @@ fn set_hex6(x, y, v, col) {
     }
     return 0
 }
+fn set_lstar_r(xr, y, c, col) {
+    setls_v = ui_lstar(c)
+    set_dec(xr - set_decw(setls_v, 2), y, setls_v, 2, col)
+    return 0
+}
 # One rung. The VALUE column is the loaded hex, so the two knockout rows change
 # hex while you watch when the FOCUS tab's toggle is thrown - which is the most
 # literal demonstration available that this table is reading the theme and not
 # a copy of design.h.
 fn set_rung(x, y, w, nm, c, role) {
     set_td(x, y, nm, theme(TH_TEXT_2))
-    set_hex6(set_cx(x, w, 34), set_tdy(y), c, theme(TH_TEXT_HI))
-    set_rat_r(set_cx(x, w, 62) - SET_TDPX * ui(), set_tdy(y), ui_ratio(c, theme(TH_PANEL)), 4, theme(TH_TEXT_2))
-    set_td(set_cx(x, w, 62), y, role, theme(TH_TEXT_DIM))
+    set_hex6(set_cx(x, w, 30), set_tdy(y), c, theme(TH_TEXT_HI))
+    set_lstar_r(set_cx(x, w, 64) - SET_TDPX * ui(), set_tdy(y), c, theme(TH_TEXT_2))
+    set_rat_r(set_cx(x, w, 80) - SET_TDPX * ui(), set_tdy(y), ui_ratio(c, theme(TH_PANEL)), 4, theme(TH_TEXT_2))
+    set_td(set_cx(x, w, 80), y, role, theme(TH_TEXT_DIM))
     return 0
 }
 fn set_rung_row(x, y, w, nm, c, role) {
@@ -10394,9 +10402,10 @@ fn set_ladder_body(x, y, w) {
     setlb_y = set_head(setlb_x, setlb_y, "THE LADDER, AS RESOLVED RIGHT NOW")
     if set_vis(setlb_y, set_thh()) == 1 {
         set_th(setlb_x, setlb_y, "TOKEN")
-        set_th(set_cx(setlb_x, setlb_w, 34), setlb_y, "VALUE")
-        set_th_r(set_cx(setlb_x, setlb_w, 62), setlb_y, "ON BASE")
-        set_th(set_cx(setlb_x, setlb_w, 62), setlb_y, "ROLE")
+        set_th(set_cx(setlb_x, setlb_w, 30), setlb_y, "VALUE")
+        set_th_r(set_cx(setlb_x, setlb_w, 64), setlb_y, "L STAR")
+        set_th_r(set_cx(setlb_x, setlb_w, 80), setlb_y, "ON BASE")
+        set_th(set_cx(setlb_x, setlb_w, 80), setlb_y, "ROLE")
     }
     setlb_y = set_thead(setlb_x, setlb_y, setlb_w)
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_CUT", theme(TH_CUT), "groove, strip")
@@ -10406,17 +10415,20 @@ fn set_ladder_body(x, y, w) {
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_RAISE", theme(TH_PANEL_HI), "on a plate, rail")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_FLOAT", theme(TH_SURF_5), "off the plane")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_LITSOFT", theme(TH_LITSOFT), "grazed left")
-    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_LIT", theme(TH_LIT), "struck top")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_LIT", theme(TH_LIT), "struck top, rule 2")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_EDGE_OVER", theme(TH_EDGE_OVER), "the occluder")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_KNOCK", theme(TH_KNOCK), "focused header")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_KO_EDGE", theme(TH_KO_EDGE), "the knockout edge")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_KNOCK_INK", theme(TH_KNOCK_INK), "reversed out")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_0", theme(TH_TEXT_HI), "emphasis")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_1", theme(TH_TEXT), "body")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_2", theme(TH_TEXT_2), "secondary")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_3", theme(TH_TEXT_DIM), "label")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_TEXT_INERT", theme(TH_SURF_7), "structure only")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_GRID", theme(TH_GRID), "the module grid")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_STEEL", theme(TH_STEEL), "instruments only")
     setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_VERM", theme(TH_ACCENT), "the overprint")
+    setlb_y = set_rung_row(setlb_x, setlb_y, setlb_w, "ZD_INK_ON", theme(TH_INK_ON), "on the overprint")
     setlb_y = setlb_y + SET_STACK * setlb_u
 
     setlb_y = set_head(setlb_x, setlb_y, "THE STEPS, AND WHETHER THEY ARE SEEN")
@@ -10431,6 +10443,27 @@ fn set_ladder_body(x, y, w) {
     setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "void to base, desk to plate", theme(TH_BG), theme(TH_PANEL))
     setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "base to raise", theme(TH_PANEL), theme(TH_PANEL_HI))
     setlb_y = set_step_row(setlb_x, setlb_y, setlb_w, "raise to float", theme(TH_PANEL_HI), theme(TH_SURF_5))
+    # proto:2061's parent-ladder minimum. It cannot be derived from this live
+    # theme, so it is named once as comparison data rather than disguised as a
+    # token. The PRESSWORK minimum below is recomputed on every draw.
+    setgm = ui_ratio(theme(TH_CUT), theme(TH_SURF_WELL))
+    setsv = ui_ratio(theme(TH_SURF_WELL), theme(TH_BG))
+    if setsv < setgm { setgm = setsv }
+    setsv = ui_ratio(theme(TH_BG), theme(TH_PANEL))
+    if setsv < setgm { setgm = setsv }
+    setsv = ui_ratio(theme(TH_PANEL), theme(TH_PANEL_HI))
+    if setsv < setgm { setgm = setsv }
+    setsv = ui_ratio(theme(TH_PANEL_HI), theme(TH_SURF_5))
+    if setsv < setgm { setgm = setsv }
+    if set_vis(setlb_y, set_tdh()) == 1 {
+        set_tdl(setlb_x, setlb_y, "SMALLEST STEP", theme(TH_TEXT_HI))
+        set_rat_r(set_cx(setlb_x, setlb_w, 66) - SET_TDPX * setlb_u, set_tdy(setlb_y), setgm, 4, theme(TH_TEXT_HI))
+        setmag = idiv((setgm - 10000) * 100, 728)
+        setmx = set_cx(setlb_x, setlb_w, 66)
+        setmx = set_dec(setmx, set_tdy(setlb_y), setmag, 2, theme(TH_TEXT_2))
+        text_aa(setmx, set_tdy(setlb_y), "x graphite magnitude", theme(TH_TEXT_2))
+    }
+    setlb_y = set_trow(setlb_x, setlb_y, setlb_w)
     if set_vis(setlb_y, set_tdh()) == 1 {
         set_tdl(setlb_x, setlb_y, "CUT TO BASE, THE WHOLE DOWNWARD BUDGET", theme(TH_TEXT_HI))
         set_rat_r(set_cx(setlb_x, setlb_w, 66) - SET_TDPX * setlb_u, set_tdy(setlb_y), set_r_cut(), 4, theme(TH_TEXT_HI))
@@ -10443,9 +10476,28 @@ fn set_ladder_body(x, y, w) {
 
     if set_vis(setlb_y, set_kvh()) == 1 {
         set_kv(setlb_x, setlb_y, setlb_w, "INK RAMP")
-        text_aa(setlb_x + setlb_w - SET_TDPX * setlb_u - 34 * cell_w(), setlb_y + setlb_u, "four rungs. the fifth no longer clears", theme(TH_TEXT_HI))
+        setix = setlb_x + setlb_w - SET_TDPX * setlb_u - 28 * cell_w()
+        setix = set_dec(setix, setlb_y + setlb_u, ui_lstar(theme(TH_TEXT_DIM)), 2, theme(TH_TEXT_HI))
+        text_aa(setix, setlb_y + setlb_u, " to ", theme(TH_TEXT_DIM))
+        setix = setix + 4 * cell_w()
+        setix = set_dec(setix, setlb_y + setlb_u, ui_lstar(theme(TH_TEXT_HI)), 2, theme(TH_TEXT_HI))
+        text_aa(setix, setlb_y + setlb_u, " L star, four rungs", theme(TH_TEXT_DIM))
     }
     setlb_y = setlb_y + set_kvh()
+    if set_vis(setlb_y, set_wellh(6)) == 1 {
+        setfb_x = setlb_x
+        setfb_y = setlb_y
+        set_well(setlb_x, setlb_y, setlb_w, 6)
+        set_wlc(setfb_x, setfb_y, 0, 0, "1  THE INK RAMP COMPRESSES. the lightest text-bearing surface")
+        set_wlc(setfb_x, setfb_y, 1, 0, "   is L star")
+        set_dec(set_wc(setfb_x, 13), set_wly(setfb_y, 1), ui_lstar(theme(TH_SURF_5)), 2, theme(TH_TEXT_HI))
+        set_wlc(setfb_x, setfb_y, 1, 19, "and the four running-text rungs span")
+        set_dec(set_wc(setfb_x, 57), set_wly(setfb_y, 1), ui_lstar(theme(TH_TEXT_HI)) - ui_lstar(theme(TH_TEXT_DIM)), 2, theme(TH_TEXT_HI))
+        set_wlc(setfb_x, setfb_y, 1, 63, "points.")
+        set_wlc(setfb_x, setfb_y, 3, 0, "2  ZD_TEXT_INERT is structure only; it clears no useful text floor.")
+        set_wlc(setfb_x, setfb_y, 5, 0, "3  every figure above is read from the loaded theme, not copied.")
+    }
+    setlb_y = setlb_y + set_wellh(6) + SET_STACK * setlb_u
     if set_vis(setlb_y, set_kvh()) == 1 {
         set_kv(setlb_x, setlb_y, setlb_w, "ACCENT SATURATION")
         text_aa(setlb_x + setlb_w - SET_TDPX * setlb_u - 34 * cell_w(), setlb_y + setlb_u, "LOCKED. two inks, and no third one", theme(TH_TEXT_HI))
@@ -10663,6 +10715,18 @@ fn set_press_body(x, y, w) {
         setpb_v = wm_appus(settings_win)
         text_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 3 * cell_w(), setpb_y + setpb_u, " us", theme(TH_TEXT_HI))
         num_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - 3 * cell_w() - s3_numw(setpb_v), setpb_y + setpb_u, setpb_v, theme(TH_TEXT_HI))
+    }
+    setpb_y = setpb_y + set_kvh()
+    if set_vis(setpb_y, set_kvh()) == 1 {
+        set_kv(setpb_x, setpb_y, setpb_w, "COMPOSITES, THIS SESSION")
+        num_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - s3_numw(wm_painted()), setpb_y + setpb_u, wm_painted(), theme(TH_TEXT_HI))
+    }
+    setpb_y = setpb_y + set_kvh()
+    if set_vis(setpb_y, set_kvh()) == 1 {
+        set_kv(setpb_x, setpb_y, setpb_w, "COMPOSITES / HOUR")
+        setpb_rate = 0
+        if ticks() > 0 { setpb_rate = idiv(wm_painted() * 360000, ticks()) }
+        num_aa(setpb_x + setpb_w - SET_TDPX * setpb_u - s3_numw(setpb_rate), setpb_y + setpb_u, setpb_rate, theme(TH_TEXT_HI))
     }
     setpb_y = setpb_y + set_kvh()
     if set_vis(setpb_y, set_kvh()) == 1 {
@@ -10955,7 +11019,7 @@ fn settings_event(win, ety, ecode, ex, ey) {
                 return 1
             }
             if set_hit_trk(setev_x, set_row2_y(set_ctl_y(setev_ay)), setev_w, ex, ey) == 1 {
-                ui_fbar(set_slider_v(set_trk_x(setev_x), set_trk_w(setev_x, setev_w), 1, 6, ex))
+                ui_fbar(set_slider_v(set_trk_x(setev_x), set_trk_w(setev_x, setev_w), ui_fbar_min(), ui_fbar_max(), ex))
                 wm_damage_theme()
                 return 1
             }
@@ -11317,7 +11381,7 @@ fn app_event(id, win, ety, ecode, ex, ey) {
             if ek == 2 {
                 # A user gesture - ESC in the editor is 'exit', which is exactly
                 # what the closebox means. wm_close_fx() is wm_close plus the
-                # ANIM_CLOSE shrink; wm_close() stays for teardown.
+                # same immediate close path as the titlebar control.
                 wm_close_fx(win)
                 edit_win = 0 - 1
                 # Return to the window that launched the editor. Generic close
@@ -12102,6 +12166,7 @@ fn ov_ctx_haskey(i) {
     if i == 7 { return 1 }
     if i == 8 { return 1 }
     if i == 10 { return 1 }
+    if i == 11 { return 1 }
     return 0
 }
 fn ov_ctx_key(i) {
@@ -12164,7 +12229,10 @@ fn ov_win_sep(i) {
 }
 fn ov_win_haskey(i) {
     if i == 0 { return 1 }
+    if i == 1 { return 1 }
     if i == 2 { return 1 }
+    if i == 5 { return 1 }
+    if i == 6 { return 1 }
     return 0
 }
 fn ov_win_key(i) {
@@ -12599,6 +12667,25 @@ fn ov_menu_run(i) {
     return ov_ctx_run(i)
 }
 
+fn ov_draw_menu_value(i, xr, y) {
+    if ov_menu_kind == OV_MENU_WIN {
+        if i == 5 {
+            omv = ui_ratio(theme(TH_CUT), theme(TH_BG))
+            if wm_over_p(ov_menu_win) == 1 { omv = ui_ratio(theme(TH_EDGE_OVER), theme(TH_PANEL)) }
+            set_rat_r(xr, y, omv, 2, theme(TH_TEXT_2))
+            return 0
+        }
+        if i == 6 {
+            omv = 10000
+            if wm_focus() == ov_menu_win { omv = ui_ratio(theme(TH_KNOCK), theme(TH_PANEL)) }
+            set_rat_r(xr, y, omv, 2, theme(TH_TEXT_2))
+            return 0
+        }
+    }
+    ui_caps(xr - 64 * ui(), y + ui(), ov_menu_key(i), theme(TH_TEXT_2), T_CAPTION)
+    return 0
+}
+
 fn ov_draw_menu(u) {
     mw = OV_MENU_W * u
     rowh = OV_MENU_ROWH * u
@@ -12612,7 +12699,16 @@ fn ov_draw_menu(u) {
     fill_rgb(mx, my + mh - 1, mw, 1, theme(TH_CUT))
     # the header names what was clicked - "field", or the window's register row
     if ov_menu_kind == OV_MENU_WIN {
-        ui_caps(mx + 10 * u, my + 6 * u, "WINDOW", theme(TH_TEXT_2), T_CAPTION)
+        oma = wm_app(ov_menu_win)
+        oms = slot_of_app(oma)
+        omhx = mx + 10 * u
+        if oms >= 0 {
+            if oms < 9 { label(omhx, my + 6 * u, "0", theme(TH_TEXT_2), T_CAPTION, W_REG) }
+            label_num(omhx + 7 * u, my + 6 * u, oms + 1, theme(TH_TEXT_2), T_CAPTION, W_REG)
+            ui_caps(omhx + 24 * u, my + 6 * u, rail_name(oms), theme(TH_TEXT_2), T_CAPTION)
+        } else {
+            ui_caps(omhx, my + 6 * u, app_name(oma), theme(TH_TEXT_2), T_CAPTION)
+        }
     } else {
         ui_caps(mx + 10 * u, my + 6 * u, "FIELD", theme(TH_TEXT_2), T_CAPTION)
     }
@@ -12636,7 +12732,7 @@ fn ov_draw_menu(u) {
             }}
             label(mx + 14 * u, ry + 3 * u, ov_menu_label(mi), tc, T_BODY, W_REG)
             if ov_menu_haskey(mi) == 1 {
-                ui_caps(mx + mw - 74 * u, ry + 4 * u, ov_menu_key(mi), theme(TH_TEXT_2), T_CAPTION)
+                ov_draw_menu_value(mi, mx + mw - 10 * u, ry + 3 * u)
             }
             ry = ry + rowh
         }
@@ -12759,6 +12855,34 @@ fn ov_act_scale(gw, gh, cols, rows, n) {
     return oas_sc
 }
 
+# The authority packs rows by the tallest plate actually present in each row.
+# Keeping this arithmetic in one helper makes the draw and hit test share the
+# same top edge instead of each spreading unused height between rows.
+fn ov_act_row_h(row, cols, n, sc) {
+    oar_h = 0
+    oar_c = 0
+    while oar_c < cols {
+        oar_i = row * cols + oar_c
+        if oar_i < n {
+            oar_w = ov_act_win(oar_i)
+            oar_th = idiv(wm_ch(oar_w) * sc, 256) + OV_ACT_TH * ui()
+            if oar_th > oar_h { oar_h = oar_th }
+        }
+        oar_c = oar_c + 1
+    }
+    return oar_h
+}
+
+fn ov_act_row_top(row, cols, n, sc) {
+    oart_y = 0
+    oart_r = 0
+    while oart_r < row {
+        oart_y = oart_y + ov_act_row_h(oart_r, cols, n, sc) + OV_ACT_GAP * ui()
+        oart_r = oart_r + 1
+    }
+    return oart_y
+}
+
 fn ov_act_tile_at(cx, cy) {
     oat_n = ov_act_n()
     if oat_n < 1 { return 0 - 1 }
@@ -12771,7 +12895,6 @@ fn ov_act_tile_at(cx, cy) {
     if oat_cols > OV_ACT_COLS { oat_cols = OV_ACT_COLS }
     oat_rows = idiv(oat_n + oat_cols - 1, oat_cols)
     oat_cw = idiv(oat_gw - (oat_cols - 1) * OV_ACT_GAP * oat_u, oat_cols)
-    oat_ch = idiv(oat_gh - (oat_rows - 1) * OV_ACT_GAP * oat_u, oat_rows)
     oat_sc = ov_act_scale(oat_gw, oat_gh, oat_cols, oat_rows, oat_n)
     oat_i = 0
     while oat_i < oat_n {
@@ -12785,7 +12908,7 @@ fn ov_act_tile_at(cx, cy) {
         oat_tw = idiv(wm_cw(oat_w2) * oat_sc, 256)
         oat_th = idiv(wm_ch(oat_w2) * oat_sc, 256) + OV_ACT_TH * oat_u
         oat_tx = oat_gx0 + oat_c * (oat_cw + OV_ACT_GAP * oat_u) + idiv(oat_cw - oat_tw, 2)
-        oat_ty = oat_gy0 + oat_r * (oat_ch + OV_ACT_GAP * oat_u)
+        oat_ty = oat_gy0 + ov_act_row_top(oat_r, oat_cols, oat_n, oat_sc)
         if cx >= oat_tx {
             if cx < oat_tx + oat_tw {
                 if cy >= oat_ty {
@@ -12848,7 +12971,7 @@ fn ov_draw_activities(u) {
         tw = idiv(wm_cw(ow2) * sc, 256)
         th = idiv(wm_ch(ow2) * sc, 256) + OV_ACT_TH * u
         tx = gx0 + c * (cw + OV_ACT_GAP * u) + (cw - tw) / 2
-        ty = gy0 + r * (ch + OV_ACT_GAP * u)
+        ty = gy0 + ov_act_row_top(r, cols, n, sc)
         # the plate, its struck edge and its groove - a tile is a plate
         fill_rgb(tx, ty, tw, th, theme(TH_PANEL))
         fill_rgb(tx, ty, tw, 1, theme(TH_LIT))

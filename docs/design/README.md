@@ -24,7 +24,9 @@ the selected direction evolved into [`presswork-prototype.html`](presswork-proto
 and the PRESSWORK implementation now lives in the kernel and UI sources. Use
 [`PRESSWORK-BACKLOG.md`](PRESSWORK-BACKLOG.md),
 [`PRESSWORK-ROUND-12.md`](PRESSWORK-ROUND-12.md), and the current project status
-for implementation truth.
+for implementation truth. Round 12 is complete in the 2026-08-30 consolidated
+tree: all 56 confirmed findings are implemented, with build/host/QEMU evidence
+and explicit hardware skips recorded in that audit.
 
 This archive contains the four original replacement design languages, each taken
 far enough to be judged by eye rather than argued about. The prototypes remain

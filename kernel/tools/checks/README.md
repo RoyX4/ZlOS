@@ -46,6 +46,7 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-shell-layout.py`
 - `check-version-selftest.py`
 - `check-version.py`
+- `check-visual-goldens.py`
 - `check-zl-calls.sh`
 - `check-zl-dispatch.py`
 - `check-zlcalls.py`
@@ -56,6 +57,7 @@ Deterministic static, host, image, and boot verification entry points.
 - `verify-64.sh`
 - `verify-clock.sh`
 - `verify-crash.py`
+- `verify-dependency-archives.py`
 - `verify-disk.sh`
 - `verify-efi.sh`
 - `verify-event-trace.py`
@@ -64,6 +66,11 @@ Deterministic static, host, image, and boot verification entry points.
 - `verify-raw.sh`
 - `verify-sources.sh`
 - `wguard.sh`
+- `write-clock-receipt.py`
+- `write-page-table-receipt.py`
+- `write-pmm-receipt.py`
+- `write-scheduler-receipt.py`
+- `write-user-process-receipt.py`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../docs/CODE-MAP.md)
 for repository-wide ownership.
