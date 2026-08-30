@@ -1315,7 +1315,11 @@ fn draw_rail_win(ry, num, win, hovered) {
     # is measured from the same value that is drawn - a second call is a second
     # chance for a resized window to change the answer between the two.
     tus = rail_slot_us(win)
-    num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tus), ny, tus, theme(TH_TEXT_DIM))
+    # the same switch as the fixed register's row above - proto:446 is scoped to
+    # `.slot .us`, and a catalogue window's row is a .slot like any other
+    if set_us != 2 {
+        num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tus), ny, tus, theme(TH_TEXT_DIM))
+    }
     return 0
 }
 
