@@ -5,9 +5,9 @@
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "e008a65c71c4e1c7fc2aaa13aa35bca7da40c554b5c1ef390ad713dea81d8c3e"
+    "sha256": "0a8ac39771a2d125b73d17aa4fdbac12fa25ea9fd5f0e5ce5c814dc940041e2e"
   },
-  "boot_log_sha256": "31158498435c25e9d9ac1c048ad36b7e107036d7b7ae382d145a7d05dc369fe0",
+  "boot_log_sha256": "5b7651f4402138d78a2f596c7377cebb6852739391116667b919981ab6a751da",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -76,7 +76,7 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "1d3222407337d5ecdb6a8ac838c19391a68fda24412e63eea1c14cc7f5248c69",
+    "sha256": "1f85450c014a183cc3de4cfa9e5de6563e2572dc63ca50b6a8ea97d7c7c3e923",
     "targets": {
       "processmemorytest": {
         "checks": 191
