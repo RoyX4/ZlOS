@@ -37,6 +37,8 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-memmap-mirror-selftest.sh`
 - `check-memmap-mirror.py`
 - `check-memmap.sh`
+- `check-nativeargs-selftest.sh`
+- `check-nativeargs.py`
 - `check-ram.sh`
 - `check-reproducible-build.py`
 - `check-shell-layout.py`

@@ -313,7 +313,10 @@ fn s3du_mount(x, y, w, nm, flag, used, total, ok) {
     if ok == 0 { fc = theme(TH_DANGER) }
     s3_mono(x + w - s3_mw(flag), y + 2 * u, flag, fc)
     by = y + 22 * u
-    sc = theme(TH_ACCENT)
+    # THE CAPACITY BAR IS AN INSTRUMENT TOO. Same rule, same token - and the
+    # failure colour stays, because TH_DANGER is a STATE rather than an accent
+    # and the authority spends it on exactly that.
+    sc = theme(TH_STEEL)
     if ok == 0 { sc = theme(TH_DANGER) }
     # A ZERO-CAPACITY VOLUME IS NOT A FULL ONE. s3_segbar divides by total, and
     # an unmounted zlfs reports capacity 0, so "used of total" was 0 of 0 - which
@@ -603,7 +606,17 @@ fn s3du_draw(ax, ay, aw, ah) {
                     }
                 }
                 bx = x + w - 84 * u - 54 * u - 9 * u
-                ui_meter(bx, ry + 9 * u, 84 * u, fs_bytes(slot) * 100 / mx, theme(TH_ACCENT))
+                # STEEL, NOT THE OVERPRINT. This drew up to seven 84dp bars in
+                # vermilion, and s3du_mount's capacity bar added two more - nine
+                # overprint fills in one window, which is exactly the "generic
+                # two accent dark UI" the Settings PRESS tab warns about two
+                # windows over. ZD_STEEL is the machine's own reading and the
+                # authority lists "raster columns, meter fills, spark bars,
+                # ruler regions" as its jobs (proto:2218-2220); kernel.zl:10105
+                # prints that same row on screen. The System Monitor's meter at
+                # kernel.zl:6057 already does it correctly and this was the only
+                # other ui_meter call site in the tree.
+                ui_meter(bx, ry + 9 * u, 84 * u, fs_bytes(slot) * 100 / mx, theme(TH_STEEL))
                 s3_num_r(x + w, ry + 4 * u, fs_bytes(slot), theme(TH_TEXT_DIM))
                 # ds 419: `border-bottom:1px solid #101215` on a body that
                 # inherits the window's own #101215. The rule is the same
@@ -868,19 +881,66 @@ fn s3sv_call_name(i) {
     if i == 10 { return "sched_yield" }
     return "statfs"
 }
+# THE ARGUMENT COLUMN WAS TWELVE LITERALS UNDER A HEADER PROMISING A READING.
+#
+# The comment above this block says the table carries "the REAL return of each
+# one in the ok column and a real device figure in the argument column". Half
+# of that was true: s3sv_call_ok reads eleven live probes. The argument column
+# was read from nowhere.
+#
+# AND ONE OF THE TWELVE CONTRADICTED THIS TREE'S OWN DRIVER. Row 7 said
+# "i915: BAR0 8 MiB"; intel.c:6 documents "BAR0 = 0xE9000000, 16 MB GTTMMADR",
+# and 8 MiB is the maximum GGTT PORTION of that BAR (intel.c:496-503), not the
+# BAR. A written figure standing directly in front of a readable one, in the
+# pane whose subject is read figures - and this file had already removed
+# exactly that fault from its Network section.
+#
+# Every argument that CAN be read now is. The label is the part that is
+# legitimately constant - a device name, a register address, a socket family -
+# and the figure beside it comes off the machine. Rows 3, 4 and 9 have no
+# figure to read and say nothing rather than inventing one.
 fn s3sv_call_arg(i) {
-    if i == 0 { return "zlfs -> /tmp" }
-    if i == 1 { return "/dev/nvme0n1" }
-    if i == 2 { return "xhci: RESET" }
+    if i == 0 { return "zlfs on nvme0, " }
+    if i == 1 { return "/dev/nvme0n1, " }
+    if i == 2 { return "xhci: " }
     if i == 3 { return "rtc: cmos 0x0b" }
     if i == 4 { return "AF_INET SOCK_DGRAM" }
-    if i == 5 { return "ipv4: 0.0.0.0:0" }
-    if i == 6 { return "ioapic: redir 1" }
-    if i == 7 { return "i915: BAR0 8 MiB" }
-    if i == 8 { return "smp: ap trampoline" }
-    if i == 9 { return "i2c-hid: descriptor" }
-    if i == 10 { return "sched: run queue" }
-    return "zlfs free blocks"
+    if i == 5 { return "ipv4: " }
+    if i == 6 { return "ioapic: " }
+    if i == 7 { return "i915: ggtt " }
+    if i == 8 { return "smp: " }
+    if i == 9 { return "i2c-hid: id " }
+    if i == 10 { return "sched: " }
+    return "zlfs: "
+}
+# -1 means "this row has no figure to read", and only three rows return it: a
+# CMOS register address and a socket family pair, which are names rather than
+# measurements, and the bind row, whose argument is an ADDRESS and is drawn as
+# a.b.c.d by the branch below rather than as a count.
+fn s3sv_call_num(i) {
+    if i == 0 { return fs_n() }
+    if i == 1 { return nv_blocks() }
+    if i == 2 { return usb_ports() }
+    if i == 3 { return 0 - 1 }
+    if i == 4 { return 0 - 1 }
+    if i == 5 { return 0 - 1 }               # drawn as a.b.c.d, not a count
+    if i == 6 { return apic_pins() }
+    if i == 7 { return intel_ggtt() / 1024 }
+    if i == 8 { return smp_n() }
+    if i == 9 { return tp_devid() }
+    if i == 10 { return sched_n() }
+    return fs_free()
+}
+fn s3sv_call_unit(i) {
+    if i == 0 { return " files" }
+    if i == 1 { return " blocks" }
+    if i == 2 { return " ports" }
+    if i == 6 { return " lines" }
+    if i == 7 { return " KiB" }
+    if i == 8 { return " cores" }
+    if i == 10 { return " tasks" }
+    if i == 11 { return " free blocks" }
+    return ""
 }
 fn s3sv_call_ok(i) {
     if i == 0 { return fs_ok() }
@@ -916,7 +976,23 @@ fn s3sv_calls(ax, ay, aw, ah) {
             cc = theme(TH_ACCENT)
             if okv == 0 { cc = theme(TH_DANGER) }
             s3_mono(ax + 116 * u, ry, s3sv_call_name(i), cc)
+            # label, then the figure, then its unit - the same three-part draw
+            # the rest of this file uses when a number sits inside a sentence.
             s3_mono(ax + 217 * u, ry, s3sv_call_arg(i), theme(TH_TEXT_DIM))
+            svax = ax + 217 * u + s3_mw(s3sv_call_arg(i))
+            if i == 5 {
+                # THE ADDRESS THE MACHINE WAS ACTUALLY GIVEN. This said
+                # 0.0.0.0:0 beside a live ip_live() probe; s3nw_ip draws a
+                # packed address a byte at a time, which is how the Network
+                # pane four tabs away prints the same figure.
+                s3nw_ip(svax, ry, dhcp_ip(), theme(TH_TEXT))
+            } else {
+                svn = s3sv_call_num(i)
+                if svn >= 0 {
+                    num_aa(svax, ry, svn, theme(TH_TEXT))
+                    s3_mono(svax + s3_numw(svn), ry, s3sv_call_unit(i), theme(TH_TEXT_DIM))
+                }
+            }
             if okv == 1 {
                 s3_mono(ax + aw - 12 * u - s3_mw("ok"), ry, "ok", theme(TH_OK))
             } else {

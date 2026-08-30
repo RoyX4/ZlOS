@@ -277,12 +277,38 @@ static void snap_preview_draw(int rx0, int ry0, int rx1, int ry1)
                rx0, ry0, rx1, ry1, &x, &y, &w, &h)) return;
     const struct ui_theme *t = ui_theme();
     fb_clip(x, y, w, h);
-    fb_rrect_blend(snap_preview_x + UI_S1(t), snap_preview_y + UI_S1(t),
-                   snap_preview_w - 2 * UI_S1(t), snap_preview_h - 2 * UI_S1(t),
-                   t->radius, t->accent, 34);
+    /* THIS WAS THE LARGEST VERMILION AREA ON THE DESKTOP, BY A WIDE MARGIN.
+     *
+     * Both of these blends were t->accent - an inner rrect at alpha 34 and the
+     * whole rect at 82 - so a half-screen snap flooded half the screen with the
+     * overprint. proto:124-128 gives ZD_VERM exactly four jobs ("the focus bar
+     * and register mark, the one primary action per view, the crop marks, the
+     * datum mark on the memory ruler") and then states the rule that keeps two
+     * inks on warm graphite from reading as decoration: "vermilion never fills
+     * an area wider than the focus bar except one button per view"
+     * (proto:129-131). This file repeats that rule for the focus bar at
+     * :2894-2904 and broke it here.
+     *
+     * THERE IS NO SNAP PREVIEW IN THE AUTHORITY AT ALL - grep for snap, ghost
+     * or preview over presswork-prototype.html returns nothing related - so
+     * nothing licenses a fifth vermilion job, let alone the biggest one.
+     *
+     * What it becomes is what a plate about to exist looks like: the knockout
+     * as a wash, the occlusion edge as its boundary, and vermilion kept for
+     * the 3dp bar down the left - the SAME mark a focused plate carries, at
+     * the SAME width, which is the one use the rule already allows. The zone
+     * still reads instantly and the budget is intact. */
     fb_rrect_blend(snap_preview_x, snap_preview_y,
                    snap_preview_w, snap_preview_h, t->radius,
-                   t->accent, 82);
+                   t->knock, 96);
+    fb_rrect_blend(snap_preview_x + UI_S1(t), snap_preview_y + UI_S1(t),
+                   snap_preview_w - 2 * UI_S1(t), snap_preview_h - 2 * UI_S1(t),
+                   t->radius, t->edge_over, 70);
+    /* the focus bar's own width, down the left edge - ZD_SEL_BAR_W, the one
+     * width vermilion is allowed to fill */
+    fb_fill_blend(snap_preview_x, snap_preview_y + t->radius,
+                  UI_DP(t, ZD_FOCUS_BAR),
+                  snap_preview_h - 2 * t->radius, t->accent, 220);
 }
 
 /* ---- input.c ------------------------------------------------------------- */
@@ -1161,18 +1187,39 @@ static const unsigned char anim_ticks[] = {
     /* FOCUS */ MS_TO_TICKS(ZD_MS_RISE),      /* RISE    90 */
 };
 
-/* Which curve each animation runs on. ds-reference.html lines 14-20: only the
- * window open gets the bespoke cubic-bezier; the pops and fades are ease-out
- * and the pulse is ease-in-out. Using one curve for all five - which is what
- * this file did - is what made every animation feel like the same animation. */
+/* ONE CURVE. THE COMMENT THAT USED TO BE HERE ARGUED THE OPPOSITE AND CITED
+ * THE SUPERSEDED DOCUMENT TO DO IT.
+ *
+ * It read: "ds-reference.html lines 14-20: only the window open gets the
+ * bespoke cubic-bezier; the pops and fades are ease-out and the pulse is
+ * ease-in-out. Using one curve for all five - which is what this file did - is
+ * what made every animation feel like the same animation."
+ *
+ * The authority says the opposite, in as many words. presswork-prototype.html
+ * declares `--ease: cubic-bezier(0.200, 0.850, 0.300, 1.000)` (proto:209)
+ * under the heading "Graphite's three durations, ONE CURVE" (proto:203-209),
+ * and every transition and animation in the file uses `var(--ease)` - nine of
+ * them, at proto:456, 602, 609, 612, 658, 663, 815, 846 and 966. Counted, not
+ * asserted: grep for cubic-bezier over that file returns exactly one, and the
+ * only other timing functions in it are three `linear`s that are
+ * linear-gradients and one `steps(1)` on the caret blink, which is a two-state
+ * flip rather than an easing.
+ *
+ * The durations beside this table had ALREADY been migrated to design.h's
+ * three, and the comment above them names this failure by name - "intent
+ * written down and never connected". The curve table was the other half of the
+ * same migration and was left on the predecessor's scheme.
+ *
+ * EASE_LINEAR stays on NONE, which has no duration and therefore no curve;
+ * giving it EASE_WIN would be a curve for an animation that does not run. */
 static const unsigned char anim_curve[] = {
     /* NONE  */ EASE_LINEAR,
     /* OPEN  */ EASE_WIN,
     /* CLOSE */ EASE_WIN,
-    /* PRESS */ EASE_STD,
-    /* PULSE */ EASE_IN_OUT,
-    /* FADE  */ EASE_OUT,
-    /* FOCUS */ EASE_STD,
+    /* PRESS */ EASE_WIN,
+    /* PULSE */ EASE_WIN,
+    /* FADE  */ EASE_WIN,
+    /* FOCUS */ EASE_WIN,
 };
 
 /* THE ID IS NOT ALWAYS A WINDOW.
@@ -2840,11 +2887,37 @@ static void chrome_seat(const struct win *W, int r, int focused, int over)
      * struck highlight is light catching the top of a raised surface; painting
      * it over the surface's own edge deletes the edge and leaves the highlight
      * floating with nothing to be the top of. */
+    /* WITH THE KNOCKOUT OFF, BOTH OF THESE RULES CHANGE, AND NEITHER DID.
+     *
+     * ui_knockout_set is a live control and ui.c remaps the four knockout roles
+     * "rule for rule" against `body.nokock`. Two of the authority's fallback
+     * rules are in this function and were not carried over:
+     *
+     *   proto:691  body.nokock .win.focus .trun { background: var(--zd-lit) }
+     *   proto:692  body.nokock .win.focus .lrun { top: var(--zd-r-plate) }
+     *
+     * They are not decoration. With the knockout off theme.knock becomes
+     * ZD_FOCUS_WASH 0x47403C, which is 1.3681:1 on the plate AND the same value
+     * as the header band directly beneath the run - so the focused plate's
+     * struck run was drawn in a colour indistinguishable from what it lies on
+     * and vanished. That is the whole point of proto:691: once the header is a
+     * wash rather than an ink plate, the run has headroom again and must be
+     * drawn in ZD_LIT.
+     *
+     * And the grazed run started below the header unconditionally, costing the
+     * focused window the top 28dp of its left edge - 56 at ui 2 - for a header
+     * that is no longer a different material. proto:692 gives it back to the
+     * plate's own corner radius.
+     *
+     * The knockout being ON is still the shipped default and neither line
+     * changes there; this is the state the switch exists to reach. */
+    int knock_on = ui_knockout_get();
     int run_w = W->w - 2 * r;
     if (run_w > 0)
-        fb_fill_px(W->x + r, W->y + 1, run_w, 1, focused ? t->knock : t->lit);
+        fb_fill_px(W->x + r, W->y + 1, run_w, 1,
+                   (focused && knock_on) ? t->knock : t->lit);
 
-    int ly = W->y + 1 + ((focused && chrome) ? t->title_h : r);
+    int ly = W->y + 1 + ((focused && chrome && knock_on) ? t->title_h : r);
     int lh = (W->y + W->h - 1 - r) - ly;
     if (lh > 0) fb_fill_px(W->x + 1, ly, 1, lh, t->litsoft);
 }

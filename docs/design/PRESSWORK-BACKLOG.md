@@ -4,49 +4,52 @@ Thirty-six findings confirmed by the round-eleven fleet against
 `docs/design/presswork-prototype.html`, zero rejected. This file exists because
 the list lived in `/tmp`, and `/tmp` has eaten four prototypes on this box already.
 
-**#23 was already fixed before this list was written.** `rd_modeline` returns
-`"  - shaded (no wireframe path)"`, short enough not to clip, and its comment
-describes the exact truncation the finding reports. The audit read a tree that
-was one commit behind — reproduce before acting.
+**#23 was already fixed before this list was written** — `rd_modeline` returns the
+short form and its comment describes the exact truncation the finding reports.
+The fleet read a tree one commit behind. Reproduce before acting.
+
+**#2/#4 were mis-diagnosed.** The finding said "there are no meshes in this
+kernel". `fb3d.c` has a shaded, back-face-culled, perspective-projected
+rasteriser and a cube. The picker was made true rather than deleted.
 
 | # | severity | status | gate | finding |
 |---|---|---|---|---|
-| 1 | invented-figure | **DONE fe0ce88** | — | The Files detail block prints an unconditional green OK verdict swatch for every selected file — nothing is checked |
-| 2 | invented-figure | **FIXED** | probe-mesh + tritest | Renderer's mesh picker selects among four meshes that do not exist and prints their triangle and vertex counts |
-| 3 | invented-figure | **FIXED** | read-only rename | "LARGEST FILES ON RD0" heads a list read from a volume the same file declares does not exist |
-| 4 | invented-figure | **FIXED** | probe-mesh + tritest | Renderer prints four fabricated tri/vert counts for meshes that do not exist |
-| 5 | invented-figure | **OPEN** | OPEN | Syscall trace's argument column is twelve literals, and one contradicts the driver |
-| 6 | invented-figure | **FIXED** | 7ffd155 | The modal's shadow is a written 3/2 multiplier where the authority states 6dp / 14dp |
-| 7 | dead-control | **FIXED** | no gate yet | The Files detail block's "hex" button opens the Hex Viewer on physical RAM at 0x100000, not on the selected file |
-| 8 | dead-control | **DONE 2c298b1** | — | Services draws 19 action pills and only one has a dispatch arm — and five bring-up natives are bound and unused |
-| 9 | dead-control | **FIXED** | probe-image | Image Viewer: three file tabs and four zoom pills light up over a canvas nothing can ever fill — no image decoder exists anywhere in the kernel |
-| 10 | dead-control | **FIXED** | tartest + probe-archive | Archive Manager: "Create archive" writes no archive, "Extract to /tmp" is silently inert, and the toolbar names a file that does not exist |
-| 11 | dead-control | **DONE fe0ce88** | — | Font Atlas: the zoom picker sits over a flat fill and its variable's only reader is its own highlight |
-| 12 | dead-control | **DONE 2c298b1** | — | Services draws 19 start/stop/restart pills; exactly one does anything |
-| 13 | dead-control | **FIXED** | probe-image | Image Viewer's file tabs and zoom pills are clickable and change nothing |
-| 14 | dead-control | **DONE fe0ce88** | — | Font Atlas zoom control has no reader outside its own fill |
-| 15 | dead-control | **FIXED** | no gate yet | Console's Scanlines pill toggles only its own fill |
-| 16 | dead-control | **FIXED** | no gate yet | The Files detail buttons stay live over the empty state, where nothing is drawn |
-| 17 | wrong-behaviour | **FIXED** | probe-lock | The lock sheet is modal to the pointer only — every character typed at its PASSPHRASE well is delivered to the window hidden behind it |
-| 18 | wrong-behaviour | **FIXED** | no gate yet | The Files pane's `hex` button opens a viewer of physical RAM, and the editor three panes away prints the refutation on screen |
-| 19 | wrong-behaviour | **FIXED** | no gate yet | Activities counts and tiles minimised windows; the prototype filters them out |
-| 20 | wrong-behaviour | **OPEN** | — | System Monitor: more cores than rows pushes the heap meter and the whole IOAPIC section off the pane |
-| 21 | wrong-behaviour | **FIXED** | no gate yet | Files empty state prints 'reason not reported' for five reasons fs_why() does report — including the one fs.c added it for |
-| 22 | wrong-visual | **FIXED** | no gate yet | The Font Atlas caption never advances nx past " glyphs - ", so the cell dimensions are overprinted on top of the word |
+| 1 | invented-figure | **DONE** `fe0ce88` | — | The Files detail block prints an unconditional green OK verdict swatch for every selected file — nothing is checked |
+| 2 | invented-figure | **DONE** `35d5b30` | tritest + probe-mesh | Renderer's mesh picker selects among four meshes that do not exist and prints their triangle and vertex counts |
+| 3 | invented-figure | **DONE** `35d5b30` | — | "LARGEST FILES ON RD0" heads a list read from a volume the same file declares does not exist |
+| 4 | invented-figure | **DONE** `35d5b30` | tritest + probe-mesh | Renderer prints four fabricated tri/vert counts for meshes that do not exist |
+| 5 | invented-figure | OPEN | — | Syscall trace's argument column is twelve literals, and one contradicts the driver |
+| 6 | invented-figure | **DONE** `7ffd155` | — | The modal's shadow is a written 3/2 multiplier where the authority states 6dp / 14dp |
+| 7 | dead-control | **DONE** `35d5b30` | — | The Files detail block's "hex" button opens the Hex Viewer on physical RAM at 0x100000, not on the selected file |
+| 8 | dead-control | **DONE** `2c298b1` | — | Services draws 19 action pills and only one has a dispatch arm — and five bring-up natives are bound and unused |
+| 9 | dead-control | **DONE** `35d5b30` | probe-image | Image Viewer: three file tabs and four zoom pills light up over a canvas nothing can ever fill — no image decoder exists anywhere in the kernel |
+| 10 | dead-control | **DONE** `35d5b30` | tartest + probe-archive | Archive Manager: "Create archive" writes no archive, "Extract to /tmp" is silently inert, and the toolbar names a file that does not exist |
+| 11 | dead-control | **DONE** `fe0ce88` | — | Font Atlas: the zoom picker sits over a flat fill and its variable's only reader is its own highlight |
+| 12 | dead-control | **DONE** `2c298b1` | — | Services draws 19 start/stop/restart pills; exactly one does anything |
+| 13 | dead-control | **DONE** `35d5b30` | probe-image | Image Viewer's file tabs and zoom pills are clickable and change nothing |
+| 14 | dead-control | **DONE** `fe0ce88` | — | Font Atlas zoom control has no reader outside its own fill |
+| 15 | dead-control | **DONE** `35d5b30` | — | Console's Scanlines pill toggles only its own fill |
+| 16 | dead-control | **DONE** `35d5b30` | — | The Files detail buttons stay live over the empty state, where nothing is drawn |
+| 17 | wrong-behaviour | **DONE** `35d5b30` | probe-lock | The lock sheet is modal to the pointer only — every character typed at its PASSPHRASE well is delivered to the window hidden behind it |
+| 18 | wrong-behaviour | **DONE** `35d5b30` | — | The Files pane's `hex` button opens a viewer of physical RAM, and the editor three panes away prints the refutation on screen |
+| 19 | wrong-behaviour | **DONE** `35d5b30` | — | Activities counts and tiles minimised windows; the prototype filters them out |
+| 20 | wrong-behaviour | **DONE** `35d5b30` | — | System Monitor: more cores than rows pushes the heap meter and the whole IOAPIC section off the pane |
+| 21 | wrong-behaviour | **DONE** `35d5b30` | — | Files empty state prints 'reason not reported' for five reasons fs_why() does report — including the one fs.c added it for |
+| 22 | wrong-visual | **DONE** `35d5b30` | — | The Font Atlas caption never advances nx past " glyphs - ", so the cell dimensions are overprinted on top of the word |
 | 23 | wrong-visual | **WAS ALREADY DONE** | — | The Renderer's new mode line is clipped to "  - wireframe" on the default window — it asserts the capability the commit added it to deny |
-| 24 | wrong-visual | **FIXED** | no gate yet | The Files detail button row is drawn past the bottom of the client rect — FILES_DETAIL_H reserves less than the block needs |
-| 25 | wrong-visual | **FIXED** | no gate yet | The Network pane fills its selected row with vermilion at 144 design units wide - 48x the sanctioned width |
-| 26 | wrong-visual | **OPEN** | — | Disk Usage draws nine instrument fills in the overprint where every other instrument in the tree uses ZD_STEEL |
-| 27 | wrong-visual | **OPEN** | — | The resize grip is drawn outside the plate's rounded corner, onto the desk |
-| 28 | wrong-visual | **OPEN** | — | The raster strip and the printer's foot are not border-box: each band is 2dp too tall and the field 4dp too short |
-| 29 | wrong-visual | **OPEN** | — | With the knockout switched off, both of the authority's fallback run rules are missing |
-| 30 | wrong-visual | **OPEN** | — | Five motion curves where the authority declares one, justified by a citation of the superseded ds-reference.html |
-| 31 | wrong-visual | **OPEN** | — | The snap preview fills half the screen with vermilion, which the overprint budget forbids |
-| 32 | wrong-visual | **FIXED** | no gate yet | Activities previews are stretched: the tile is sized from the FRAME, the pixels come from the CLIENT |
-| 33 | wrong-visual | **FIXED** | no gate yet | Files detail block overflows its own reservation; the three buttons are clipped by the client edge |
-| 34 | missing-feature | **OPEN** | — | The boot desktop is the SUPERSEDED document's composition: three plates, no overlap, wrong window focused |
-| 35 | missing-feature | **OPEN** | — | The LADDER tab has no controls at all - both of the authority's are absent |
-| 36 | missing-feature | **OPEN** | — | No segmented-control widget exists, so three of the authority's controls have no counterpart |
+| 24 | wrong-visual | **DONE** `35d5b30` | — | The Files detail button row is drawn past the bottom of the client rect — FILES_DETAIL_H reserves less than the block needs |
+| 25 | wrong-visual | **DONE** `35d5b30` | — | The Network pane fills its selected row with vermilion at 144 design units wide - 48x the sanctioned width |
+| 26 | wrong-visual | OPEN | — | Disk Usage draws nine instrument fills in the overprint where every other instrument in the tree uses ZD_STEEL |
+| 27 | wrong-visual | **IN TREE** | — | The resize grip is drawn outside the plate's rounded corner, onto the desk |
+| 28 | wrong-visual | OPEN | — | The raster strip and the printer's foot are not border-box: each band is 2dp too tall and the field 4dp too short |
+| 29 | wrong-visual | **IN TREE** | — | With the knockout switched off, both of the authority's fallback run rules are missing |
+| 30 | wrong-visual | **IN TREE** | — | Five motion curves where the authority declares one, justified by a citation of the superseded ds-reference.html |
+| 31 | wrong-visual | **IN TREE** | — | The snap preview fills half the screen with vermilion, which the overprint budget forbids |
+| 32 | wrong-visual | **DONE** `35d5b30` | — | Activities previews are stretched: the tile is sized from the FRAME, the pixels come from the CLIENT |
+| 33 | wrong-visual | **DONE** `35d5b30` | — | Files detail block overflows its own reservation; the three buttons are clipped by the client edge |
+| 34 | missing-feature | OPEN | — | The boot desktop is the SUPERSEDED document's composition: three plates, no overlap, wrong window focused |
+| 35 | missing-feature | OPEN | — | The LADDER tab has no controls at all - both of the authority's are absent |
+| 36 | missing-feature | OPEN | — | No segmented-control widget exists, so three of the authority's controls have no counterpart |
 
 ## Detail
 

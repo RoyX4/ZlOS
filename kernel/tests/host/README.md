@@ -90,11 +90,13 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `palette.c`
 - `parsestat.c`
 - `pngtest.c`
+- `retest.c`
 - `rtctest.c`
 - `run-all.sh`
 - `runtest.c`
 - `settingstest.c`
 - `systest.c`
+- `tartest.c`
 - `tcptest.c`
 - `termwrap.c`
 - `test-inventory.json`

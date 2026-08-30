@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — feat: fourteen of round eleven's findings, and four gates that catch them (35d5b30)
+
+`design/presswork` · 27 files changed, 2486 insertions(+), 210 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>27 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/design/PRESSWORK-BACKLOG.md`
+- `freestanding/runtime_kernel.c`
+- `kernel/SOURCES`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/docs/reference/system/memory-model.md`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/arch/x86/memmap.h`
+- _…and 15 more_
+
+</details>
+
 ## 2026-08-30 — feat: the Font Atlas draws its atlas - and my Files pane claimed a verdict again (fe0ce88)
 
 `design/presswork` · 9 files changed, 117 insertions(+), 14 deletions(-)

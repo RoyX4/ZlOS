@@ -106,6 +106,13 @@ try:
     time.sleep(1.6)
     qmp.screendump(B)
     b_t = band(B, *TARGET)
+    # THE SHELL HAS TO HAVE FOCUS BEFORE ls CAN BE TYPED AT IT. Serial bytes
+    # arrive as EV_CHAR and wm.c routes them to the FOCUSED window, so after
+    # the click the "ls" went into the Archive Manager, which ignores it - and
+    # this probe's third run reported an empty console and a written archive
+    # side by side. Ctrl+W is wm.c's close (:4575), and closing the pane hands
+    # focus back to the plate underneath it.
+    ser.send("\x17"); time.sleep(1.6)
     after = ls_says(ser)
     try:
         from PIL import Image
