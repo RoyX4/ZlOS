@@ -61,7 +61,10 @@ jobs:
                    kernel/tools/checks/verify-efi.sh; do
             echo "── $g ──"
             "$g" 2>&1 | tee /tmp/g.log
-            grep -qiE '^\s*skip:' /tmp/g.log && { echo "::error::$g skipped"; exit 1; }
+            if grep -qiE '^\s*skip:' /tmp/g.log; then
+              echo "::error::$g skipped"
+              exit 1
+            fi
           done
 
       # fb.c is freestanding C against memory, so the renderer benchmarks at
