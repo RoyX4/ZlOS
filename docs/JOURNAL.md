@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — chore: record presswork round twelve closure (1cc71f7)
+
+`codex/consolidate-all-2026-08-30` · 2 files changed, 30 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-30 — fix: complete presswork round twelve (8e94622)
 
 `codex/consolidate-all-2026-08-30` · 76 files changed, 1774 insertions(+), 502 deletions(-)
