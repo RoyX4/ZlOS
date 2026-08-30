@@ -7,6 +7,23 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — chore: journal ride-along for 1134543 (86c2d4b)
+
+`design/presswork` · 1 file changed, 27 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
 ## 2026-08-30 — fix: round twelve, section E - eleven measurements that disagreed with the authority (1134543)
 
 `design/presswork` · 11 files changed, 134 insertions(+), 33 deletions(-)
