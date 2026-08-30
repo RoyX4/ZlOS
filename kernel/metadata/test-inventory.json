@@ -1150,7 +1150,7 @@
       "optional_build": false,
       "source": "palette.c",
       "source_present": true,
-      "source_sha256": "08a33c35cfe0649907bab1568c43ce772c98f950f9537cf0159e44b5885bfaad",
+      "source_sha256": "fe8aa7368c03432fc80240efcd639ba60bc5e900ac17471f30bba738ef59c2f1",
       "timeout_seconds": 180
     },
     {
@@ -1528,7 +1528,7 @@
       "optional_build": false,
       "source": "uitest.c",
       "source_present": true,
-      "source_sha256": "0d5d866cd4be9c9d34776ab928c5f01cf2dcef4a0a4ad250ce3798b60ad0f7a2",
+      "source_sha256": "3ab38632e5d19586f3147de979b9bc9f74921137460e87bc7269210e1bdd52f8",
       "timeout_seconds": 180
     },
     {
@@ -1633,7 +1633,7 @@
       "optional_build": false,
       "source": "wmtest.c",
       "source_present": true,
-      "source_sha256": "63652f5842c75dd58972e9c6bbd871381b862f883ff4cc4ff560766b84051cf3",
+      "source_sha256": "2b70d778aa6f804487ccd2f3dbd58874661f39e59fbdc7d1b7ce90733446279f",
       "timeout_seconds": 180
     },
     {
@@ -1654,7 +1654,7 @@
       "optional_build": false,
       "source": "wmtest_feel.c",
       "source_present": true,
-      "source_sha256": "4d6427f07a01525bc771067e3210177d7160df2e9f57390239cb1fda3d3c7e24",
+      "source_sha256": "92f5ab48ae0e09652e7172f851d1443494699b6b2bde53aeff3bcbaf76869446",
       "timeout_seconds": 180
     },
     {

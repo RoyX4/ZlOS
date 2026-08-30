@@ -1,13 +1,13 @@
 {
   "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY",
-  "build_identity": "ecc49c5ca81a4c212edd0d5d67d99265bdb986c383b9236306e3eb89c24b9d57",
+  "build_identity": "9aeb5f46dffa99a1072a38b224380857f14c7e33fd1e6cd42603d3eb2968fd28",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "e43f589dfbed461640390ee17bcfb3a7244f1e38fc6a3c029766417a6ad2f38a"
+    "sha256": "fdd955bc58933d2616a7f495cfb619aaac6577f477b90ce5669ee2d85cb93f68"
   },
-  "boot_log_sha256": "fabbb0bc889dae5122add819bacee52dc9cfdd39f6dc83db69b5fb6462202c38",
+  "boot_log_sha256": "fc29e051cddbf575491fd6cd6d31de45068a3418c06c9ae3b567af5ceff8c971",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -76,7 +76,7 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "344b79d78f46da98e66fdd6ddd2500fe93228aa30ce7a9d4fa23eac21c66118c",
+    "sha256": "1d3222407337d5ecdb6a8ac838c19391a68fda24412e63eea1c14cc7f5248c69",
     "targets": {
       "processmemorytest": {
         "checks": 191
@@ -269,12 +269,13 @@
     "copy admission covers the fixed code/stack layout rather than arbitrary mapped regions",
     "anonymous allocation is a fixed 32-page window without a virtual-area allocator or demand paging",
     "owner accounting is not yet unified across services, caches, pinned memory, DMA or surfaces",
+    "the typed PMM owner is not a per-allocation origin or call-site provenance ledger",
     "ABI version 1 has no compatibility, deprecation or migration tooling",
     "no current physical-hardware user-process receipt"
   ],
   "evidence_ceiling": "exact current native-UEFI64 QEMU artifact plus source-bound fixed-layout and bounded kernel-stack-use contracts; not a general process service, stable compatibility promise, or physical-hardware qualification",
   "generator": {
     "path": "kernel/tools/checks/write-user-process-receipt.py",
-    "sha256": "ad7661b14636bca57e9f6581a7d32c5546030f0147fb8150ae7f3db66fc2d4dd"
+    "sha256": "ea771aaeb954e1d0629e3a6e683a26eb77dc7c48ceeb2da1680189d89c413289"
   }
 }
