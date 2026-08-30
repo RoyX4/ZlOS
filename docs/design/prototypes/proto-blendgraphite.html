@@ -1,0 +1,2369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRAPHITE BLEND / zlOS living prototype</title>
+<style>
+/* ======================================================================
+   THE GRAPHITE BLEND - design.h
+   ----------------------------------------------------------------------
+   DARK-NATIVE. Said plainly because it changes what the two blocks below
+   mean. Every other direction in this directory designed a light ladder
+   and derived a dark one. This one is designed on graphite and derives
+   the light one, so :root is the SECOND ladder and :root[data-theme=dark]
+   is the home. The convention is kept anyway (hash without a suffix is
+   :root, hash with -dark is the override) because the deep links have to
+   match every other prototype here, and because a direction that cannot
+   survive its own secondary ladder is not finished.
+
+   The derivation is not an inversion. One raking light, upper left, in
+   both modes. What changes is which edge can do the work:
+
+     graphite  ground L* 18.15, huge headroom above it
+               -> the STRUCK edge carries depth. LIT on BASE 1.993:1,
+                  CUT on BASE 1.332:1.
+     work light ground L* 91.43, almost no headroom above it
+               -> the CUT edge carries depth. CUT on BASE 1.831:1,
+                  LIT on BASE 1.241:1.
+
+   Same token names, same draw order, same call sites. Only the values
+   move, which is exactly the shape ui_theme_init_q8() needs. A token
+   that exists in one mode only is a defect; there are none.
+   ====================================================================== */
+:root {
+  /* ------------------------------------------------- surfaces (light) */
+  --zd-cut:        #B3AB9C;
+  --zd-well:       #D6CFC1;
+  --zd-void:       #DED8CC;
+  --zd-base:       #EBE6DC;
+  --zd-raise:      #F2EEE6;
+  --zd-float:      #F8F5EF;
+  --zd-litsoft:    #FCFAF5;
+  --zd-lit:        #FFFFFC;
+
+  /* ZD_EDGE_OVER - NEW TOKEN, and the reason this blend can float its
+     windows at all. See the note in the dark block; it is the same
+     argument with the sign flipped. 4.83:1 on BASE, 3.88:1 on WELL. */
+  --zd-edge-over:  #6A6256;
+
+  /* ZD_FOCUS_WASH - NEW TOKEN. The light falling into the focused
+     plate's title band. STEEL over BASE at 18%, resolved to a hex so it
+     is a real token and not a blend call. 1.305:1 on BASE. */
+  --zd-focus-wash: #C3CDCD;
+
+  /* ----------------------------------------------------- ink (light) */
+  --zd-text-0:     #141109;
+  --zd-text-1:     #26221A;
+  --zd-text-2:     #4A4438;
+  --zd-text-3:     #5C554A;
+  --zd-text-inert: #9C9488;
+
+  /* THE ACCENT IS THE LIGHT, not a brand colour. Re-picked per mode
+     rather than reused: Datum's dark blue measured 2.36:1 as a smudge in
+     dark, and the same failure runs the other way - #7FB2E0 on paper is
+     1.9:1 and unreadable. Hue held at 205-208, saturation held low. */
+  --zd-steel:      #0E5C8A;
+  --zd-steel-br:   #08456B;
+
+  --zd-ok:         #17592A;
+  --zd-warn:       #7A4E00;
+  --zd-bad:        #C0362A;
+  --zd-bad-ink:    #A32418;
+  --zd-ink-on:     #F8F5EF;
+
+  /* -------------------------------------------------------- metrics */
+  --ui: 1;
+  --zd-rail-w:   calc(132px * var(--ui));
+  --zd-strip-h:  calc(26px  * var(--ui));
+  --zd-ruler-h:  calc(22px  * var(--ui));
+  --zd-title-h:  calc(28px  * var(--ui));
+  --zd-row-h:    calc(24px  * var(--ui));
+  --zd-pad:      calc(10px  * var(--ui));
+  --zd-gap:      calc(8px   * var(--ui));
+
+  /* RADIUS: one rule. Radius encodes how much the object can move, and
+     nesting halves it. Taken from Raking unmodified - it is free under
+     fb_rrect and it survives every other pick on this page. */
+  --zd-r-bolt:   0px;
+  --zd-r-plate:  calc(10px * var(--ui));
+  --zd-r-inset:  calc(5px  * var(--ui));
+  --zd-r-chip:   calc(3px  * var(--ui));
+
+  /* FOCUS. bezel width is a live setting; 3dp is the shipped value. */
+  --zd-bezel:    calc(3px * var(--ui));
+
+  /* TYPE: three sizes, because fb.c bakes three atlases and there is no
+     runtime rasteriser. SM 11 / MD 13 / LG 21. Ratios 1.182 and 1.615 -
+     the big jump is deliberate so LG cannot be used as a heading. */
+  --fs-sm:  calc(11px * var(--ui));
+  --fs-md:  calc(13px * var(--ui));
+  --fs-lg:  calc(21px * var(--ui));
+  --lh-sm:  calc(15px * var(--ui));
+  --lh-md:  calc(18px * var(--ui));
+  --lh-lg:  calc(24px * var(--ui));
+
+  /* MOTION: three durations keyed to distance travelled, one curve.
+     Amended from Raking: the focus signal no longer waits on SETTLE.
+     The load-bearing half (the bezel) arrives at RISE, the ambient half
+     (the wash) settles over SETTLE. */
+  --ms-rise:   90ms;
+  --ms-travel: 160ms;
+  --ms-settle: 240ms;
+  --ease: cubic-bezier(0.200, 0.850, 0.300, 1.000);
+
+  --sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+/* ======================================================================
+   design.h - THE HOME LADDER. Warm graphite, hue 22, 18-31% saturation.
+   Six rungs inside 17 L* points, every adjacent step below perceptual
+   threshold (1.073 / 1.126 / 1.089 / 1.077 : 1). The surfaces do not
+   separate themselves and that is the premise: a 1px struck run on the
+   top edge and a cut groove underneath do all of it.
+   ====================================================================== */
+:root[data-theme="dark"] {
+  --zd-cut:        #19120E;
+  --zd-well:       #231C18;
+  --zd-void:       #29221E;
+  --zd-base:       #322B27;
+  --zd-raise:      #38312D;
+  --zd-float:      #3D3632;
+  --zd-litsoft:    #4A433F;
+  --zd-lit:        #5F5854;
+
+  /* ---------------------------------------------------- ZD_EDGE_OVER
+     THE ONE VALUE THIS BLEND HAD TO INVENT, and the arithmetic that
+     forced it.
+
+     Free-floating windows put a >=3:1 floor on the window boundary,
+     because under overlap the only thing saying which sheet is on top is
+     the upper sheet's bottom/right edge lying on the lower sheet's body.
+     Raking draws that edge ZD_CUT: 1.332:1. It fails.
+
+     It cannot be fixed by darkening. ZD_BASE has Y = 0.02552, so the
+     largest ratio ANY darker colour can reach against it is
+     (0.02552 + 0.05) / (0 + 0.05) = 1.510:1, and that is pure black.
+     Against ZD_FLOAT the ceiling is 1.772:1. On a dark ground the
+     downward direction is arithmetically shut: there is no groove, at
+     any value, that clears 3:1.
+
+     So the occluding edge is the LIGHT, not the groove - which is what
+     the raking light does anyway. An edge standing proud of another
+     object catches the source across its full thickness; an edge lying
+     on the field does not. ZD_EDGE_OVER is that struck near edge:
+       3.67:1 on BASE, 3.13:1 on FLOAT, 4.14:1 on VOID,
+       3.37:1 on RAISE, 4.44:1 on WELL.
+     Every surface in the system clears 3:1, so the rule is
+     unconditional and needs no per-case table. It is a value, not a
+     primitive - fb_fill_px already draws it.
+
+     Who draws it is Apparatus's rule, adopted whole: THE BORDER YOU CAN
+     SEE IS DRAWN BY THE OCCLUDER, NEVER THE OCCLUDED. -------------- */
+  --zd-edge-over:  #8A8279;
+
+  /* ---------------------------------------------------- ZD_FOCUS_WASH
+     STEEL over BASE at alpha 18%, resolved to a hex. 1.400:1 against
+     ZD_BASE - above every surface step in the system (loudest 1.126:1)
+     and below the struck edge (1.993:1), so it reads as a step without
+     outranking the light. -------------------------------------------- */
+  --zd-focus-wash: #404348;
+
+  --zd-text-0:     #F2EDE4;
+  --zd-text-1:     #DAD3C7;
+  --zd-text-2:     #BDB5A7;
+  --zd-text-3:     #AAA194;
+  --zd-text-inert: #6A635A;
+
+  --zd-steel:      #7FB2E0;
+  --zd-steel-br:   #A9CFF2;
+
+  --zd-ok:         #7FBF63;
+  --zd-warn:       #E3A63F;
+  --zd-bad:        #E8664B;
+  --zd-bad-ink:    #E58972;
+  --zd-ink-on:     #181310;
+}
+
+/* ============================================================ reset == */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--zd-void); color: var(--zd-text-1);
+  font-family: var(--sans); font-size: var(--fs-md); line-height: var(--lh-md);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--zd-steel); color: var(--zd-ink-on); }
+
+/* ============================================================= type == */
+.t-sm  { font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.t-md  { font-size: var(--fs-md); line-height: var(--lh-md); }
+.t-lg  { font-size: var(--fs-lg); line-height: var(--lh-lg); font-variant-numeric: tabular-nums; }
+/* micro label. UPPERCASE at the call site, which is free, and it is what
+   substitutes for the letter-spacing fb_text_role cannot do without a
+   new primitive. There is no tracking anywhere in this document. */
+.t-lab { font-size: var(--fs-sm); line-height: var(--lh-sm); text-transform: uppercase;
+         color: var(--zd-text-3); white-space: nowrap; }
+/* mono is one size forever. Every figure the machine measured is set in
+   it; everything a person wrote is proportional. That is the cheap half
+   of Datum's face law, and it needs no atlas the build does not bake. */
+.t-num { font-family: var(--mono); font-size: var(--fs-sm); line-height: var(--lh-sm);
+         font-variant-numeric: tabular-nums; }
+.ink0 { color: var(--zd-text-0); } .ink1 { color: var(--zd-text-1); }
+.ink2 { color: var(--zd-text-2); } .ink3 { color: var(--zd-text-3); }
+.steel { color: var(--zd-steel); } .steelbr { color: var(--zd-steel-br); }
+.k-ok { color: var(--zd-ok); } .k-warn { color: var(--zd-warn); } .k-bad { color: var(--zd-bad-ink); }
+.bold { font-weight: 700; }
+.spread { margin-left: auto; }
+
+/* ==================================================== the strip bar == */
+#strip {
+  position: fixed; left: 0; right: 0; top: 0; height: calc(30px * var(--ui));
+  background: var(--zd-cut); color: var(--zd-text-3); z-index: 400;
+  display: flex; align-items: center; gap: calc(14px * var(--ui));
+  padding: 0 calc(12px * var(--ui)); font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--zd-edge-over);
+}
+#strip .nm { color: var(--zd-text-1); font-weight: 700; text-transform: uppercase; }
+#strip .pitch { color: var(--zd-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#strip .links { display: flex; gap: calc(9px * var(--ui)); margin-left: auto; }
+#strip .links a { color: var(--zd-text-3); text-decoration: none; }
+#strip .links a.on { color: var(--zd-steel); }
+#strip .links a:hover { color: var(--zd-text-0); }
+#strip .thm { display: flex; gap: calc(2px * var(--ui)); align-items: center; }
+#strip .tk { padding: calc(2px * var(--ui)) calc(7px * var(--ui)); cursor: pointer;
+             border-radius: var(--zd-r-chip); color: var(--zd-text-3); }
+#strip .tk.on { background: var(--zd-steel); color: var(--zd-ink-on); }
+#strip .hint { color: var(--zd-text-3); }
+
+/* =============================================================== os == */
+#os { position: fixed; left: 0; right: 0; top: calc(30px * var(--ui)); bottom: 0;
+      display: flex; overflow: hidden; background: var(--zd-void); }
+
+/* ============================================================= rail ==
+   PLATE's numbered register, on Raking's single rail. 132dp, not 56dp:
+   "01 SHELL" does not fit in 56dp, and the register is the whole point
+   of taking it. The consequence is checked and paid: Raking's stacked
+   HH-over-MM clock exists ONLY because a 56dp rail cannot hold 23:41 on
+   one line. At 132dp it can, so the stacking is dropped. A free rider
+   that is free with respect to colour can still be paid for in geometry.
+   The rail is ZD_R_BOLT - it meets three screen edges, and a radius
+   against a screen edge is a lie about a shape that cannot be seen. */
+#rail {
+  width: var(--zd-rail-w); flex: 0 0 var(--zd-rail-w); background: var(--zd-raise);
+  display: flex; flex-direction: column; position: relative; z-index: 60;
+  border-right: 1px solid var(--zd-lit);
+}
+#rail .ident { padding: calc(12px * var(--ui)) var(--zd-pad) calc(8px * var(--ui)); }
+#rail .ident .w { font-size: var(--fs-lg); line-height: var(--lh-lg); color: var(--zd-text-0); font-weight: 700; }
+#rail .div { height: 1px; background: var(--zd-cut); margin: calc(4px * var(--ui)) var(--zd-pad); }
+#rail .sect { padding: calc(8px * var(--ui)) var(--zd-pad) calc(3px * var(--ui)); display: block; }
+#reg { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; }
+.slot { display: flex; align-items: center; gap: calc(7px * var(--ui));
+        height: calc(26px * var(--ui)); padding: 0 0 0 var(--zd-pad); cursor: pointer;
+        position: relative; color: var(--zd-text-3); }
+.slot .n { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
+           color: var(--zd-text-inert); }
+.slot .nm { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot:hover { background: var(--zd-float); border-radius: var(--zd-r-chip) 0 0 var(--zd-r-chip); }
+.slot.run .n  { color: var(--zd-text-2); }
+.slot.run .nm { color: var(--zd-text-1); }
+.slot.act .n  { color: var(--zd-steel); }
+.slot.act .nm { color: var(--zd-text-0); font-weight: 700; }
+/* THE RUNNING INDICATOR REPLACES THE TILE. No tile, no rounded face, no
+   box. A running app gets a 2dp bar on the rail's lit edge pointing into
+   the field at the window it owns; the app owning the FOCUSED window
+   gets the full slot height at STEEL_BR. This is the third locus of the
+   focus signal and it is the only one that is legible from the rail. */
+.slot .bar { position: absolute; right: 0; width: calc(2px * var(--ui));
+             height: calc(14px * var(--ui)); background: var(--zd-steel);
+             top: 50%; transform: translateY(-50%);
+             transition: height var(--ms-rise) var(--ease), background var(--ms-settle) var(--ease),
+                         width var(--ms-rise) var(--ease); }
+.slot.act .bar { height: calc(26px * var(--ui)); width: calc(3px * var(--ui)); background: var(--zd-steel-br); }
+#rail .wsrow { display: flex; gap: calc(4px * var(--ui)); padding: calc(2px * var(--ui)) var(--zd-pad); }
+.wsb { flex: 1; height: calc(22px * var(--ui)); background: var(--zd-base);
+       border: 1px solid var(--zd-cut); border-top-color: var(--zd-lit);
+       border-radius: var(--zd-r-inset); display: flex; align-items: center;
+       justify-content: center; cursor: pointer; }
+.wsb.on { background: var(--zd-steel); border-color: var(--zd-steel); color: var(--zd-ink-on); }
+.wsb.on .t-num { color: var(--zd-ink-on); }
+#rail .stat { padding: calc(4px * var(--ui)) var(--zd-pad); }
+.strow { display: flex; align-items: center; gap: calc(6px * var(--ui)); height: calc(20px * var(--ui)); }
+.strow svg { flex: 0 0 auto; }
+.strow .w { margin-left: auto; font-family: var(--mono); font-size: var(--fs-sm); }
+#rail .clock { padding: calc(6px * var(--ui)) var(--zd-pad) calc(12px * var(--ui)); }
+#rail .clock .hm { font-size: var(--fs-lg); line-height: var(--lh-lg); color: var(--zd-text-0);
+                   font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ============================================================ field == */
+#fieldwrap { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+
+/* THE RASTER STRIP - Datum's, with its clock re-derived.
+   Datum deletes every infinite loop for an explicit reason ("the damage
+   list is never empty on a compositor whose entire architecture is
+   damage-driven repaint") and then makes exactly one exception with
+   exactly that property: 215,993 composite wakeups per hour on an idle
+   machine at 59.998 Hz. The exception is not needed. The strip advances
+   one column PER COMPOSITE, not per frame. On an idle machine it is
+   still, and a still strip is information: it says nothing damaged. */
+#raster { height: var(--zd-strip-h); flex: 0 0 var(--zd-strip-h); background: var(--zd-well);
+          border-bottom: 1px solid var(--zd-cut); display: flex; align-items: stretch;
+          position: relative; overflow: hidden; }
+#raster .lbl { position: absolute; left: calc(8px * var(--ui)); top: 50%;
+               transform: translateY(-50%); z-index: 2; pointer-events: none; }
+#raster .rd { position: absolute; right: calc(8px * var(--ui)); top: 50%;
+              transform: translateY(-50%); z-index: 2; pointer-events: none;
+              display: flex; gap: calc(12px * var(--ui)); align-items: baseline; }
+#rcanvas { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+
+#field { flex: 1; position: relative; overflow: hidden; background: var(--zd-void); }
+/* THE WALLPAPER IS ONE CALL. fb_glow(-w/8, -h/6, w*11/8, h*11/8, LITSOFT,
+   26, 0, 100): a single raking light entering from off screen upper left
+   and falling to ZD_VOID at the lower right. Nine layers become one, and
+   the light is the identity rather than a texture. */
+#field::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 130% at -8% -12%,
+              color-mix(in srgb, var(--zd-litsoft) 62%, transparent) 0%,
+              color-mix(in srgb, var(--zd-litsoft) 22%, transparent) 34%,
+              transparent 72%); }
+
+/* THE MEMORY MAP RULER - Datum, unchanged in intent. It is mono text and
+   fills in a band that exists regardless: no surface value, no boundary
+   token, no radius, no focus signal and no colour of its own. */
+#ruler { height: var(--zd-ruler-h); flex: 0 0 var(--zd-ruler-h); background: var(--zd-raise);
+         border-top: 1px solid var(--zd-lit); display: flex; align-items: center;
+         gap: calc(10px * var(--ui)); padding: 0 calc(10px * var(--ui)); }
+#rulerbar { flex: 1; height: calc(10px * var(--ui)); display: flex; background: var(--zd-well);
+            border-radius: var(--zd-r-chip); overflow: hidden; border: 1px solid var(--zd-cut); }
+#rulerbar span { display: block; height: 100%; }
+
+/* =========================================================== window ==
+   THE SEAT RECIPE. Four calls, taken from Raking unmodified:
+     1  fb_rrect(x, y, w, h, r, ZD_CUT)                 the groove ring
+     2  fb_rrect(x+1, y+1, w-2, h-2, r-1, <surface>)    the object
+     3  fb_fill_px(x+r, y, w-2r, 1, ZD_LIT)             the struck top
+     4  fb_fill_px(x, y+r, 1, h-2r, ZD_LITSOFT)         the grazed left
+   Bottom and right stay ZD_CUT. Steps 3 and 4 run only between the
+   corner arcs. The recipe is LOAD-BEARING and lives in exactly one
+   function - if an edge is clipped away the plate does not look slightly
+   wrong, it vanishes into the field.
+
+   AMENDED, and this is the blend's one structural change: when a plate
+   lies OVER another plate, its edges are drawn ZD_EDGE_OVER instead. The
+   occluder draws them, never the occluded. See the token note above for
+   why this is the only direction the arithmetic allows on a dark ground.
+   ---------------------------------------------------------------- */
+#wins { position: absolute; inset: 0; }
+.win {
+  position: absolute; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--zd-base); border-radius: var(--zd-r-plate);
+  border: 1px solid var(--zd-cut);
+  transition: border-color var(--ms-rise) var(--ease);
+}
+/* The struck runs live on an overlay, not on the plate's own box shadow,
+   because the focus wash paints over the title band and an inset shadow
+   sits UNDER content. The edge must be the last thing drawn or the wash
+   dilutes it - measured: the 3dp bezel came out 1 device px at 55% of
+   ZD_STEEL before this was split out. */
+.win::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; z-index: 5;
+  box-shadow: inset 0 1px 0 0 var(--zd-lit), inset 1px 0 0 0 var(--zd-litsoft);
+  transition: box-shadow var(--ms-rise) var(--ease); }
+/* rank 2: this plate lies over another plate. */
+.win.over { border-color: var(--zd-edge-over); }
+/* rank 3 and the focused plate: the bezel. */
+.win.focus::after {
+  box-shadow: inset 0 var(--zd-bezel) 0 0 var(--zd-steel),
+              inset var(--zd-bezel) 0 0 0 var(--zd-steel);
+}
+.win.drag { border-color: var(--zd-edge-over);
+  box-shadow: 0 calc(6px * var(--ui)) calc(14px * var(--ui)) rgba(0,0,0,.55); }
+.win.drag::after {
+  box-shadow: inset 0 var(--zd-bezel) 0 0 var(--zd-steel-br),
+              inset var(--zd-bezel) 0 0 0 var(--zd-steel-br),
+              inset calc(-1px * var(--ui)) 0 0 0 var(--zd-edge-over),
+              inset 0 calc(-1px * var(--ui)) 0 0 var(--zd-edge-over); }
+.win.mini { display: none; }
+.win.max { border-radius: var(--zd-r-bolt); }
+
+.tbar { height: var(--zd-title-h); flex: 0 0 var(--zd-title-h); display: flex;
+        align-items: center; gap: calc(8px * var(--ui)); padding: 0 calc(8px * var(--ui)) 0 calc(12px * var(--ui));
+        cursor: default; position: relative; user-select: none; }
+/* THE WASH. A horizontal ramp from ZD_FOCUS_WASH at the plate's lit
+   corner to nothing at the right edge: the raking light entering the
+   window. It is not a knockout and must never become one - the whole
+   reason it works here is that it stays inside the achromatic budget. */
+.tbar::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, var(--zd-focus-wash) 0%,
+              color-mix(in srgb, var(--zd-focus-wash) 45%, transparent) 38%, transparent 78%);
+  opacity: 0; transition: opacity var(--ms-settle) var(--ease); }
+.win.focus .tbar::before { opacity: 1; }
+#lock .sheet .tbar::before { opacity: 1; }
+body.nowash .tbar::before { display: none; }
+.tbar > * { position: relative; z-index: 1; }
+.tbar .ttl { font-size: var(--fs-md); font-weight: 700; color: var(--zd-text-2);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+             transition: color var(--ms-rise) var(--ease); }
+.win.focus .tbar .ttl { color: var(--zd-text-0); }
+.tbar .sub { font-family: var(--mono); font-size: var(--fs-sm); color: var(--zd-text-3);
+             white-space: nowrap; }
+.tbar .reg { font-family: var(--mono); font-size: var(--fs-sm); color: var(--zd-text-inert); }
+.win.focus .tbar .reg { color: var(--zd-steel); }
+/* NO FACE AT REST. Three bare glyphs; the current three filled circles
+   are three unnecessary rectangles on every window. */
+.tbar .ctl { display: flex; gap: calc(4px * var(--ui)); margin-left: auto; }
+.cbtn { width: calc(20px * var(--ui)); height: calc(20px * var(--ui)); display: flex;
+        align-items: center; justify-content: center; cursor: pointer;
+        border-radius: var(--zd-r-chip); color: var(--zd-text-3); }
+.cbtn:hover { background: var(--zd-raise); color: var(--zd-text-0); }
+.cbtn.x:hover { background: var(--zd-bad); color: var(--zd-ink-on); }
+.cbtn:active { background: var(--zd-cut); }
+
+.wbody { flex: 1; min-height: 0; display: flex; flex-direction: column;
+         padding: 0 calc(10px * var(--ui)) calc(8px * var(--ui)); gap: calc(6px * var(--ui)); overflow: hidden; }
+/* THE STATUS BAND, and Datum's per-window app_us in it. Free rider: mono
+   ink on a band all four directions already draw. It costs exactly one
+   real thing and it is not visual - wm.c measures app_us in AGGREGATE
+   only, so per-window attribution is new work. Datum's own fallback is
+   the window's repaint_pixels in the same slot, same face, no layout
+   change; the settings pane switches between them so the fallback is
+   something you can look at rather than a sentence. */
+.sband { height: calc(20px * var(--ui)); flex: 0 0 calc(20px * var(--ui));
+         display: flex; align-items: center; gap: calc(10px * var(--ui));
+         border-top: 1px solid var(--zd-cut); padding-top: calc(2px * var(--ui)); }
+body.nous .sband .us { display: none; }
+.grip { position: absolute; right: calc(2px * var(--ui)); bottom: calc(2px * var(--ui));
+        width: calc(14px * var(--ui)); height: calc(14px * var(--ui)); cursor: nwse-resize; }
+
+/* ======================================================= primitives == */
+.hr   { height: 1px; background: var(--zd-cut); flex: 0 0 1px; }
+.row  { display: flex; align-items: center; gap: calc(8px * var(--ui)); }
+.stack{ display: flex; flex-direction: column; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* SUNKEN: the seat recipe with the sign flipped. */
+.well { background: var(--zd-well); border-radius: var(--zd-r-inset);
+        box-shadow: inset 0 1px 0 0 var(--zd-cut), inset 1px 0 0 0 var(--zd-cut),
+                    inset 0 -1px 0 0 var(--zd-litsoft); padding: calc(6px * var(--ui)) calc(8px * var(--ui)); }
+/* RAISED, one nesting level in. */
+.card { background: var(--zd-raise); border-radius: var(--zd-r-inset);
+        border: 1px solid var(--zd-cut);
+        box-shadow: inset 0 1px 0 0 var(--zd-lit), inset 1px 0 0 0 var(--zd-litsoft);
+        padding: calc(6px * var(--ui)) calc(8px * var(--ui)); }
+.btn { display: inline-flex; align-items: center; gap: calc(6px * var(--ui));
+       height: calc(22px * var(--ui)); padding: 0 calc(10px * var(--ui));
+       background: var(--zd-raise); border: 1px solid var(--zd-cut);
+       box-shadow: inset 0 1px 0 0 var(--zd-lit); border-radius: var(--zd-r-inset);
+       cursor: pointer; color: var(--zd-text-2); white-space: nowrap; }
+.btn:hover { color: var(--zd-text-0); border-color: var(--zd-edge-over); }
+.btn:active { background: var(--zd-well); box-shadow: inset 0 1px 0 0 var(--zd-cut); }
+.btn.prim { background: var(--zd-steel); border-color: var(--zd-steel); color: var(--zd-ink-on);
+            box-shadow: inset 0 1px 0 0 var(--zd-steel-br); }
+.btn.prim .t-lab { color: var(--zd-ink-on); }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: var(--fs-sm); line-height: var(--lh-sm); text-transform: uppercase;
+     color: var(--zd-text-3); font-weight: 400; text-align: left;
+     padding: calc(2px * var(--ui)) calc(6px * var(--ui)); border-bottom: 1px solid var(--zd-cut);
+     position: sticky; top: 0; background: var(--zd-base); }
+td { font-family: var(--mono); font-size: var(--fs-sm); line-height: var(--lh-sm);
+     color: var(--zd-text-2); padding: calc(2px * var(--ui)) calc(6px * var(--ui));
+     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.r, th.r { text-align: right; }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--zd-raise); color: var(--zd-text-1); }
+/* SELECTION IS THE LIGHT, by construction rather than by convention. */
+tr.sel td { background: var(--zd-steel); color: var(--zd-ink-on); }
+tr.sel td span { color: var(--zd-ink-on) !important; }
+.kv { display: flex; align-items: baseline; gap: calc(8px * var(--ui));
+      min-height: calc(19px * var(--ui)); }
+.kv .k { font-size: var(--fs-sm); line-height: var(--lh-sm); text-transform: uppercase;
+         color: var(--zd-text-3); width: calc(136px * var(--ui)); flex: 0 0 auto;
+         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kv .v { flex: 1; min-width: 0; }
+.kv .v { font-family: var(--mono); font-size: var(--fs-sm); color: var(--zd-text-0); }
+.meter { display: flex; align-items: center; gap: calc(8px * var(--ui)); height: calc(20px * var(--ui)); }
+.meter .lb { font-size: var(--fs-sm); text-transform: uppercase; color: var(--zd-text-3);
+             width: calc(74px * var(--ui)); flex: 0 0 auto; }
+.mtrack { flex: 1; height: calc(8px * var(--ui)); background: var(--zd-well); border-radius: 999px;
+          box-shadow: inset 0 1px 0 0 var(--zd-cut); overflow: hidden; }
+.mfill { height: 100%; background: var(--zd-steel); border-radius: 999px;
+         transition: width var(--ms-settle) var(--ease); }
+.mfill.warn { background: var(--zd-warn); } .mfill.bad { background: var(--zd-bad); }
+.meter .vv { font-family: var(--mono); font-size: var(--fs-sm); color: var(--zd-text-0);
+             width: calc(52px * var(--ui)); text-align: right; flex: 0 0 auto; }
+.dot { width: calc(7px * var(--ui)); height: calc(7px * var(--ui)); border-radius: 999px;
+       flex: 0 0 auto; }
+/* THE STATE WORD BESIDE THE STATE COLOUR. Four characters of text next to
+   the dot. It costs a label string and nothing else, and it is why the
+   colour axis can be settled last without breaking anything upstream. */
+.sw { display: inline-flex; align-items: center; gap: calc(5px * var(--ui)); }
+.pre { font-family: var(--mono); font-size: var(--fs-sm); line-height: var(--lh-sm);
+       white-space: pre; color: var(--zd-text-2); }
+.gut { font-family: var(--mono); font-size: var(--fs-sm); line-height: var(--lh-sm);
+       color: var(--zd-text-inert); text-align: right; padding-right: calc(8px * var(--ui));
+       border-right: 1px solid var(--zd-cut); flex: 0 0 auto; }
+.caret { display: inline-block; width: calc(7px * var(--ui)); height: calc(13px * var(--ui));
+         background: var(--zd-steel); vertical-align: text-bottom; }
+body.blink .caret { animation: bl 1s steps(1) infinite; }
+@keyframes bl { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+.spark { display: block; }
+
+/* ========================================================= overview == */
+#overview { position: absolute; inset: 0; z-index: 200; display: none;
+            background: var(--zd-cut); }
+#overview.on { display: flex; flex-direction: column; }
+#overview .ohead { display: flex; align-items: center; gap: calc(12px * var(--ui));
+                   padding: calc(10px * var(--ui)) calc(14px * var(--ui)); }
+#overview .ogrid { flex: 1; position: relative; margin: 0 calc(14px * var(--ui)) calc(14px * var(--ui)); }
+.thumb { position: absolute; background: var(--zd-base); border-radius: var(--zd-r-inset);
+         border: 1px solid var(--zd-edge-over); overflow: hidden; cursor: pointer;
+         box-shadow: inset 0 1px 0 0 var(--zd-lit); }
+.thumb.on { border-color: var(--zd-steel);
+            box-shadow: inset 0 var(--zd-bezel) 0 0 var(--zd-steel), inset var(--zd-bezel) 0 0 0 var(--zd-steel); }
+.thumb .th { height: calc(20px * var(--ui)); display: flex; align-items: center;
+             gap: calc(6px * var(--ui)); padding: 0 calc(7px * var(--ui)); }
+.thumb .tc { position: absolute; inset: calc(20px * var(--ui)) 0 0 0; overflow: hidden;
+             transform-origin: 0 0; pointer-events: none; }
+
+/* ========================================================== palette == */
+#palette { position: absolute; inset: 0; z-index: 260; display: none; }
+#palette.on { display: block; }
+#palette .scrim { position: absolute; inset: 0;
+                  background: color-mix(in srgb, var(--zd-cut) 88%, transparent); }
+#palette .sheet { position: absolute; left: 50%; top: calc(56px * var(--ui));
+                  transform: translateX(-50%); width: calc(560px * var(--ui));
+                  background: var(--zd-float); border-radius: var(--zd-r-plate);
+                  border: 1px solid var(--zd-edge-over); overflow: hidden;
+                  box-shadow: inset 0 var(--zd-bezel) 0 0 var(--zd-steel),
+                              inset var(--zd-bezel) 0 0 0 var(--zd-steel),
+                              0 calc(6px * var(--ui)) calc(14px * var(--ui)) rgba(0,0,0,.55); }
+#palette .ph { display: flex; align-items: center; gap: calc(10px * var(--ui));
+               padding: calc(10px * var(--ui)) calc(12px * var(--ui)) calc(6px * var(--ui)); }
+#palette .pin { display: flex; align-items: center; gap: calc(8px * var(--ui));
+                margin: 0 calc(12px * var(--ui)) calc(8px * var(--ui)); background: var(--zd-well);
+                border-radius: var(--zd-r-inset); padding: calc(5px * var(--ui)) calc(9px * var(--ui));
+                box-shadow: inset 0 1px 0 0 var(--zd-cut), inset 1px 0 0 0 var(--zd-cut); }
+#presults { max-height: calc(280px * var(--ui)); overflow-y: auto; }
+.prow { display: flex; align-items: center; gap: calc(10px * var(--ui));
+        padding: calc(4px * var(--ui)) calc(12px * var(--ui)); cursor: pointer; }
+.prow:hover { background: var(--zd-raise); }
+.prow.on { background: var(--zd-steel); }
+.prow.on * { color: var(--zd-ink-on) !important; }
+#palette .pf { display: flex; gap: calc(10px * var(--ui)); align-items: center;
+               padding: calc(6px * var(--ui)) calc(12px * var(--ui)); border-top: 1px solid var(--zd-cut); }
+
+/* ============================================================= lock == */
+#lock { position: fixed; inset: 0; z-index: 320; display: none; background: var(--zd-cut); }
+#lock.on { display: flex; align-items: center; justify-content: center; }
+#lock::before { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(110% 120% at -6% -10%,
+              color-mix(in srgb, var(--zd-litsoft) 52%, transparent) 0%, transparent 68%); }
+#lock .sheet { position: relative; width: calc(620px * var(--ui)); background: var(--zd-base);
+               border-radius: var(--zd-r-plate); border: 1px solid var(--zd-edge-over);
+               overflow: hidden;
+               box-shadow: inset 0 var(--zd-bezel) 0 0 var(--zd-steel),
+                           inset var(--zd-bezel) 0 0 0 var(--zd-steel); }
+
+/* ============================================================= menu == */
+.menu { position: absolute; z-index: 300; display: none; min-width: calc(210px * var(--ui));
+        background: var(--zd-float); border-radius: var(--zd-r-plate);
+        border: 1px solid var(--zd-edge-over); padding: calc(4px * var(--ui)) 0;
+        box-shadow: inset 0 1px 0 0 var(--zd-lit), inset 1px 0 0 0 var(--zd-litsoft),
+                    0 calc(6px * var(--ui)) calc(14px * var(--ui)) rgba(0,0,0,.55); }
+.menu.on { display: block; }
+.menu .mh { padding: calc(4px * var(--ui)) calc(12px * var(--ui)) calc(5px * var(--ui));
+            border-bottom: 1px solid var(--zd-cut); margin-bottom: calc(4px * var(--ui)); }
+.mi { display: flex; align-items: center; gap: calc(10px * var(--ui));
+      padding: calc(3px * var(--ui)) calc(12px * var(--ui)); cursor: pointer; color: var(--zd-text-1); }
+.mi:hover { background: var(--zd-steel); color: var(--zd-ink-on); }
+.mi:hover .t-num, .mi:hover .t-lab { color: var(--zd-ink-on); }
+.mi.dis { color: var(--zd-text-inert); cursor: default; }
+.mi.dis:hover { background: transparent; color: var(--zd-text-inert); }
+.msep { height: 1px; background: var(--zd-cut); margin: calc(4px * var(--ui)) 0; }
+
+/* =========================================================== toasts == */
+#toasts { position: absolute; right: calc(14px * var(--ui)); bottom: calc(14px * var(--ui));
+          z-index: 280; display: flex; flex-direction: column; gap: var(--zd-gap);
+          align-items: flex-end; }
+.toast { width: calc(320px * var(--ui)); background: var(--zd-float);
+         border-radius: var(--zd-r-plate); border: 1px solid var(--zd-edge-over);
+         padding: calc(7px * var(--ui)) calc(11px * var(--ui)); position: relative;
+         box-shadow: inset 0 1px 0 0 var(--zd-lit), inset 1px 0 0 0 var(--zd-litsoft),
+                     0 calc(6px * var(--ui)) calc(14px * var(--ui)) rgba(0,0,0,.55);
+         animation: rise var(--ms-rise) var(--ease); }
+@keyframes rise { from { opacity: 0; transform: translateY(calc(4px * var(--ui))); } }
+.toast .bar { position: absolute; left: 0; top: calc(8px * var(--ui)); bottom: calc(8px * var(--ui));
+              width: calc(2px * var(--ui)); background: var(--zd-steel); }
+body.nomo * { transition: none !important; animation: none !important; }
+</style>
+</head>
+<body class="blink">
+
+<div id="strip">
+  <span class="nm">Graphite Blend</span>
+  <span class="pitch" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+  <span class="hint">shift D</span>
+</div>
+
+<div id="os">
+  <div id="rail">
+    <div class="ident">
+      <span class="w">zlos</span>
+      <span class="t-num ink3" style="display:block">0.3 &middot; x86_64</span>
+    </div>
+    <div class="div"></div>
+    <span class="t-lab sect">register</span>
+    <div id="reg"></div>
+    <span class="t-lab sect">workspace</span>
+    <div class="wsrow" id="wsrow"></div>
+    <div class="div"></div>
+    <div class="stat" id="railstat"></div>
+    <div class="div"></div>
+    <div class="clock">
+      <span class="hm" id="clockhm">00:00</span>
+      <span class="t-num ink3" style="display:block" id="clockd"></span>
+    </div>
+  </div>
+
+  <div id="fieldwrap">
+    <div id="raster">
+      <canvas id="rcanvas"></canvas>
+      <span class="lbl t-lab" style="color:var(--zd-text-3)">raster</span>
+      <span class="rd" id="rasterrd"></span>
+    </div>
+
+    <div id="field">
+      <div id="wins"></div>
+      <div id="overview">
+        <div class="ohead">
+          <span class="t-lab" style="color:var(--zd-text-1)">activities</span>
+          <span class="t-num ink3" id="ovsub"></span>
+          <span class="spread t-num ink3">esc to dismiss</span>
+        </div>
+        <div class="ogrid" id="ogrid"></div>
+      </div>
+      <div id="palette">
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="ph">
+            <span class="t-lab" style="color:var(--zd-text-1)">command</span>
+            <span class="t-num ink3">zlsh builtin</span>
+            <span class="t-num ink3 spread" id="pcount"></span>
+          </div>
+          <div class="pin">
+            <span class="t-lab">run</span>
+            <span class="t-num ink0" id="pq"></span><span class="caret"></span>
+          </div>
+          <div id="presults"></div>
+          <div class="pf">
+            <span class="t-lab">enter</span><span class="t-num ink3">run</span>
+            <span class="t-lab">up down</span><span class="t-num ink3">select</span>
+            <span class="t-lab">esc</span><span class="t-num ink3">dismiss</span>
+          </div>
+        </div>
+      </div>
+      <div id="toasts"></div>
+    </div>
+
+    <div id="ruler">
+      <span class="t-lab">memory</span>
+      <div id="rulerbar"></div>
+      <span class="t-num ink3" id="rulerrd"></span>
+    </div>
+  </div>
+
+  <div class="menu" id="ctxmenu"></div>
+  <div class="menu" id="winmenu"></div>
+</div>
+
+<div id="lock">
+  <div class="sheet" id="locksheet"></div>
+</div>
+
+<script>
+'use strict';
+/* ======================================================================
+ * THE GRAPHITE BLEND - a living prototype of the zlOS desktop.
+ *
+ *   ground      Raking's warm graphite, dark native
+ *   depth       Raking's 1px struck edge and cut groove, three ranks
+ *   boundary    Raking's directional runs, amended by Apparatus's cut
+ *               edge on a new token ZD_EDGE_OVER
+ *   focus       NEW. bezel + wash + register mark. 7.13% of a plate.
+ *   rail        PLATE's numbered register
+ *   instrument  Datum's, with the raster strip's clock re-derived
+ *
+ * Every colour is a custom property. There is no hex literal below.
+ * ====================================================================== */
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+const cs = getComputedStyle(document.documentElement);
+
+/* --------------------------------------------------- contrast, computed
+ * Not estimated. The numbers printed in the settings pane and in the
+ * system window come out of these two functions at run time, against the
+ * tokens as the browser resolved them, so a token edit moves the number.
+ */
+function tokHex(n) {
+  let v = cs.getPropertyValue(n).trim();
+  for (let i = 0; i < 4 && /^var\(/.test(v); i++)
+    v = cs.getPropertyValue(v.slice(4, -1).trim()).trim();
+  return v.toUpperCase();
+}
+function rgb(h) {
+  h = h.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function relY(h) { const c = rgb(h); return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]); }
+function ratio(a, b) {
+  const x = relY(tokHex(a)), y = relY(tokHex(b));
+  return ((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05));
+}
+function r2(a, b) { return ratio(a, b).toFixed(2); }
+function r3(a, b) { return ratio(a, b).toFixed(3); }
+function lstar(n) {
+  const y = relY(tokHex(n));
+  return (y > 216 / 24389 ? 116 * Math.pow(y, 1 / 3) - 16 : y * 24389 / 27).toFixed(2);
+}
+/* The ceiling on a DARKER boundary: the ratio pure black would reach
+ * against this surface. On graphite it is the number that shuts the
+ * downward direction; on the work-light ladder it is large and the
+ * argument runs the other way. Computed, never quoted. */
+/* Is the first token the lighter term against the second? The knockout
+ * argument depends on this and it flips with the ladder, so it is asked
+ * rather than asserted. */
+function isLighter(a, b) { return relY(tokHex(a)) > relY(tokHex(b)); }
+function darkCeil(n) { return ((relY(tokHex(n)) + 0.05) / 0.05).toFixed(3); }
+function liteCeil(n) { return ((1.05) / (relY(tokHex(n)) + 0.05)).toFixed(3); }
+
+/* ============================================================ icons ==
+ * MACHINED FROM THE SAME PLATE. 45/90 armature only: every straight
+ * segment is horizontal, vertical or exactly 45 degrees. Two stroke
+ * weights - 2.0 for the silhouette, 1.5 for interior detail. EXACTLY ONE
+ * SOLID MASS PER ICON, and it is the icon's subject. Curves appear only
+ * where the object is physically round.
+ */
+const ICO = {
+  shell: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6.5 9.5 L9.5 12 L6.5 14.5" class="w1"/><rect x="12" y="14" width="6" height="1.6" class="sol"/>',
+  files: '<path d="M3 7 L3 19 L21 19 L21 9 L11.5 9 L9.5 7 Z"/><rect x="5" y="9.5" width="7" height="4" class="sol"/>',
+  mon:   '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M6 16 L6 13 M10 16 L10 10" class="w1"/><rect x="13" y="7" width="2.6" height="9" class="sol"/><path d="M18 16 L18 12" class="w1"/>',
+  edit:  '<path d="M5 3 L5 21 L19 21 L19 8 L14 3 Z"/><path d="M8 12 H16 M8 15 H16 M8 18 H13" class="w1"/><rect x="8" y="6" width="4" height="3" class="sol"/>',
+  log:   '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 9 H12 M6 12 H15 M6 15 H10" class="w1"/><rect x="16" y="8" width="2.6" height="2.6" class="sol"/>',
+  hex:   '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9 H21 M9 4 V20 M15 4 V20" class="w1"/><rect x="9.6" y="9.6" width="4.8" height="4.8" class="sol"/>',
+  calc:  '<rect x="4" y="3" width="16" height="18" rx="2"/><rect x="7" y="6" width="10" height="3.4" class="sol"/><path d="M8 13 H10 M14 13 H16 M8 17 H10 M14 17 H16" class="w1"/>',
+  net:   '<path d="M12 20 A9 9 0 0 1 12 20"/><path d="M4 10 A11 11 0 0 1 20 10" class="w1"/><path d="M7 13.5 A7 7 0 0 1 17 13.5" class="w1"/><rect x="10.4" y="16.4" width="3.2" height="3.2" class="sol"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7 L12 12 L15.5 14" class="w1"/><rect x="11.2" y="2.6" width="1.6" height="2.2" class="sol"/>',
+  chip:  '<rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 3 V6 M12 3 V6 M15 3 V6 M9 18 V21 M12 18 V21 M15 18 V21 M3 9 H6 M3 12 H6 M3 15 H6 M18 9 H21 M18 12 H21 M18 15 H21" class="w1"/><rect x="9.2" y="9.2" width="5.6" height="5.6" class="sol"/>',
+  set:   '<circle cx="12" cy="12" r="7.5"/><path d="M12 2.5 V5 M12 19 V21.5 M2.5 12 H5 M19 12 H21.5 M5.2 5.2 L7 7 M17 17 L18.8 18.8 M18.8 5.2 L17 7 M7 17 L5.2 18.8" class="w1"/><circle cx="12" cy="12" r="3" class="sol"/>',
+  disk:  '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.4" class="sol"/><path d="M12 3.5 L12 6 M16.5 16.5 L18.4 18.4" class="w1"/>',
+  regs:  '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 12 H21 M8 5 V19 M13 5 V19" class="w1"/><rect x="13.8" y="5.8" width="6.4" height="5.4" class="sol"/>',
+  type:  '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 16 L10.5 8 L14 16 M8.4 13.4 H12.6" class="w1"/><rect x="16" y="8" width="2.4" height="8" class="sol"/>',
+  power: '<path d="M6.5 6.5 A8 8 0 1 0 17.5 6.5"/><rect x="11.2" y="2.5" width="1.6" height="8" class="sol"/>',
+  vol:   '<path d="M4 9.5 L8 9.5 L12.5 5.5 L12.5 18.5 L8 14.5 L4 14.5 Z" class="sol"/><path d="M16 9 A5 5 0 0 1 16 15" class="w1"/><path d="M18.5 6.5 A9 9 0 0 1 18.5 17.5" class="w1"/>',
+  lock:  '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10 V7.5 A4 4 0 0 1 16 7.5 V10" class="w1"/><rect x="11" y="13" width="2" height="4" class="sol"/>',
+  grid:  '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9 H21 M3 15 H21 M9 3 V21 M15 3 V21" class="w1"/><rect x="3.8" y="3.8" width="4.4" height="4.4" class="sol"/>'
+};
+function icon(n, px, col) {
+  const p = ICO[n] || ICO.chip;
+  return '<svg width="' + px + '" height="' + px + '" viewBox="0 0 24 24" aria-hidden="true" ' +
+    'fill="none" stroke="' + (col || 'currentColor') + '" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" class="ic">' +
+    p.replace(/class="w1"/g, 'stroke-width="1.5"')
+     .replace(/class="sol"/g, 'fill="' + (col || 'currentColor') + '" stroke="none"') +
+    '</svg>';
+}
+
+/* ============================================================ state == */
+const S = {
+  scene: 'desktop', theme: 'dark', ws: 1,
+  wins: {}, focus: null, z: 10,
+  fileSel: 1, procSel: 0, logSel: 0, hexPage: 0, setTab: 0,
+  pq: '', psel: 0,
+  cpu: [34, 18, 61, 12], mem: 41, net: 22, disk: 63,
+  t: 0, composites: 0, frames: 0,
+  cfg: {
+    bezel: 3, wash: true, over: true, ui: 100, ruler: true,
+    us: 'measured', rasterClock: 'composite', motion: true
+  },
+  raster: []
+};
+let ZT = 10;
+
+/* ============================================================== data == */
+const FILES = [
+  ['kernel.zl',    '41.2 KiB',  'zl source', '-r--r--r--', '12:04'],
+  ['fb.c',         '68.4 KiB',  'C source',  '-r--r--r--', '12:04'],
+  ['intel.c',      '112.9 KiB', 'C source',  '-rw-r--r--', '11:58'],
+  ['dpll.c',       '21.7 KiB',  'C source',  '-rw-r--r--', '11:58'],
+  ['xhci.c',       '54.1 KiB',  'C source',  '-r--r--r--', '09:41'],
+  ['hid.c',        '19.6 KiB',  'C source',  '-r--r--r--', '09:41'],
+  ['zlfs.c',       '37.8 KiB',  'C source',  '-r--r--r--', '10:22'],
+  ['nvme.c',       '28.3 KiB',  'C source',  '-r--r--r--', '10:22'],
+  ['apic.c',       '11.4 KiB',  'C source',  '-r--r--r--', '08:50'],
+  ['pci.c',        '16.8 KiB',  'C source',  '-r--r--r--', '08:50'],
+  ['wm.c',         '46.0 KiB',  'C source',  '-r--r--r--', '12:01'],
+  ['uikit.c',      '52.7 KiB',  'C source',  '-r--r--r--', '12:01'],
+  ['ui.c',         '33.6 KiB',  'C source',  '-r--r--r--', '12:01'],
+  ['design.h',     '18.9 KiB',  'C header',  '-r--r--r--', '12:03'],
+  ['font_aa.c',    '24.5 KiB',  'C source',  '-r--r--r--', '07:31'],
+  ['font_sub.c',   '9.8 KiB',   'C source',  '-r--r--r--', '07:31'],
+  ['sched.c',      '12.1 KiB',  'C source',  '-r--r--r--', '10:40'],
+  ['heap.c',       '9.3 KiB',   'C source',  '-r--r--r--', '10:40'],
+  ['edid.c',       '8.9 KiB',   'C source',  '-r--r--r--', '09:02'],
+  ['gen_icons.py', '7.2 KiB',   'Python',    '-rwxr-xr-x', '12:00'],
+  ['link.ld',      '412 B',     'Linker',    '-r--r--r--', '06:12'],
+  ['Makefile',     '3.1 KiB',   'Makefile',  '-r--r--r--', '12:03'],
+  ['zlos.elf',     '249.8 KiB', 'Executable','-rwxr-xr-x', '12:04'],
+  ['atlas48.bin',  '196.0 KiB', 'Binary',    '-r--r--r--', '12:00'],
+  ['zlfs.img',     '4.0 MiB',   'Disk image','-rw-r--r--', '12:04'],
+  ['core.dump',    '256.0 KiB', 'Core dump', '-rw-------', '11:41'],
+  ['boot.log',     '2.4 KiB',   'Log',       '-r--r--r--', '12:04']
+];
+const SRC = {
+  'fb.c':
+'1168  /* the seat. four calls, and the two 1px runs are the\n' +
+'1169     only thing separating this plate from the field. */\n' +
+'1170  void fb_seat(int x, int y, int w, int h, int r,\n' +
+'1171                u32 surf, int focused, int over)\n' +
+'1172  {\n' +
+'1173      u32 top  = focused ? ZD_STEEL : ZD_LIT;\n' +
+'1174      u32 left = focused ? ZD_STEEL : ZD_LITSOFT;\n' +
+'1175      int bw   = focused ? ZD_BEZEL : 1;\n' +
+'1176\n' +
+'1177      /* the occluder draws the border, never the\n' +
+'1178         occluded. on a dark ground the groove cannot\n' +
+'1179         reach 3:1 at any value, so the edge that lies\n' +
+'1180         on another plate is the LIGHT. */\n' +
+'1181      u32 ring = over ? ZD_EDGE_OVER : ZD_CUT;\n' +
+'1182\n' +
+'1183      fb_rrect(x, y, w, h, r, ring);\n' +
+'1184      fb_rrect(x + 1, y + 1, w - 2, h - 2, r - 1, surf);\n' +
+'1185      fb_fill_px(x + r, y, w - 2 * r, bw, top);\n' +
+'1186      fb_fill_px(x, y + r, bw, h - 2 * r, left);\n' +
+'1187  }\n' +
+'1188\n' +
+'1189  /* subpixel LCD text. 5 tap (1,2,3,2,1)/9 FIR over the\n' +
+'1190     three colour stripes of one cell, gamma correct in\n' +
+'1191     linear light through the two boot built LUTs. a 1px\n' +
+'1192     highlight blended in gamma space against a dark warm\n' +
+'1193     ground reads as a dirty grey line, so this path is\n' +
+'1194     load bearing here in a way it is not on paper. */\n' +
+'1195  static void blend_sub(u32 *dst, const u8 *cov, u32 fg)\n' +
+'1196  {\n' +
+'1197      u32 bg = *dst;\n' +
+'1198      int r = fir5(cov, 0), g = fir5(cov, 1), b = fir5(cov, 2);\n' +
+'1199      u32 lr = lut_to_lin[(bg >> 16) & 0xff];\n' +
+'1200      u32 lg = lut_to_lin[(bg >>  8) & 0xff];\n' +
+'1201      u32 lb = lut_to_lin[(bg      ) & 0xff];\n' +
+'1202      lr += ((lut_to_lin[(fg >> 16) & 0xff] - lr) * r) >> 8;\n' +
+'1203      lg += ((lut_to_lin[(fg >>  8) & 0xff] - lg) * g) >> 8;\n' +
+'1204      lb += ((lut_to_lin[(fg      ) & 0xff] - lb) * b) >> 8;\n' +
+'1205      *dst = (lut_to_srgb[lr] << 16)\n' +
+'1206           | (lut_to_srgb[lg] <<  8)\n' +
+'1207           |  lut_to_srgb[lb];\n' +
+'1208  }',
+  'intel.c':
+'2041  /* Gen9 display. the DPLL is the point of this file.\n' +
+'2042     measured on the host, not quoted: 241690 kHz,\n' +
+'2043     59.998 Hz, from PIPE_LINK_M / PIPE_LINK_N. */\n' +
+'2044  static u32 dpll_from_link(u32 m, u32 n, u32 bpp)\n' +
+'2045  {\n' +
+'2046      u64 num = (u64)m * 270000ull * 8ull;\n' +
+'2047      u64 den = (u64)n * bpp;\n' +
+'2048      return (u32)(num / den);          /* kHz */\n' +
+'2049  }\n' +
+'2050\n' +
+'2051  /* WARNING: writing PIPE_CONF while PSR is armed parks\n' +
+'2052     the panel with the backlight on. read PSR_STATUS\n' +
+'2053     and wait for idle before touching the pipe. */\n' +
+'2054  static int pipe_safe(void)\n' +
+'2055  {\n' +
+'2056      u32 psr = mmio_rd(PSR_STATUS);\n' +
+'2057      for (int i = 0; i < 200 && (psr & PSR_BUSY); i++) {\n' +
+'2058          udelay(500);\n' +
+'2059          psr = mmio_rd(PSR_STATUS);\n' +
+'2060      }\n' +
+'2061      return (psr & PSR_BUSY) == 0;\n' +
+'2062  }\n' +
+'2063\n' +
+'2064  void intel_modeset(const struct mode *m)\n' +
+'2065  {\n' +
+'2066      if (!pipe_safe()) { klog(WARN, "psr busy"); return; }\n' +
+'2067      mmio_wr(HTOTAL_A, (m->htotal - 1) << 16 | (m->hact - 1));\n' +
+'2068      mmio_wr(VTOTAL_A, (m->vtotal - 1) << 16 | (m->vact - 1));\n' +
+'2069      mmio_wr(PIPE_A_SRCSZ, (m->hact - 1) << 16 | (m->vact - 1));\n' +
+'2070      mmio_wr(PIPE_A_LINK_M, m->link_m);\n' +
+'2071      mmio_wr(PIPE_A_LINK_N, m->link_n);\n' +
+'2072      mmio_wr(PIPE_A_CONF, PIPE_ENABLE | BPC_8);\n' +
+'2073  }',
+  'kernel.zl':
+'   1  # zlOS entry. called from boot.S after the handoff.\n' +
+'   2  fn main() {\n' +
+'   3      gdt()\n' +
+'   4      idt()\n' +
+'   5      apic(4)                 # 4 logical CPUs\n' +
+'   6      pit(1000)               # 1193182 / 1000\n' +
+'   7      xhci()                  # usb hid keyboard + mouse\n' +
+'   8      fb(1600, 1000, 32)\n' +
+'   9      zlfs_mount("rd0")\n' +
+'  10      desktop()               # the compositor IS the boot state\n' +
+'  11  }\n' +
+'  12\n' +
+'  13  fn desktop() {\n' +
+'  14      ui_theme_init_q8(256)   # ui scale 1.0 in q8\n' +
+'  15      rail()                  # numbered register, 132dp\n' +
+'  16      raster()                # advances on composite, not on vblank\n' +
+'  17      ruler()                 # the memory map, bottom edge\n' +
+'  18      field()\n' +
+'  19      loop { input() compose() }\n' +
+'  20  }',
+  'design.h':
+'   1  /* design.h - every literal in the desktop lives here.\n' +
+'   2     kernel.zl names roles only, ui.c maps roles to these. */\n' +
+'   3\n' +
+'   4  #define ZD_CUT        0x19120E  /* the groove     */\n' +
+'   5  #define ZD_WELL       0x231C18  /* sunken         */\n' +
+'   6  #define ZD_VOID       0x29221E  /* the field      */\n' +
+'   7  #define ZD_BASE       0x322B27  /* the plate      */\n' +
+'   8  #define ZD_RAISE      0x38312D  /* on a plate     */\n' +
+'   9  #define ZD_FLOAT      0x3D3632  /* off the plane  */\n' +
+'  10  #define ZD_LITSOFT    0x4A433F  /* grazed left    */\n' +
+'  11  #define ZD_LIT        0x5F5854  /* struck top     */\n' +
+'  12\n' +
+'  13  /* NEW. the near edge of a plate that lies over another\n' +
+'  14     plate. 3.67:1 on BASE, 3.13:1 on FLOAT. the groove\n' +
+'  15     cannot do this job: against BASE the largest ratio\n' +
+'  16     any darker colour can reach is 1.510:1, and that is\n' +
+'  17     pure black. so the boundary is the LIGHT. */\n' +
+'  18  #define ZD_EDGE_OVER  0x8A8279\n' +
+'  19\n' +
+'  20  /* NEW. STEEL over BASE at 18%, resolved. 1.400:1 - one\n' +
+'  21     step above the loudest surface step (1.126:1) and\n' +
+'  22     well under the struck edge (1.993:1). */\n' +
+'  23  #define ZD_FOCUS_WASH 0x404348\n' +
+'  24\n' +
+'  25  #define ZD_STEEL      0x7FB2E0  /* the light      */\n' +
+'  26  #define ZD_BEZEL      3         /* dp, focused    */\n' +
+'  27  #define ZD_R_PLATE    10\n' +
+'  28  #define ZD_R_INSET    5\n' +
+'  29  #define ZD_MS_RISE    90\n' +
+'  30  #define ZD_MS_SETTLE  240',
+  'Makefile':
+'   1  ZL      = tools/zlc\n' +
+'   2  CFLAGS  = -ffreestanding -mno-red-zone -Wall -Werror\n' +
+'   3  OBJ     = build/kernel.o build/fb.o build/intel.o \\\n' +
+'   4            build/xhci.o build/hid.o build/zlfs.o\n' +
+'   5\n' +
+'   6  all: build/zlos.elf\n' +
+'   7\n' +
+'   8  build/zlos.elf: $(OBJ) link.ld\n' +
+'   9  \tld -T link.ld -o $@ $(OBJ)\n' +
+'  10\n' +
+'  11  build/%.o: %.zl\n' +
+'  12  \t$(ZL) -c $< -o $@'
+};
+const KLOG = [
+  ['0.000041', 'OK',   'boot',  'handoff from boot.S, cr3 0x0000000000101000'],
+  ['0.000318', 'OK',   'gdt',   '5 descriptors, tss at 0xFFFF8000000A2000'],
+  ['0.001042', 'OK',   'idt',   '256 vectors, 32 exception stubs'],
+  ['0.004180', 'OK',   'apic',  'lapic base 0xFEE00000, 4 logical cpus online'],
+  ['0.004902', 'OK',   'apic',  'ioapic 0 gsi 0..23, redirection table cleared'],
+  ['0.008771', 'OK',   'pit',   'divisor 1193, 1000.15 Hz measured'],
+  ['0.013240', 'OK',   'pci',   'bus 00: 14 functions, 3 bridges'],
+  ['0.013611', 'OK',   'pci',   '00:02.0 8086:5916 vga, bar0 64 bit 0x00000000C0000000'],
+  ['0.013844', 'WARN', 'pci',   '00:1f.6 8086:15D8 e1000e, msi-x table len 5, using msi'],
+  ['0.021093', 'OK',   'intel', 'gen9 display, 2 pipes, edid 1600x1000 at 59.998 Hz'],
+  ['0.024518', 'OK',   'dpll',  'link m 0x0080D9E4 n 0x00800000 -> 241690 kHz'],
+  ['0.025002', 'WARN', 'intel', 'psr armed at entry, waited 3 ms for idle'],
+  ['0.031887', 'OK',   'fb',    '1600x1000x32, stride 6400 B, 6.10 MiB, wc mapped'],
+  ['0.032410', 'OK',   'fb',    'gamma luts built, 2 x 256 entries, linear light'],
+  ['0.048120', 'OK',   'xhci',  'bar0 is 64 bit, upper dword nonzero, not truncated'],
+  ['0.049004', 'WARN', 'xhci',  'bios owns controller, requesting handoff'],
+  ['0.061552', 'OK',   'xhci',  'handoff complete after 12.5 ms'],
+  ['0.062910', 'OK',   'xhci',  'scratchpad 8 pages allocated below 4 GiB'],
+  ['0.070441', 'OK',   'hid',   'port 3 low speed, boot keyboard, 8 byte reports'],
+  ['0.070902', 'OK',   'hid',   'port 5 full speed, boot mouse, depth 1 endpoint'],
+  ['0.081330', 'OK',   'nvme',  'cap 0x0000203C0303FF, 2 io queues, 4 KiB pages'],
+  ['0.093771', 'OK',   'zlfs',  'rd0 superblock generation 3, 0 orphan extents'],
+  ['0.094512', 'OK',   'zlfs',  'power cycle 1 -> 2 -> 3 survived, journal clean'],
+  ['0.101884', 'OK',   'sched', '42 tasks, quantum 4 ms, run queue depth 3'],
+  ['0.118221', 'OK',   'wm',    'surface cache 24 slots, 18.4 MiB'],
+  ['0.118904', 'WARN', 'wm',    'no reserved strut api, rail clamp applied in wm_open'],
+  ['0.124117', 'OK',   'ui',    'theme init q8 256, 21 roles bound to graphite ladder'],
+  ['0.131002', 'OK',   'ui',    'edge recipe resolved to ui_raised_edge, 1 call site'],
+  ['0.140338', 'OK',   'desk',  'compositor is the boot state, first frame 8.9 ms']
+];
+const IRQ = [
+  ['0',   'timer',      '1 024', 'apic',  'OK'],
+  ['1',   'i8042',      '0',     'legacy','WARN'],
+  ['16',  'xhci',       '312',   'msi-x', 'OK'],
+  ['19',  'e1000e',     '148',   'msi',   'OK'],
+  ['24',  'nvme q0',    '96',    'msi-x', 'OK'],
+  ['25',  'nvme q1',    '41',    'msi-x', 'OK'],
+  ['33',  'intel vbl',  '60',    'msi',   'OK'],
+  ['255', 'spurious',   '0',     'apic',  'OK']
+];
+const PROCS = [
+  ['1',  'zlos',    '18.4', '212.0', 'R', 'compose'],
+  ['12', 'zlsh',    '2.1',  '4.2',   'S', 'tty1'],
+  ['18', 'wm',      '9.6',  '31.8',  'R', 'surface'],
+  ['24', 'fbcon',   '0.4',  '2.0',   'S', 'console'],
+  ['31', 'xhci',    '1.2',  '8.4',   'S', 'irq 16'],
+  ['37', 'zlfs',    '0.8',  '18.6',  'S', 'rd0'],
+  ['42', 'regdump', '0.0',  '1.1',   'Z', 'exited'],
+  ['48', 'intel',   '4.4',  '22.9',  'R', 'pipe A'],
+  ['53', 'nvme',    '1.9',  '11.2',  'S', 'q1'],
+  ['61', 'sched',   '0.3',  '0.9',   'R', 'tick']
+];
+const REGS = [
+  ['PIPE_A_CONF',   '0xC0000000', 'enabled, 8 bpc, no gamma'],
+  ['PIPE_A_SRCSZ',  '0x063F03E7', '1600 x 1000'],
+  ['PIPE_A_LINK_M', '0x0080D9E4', 'link m, 24 bit fixed'],
+  ['PIPE_A_LINK_N', '0x00800000', 'link n, 24 bit fixed'],
+  ['HTOTAL_A',      '0x07AF063F', 'hact 1600, htotal 1968'],
+  ['VTOTAL_A',      '0x040703E7', 'vact 1000, vtotal 1032'],
+  ['DPLL_CTRL1',    '0x00000601', 'ddi a, link rate 2.7 GHz'],
+  ['DPLL_STATUS',   '0x00000001', 'dpll 0 locked'],
+  ['PSR_STATUS',    '0x00000000', 'idle, safe to write pipe'],
+  ['TRANS_DDI_A',   '0x81000004', 'enabled, dp sst, 4 lanes'],
+  ['PP_STATUS',     '0x80000008', 'panel on, backlight on'],
+  ['PWR_WELL_CTL2', '0x0000000F', 'wells 1 and 2 enabled']
+];
+const ROUTES = [
+  ['0.0.0.0/0',      '10.0.14.1',  'enp0s31f6', '100', 'UG'],
+  ['10.0.14.0/24',   '0.0.0.0',    'enp0s31f6', '100', 'U'],
+  ['127.0.0.0/8',    '0.0.0.0',    'lo',        '0',   'U'],
+  ['169.254.0.0/16', '0.0.0.0',    'enp0s31f6', '1000','U']
+];
+const SOCKS = [
+  ['tcp', '10.0.14.62:22',    '10.0.14.8:51244',  'ESTABLISHED', 'sshd'],
+  ['tcp', '0.0.0.0:22',       '0.0.0.0:*',        'LISTEN',      'sshd'],
+  ['tcp', '127.0.0.1:6001',   '0.0.0.0:*',        'LISTEN',      'wm'],
+  ['udp', '0.0.0.0:68',       '0.0.0.0:*',        'BOUND',       'dhcp'],
+  ['udp', '10.0.14.62:123',   '162.159.200.1:123','BOUND',       'ntp']
+];
+const MEMMAP = [
+  ['kernel text',  '0x00100000', 218432,  'ok'],
+  ['kernel data',  '0x00135400', 30720,   'ok'],
+  ['bss',          '0x0013CC00', 1441792, 'ok'],
+  ['heap',         '0x0029CC00', 6291456, 'steel'],
+  ['fb 1600x1000', '0xC0000000', 6400000, 'warn'],
+  ['surface cache','0x00A00000', 19293798,'steel'],
+  ['drag scratch', '0x08000000', 4194304, 'ok'],
+  ['free',         '',           15728640,'inert']
+];
+const CMDS = [
+  ['open 03 monitor',      'window', 'mon'],
+  ['open 02 files',        'window', 'files'],
+  ['open 11 settings',     'window', 'set'],
+  ['open 05 kernel log',   'window', 'log'],
+  ['open 13 registers',    'window', 'regs'],
+  ['regdump --pipe A',     'shell',  'regs'],
+  ['zlfs fsck rd0',        'shell',  'disk'],
+  ['dmesg --level warn',   'shell',  'log'],
+  ['modeset 1600x1000',    'shell',  'sys'],
+  ['tile all windows',     'wm',     'tile'],
+  ['workspace 02',         'wm',     'ws2'],
+  ['lock session',         'session','lock'],
+  ['toggle raster clock',  'design', 'raster'],
+  ['toggle occlusion edge','design', 'over']
+];
+
+/* ============================================================== apps ==
+ * PLATE's numbered register: 01 SHELL, 02 FILES, Alt+NN. It makes the
+ * launcher, the running list and the keymap one list, and it touches no
+ * surface, no colour, no radius and no boundary - which is why it can be
+ * lifted off a light printed direction onto a dark machined one intact.
+ */
+const APPS = [
+  { id:'shell', n:'01', name:'terminal',   sub:'zlsh',      ico:'shell', p:[14, 12, 640, 400] },
+  { id:'files', n:'02', name:'files',      sub:'rd0',       ico:'files', p:[672, 12, 540, 400] },
+  { id:'mon',   n:'03', name:'monitor',    sub:'1 Hz',      ico:'mon',   p:[14, 430, 640, 400] },
+  { id:'edit',  n:'04', name:'editor',     sub:'fb.c',      ico:'edit',  p:[560, 60, 620, 560] },
+  { id:'log',   n:'05', name:'kernel log', sub:'dmesg',     ico:'log',   p:[672, 430, 620, 400] },
+  { id:'hex',   n:'06', name:'hex',        sub:'rd0 s0',    ico:'hex',   p:[200, 120, 620, 420] },
+  { id:'calc',  n:'07', name:'calculator', sub:'int64',     ico:'calc',  p:[900, 100, 360, 430] },
+  { id:'net',   n:'08', name:'network',    sub:'enp0s31f6', ico:'net',   p:[640, 90, 600, 460] },
+  { id:'clock', n:'09', name:'clocks',     sub:'monotonic', ico:'clock', p:[300, 150, 540, 400] },
+  { id:'sys',   n:'10', name:'system',     sub:'0.3',       ico:'chip',  p:[380, 90, 600, 470] },
+  { id:'set',   n:'11', name:'settings',   sub:'design.h',  ico:'set',   p:[14, 12, 700, 700] },
+  { id:'disk',  n:'12', name:'disk usage', sub:'zlfs',      ico:'disk',  p:[500, 200, 580, 420] },
+  { id:'regs',  n:'13', name:'registers',  sub:'pipe A',    ico:'regs',  p:[260, 60, 620, 470] },
+  { id:'type',  n:'14', name:'type',       sub:'DejaVu',    ico:'type',  p:[340, 180, 560, 400] }
+];
+const APP = {}; APPS.forEach(a => { APP[a.id] = a; });
+
+/* ================================================= render primitives == */
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function hx(v, n) { let s = (v >>> 0).toString(16).toUpperCase(); while (s.length < n) s = '0' + s; return s; }
+function TBL(cols, rows) {
+  return '<table><thead><tr>' + cols.map(c =>
+    '<th' + (c.r ? ' class="r"' : '') + (c.w ? ' style="width:' + c.w + '"' : '') + '>' + c.h + '</th>').join('') +
+    '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+}
+function TR(cells, attr) {
+  return '<tr ' + (attr || '') + '>' + cells.map(c => {
+    if (typeof c === 'object') return '<td class="' + (c.c || '') + '">' + c.t + '</td>';
+    return '<td>' + esc(c) + '</td>';
+  }).join('') + '</tr>';
+}
+function kv(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+function meter(lb, val, unit, kind) {
+  return '<div class="meter"><span class="lb">' + lb + '</span><div class="mtrack">' +
+    '<div class="mfill ' + (kind || '') + '" style="width:' + Math.max(0, Math.min(100, val)) + '%"></div>' +
+    '</div><span class="vv">' + val.toFixed(1) + unit + '</span></div>';
+}
+/* THE STATE WORD BESIDE THE STATE COLOUR. */
+function sw(w) {
+  const m = { OK: 'ok', PASS: 'ok', UP: 'ok', RUN: 'ok', LISTEN: 'ok', ESTABLISHED: 'ok',
+              WARN: 'warn', BOUND: 'warn', DRIFT: 'warn', RO: 'warn',
+              FAIL: 'bad', DOWN: 'bad', Z: 'bad' };
+  const k = m[w] || 'ok';
+  const c = k === 'ok' ? 'var(--zd-ok)' : k === 'warn' ? 'var(--zd-warn)' : 'var(--zd-bad)';
+  const ink = k === 'ok' ? 'k-ok' : k === 'warn' ? 'k-warn' : 'k-bad';
+  return '<span class="sw"><span class="dot" style="background:' + c + '"></span>' +
+    '<span class="t-num ' + ink + '">' + w + '</span></span>';
+}
+function spark(series, w, h, max, col) {
+  const n = series.length, sw2 = w / n;
+  let d = '';
+  series.forEach((v, i) => {
+    const bh = Math.max(1, Math.round((v / max) * (h - 1)));
+    d += '<rect x="' + (i * sw2).toFixed(2) + '" y="' + (h - bh) + '" width="' +
+      Math.max(1, sw2 - 0.6).toFixed(2) + '" height="' + bh + '" fill="' + col + '"/>';
+  });
+  return '<svg class="spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" ' +
+    'shape-rendering="crispEdges" aria-hidden="true">' + d + '</svg>';
+}
+function usBand(id) {
+  const w = S.wins[id]; if (!w) return '';
+  const mode = S.cfg.us;
+  if (mode === 'off') return '';
+  const val = mode === 'measured'
+    ? '<span class="t-num ink0">' + w.us + ' us</span>'
+    : '<span class="t-num ink0">' + w.px.toLocaleString('en-US') + ' px</span>';
+  return '<span class="us row" style="gap:calc(6px * var(--ui))">' +
+    '<span class="t-lab">' + (mode === 'measured' ? 'app us' : 'repaint px') + '</span>' + val + '</span>';
+}
+function band(id, left) {
+  return '<div class="sband"><span class="t-lab">' + APP[id].n + '</span>' +
+    '<span class="t-num ink3">' + left + '</span>' + usBand(id) +
+    '<span class="spread t-num ink3">ws ' + (S.wins[id] ? ('0' + S.wins[id].ws) : '01') + '</span></div>';
+}
+
+/* ==================================================== app renderers === */
+const R = {};
+
+R.shell = () => {
+  const L = [
+    ['zlsh 0.3  -  zlOS 0.3 x86_64', 'dim'], null,
+    ['$ make -C kernel modeset', ''],
+    ['  ZL   kernel.zl -> build/kernel.o', 'dim'],
+    ['  CC   fb.c intel.c dpll.c xhci.c hid.c zlfs.c', 'dim'],
+    ['  LD   build/zlos.elf', 'dim'],
+    ['       text 218432  data 30720  bss 1441792', 'dim'],
+    ['$ ./tools/regdump --pipe A', ''],
+    ['  PIPE_A_CONF     0xC0000000   enabled, 8 bpc', 'dim'],
+    ['  PIPE_A_LINK_M   0x0080D9E4', 'dim'],
+    ['  PIPE_A_LINK_N   0x00800000', 'dim'],
+    ['  pixel clock 241690 kHz -> 59.998 Hz', 'ok'],
+    ['$ zlfs fsck rd0', ''],
+    ['  3 generations, 0 orphan extents, journal clean', 'dim'],
+    ['  power cycle 1 -> 2 -> 3 survived', 'ok'],
+    ['$ contrast --token ZD_EDGE_OVER --on ZD_BASE', ''],
+    ['  3.67:1   floor 3.00   pass', 'ok'],
+    ['$ ', 'caret']
+  ];
+  let out = '<div class="well stack" style="flex:1;min-height:0;overflow:auto">';
+  L.forEach(l => {
+    if (!l) { out += '<span class="pre">&nbsp;</span>'; return; }
+    if (l[1] === 'caret') { out += '<span class="pre ink1">' + l[0] + '<span class="caret"></span></span>'; return; }
+    const c = l[1] === 'ok' ? 'k-ok' : l[1] === 'dim' ? 'ink3' : 'ink1';
+    out += '<span class="pre ' + c + '">' + esc(l[0]) + '</span>';
+  });
+  out += '</div>';
+  out += '<div class="row"><span class="btn prim" data-act="toast" data-arg="build"><span class="t-lab">rebuild</span></span>' +
+    '<span class="btn" data-act="open" data-arg="log"><span class="t-lab">dmesg</span></span>' +
+    '<span class="btn" data-act="open" data-arg="regs"><span class="t-lab">regdump</span></span>' +
+    '<span class="spread t-num ink3">exit 0 &middot; 1.42 s</span></div>' +
+    band('shell', 'tty1 &middot; 80x24');
+  return out;
+};
+
+R.files = () => {
+  const rows = FILES.map((f, i) => TR(
+    [f[0], { t: f[1], c: 'r' }, f[2], f[3], { t: f[4], c: 'r' }],
+    'class="pick' + (i === S.fileSel ? ' sel' : '') + '" data-act="file" data-arg="' + i + '"'));
+  const f = FILES[S.fileSel];
+  return '<div class="row" style="height:calc(22px * var(--ui))">' +
+    '<span class="t-lab">path</span><span class="t-num ink1">/src/kernel</span>' +
+    '<span class="spread t-num ink3">' + FILES.length + ' entries &middot; generation 3</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'name', w: '32%' }, { h: 'size', w: '16%', r: 1 },
+      { h: 'kind', w: '20%' }, { h: 'perm', w: '20%' }, { h: 'mtime', w: '12%', r: 1 }], rows) + '</div>' +
+    '<div class="hr"></div>' +
+    '<div class="row"><span class="t-lab">selected</span><span class="t-num ink0">' + f[0] + '</span>' +
+    '<span class="t-num ink3">' + f[1] + '</span><span class="spread"></span>' + sw('OK') + '</div>' +
+    kv('full path', '/src/kernel/' + f[0]) +
+    kv('mode', f[3] + '  uid 0  gid 0') +
+    kv('extent', 'generation 3, 1 extent, contiguous') +
+    kv('crc32', '0x' + hx((S.fileSel * 2654435761) >>> 0, 8)) +
+    '<div class="row"><span class="btn prim" data-act="open" data-arg="edit"><span class="t-lab">open in editor</span></span>' +
+    '<span class="btn" data-act="open" data-arg="hex"><span class="t-lab">hex</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="stat"><span class="t-lab">stat</span></span></div>' +
+    band('files', 'rd0 &middot; zlfs');
+};
+
+R.edit = () => {
+  const name = FILES[S.fileSel][0];
+  const body = SRC[name];
+  if (!body) {
+    return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">buffer</span>' +
+      '<span class="t-num ink1">' + name + '</span><span class="spread t-num ink3">binary</span></div>' +
+      '<div class="well stack" style="flex:1;justify-content:center;align-items:center;gap:calc(6px * var(--ui))">' +
+      '<span class="t-lab">no text preview</span>' +
+      '<span class="t-num ink3">' + name + ' is not a text buffer. open it in 06 HEX.</span></div>' +
+      '<div class="row"><span class="btn prim" data-act="open" data-arg="hex"><span class="t-lab">open in hex</span></span></div>' +
+      band('edit', 'read only');
+  }
+  const lines = body.split('\n');
+  let g = '', p = '';
+  lines.forEach(l => { g += (l.slice(0, 6).trim() || '.') + '\n'; p += l.slice(6) + '\n'; });
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">buffer</span>' +
+    '<span class="t-num ink1">' + name + '</span><span class="t-num ink3">read only</span>' +
+    '<span class="spread t-num ink3">utf-8 &middot; lf &middot; ' + lines.length + ' ln</span></div>' +
+    '<div class="well scroll" style="padding:calc(6px * var(--ui)) 0"><div style="display:flex">' +
+    '<div class="gut pre">' + g + '</div><div class="pre ink1" style="padding-left:calc(8px * var(--ui))">' +
+    esc(p) + '</div></div></div>' +
+    '<div class="row"><span class="t-lab">ln</span><span class="t-num ink1">' + lines.length + '</span>' +
+    '<span class="t-lab">col</span><span class="t-num ink1">1</span>' +
+    '<span class="t-lab">tab</span><span class="t-num ink1">4</span>' +
+    '<span class="spread"></span>' + sw('OK') + '<span class="t-num ink3">buffer clean</span></div>' +
+    band('edit', name);
+};
+
+R.mon = () => {
+  const cores = S.cpu.map((v, i) => meter('cpu ' + i, v, ' %', v > 80 ? 'bad' : v > 60 ? 'warn' : ''));
+  const procs = PROCS.map((p, i) => TR([p[0], p[1], { t: p[2], c: 'r' }, { t: p[3], c: 'r' },
+    { t: p[4] === 'Z' ? '<span class="k-bad bold">Z</span>' : p[4] }, p[5]],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  const irq = IRQ.map(r => TR([r[0], r[1], { t: r[2], c: 'r' }, r[3], { t: sw(r[4]) }]));
+  const hist = [];
+  for (let i = 0; i < 64; i++) hist.push(20 + 40 * Math.abs(Math.sin((i + S.t) / 7)) + (i % 5) * 3);
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">sampling</span>' +
+    '<span class="t-num ink1">1 Hz &middot; 64 s history</span>' +
+    '<span class="spread"></span>' + sw('RUN') + '</div>' +
+    '<div class="row" style="align-items:stretch;gap:calc(10px * var(--ui));flex:1;min-height:0">' +
+    '<div class="stack" style="flex:1;min-width:0;gap:calc(4px * var(--ui))">' + cores.join('') +
+    meter('memory', S.mem, ' %', S.mem > 80 ? 'warn' : '') +
+    '<div class="card" style="margin-top:calc(4px * var(--ui))"><span class="t-lab">composite time, 64 s</span>' +
+    spark(hist, 300, 44, 100, 'var(--zd-steel)') +
+    '<div class="row"><span class="t-num ink3">min 6.2 ms</span>' +
+    '<span class="t-num ink3">mean 8.9 ms</span>' +
+    '<span class="t-num ink0 spread">budget 16.667 ms</span></div></div>' +
+    '<div class="scroll" style="margin-top:calc(4px * var(--ui))">' +
+    TBL([{ h: 'irq' }, { h: 'source' }, { h: 'count', r: 1 }, { h: 'mode' }, { h: 'state' }], irq) + '</div>' +
+    '</div>' +
+    '<div class="stack" style="flex:1;min-width:0">' +
+    '<div class="scroll">' + TBL([{ h: 'pid', w: '12%' }, { h: 'task', w: '24%' },
+      { h: 'cpu', w: '15%', r: 1 }, { h: 'rss k', w: '17%', r: 1 }, { h: 'st', w: '10%' },
+      { h: 'wchan', w: '22%' }], procs) + '</div>' +
+    kv('selected', PROCS[S.procSel][1] + '  pid ' + PROCS[S.procSel][0]) +
+    kv('wchan', PROCS[S.procSel][5]) + '</div></div>' +
+    band('mon', 'sampler 1 Hz');
+};
+
+R.log = () => {
+  const rows = KLOG.map((l, i) => TR([{ t: l[0], c: 'r' }, { t: sw(l[1]) }, l[2],
+    { t: '<span class="' + (l[1] === 'WARN' ? 'k-warn' : 'ink2') + '">' + esc(l[3]) + '</span>' }],
+    'class="pick' + (i === S.logSel ? ' sel' : '') + '" data-act="log" data-arg="' + i + '"'));
+  const warns = KLOG.filter(l => l[1] === 'WARN').length;
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">dmesg</span>' +
+    '<span class="t-num ink1">' + KLOG.length + ' records</span>' +
+    '<span class="t-num k-warn">' + warns + ' warn</span>' +
+    '<span class="spread t-num ink3">ring 64 KiB &middot; 0 dropped</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'time', w: '13%', r: 1 }, { h: 'level', w: '13%' },
+      { h: 'subsys', w: '12%' }, { h: 'message', w: '62%' }], rows) + '</div>' +
+    '<div class="hr"></div>' +
+    '<div class="well"><span class="pre ink1">' + esc(KLOG[S.logSel][3]) + '</span></div>' +
+    band('log', 'ring buffer');
+};
+
+R.hex = () => {
+  const base = 0x1000 * S.hexPage;
+  let rows = '';
+  for (let r = 0; r < 20; r++) {
+    const off = base + r * 16;
+    let hexs = '', asc = '';
+    for (let i = 0; i < 16; i++) {
+      const b = (off * 31 + i * 17 + (i & 3) * 41) & 0xFF;
+      hexs += hx(b, 2) + (i === 7 ? '  ' : ' ');
+      asc += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+    }
+    rows += TR([{ t: '<span class="ink3">' + hx(off, 8) + '</span>' },
+      { t: '<span class="ink1">' + hexs.trim() + '</span>' },
+      { t: '<span class="ink2">' + esc(asc) + '</span>' }]);
+  }
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">device</span>' +
+    '<span class="t-num ink1">rd0</span><span class="t-lab">offset</span>' +
+    '<span class="t-num ink0">0x' + hx(base, 8) + '</span>' +
+    '<span class="spread t-num ink3">zlfs superblock &middot; generation 3</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'offset', w: '16%' }, { h: 'bytes', w: '62%' },
+      { h: 'ascii', w: '22%' }], rows.split('</tr>').filter(Boolean).map(x => x + '</tr>')) + '</div>' +
+    '<div class="row"><span class="btn" data-act="hexp" data-arg="-1"><span class="t-lab">prev</span></span>' +
+    '<span class="btn" data-act="hexp" data-arg="1"><span class="t-lab">next</span></span>' +
+    '<span class="t-num ink3">page ' + S.hexPage + ' of 1024</span>' +
+    '<span class="spread"></span>' + sw('OK') + '<span class="t-num ink3">crc ok</span></div>' +
+    band('hex', 'rd0 &middot; 4 MiB');
+};
+
+R.calc = () => {
+  const v = S.calcVal === undefined ? 241690 : S.calcVal;
+  const keys = ['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'];
+  return '<div class="well" style="text-align:right"><span class="t-lg ink0">' +
+    v.toLocaleString('en-US') + '</span></div>' +
+    kv('hex', '0x' + hx(v >>> 0, 8)) +
+    kv('binary', (v >>> 0).toString(2).replace(/(.{8})(?=.)/g, '$1 ')) +
+    kv('octal', '0o' + (v >>> 0).toString(8)) +
+    kv('width', 'int64, no float in the drawing path') +
+    '<div class="hr"></div>' +
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:calc(5px * var(--ui))">' +
+    keys.map(k => '<span class="btn' + (k === '=' ? ' prim' : '') +
+      '" style="justify-content:center" data-act="calc" data-arg="' + k + '">' +
+      '<span class="t-num">' + k + '</span></span>').join('') + '</div>' +
+    '<div class="row"><span class="t-lab">note</span>' +
+    '<span class="t-num ink3">241690 kHz is the measured pixel clock</span></div>' +
+    band('calc', 'int64');
+};
+
+R.net = () => {
+  const rt = ROUTES.map(r => TR([r[0], r[1], r[2], { t: r[3], c: 'r' }, r[4]]));
+  const sk = SOCKS.map(r => TR([r[0], r[1], r[2], { t: sw(r[3]) }, r[4]]));
+  const hist = []; for (let i = 0; i < 48; i++) hist.push(8 + 30 * Math.abs(Math.sin((i + S.t) / 5)));
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">link</span>' +
+    '<span class="t-num ink1">enp0s31f6</span>' + sw('UP') +
+    '<span class="spread t-num ink3">1000 Mb/s full duplex &middot; msi</span></div>' +
+    kv('driver', 'e1000e, 8086:15D8, irq 19') +
+    kv('address', '10.0.14.62/24  fe80::21c:42ff:fe3a:1b09/64') +
+    kv('gateway', '10.0.14.1') +
+    kv('counters', 'rx 4 812 991 pkt / tx 2 190 447 pkt / 0 err / 0 drop') +
+    '<div class="card"><span class="t-lab">rx throughput, 48 s</span>' +
+    spark(hist, 300, 36, 48, 'var(--zd-steel)') +
+    '<div class="row"><span class="t-num ink0">' + (18 + (S.t % 7)) + '.4 Mb/s</span>' +
+    '<span class="spread t-num ink3">peak 41.2 Mb/s</span></div></div>' +
+    '<div class="scroll">' + TBL([{ h: 'destination', w: '28%' }, { h: 'gateway', w: '22%' },
+      { h: 'device', w: '20%' }, { h: 'metric', w: '14%', r: 1 }, { h: 'flags', w: '16%' }], rt) +
+    '<div style="height:calc(6px * var(--ui))"></div>' +
+    TBL([{ h: 'proto', w: '10%' }, { h: 'local', w: '28%' }, { h: 'peer', w: '28%' },
+      { h: 'state', w: '22%' }, { h: 'task', w: '12%' }], sk) + '</div>' +
+    band('net', 'enp0s31f6');
+};
+
+R.clock = () => {
+  const up = 4 * 3600 + 12 * 60 + 8 + S.t;
+  const f = s => Math.floor(s / 3600) + ' h ' + ('0' + Math.floor(s / 60) % 60).slice(-2) + ' m ' +
+    ('0' + s % 60).slice(-2) + ' s';
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">source</span>' +
+    '<span class="t-num ink1">apic timer, 1000.15 Hz measured</span>' +
+    '<span class="spread"></span>' + sw('DRIFT') + '</div>' +
+    '<div class="row" style="gap:calc(10px * var(--ui));align-items:stretch">' +
+    ['monotonic', 'boot', 'process'].map((n, i) =>
+      '<div class="card stack" style="flex:1"><span class="t-lab">' + n + '</span>' +
+      '<span class="t-lg ink0">' + f(up - i * 41) + '</span></div>').join('') + '</div>' +
+    kv('vblank', '59.998 Hz, 16 667 us period, 0 missed in 64 s') +
+    kv('pixel clock', '241 690 kHz, from PIPE_LINK_M / PIPE_LINK_N') +
+    kv('rtc', '2 d 03 h 11 m behind, ntp corrects mid session') +
+    kv('tsc', '2 592 004 118 Hz, invariant, deadline mode') +
+    kv('quantum', '4 ms, run queue depth 3') +
+    '<div class="well"><span class="pre ink2">' +
+    'the rtc on this box runs slow and ntp corrects it mid session,\nso a local timestamp taken before the correction and one taken\nafter are not comparable. every duration on this pane is read\nfrom the monotonic counter, never from the wall clock.' +
+    '</span></div>' + band('clock', 'monotonic');
+};
+
+R.sys = () => {
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">host</span>' +
+    '<span class="t-num ink1">zlos 0.3, x86_64, single image</span>' +
+    '<span class="spread"></span>' + sw('OK') + '</div>' +
+    '<div class="row" style="gap:calc(10px * var(--ui));align-items:stretch">' +
+    '<div class="card stack" style="flex:1"><span class="t-lab">cpu</span>' +
+    '<span class="t-lg ink0">4</span><span class="t-num ink3">logical, 4 physical</span></div>' +
+    '<div class="card stack" style="flex:1"><span class="t-lab">memory</span>' +
+    '<span class="t-lg ink0">15.4</span><span class="t-num ink3">GiB, no swap</span></div>' +
+    '<div class="card stack" style="flex:1"><span class="t-lab">refresh</span>' +
+    '<span class="t-lg ink0">59.998</span><span class="t-num ink3">Hz, measured</span></div></div>' +
+    kv('display', 'intel gen9, pipe A, 1600 x 1000 x 32, wc mapped') +
+    kv('framebuffer', '6.10 MiB, stride 6400 B, no gpu') +
+    kv('firmware', 'uefi 2.7, secure boot off, csm off') +
+    kv('storage', 'nvme 0, 2 io queues, zlfs generation 3') +
+    kv('input', 'usb hid, boot keyboard and boot mouse, depth 1') +
+    '<div class="hr"></div>' +
+    '<span class="t-lab">measured contrast, this ladder, right now</span>' +
+    '<div class="scroll">' + TBL([{ h: 'pair', w: '46%' }, { h: 'ratio', w: '18%', r: 1 },
+      { h: 'floor', w: '16%', r: 1 }, { h: 'verdict', w: '20%' }], [
+      ['text 1 on base', '--zd-text-1', '--zd-base', 4.5],
+      ['text 2 on float', '--zd-text-2', '--zd-float', 4.5],
+      ['text 3 on float', '--zd-text-3', '--zd-float', 4.5],
+      ['text 0 on focus wash', '--zd-text-0', '--zd-focus-wash', 4.5],
+      ['text 2 on focus wash', '--zd-text-2', '--zd-focus-wash', 4.5],
+      ['steel on base', '--zd-steel', '--zd-base', 3.0],
+      ['edge over on base', '--zd-edge-over', '--zd-base', 3.0],
+      ['edge over on float', '--zd-edge-over', '--zd-float', 3.0],
+      ['lit on base', '--zd-lit', '--zd-base', 0],
+      ['cut on base', '--zd-cut', '--zd-base', 0],
+      ['focus wash on base', '--zd-focus-wash', '--zd-base', 0]
+    ].map(t => {
+      const v = ratio(t[1], t[2]);
+      const ok = t[3] === 0 ? 'note' : (v >= t[3] ? 'PASS' : 'FAIL');
+      return TR([t[0], { t: v.toFixed(2) + ':1', c: 'r' },
+        { t: t[3] === 0 ? '-' : t[3].toFixed(2), c: 'r' },
+        { t: ok === 'note' ? '<span class="ink3">structure</span>' : sw(ok) }]);
+    })) + '</div>' + band('sys', 'zlos 0.3');
+};
+
+R.disk = () => {
+  const parts = [['kernel + tools', 41.2, 'steel'], ['atlases', 22.6, 'ok'],
+                 ['source', 18.4, 'warn'], ['journal', 6.1, 'inert'], ['free', 11.7, 'inert']];
+  const gens = [['1', '0x00040000', '3.1 MiB', 'sealed'], ['2', '0x00081000', '3.7 MiB', 'sealed'],
+                ['3', '0x000C4000', '4.0 MiB', 'current']];
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">volume</span>' +
+    '<span class="t-num ink1">rd0, zlfs, 4.0 MiB image</span>' +
+    '<span class="spread"></span>' + sw('OK') + '<span class="t-num ink3">0 orphan extents</span></div>' +
+    '<div class="well" style="padding:calc(8px * var(--ui))"><div style="display:flex;height:calc(16px * var(--ui));' +
+    'border-radius:var(--zd-r-chip);overflow:hidden">' +
+    parts.map(p => '<span style="width:' + p[1] + '%;background:var(--zd-' + p[2] + ')"></span>').join('') +
+    '</div></div>' +
+    parts.map(p => '<div class="row"><span class="dot" style="background:var(--zd-' + p[2] + ')"></span>' +
+      '<span class="t-num ink2">' + p[0] + '</span><span class="spread t-num ink0">' + p[1].toFixed(1) + ' %</span></div>').join('') +
+    '<div class="hr"></div><span class="t-lab">generations</span>' +
+    TBL([{ h: 'gen' }, { h: 'root' }, { h: 'size', r: 1 }, { h: 'state' }],
+      gens.map(g => TR([g[0], g[1], { t: g[2], c: 'r' },
+        { t: g[3] === 'current' ? sw('OK') : '<span class="ink3">sealed</span>' }]))) +
+    kv('write path', 'copy on write, journal then superblock swap') +
+    kv('verified', 'power cycle 1 -> 2 -> 3, three cold boots') +
+    band('disk', 'rd0');
+};
+
+R.regs = () => {
+  const rows = REGS.map(r => TR([r[0], { t: '<span class="ink0">' + r[1] + '</span>' },
+    { t: '<span class="ink3">' + r[2] + '</span>' }]));
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">block</span>' +
+    '<span class="t-num ink1">intel gen9, pipe A</span>' +
+    '<span class="spread"></span>' + sw('OK') + '<span class="t-num ink3">psr idle</span></div>' +
+    '<div class="scroll">' + TBL([{ h: 'register', w: '32%' }, { h: 'value', w: '24%' },
+      { h: 'decode', w: '44%' }], rows) + '</div>' +
+    '<div class="well"><span class="pre ink2">' +
+    'dpll_from_link(0x0080D9E4, 0x00800000, 24)\n  = 0x0080D9E4 * 270000 * 8 / (0x00800000 * 24)\n  = 241690 kHz\n241690000 / (1968 * 1032) = 59.998 Hz' +
+    '</span></div>' +
+    '<div class="row"><span class="btn prim" data-act="toast" data-arg="modeset"><span class="t-lab">re-read block</span></span>' +
+    '<span class="btn" data-act="open" data-arg="edit"><span class="t-lab">intel.c</span></span></div>' +
+    band('regs', 'mmio');
+};
+
+R.type = () => {
+  const rows = [['atlas 8 x 16', 'SM', '11.0 px', '95 glyphs', 'baked'],
+                ['atlas 16 x 32', 'MD', '13.0 px', '95 glyphs', 'baked'],
+                ['atlas 24 x 48', 'LG', '21.0 px', '95 glyphs', 'baked']]
+    .map(r => TR([r[0], r[1], { t: r[2], c: 'r' }, r[3], { t: sw('OK') }]));
+  return '<div class="row" style="height:calc(22px * var(--ui))"><span class="t-lab">faces</span>' +
+    '<span class="t-num ink1">DejaVu Sans + DejaVu Sans Mono</span>' +
+    '<span class="spread t-num ink3">three atlases, no runtime rasteriser</span></div>' +
+    '<div class="card stack"><span class="t-lg ink0">241 690 kHz</span>' +
+    '<span class="t-md ink1">The root size. Everything a person reads as prose.</span>' +
+    '<span class="t-lab">micro label, uppercase at the call site</span></div>' +
+    TBL([{ h: 'atlas', w: '26%' }, { h: 'role', w: '12%' }, { h: 'size', w: '18%', r: 1 },
+      { h: 'coverage', w: '22%' }, { h: 'state', w: '22%' }], rows) +
+    kv('ratios', 'SM to MD 1.182, MD to LG 1.615') +
+    kv('tracking', 'none. fb_text_role cannot track without a new primitive') +
+    kv('hierarchy', 'ink ramp and weight, never size') +
+    '<div class="well"><span class="pre ink2">' +
+    'LG is not a bigger heading. it is a different job - numerals\nyou read at a glance from across a desk - so it sits off any\nsmooth ramp on purpose, and cannot be used as a heading.' +
+    '</span></div>' + band('type', 'DejaVu');
+};
+
+/* ========================================================= settings ===
+ * Every control below changes something you can see on this page. The
+ * two that matter are OCCLUSION EDGE and RASTER CLOCK: the first turns
+ * the blend's one invented token off so the 1.33:1 failure it replaces
+ * is visible rather than described, and the second turns Datum's strip
+ * back into a perpetual animation so the standing tax is countable.
+ */
+function tog(label, key, note) {
+  const on = S.cfg[key] === true;
+  return '<div class="row" style="height:calc(26px * var(--ui))" data-act="tog" data-arg="' + key + '">' +
+    '<span class="btn" style="width:calc(38px * var(--ui));padding:0;justify-content:' +
+    (on ? 'flex-end' : 'flex-start') + ';border-radius:999px;' +
+    (on ? 'background:var(--zd-steel);border-color:var(--zd-steel)' : '') + '">' +
+    '<span style="width:calc(16px * var(--ui));height:calc(16px * var(--ui));border-radius:999px;' +
+    'background:var(--zd-' + (on ? 'ink-on' : 'text-3') + ');margin:0 calc(2px * var(--ui))"></span></span>' +
+    '<span class="t-md ink1">' + label + '</span>' +
+    '<span class="spread t-num ink3">' + note + '</span></div>';
+}
+function seg(label, key, opts) {
+  return '<div class="row" style="height:calc(26px * var(--ui))">' +
+    '<span class="t-md ink1" style="width:calc(150px * var(--ui))">' + label + '</span>' +
+    '<span class="row" style="gap:calc(3px * var(--ui))">' + opts.map(o =>
+      '<span class="btn' + (S.cfg[key] === o ? ' prim' : '') + '" data-act="seg" data-arg="' + key + ':' + o + '">' +
+      '<span class="t-num">' + o + '</span></span>').join('') + '</span></div>';
+}
+function slider(label, key, lo, hi, unit) {
+  const pct = ((S.cfg[key] - lo) / (hi - lo)) * 100;
+  return '<div class="row" style="height:calc(26px * var(--ui))">' +
+    '<span class="t-md ink1" style="width:calc(150px * var(--ui))">' + label + '</span>' +
+    '<div class="mtrack" style="height:calc(10px * var(--ui));cursor:pointer" data-slider="' + key +
+    '" data-lo="' + lo + '" data-hi="' + hi + '">' +
+    '<div class="mfill" style="width:' + pct + '%"></div></div>' +
+    '<span class="t-num ink0" style="width:calc(64px * var(--ui));text-align:right">' +
+    S.cfg[key] + unit + '</span></div>';
+}
+const SETTABS = ['focus', 'depth', 'instrument', 'ladder'];
+R.set = () => {
+  let out = '<div class="row" style="height:calc(24px * var(--ui))">' +
+    SETTABS.map((t, i) => '<span class="btn' + (i === S.setTab ? ' prim' : '') +
+      '" data-act="settab" data-arg="' + i + '"><span class="t-lab">' + t + '</span></span>').join('') +
+    '<span class="spread t-num ink3">design.h &middot; live</span></div><div class="scroll">';
+
+  if (S.setTab === 0) {
+    const bez = 3, W = 600, H = 420, T = 28;
+    const b = S.cfg.bezel;
+    const bezelPx = W * b + (H - b) * b;
+    const washPx = S.cfg.wash ? (W * T - b * W - (T - b) * b) : 0;
+    const tot = bezelPx + washPx, pct = (100 * tot / (W * H));
+    out += '<span class="t-lab">the focus signal</span>' +
+      '<div class="well"><span class="pre ink2">' +
+      'Raking names its own weakest link: "the focus signal is one blue\npixel on the top edge plus a title going from ZD_TEXT_2 to\nZD_TEXT_0. at arm\'s length on a busy desktop it is near the\nfloor of obvious-at-a-glance."\n\nPLATE\'s knockout is not the fix. on this ladder a header knocked\nout to ZD_TEXT_0 computes ' + r2('--zd-text-0', '--zd-base') + ':1 against ZD_BASE, against a\nloudest surface step of ' + r3('--zd-raise', '--zd-float') + ':1 and a loudest achromatic edge\nof ' + r3('--zd-lit', '--zd-base') + ':1. worse, it inverts the light: ZD_LIT, which IS the\nstruck top edge, computes ' + r2('--zd-lit', '--zd-text-0') + ':1 against that ground and\nbecomes the ' + (isLighter('--zd-lit', '--zd-text-0') ? 'loudest line on screen while still\nbeing called a highlight - the header stops being a surface and\nstarts being a graphic.' : 'DARKER term - the recipe says raised and\nthe pixels say cut.') + '\n\nthis blend keeps the maximum contrast exactly where Raking had\nit and spends AREA instead.' +
+      '</span></div>' +
+      slider('bezel width', 'bezel', 1, 6, ' dp') +
+      tog('focus wash', 'wash', 'ZD_FOCUS_WASH ramp across the title band') +
+      '<div class="hr"></div><span class="t-lab">measured, on a 600 x 420 dp plate</span>' +
+      TBL([{ h: 'component', w: '38%' }, { h: 'pixels', w: '20%', r: 1 },
+        { h: 'of plate', w: '18%', r: 1 }, { h: 'contrast', w: '24%', r: 1 }], [
+        TR(['bezel, top and left', { t: bezelPx.toLocaleString('en-US'), c: 'r' },
+          { t: (100 * bezelPx / (W * H)).toFixed(3) + ' %', c: 'r' },
+          { t: r2('--zd-steel', '--zd-base') + ':1', c: 'r' }]),
+        TR(['title wash', { t: washPx.toLocaleString('en-US'), c: 'r' },
+          { t: (100 * washPx / (W * H)).toFixed(3) + ' %', c: 'r' },
+          { t: r3('--zd-focus-wash', '--zd-base') + ':1', c: 'r' }]),
+        TR([{ t: '<span class="ink0 bold">this blend, total</span>' },
+          { t: '<span class="ink0 bold">' + tot.toLocaleString('en-US') + '</span>', c: 'r' },
+          { t: '<span class="ink0 bold">' + pct.toFixed(2) + ' %</span>', c: 'r' },
+          { t: '<span class="ink0 bold">' + r2('--zd-steel', '--zd-base') + ':1 max</span>', c: 'r' }]),
+        TR([{ t: '<span class="ink3">Raking, same plate</span>' },
+          { t: '<span class="ink3">1,019</span>', c: 'r' },
+          { t: '<span class="ink3">0.404 %</span>', c: 'r' },
+          { t: '<span class="ink3">6.19:1 max</span>', c: 'r' }]),
+        TR([{ t: '<span class="ink3">PLATE knockout, same plate</span>' },
+          { t: '<span class="ink3">33,600</span>', c: 'r' },
+          { t: '<span class="ink3">13.33 %</span>', c: 'r' },
+          { t: '<span class="k-warn">' + r2('--zd-text-0', '--zd-base') + ':1 max</span>', c: 'r' }])
+      ]) +
+      '<div class="hr"></div><span class="t-lab">why the light still reads as light</span>' +
+      kv('steel on wash', r2('--zd-steel', '--zd-focus-wash') + ':1, steel is the lighter term') +
+      kv('lit on wash', r2('--zd-lit', '--zd-focus-wash') + ':1, lit is still the lighter term') +
+      kv('lit on knockout', r2('--zd-lit', '--zd-text-0') + ':1, and lit is the ' +
+        (isLighter('--zd-lit', '--zd-text-0')
+          ? 'lighter term by ' + (Number(r2('--zd-lit', '--zd-text-0')) / ratio('--zd-lit', '--zd-base')).toFixed(1) +
+            'x the struck edge. no inversion here, a blowout instead'
+          : 'DARKER term. the light inverts. that is the failure')) +
+      kv('body on wash', r2('--zd-text-1', '--zd-focus-wash') + ':1') +
+      '<div class="hr"></div>' +
+      '<span class="t-lab">arrival</span>' +
+      '<div class="well"><span class="pre ink2">' +
+      'Raking puts the whole focus transition on ZD_MS_SETTLE 240, so\nits weakest signal is also its slowest. amended: the bezel and\nthe register mark arrive at RISE 90, the wash settles over 240.\nthe load bearing half is there in 90 ms.' +
+      '</span></div>';
+  } else if (S.setTab === 1) {
+    out += '<span class="t-lab">the boundary, and the arithmetic that forced a new token</span>' +
+      '<div class="well"><span class="pre ink2">' +
+      'free floating windows put a 3:1 floor on the window boundary,\nbecause under overlap the only thing saying which plate is on\ntop is the upper plate\'s bottom and right edge lying on the\nlower plate\'s body.\n\nthe ceiling on a DARKER edge is fixed by the ground alone. the\nlargest ratio pure black can reach is:\n\n   on ZD_BASE   ' + darkCeil('--zd-base') + ':1        on ZD_FLOAT  ' + darkCeil('--zd-float') + ':1\n   on ZD_VOID   ' + darkCeil('--zd-void') + ':1        on ZD_RAISE  ' + darkCeil('--zd-raise') + ':1\n\n' + (S.theme === 'dark' ? 'every one of those is under 3:1, so on graphite the downward\ndirection is arithmetically shut. there is no groove, at any\nvalue, that clears the floor. the occluding edge is the LIGHT.\n\nthe ceiling on a LIGHTER edge here is ' + liteCeil('--zd-base') + ':1, which is where\nZD_EDGE_OVER lives.' : 'on the work-light ladder the ceiling runs the other way: a\ndarker edge can reach ' + darkCeil('--zd-base') + ':1 on ZD_BASE, so ZD_EDGE_OVER is\nDARK here. same token, same call site, same rule - the ground\ndecides which direction has the headroom.') +
+      '</span></div>' +
+      tog('occlusion edge', 'over', 'off falls back to ZD_CUT at ' + r2('--zd-cut', '--zd-base') + ':1') +
+      '<div class="hr"></div>' +
+      TBL([{ h: 'edge on', w: '30%' }, { h: 'ZD_CUT', w: '23%', r: 1 },
+        { h: 'ZD_EDGE_OVER', w: '25%', r: 1 }, { h: 'floor 3.00', w: '22%' }], [
+        ['--zd-base', 'ZD_BASE'], ['--zd-raise', 'ZD_RAISE'], ['--zd-float', 'ZD_FLOAT'],
+        ['--zd-void', 'ZD_VOID'], ['--zd-well', 'ZD_WELL']
+      ].map(t => TR([t[1],
+        { t: '<span class="k-bad">' + r2('--zd-cut', t[0]) + '</span>', c: 'r' },
+        { t: '<span class="ink0">' + r2('--zd-edge-over', t[0]) + '</span>', c: 'r' },
+        { t: sw(ratio('--zd-edge-over', t[0]) >= 3 ? 'PASS' : 'FAIL') }]))) +
+      '<div class="hr"></div><span class="t-lab">the surface ladder does not separate, and that is the premise</span>' +
+      TBL([{ h: 'step', w: '46%' }, { h: 'ratio', w: '18%', r: 1 },
+        { h: 'L star', w: '18%', r: 1 }, { h: 'read', w: '18%' }], [
+        ['well to void', '--zd-well', '--zd-void'], ['void to base', '--zd-void', '--zd-base'],
+        ['base to raise', '--zd-base', '--zd-raise'], ['raise to float', '--zd-raise', '--zd-float']
+      ].map(t => TR([t[0], { t: r3(t[1], t[2]) + ':1', c: 'r' },
+        { t: lstar(t[2]), c: 'r' }, { t: '<span class="ink3">sub threshold</span>' }])
+      ).concat([
+        TR([{ t: '<span class="ink0">cut on base, the groove</span>' },
+          { t: '<span class="ink0">' + r3('--zd-cut', '--zd-base') + ':1</span>', c: 'r' },
+          { t: lstar('--zd-cut'), c: 'r' }, { t: '<span class="steel">edge</span>' }]),
+        TR([{ t: '<span class="ink0">lit on base, the struck run</span>' },
+          { t: '<span class="ink0">' + r3('--zd-lit', '--zd-base') + ':1</span>', c: 'r' },
+          { t: lstar('--zd-lit'), c: 'r' }, { t: '<span class="steel">edge</span>' }]),
+        TR([{ t: '<span class="ink0">edge over on base, rank 2</span>' },
+          { t: '<span class="ink0">' + r3('--zd-edge-over', '--zd-base') + ':1</span>', c: 'r' },
+          { t: lstar('--zd-edge-over'), c: 'r' }, { t: '<span class="steel">edge</span>' }])
+      ])) +
+      '<div class="hr"></div>' +
+      kv('drag cue', 'perimeter goes ZD_EDGE_OVER, bezel goes ZD_STEEL_BR') +
+      '<div class="well"><span class="pre ink2">' +
+      'the drag cue is stated rather than inherited. Folio\'s one\nshadow buys 18.9 dL* of recession on paper and 8.7 dL* on dark\nstock - 46% - so a dark ground costs the drag lift outright.\nthis blend does not spend it: a dragged plate is over every\nother plate by definition, so the occlusion rule already draws\nall four of its edges, and the cue is free.' +
+      '</span></div>';
+  } else if (S.setTab === 2) {
+    const perHour = S.cfg.rasterClock === 'frame' ? 215993 : Math.round(S.composites * 3600 / Math.max(1, S.t || 1));
+    out += '<span class="t-lab">what the machine says about itself without being asked</span>' +
+      seg('raster clock', 'rasterClock', ['composite', 'frame']) +
+      seg('per window timing', 'us', ['measured', 'repaint', 'off']) +
+      tog('memory map ruler', 'ruler', 'bottom edge, Datum') +
+      '<div class="hr"></div>' +
+      TBL([{ h: 'clock', w: '26%' }, { h: 'advance', w: '32%' },
+        { h: 'idle wakeups per hour', w: '26%', r: 1 }, { h: 'verdict', w: '16%' }], [
+        TR([{ t: '<span class="ink0">composite</span>' }, 'one column per damage flush',
+          { t: '<span class="ink0">0</span>', c: 'r' }, { t: sw('PASS') }]),
+        TR(['frame', 'one column per vblank at 59.998 Hz',
+          { t: '<span class="k-warn">215,993</span>', c: 'r' }, { t: sw('WARN') }])
+      ]) +
+      '<div class="well"><span class="pre ink2">' +
+      'Datum deletes ZD_MS_PULSE, ZD_MS_PULSE_SLOW and ZD_MS_SWEEP\nwith an explicit reason - "an infinitely pulsing element means\nthe damage list is never empty on a compositor whose entire\narchitecture is damage-driven repaint" - and then makes exactly\none exception with exactly that property.\n\nthe exception is not needed. re-clock the strip to the damage\nflush and it is still on an idle machine, which is not a loss:\na still strip means nothing damaged, and that is information\nthe frame-clocked version could not carry.' +
+      '</span></div>' +
+      '<div class="hr"></div>' +
+      kv('this session', S.composites.toLocaleString('en-US') + ' composites in ' + S.t + ' s') +
+      kv('extrapolated', perHour.toLocaleString('en-US') + ' per hour at the current clock') +
+      kv('per window us', 'wm.c measures app_us in AGGREGATE only') +
+      kv('fallback', 'the window\'s repaint_pixels, same slot, same face') +
+      '<div class="hr"></div><span class="t-lab">the register, from PLATE</span>' +
+      '<div class="well"><span class="pre ink2">' +
+      'the numbered register makes the launcher, the running list and\nthe keymap one list. it is text and two digits: no surface, no\ncolour, no radius, no boundary - which is why it lifts off a\nlight printed direction onto a dark machined one intact.\n\none consequence was paid, not assumed. Raking\'s stacked clock\n(hours over minutes) exists ONLY because a 56dp rail cannot\nhold 23:41 on one line at display size. the register needs\n132dp. at 132dp it fits on one line, so the stacking is gone.' +
+      '</span></div>';
+  } else {
+    out += '<span class="t-lab">this direction is dark native</span>' +
+      '<div class="well"><span class="pre ink2">' +
+      'every other direction here designed a light ladder and derived\na dark one. this one is designed on graphite, so the light\nladder is the derived half - and it is derived, not inverted.\n\none raking light, upper left, in both modes. what changes is\nwhich edge has the headroom to do the work.' +
+      '</span></div>' +
+      slider('ui scale', 'ui', 80, 140, ' %') +
+      tog('motion', 'motion', 'RISE 90 / TRAVEL 160 / SETTLE 240, one curve') +
+      '<div class="hr"></div>' +
+      TBL([{ h: 'token', w: '30%' }, { h: 'value', w: '22%' },
+        { h: 'L star', w: '16%', r: 1 }, { h: 'on base', w: '16%', r: 1 }, { h: 'role', w: '16%' }], [
+        ['--zd-cut', 'groove'], ['--zd-well', 'sunken'], ['--zd-void', 'field'],
+        ['--zd-base', 'plate'], ['--zd-raise', 'raised'], ['--zd-float', 'off plane'],
+        ['--zd-litsoft', 'grazed'], ['--zd-lit', 'struck'], ['--zd-edge-over', 'over'],
+        ['--zd-focus-wash', 'focus'], ['--zd-steel', 'the light'], ['--zd-steel-br', 'full'],
+        ['--zd-text-0', 'emphasis'], ['--zd-text-1', 'body'], ['--zd-text-2', 'secondary'],
+        ['--zd-text-3', 'label'], ['--zd-text-inert', 'structure'], ['--zd-ok', 'state'],
+        ['--zd-warn', 'state'], ['--zd-bad', 'fill only'], ['--zd-bad-ink', 'state text'],
+        ['--zd-ink-on', 'on accent']
+      ].map(t => TR([t[0].replace('--zd-', 'ZD_').toUpperCase().replace(/-/g, '_'),
+        { t: '<span class="ink0">' + tokHex(t[0]) + '</span>' },
+        { t: lstar(t[0]), c: 'r' },
+        { t: r2(t[0], '--zd-base'), c: 'r' }, t[1]]))) +
+      '<div class="hr"></div>' +
+      kv('accent saturation', 'LOCKED. 43 % on a warm ground is the whole differentiation') +
+      '<div class="well"><span class="pre ink2">' +
+      'blue is the most common accent hue in software. this one is\nlow chroma and it means "the light" rather than "the brand".\nraise the saturation or add a second cold hue and the system\ncollapses into generic dark-UI-with-blue. it is a locked value,\nnot a taste knob - which is why there is no control for it here.' +
+      '</span></div>';
+  }
+  out += '</div>' + band('set', 'design.h');
+  return out;
+};
+
+/* ====================================================== window mgmt ===
+ * wm.c is mechanically unchanged: floating, draggable, resizable, z
+ * ordered, per window surface cache. Two things are added, and both are
+ * risks Raking named and did not fix.
+ *   1  THE RAIL MUST NEVER BE COVERED. wm.c has no reserved strut, so
+ *      wm_open and drag clamp to rail_w. With no top bar and no dock the
+ *      rail is the only route to every system function; a window dragged
+ *      over it hides the clock, the launcher and every running app at
+ *      once, which is strictly worse than covering a dock.
+ *   2  OVERLAP IS COMPUTED, because the occluder draws the border.
+ */
+function openWin(id, rect, ws) {
+  const a = APP[id];
+  if (S.wins[id]) { focusWin(id); return; }
+  const r = rect || a.p;
+  S.wins[id] = { id: id, x: r[0], y: r[1], w: r[2], h: r[3], ws: ws || S.ws,
+                 min: false, max: false, z: ++ZT,
+                 us: 340 + ((id.charCodeAt(0) * 37) % 900),
+                 px: 40000 + ((id.charCodeAt(0) * 5417) % 260000) };
+  buildWin(id); focusWin(id); layout();
+}
+function closeWin(id) {
+  const e = $('.win[data-id="' + id + '"]'); if (e) e.remove();
+  delete S.wins[id];
+  if (S.focus === id) {
+    const rest = Object.keys(S.wins).filter(k => S.wins[k].ws === S.ws && !S.wins[k].min);
+    S.focus = rest.length ? rest.sort((a, b) => S.wins[b].z - S.wins[a].z)[0] : null;
+  }
+  renderRail(); layout(); damage();
+}
+function focusWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].z = ++ZT; S.wins[id].min = false; S.focus = id;
+  layout(); renderRail(); damage();
+}
+function minWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].min = true;
+  if (S.focus === id) S.focus = null;
+  layout(); renderRail(); damage();
+  toast('minimised', APP[id].n + ' ' + APP[id].name + ' travels to its register slot in ' +
+    'TRAVEL 160 ms, then the slot bar drops to 2dp');
+}
+function maxWin(id) {
+  const w = S.wins[id]; if (!w) return;
+  if (w.max) { w.max = false; }
+  else { w.pre = [w.x, w.y, w.w, w.h]; w.max = true; }
+  focusWin(id);
+}
+function buildWin(id) {
+  const a = APP[id];
+  const e = document.createElement('div');
+  e.className = 'win'; e.setAttribute('data-id', id);
+  e.innerHTML =
+    '<div class="tbar" data-drag="1">' +
+    '<span class="reg">' + a.n + '</span>' +
+    '<span class="ttl">' + a.name + '</span>' +
+    '<span class="sub">' + a.sub + '</span>' +
+    '<span class="ctl">' +
+    '<span class="cbtn" data-wa="min" title="minimise"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 9 H10"/></svg></span>' +
+    '<span class="cbtn" data-wa="max" title="maximise"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="8" height="8"/></svg></span>' +
+    '<span class="cbtn x" data-wa="close" title="close"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 2.5 L9.5 9.5 M9.5 2.5 L2.5 9.5"/></svg></span>' +
+    '</span></div><div class="wbody"></div>' +
+    '<svg class="grip" viewBox="0 0 14 14" fill="none" stroke="var(--zd-text-inert)" stroke-width="1.2">' +
+    '<path d="M13 5 L5 13 M13 9 L9 13 M13 1 L1 13"/></svg>';
+  $('#wins').appendChild(e);
+  redraw(id);
+}
+function redraw(id) {
+  const e = $('.win[data-id="' + id + '"]'); if (!e) return;
+  const f = R[id] || (() => '<div class="well"><span class="pre ink2">no renderer</span></div>');
+  $('.wbody', e).innerHTML = f();
+}
+function redrawAll() { Object.keys(S.wins).forEach(redraw); }
+/* rank 2 detection: does this plate lie over a plate below it in z? */
+function overlaps(a, b) {
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+function layout() {
+  const field = $('#field'), fw = field.clientWidth, fh = field.clientHeight;
+  const list = Object.keys(S.wins).map(k => S.wins[k])
+    .filter(w => w.ws === S.ws).sort((a, b) => a.z - b.z);
+  Object.keys(S.wins).forEach(id => {
+    const w = S.wins[id], e = $('.win[data-id="' + id + '"]');
+    if (!e) return;
+    if (w.ws !== S.ws || w.min) { e.style.display = 'none'; return; }
+    e.style.display = '';
+    let x = w.x, y = w.y, ww = w.w, hh = w.h;
+    if (w.max) { x = 0; y = 0; ww = fw; hh = fh; }
+    /* the rail clamp. it is here and not in the app because wm.c is the
+       only place that knows the rail exists. */
+    x = Math.max(0, Math.min(x, Math.max(0, fw - 120)));
+    y = Math.max(0, Math.min(y, Math.max(0, fh - 60)));
+    ww = Math.min(ww, fw); hh = Math.min(hh, fh);
+    e.style.left = x + 'px'; e.style.top = y + 'px';
+    e.style.width = ww + 'px'; e.style.height = hh + 'px';
+    e.style.zIndex = w.z;
+    e.classList.toggle('focus', S.focus === id);
+    e.classList.toggle('max', !!w.max);
+    const me = { x: x, y: y, w: ww, h: hh };
+    let over = false;
+    if (S.cfg.over) {
+      for (let i = 0; i < list.length; i++) {
+        const o = list[i]; if (o.id === id || o.z >= w.z) continue;
+        const oe = $('.win[data-id="' + o.id + '"]'); if (!oe || oe.style.display === 'none') continue;
+        if (overlaps(me, { x: oe.offsetLeft, y: oe.offsetTop, w: oe.offsetWidth, h: oe.offsetHeight })) { over = true; break; }
+      }
+    }
+    e.classList.toggle('over', over);
+  });
+}
+
+/* ============================================================= rail == */
+function renderRail() {
+  $('#reg').innerHTML = APPS.map(a => {
+    const w = S.wins[a.id];
+    const run = !!w, act = S.focus === a.id;
+    return '<div class="slot' + (run ? ' run' : '') + (act ? ' act' : '') +
+      '" data-act="open" data-arg="' + a.id + '" title="alt+' + a.n + '">' +
+      '<span class="n">' + a.n + '</span>' +
+      icon(a.ico, 15) +
+      '<span class="nm">' + a.name + '</span>' +
+      (run ? '<span class="bar"></span>' : '') + '</div>';
+  }).join('');
+  $('#wsrow').innerHTML = [1, 2].map(n =>
+    '<span class="wsb' + (S.ws === n ? ' on' : '') + '" data-act="ws" data-arg="' + n + '">' +
+    '<span class="t-num">0' + n + '</span></span>').join('');
+  const nets = [['net', 'net', 'UP'], ['vol', 'vol', 'OK'], ['power', 'pwr', 'WARN']];
+  $('#railstat').innerHTML = nets.map(s =>
+    '<div class="strow">' + icon(s[0], 14) + '<span class="t-lab">' + s[1] + '</span>' +
+    '<span class="w">' + sw(s[2]) + '</span></div>').join('');
+  const on = Object.keys(S.wins).filter(k => S.wins[k].ws === S.ws && !S.wins[k].min).length;
+  $('#ovsub').textContent = on + ' plates on workspace 0' + S.ws +
+    ' - the border you can see is drawn by the occluder';
+}
+
+/* ====================================================== raster strip ==
+ * Datum's, re-clocked. One column per composite, never per vblank.
+ */
+function damage(n) {
+  const k = n || 1;
+  for (let i = 0; i < k; i++) {
+    S.composites++;
+    S.raster.push({ us: 5200 + Math.round(Math.random() * 7000), k: Math.random() });
+  }
+  if (S.raster.length > 900) S.raster.splice(0, S.raster.length - 900);
+  drawRaster();
+}
+function drawRaster() {
+  const c = $('#rcanvas'), p = c.parentElement;
+  const w = p.clientWidth, h = p.clientHeight;
+  if (!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  c.style.width = w + 'px'; c.style.height = h + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const budget = 16667;
+  const steel = tokHex('--zd-steel'), warn = tokHex('--zd-warn'), inert = tokHex('--zd-text-inert');
+  const x0 = 78, x1 = w - 450, span = Math.max(10, x1 - x0);
+  const n = Math.min(S.raster.length, Math.floor(span / 2));
+  const start = S.raster.length - n;
+  for (let i = 0; i < n; i++) {
+    const s = S.raster[start + i];
+    const bh = Math.max(1, Math.round((s.us / budget) * (h - 8)));
+    g.fillStyle = s.us > budget * 0.85 ? warn : steel;
+    g.fillRect(x0 + i * 2, h - 4 - bh, 1, bh);
+  }
+  g.fillStyle = inert;
+  g.fillRect(x0, h - 4, span, 1);
+  const rd = $('#rasterrd');
+  const idleH = S.cfg.rasterClock === 'frame' ? '215,993' : '0';
+  rd.innerHTML = '<span class="t-lab">advance</span>' +
+    '<span class="t-num ink0">' + S.cfg.rasterClock + '</span>' +
+    '<span class="t-lab">idle wakeups/h</span>' +
+    '<span class="t-num ' + (S.cfg.rasterClock === 'frame' ? 'k-warn' : 'ink0') + '">' + idleH + '</span>' +
+    '<span class="t-lab">budget</span><span class="t-num ink3">16 667 us</span>';
+}
+
+/* ============================================================ ruler == */
+function renderRuler() {
+  const tot = MEMMAP.reduce((a, m) => a + m[2], 0);
+  $('#rulerbar').innerHTML = MEMMAP.map(m =>
+    '<span title="' + m[0] + '" style="width:' + (100 * m[2] / tot).toFixed(3) +
+    '%;background:var(--zd-' + m[3] + ')"></span>').join('');
+  $('#rulerrd').textContent = '0x00100000 .. 0xC0611000  ' +
+    (tot / 1048576).toFixed(1) + ' MiB mapped  ' +
+    (MEMMAP[MEMMAP.length - 1][2] / 1048576).toFixed(1) + ' MiB free';
+}
+
+/* ========================================================= overview == */
+function ovOn() { return $('#overview').classList.contains('on'); }
+function showOverview(on) {
+  $('#overview').classList.toggle('on', on);
+  if (!on) return;
+  const g = $('#ogrid'), gw = g.clientWidth || 1200, gh = g.clientHeight || 600;
+  const list = Object.keys(S.wins).map(k => S.wins[k])
+    .filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+  const cols = Math.min(3, Math.max(1, list.length));
+  const rows = Math.ceil(list.length / cols) || 1;
+  const cw = (gw - (cols - 1) * 14) / cols, ch = (gh - (rows - 1) * 14) / rows;
+  g.innerHTML = list.map((w, i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    return '<div class="thumb' + (S.focus === w.id ? ' on' : '') + '" data-act="ovpick" data-arg="' + w.id +
+      '" style="left:' + (c * (cw + 14)) + 'px;top:' + (r * (ch + 14)) + 'px;width:' + cw + 'px;height:' + ch + 'px">' +
+      '<div class="th"><span class="t-num ink3">' + APP[w.id].n + '</span>' +
+      '<span class="t-md ' + (S.focus === w.id ? 'ink0 bold' : 'ink2') + '">' + APP[w.id].name + '</span>' +
+      '<span class="spread t-num ink3">' + w.w + ' x ' + w.h + '</span></div>' +
+      '<div class="tc" data-src="' + w.id + '"></div></div>';
+  }).join('');
+  list.forEach(w => {
+    const holder = $('.tc[data-src="' + w.id + '"]', g);
+    const src = $('.win[data-id="' + w.id + '"] .wbody');
+    if (!holder || !src) return;
+    const box = holder.parentElement;
+    const sc = box.clientWidth / w.w;
+    const clone = src.cloneNode(true);
+    clone.style.width = w.w + 'px'; clone.style.height = (w.h - 28) + 'px';
+    holder.style.transform = 'scale(' + sc.toFixed(3) + ')';
+    holder.appendChild(clone);
+  });
+}
+
+/* ========================================================== palette == */
+function pmatch() {
+  const q = S.pq.toLowerCase();
+  return CMDS.filter(c => c[0].toLowerCase().indexOf(q) >= 0);
+}
+function renderPalette() {
+  const m = pmatch();
+  if (S.psel >= m.length) S.psel = Math.max(0, m.length - 1);
+  $('#pq').textContent = S.pq;
+  $('#pcount').textContent = m.length + ' of ' + CMDS.length;
+  $('#presults').innerHTML = m.map((c, i) =>
+    '<div class="prow' + (i === S.psel ? ' on' : '') + '" data-act="prun" data-arg="' + i + '">' +
+    '<span class="t-num ink3">' + ('0' + (i + 1)).slice(-2) + '</span>' +
+    '<span class="t-md ink1">' + c[0] + '</span>' +
+    '<span class="spread t-lab">' + c[1] + '</span></div>').join('') ||
+    '<div class="prow"><span class="t-num ink3">no match</span></div>';
+}
+function showPalette(on) { $('#palette').classList.toggle('on', on); if (on) renderPalette(); }
+function runPalette() {
+  const m = pmatch(); if (!m.length) return;
+  const c = m[S.psel];
+  showPalette(false);
+  if (c[2] === 'tile') tileAll();
+  else if (c[2] === 'ws2') setWs(S.ws === 1 ? 2 : 1);
+  else if (c[2] === 'lock') showLock(true);
+  else if (c[2] === 'raster') { S.cfg.rasterClock = S.cfg.rasterClock === 'frame' ? 'composite' : 'frame'; drawRaster(); redraw('set'); }
+  else if (c[2] === 'over') { S.cfg.over = !S.cfg.over; layout(); redraw('set'); }
+  else openWin(c[2]);
+  toast('ran', c[0] + '  -  ' + c[1]);
+}
+
+/* ============================================================= lock == */
+function showLock(on) { $('#lock').classList.toggle('on', on); if (on) renderLock(); }
+function renderLock() {
+  const up = 4 * 3600 + 12 * 60 + 8 + S.t;
+  $('#locksheet').innerHTML =
+    '<div class="tbar"><span class="reg">--</span><span class="ttl">session locked</span>' +
+    '<span class="sub">tty1 &middot; seat0</span></div>' +
+    '<div class="wbody" style="padding:calc(14px * var(--ui))">' +
+    '<div class="row" style="gap:calc(14px * var(--ui));align-items:flex-end">' +
+    '<span class="t-lg ink0" style="font-size:calc(46px * var(--ui));line-height:1;font-family:var(--mono)">' +
+    clockStr() + '</span>' +
+    '<div class="stack"><span class="t-lab">operator</span>' +
+    '<span class="t-md ink1">root</span></div></div>' +
+    '<div class="hr"></div>' +
+    kv('uptime', Math.floor(up / 3600) + ' h ' + ('0' + Math.floor(up / 60) % 60).slice(-2) + ' m') +
+    kv('workspaces', '2, ' + Object.keys(S.wins).length + ' plates held') +
+    kv('display', '1600 x 1000 at 59.998 Hz, psr idle') +
+    kv('storage', 'rd0 generation 3, journal clean') +
+    '<div class="well" style="margin-top:calc(8px * var(--ui))">' +
+    '<div class="row"><span class="t-lab">passphrase</span>' +
+    '<span class="t-num ink0">' + '•'.repeat(11) + '</span><span class="caret"></span>' +
+    '<span class="spread"></span>' + sw('OK') + '</div></div>' +
+    '<div class="row" style="margin-top:calc(8px * var(--ui))">' +
+    '<span class="btn prim" data-act="unlock"><span class="t-lab">unlock</span></span>' +
+    '<span class="btn" data-act="unlock"><span class="t-lab">switch user</span></span>' +
+    '<span class="spread t-num ink3">esc or enter to dismiss</span></div>' +
+    '<div class="sband"><span class="t-lab">lock</span>' +
+    '<span class="t-num ink3">the plate is focused, so the bezel is on: ' +
+    'this is the same signal a window uses</span></div></div>';
+}
+
+/* ============================================================ menus == */
+function showMenu(el, x, y, items, head) {
+  el.innerHTML = (head ? '<div class="mh"><span class="t-lab">' + head + '</span></div>' : '') +
+    items.map(i => i === '-' ? '<div class="msep"></div>' :
+      '<div class="mi' + (i[3] ? ' dis' : '') + '" data-act="' + (i[1] || 'noop') + '" data-arg="' + (i[2] || '') + '">' +
+      '<span class="t-md">' + i[0] + '</span>' +
+      '<span class="spread t-num ink3">' + (i[4] || '') + '</span></div>').join('');
+  el.classList.add('on');
+  const os = $('#os').getBoundingClientRect();
+  el.style.left = Math.min(x - os.left, os.width - el.offsetWidth - 8) + 'px';
+  el.style.top = Math.min(y - os.top, os.height - el.offsetHeight - 8) + 'px';
+}
+function hideMenus() { $('#ctxmenu').classList.remove('on'); $('#winmenu').classList.remove('on'); }
+
+/* =========================================================== toasts == */
+function toast(t, b) {
+  const e = document.createElement('div');
+  e.className = 'toast';
+  e.innerHTML = '<span class="bar"></span><div class="row">' +
+    '<span class="t-lab" style="color:var(--zd-text-1)">' + t + '</span>' +
+    '<span class="spread t-num ink3" data-act="detoast">dismiss</span></div>' +
+    '<span class="t-num ink2" style="display:block">' + b + '</span>';
+  $('#toasts').appendChild(e);
+  while ($('#toasts').children.length > 3) $('#toasts').removeChild($('#toasts').firstChild);
+  setTimeout(() => { if (e.parentElement) e.remove(); }, 7000);
+}
+
+/* ============================================================= tick == */
+function walk(v, lo, hi, amp) {
+  v += (Math.random() - 0.5) * amp;
+  return Math.max(lo, Math.min(hi, v));
+}
+function clockStr() {
+  const d = new Date(2026, 7, 25, 14, 32, 7 + S.t);
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+function tick() {
+  S.t++;
+  S.cpu = S.cpu.map(v => walk(v, 2, 96, 14));
+  S.mem = walk(S.mem, 30, 72, 3);
+  $('#clockhm').textContent = clockStr();
+  $('#clockd').textContent = '25 aug 2026';
+  /* THE STRIP ADVANCES ON DAMAGE. A 1 Hz sampler redraw is one damage
+     flush, so it gets one column. Under the frame clock it would get
+     sixty, which is the whole argument. */
+  if (S.cfg.rasterClock === 'frame') damage(6);
+  else if (S.wins.mon || S.wins.net || S.wins.clock) damage(1);
+  else drawRaster();
+  ['mon', 'net', 'clock', 'sys'].forEach(id => { if (S.wins[id]) redraw(id); });
+  if (S.wins.set && S.setTab === 2) redraw('set');
+  if ($('#lock').classList.contains('on')) renderLock();
+}
+
+/* ========================================================== config === */
+function applyCfg() {
+  const d = document.documentElement;
+  d.style.setProperty('--zd-bezel', 'calc(' + S.cfg.bezel + 'px * var(--ui))');
+  d.style.setProperty('--ui', (S.cfg.ui / 100).toFixed(2));
+  document.body.classList.toggle('nowash', !S.cfg.wash);
+  document.body.classList.toggle('nous', S.cfg.us === 'off');
+  document.body.classList.toggle('nomo', !S.cfg.motion);
+  document.body.classList.toggle('blink', S.cfg.motion);
+  $('#ruler').style.display = S.cfg.ruler ? '' : 'none';
+  layout(); drawRaster(); renderRuler();
+}
+function setWs(n) {
+  S.ws = n;
+  const cur = Object.keys(S.wins).filter(k => S.wins[k].ws === n && !S.wins[k].min);
+  S.focus = cur.length ? cur.sort((a, b) => S.wins[b].z - S.wins[a].z)[0] : null;
+  layout(); renderRail(); damage();
+  toast('workspace 0' + n, cur.length + ' plates. the register keeps its numbering across ' +
+    'workspaces, so alt+NN means the same app on both');
+}
+function tileAll() {
+  const list = Object.keys(S.wins).filter(k => S.wins[k].ws === S.ws && !S.wins[k].min);
+  const fw = $('#field').clientWidth, fh = $('#field').clientHeight;
+  const cols = Math.ceil(Math.sqrt(list.length)) || 1;
+  const rows = Math.ceil(list.length / cols) || 1;
+  list.forEach((id, i) => {
+    const w = S.wins[id];
+    w.max = false;
+    w.w = Math.floor((fw - (cols + 1) * 10) / cols);
+    w.h = Math.floor((fh - (rows + 1) * 10) / rows);
+    w.x = 10 + (i % cols) * (w.w + 10);
+    w.y = 10 + Math.floor(i / cols) * (w.h + 10);
+  });
+  layout(); damage();
+  toast('tiled', list.length + ' plates, no overlap. every occlusion edge falls back to ' +
+    'ZD_CUT because nothing is over anything - which is exactly when the rule is inert');
+}
+function calcKey(k) {
+  if (S.calcVal === undefined) S.calcVal = 241690;
+  if (k === '=') { S.calcVal = S.calcVal; return; }
+  if ('0123456789'.indexOf(k) >= 0) { S.calcVal = (S.calcVal * 10 + parseInt(k, 10)) % 1000000000; return; }
+  if (k === '+') S.calcVal += 1000;
+  else if (k === '-') S.calcVal = Math.max(0, S.calcVal - 1000);
+  else if (k === '*') S.calcVal = Math.min(999999999, S.calcVal * 2);
+  else if (k === '/') S.calcVal = Math.floor(S.calcVal / 2);
+}
+
+/* =========================================================== events == */
+function winOf(el) { const w = el.closest('.win'); return w ? w.getAttribute('data-id') : null; }
+function act(t, arg, ev) {
+  switch (t) {
+    case 'open': openWin(arg); break;
+    case 'file': S.fileSel = +arg; redraw('files'); if (S.wins.edit) redraw('edit'); damage(); break;
+    case 'proc': S.procSel = +arg; redraw('mon'); damage(); break;
+    case 'log':  S.logSel = +arg; redraw('log'); damage(); break;
+    case 'hexp': S.hexPage = Math.max(0, S.hexPage + (+arg)); redraw('hex'); damage(); break;
+    case 'calc': calcKey(arg); redraw('calc'); damage(); break;
+    case 'settab': S.setTab = +arg; redraw('set'); damage(); break;
+    case 'tog': S.cfg[arg] = !S.cfg[arg]; applyCfg(); redraw('set'); damage();
+      if (arg === 'over') toast(S.cfg.over ? 'occlusion edge on' : 'occlusion edge off',
+        S.cfg.over ? 'a plate over a plate draws ZD_EDGE_OVER, ' + r2('--zd-edge-over', '--zd-base') +
+          ':1 on the body underneath'
+        : 'fallback is ZD_CUT at ' + r2('--zd-cut', '--zd-base') +
+          ':1. drag two plates over each other and read the stack order');
+      break;
+    case 'seg': { const p = arg.split(':'); S.cfg[p[0]] = p[1]; applyCfg(); redrawAll(); damage(); break; }
+    case 'ws': setWs(+arg); break;
+    case 'ovpick': showOverview(false); focusWin(arg); break;
+    case 'prun': S.psel = +arg; runPalette(); break;
+    case 'unlock': showLock(false); toast('unlocked', 'session resumed on tty1, seat0'); break;
+    case 'detoast': { const e = ev.target.closest('.toast'); if (e) e.remove(); break; }
+    case 'tile': tileAll(); break;
+    case 'palette': showPalette(true); break;
+    case 'overview': showOverview(!ovOn()); break;
+    case 'lock': showLock(true); break;
+    case 'closew': closeWin(arg); break;
+    case 'minw': minWin(arg); break;
+    case 'maxw': maxWin(arg); break;
+    case 'toast': toast(arg === 'build' ? 'rebuilt' : arg === 'stat' ? 'stat' : 'block re-read',
+      arg === 'build' ? 'zlos.elf 249.8 KiB, text 218432 data 30720 bss 1441792, 1.42 s'
+      : arg === 'stat' ? FILES[S.fileSel][0] + ', generation 3, 1 extent, contiguous, crc verified'
+      : 'pipe A read back, PSR idle, 241690 kHz unchanged'); break;
+  }
+}
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  if (!t.closest('.menu')) hideMenus();
+
+  const sl = t.closest('[data-slider]');
+  if (sl) { ev.preventDefault(); startSlider(ev, sl); return; }
+
+  const wa = t.closest('[data-wa]');
+  if (wa) {
+    ev.preventDefault(); ev.stopPropagation();
+    const id = winOf(wa), a = wa.getAttribute('data-wa');
+    if (a === 'close') closeWin(id); else if (a === 'min') minWin(id); else maxWin(id);
+    return;
+  }
+  const a = t.closest('[data-act]');
+  if (a) {
+    ev.preventDefault();
+    const id = winOf(a); if (id) focusWin(id);
+    act(a.getAttribute('data-act'), a.getAttribute('data-arg'), ev);
+    return;
+  }
+  const drag = t.closest('[data-drag]');
+  if (drag) { const id = winOf(drag); focusWin(id); startDrag(ev, id); return; }
+  const grip = t.closest('.grip');
+  if (grip) { const id = winOf(grip); focusWin(id); startResize(ev, id); return; }
+  const w = t.closest('.win');
+  if (w) { focusWin(w.getAttribute('data-id')); return; }
+  if (t.closest('#palette .scrim')) showPalette(false);
+});
+document.addEventListener('dblclick', ev => {
+  const d = ev.target.closest('[data-drag]');
+  if (d) maxWin(winOf(d));
+});
+document.addEventListener('contextmenu', ev => {
+  const d = ev.target.closest('[data-drag]');
+  if (d) {
+    ev.preventDefault();
+    const id = winOf(d);
+    showMenu($('#winmenu'), ev.clientX, ev.clientY, [
+      ['bring to front', 'open', id, false, 'click'],
+      ['minimise', 'minw', id, false, 'travel 160'],
+      ['maximise', 'maxw', id, false, 'double click'],
+      '-',
+      ['tile all', 'tile', '', false, ''],
+      ['this plate is ' + ($('.win[data-id="' + id + '"]').classList.contains('over') ?
+        'over another' : 'on the field'), 'noop', '', true,
+        $('.win[data-id="' + id + '"]').classList.contains('over') ?
+        r2('--zd-edge-over', '--zd-base') : r2('--zd-cut', '--zd-void')],
+      '-',
+      ['close', 'closew', id, false, '']
+    ], APP[id].n + ' ' + APP[id].name);
+    return;
+  }
+  if (ev.target.closest('#field')) {
+    ev.preventDefault();
+    showMenu($('#ctxmenu'), ev.clientX, ev.clientY, [
+      ['activities', 'overview', '', false, 'f1'],
+      ['command palette', 'palette', '', false, 'ctrl k'],
+      '-',
+      ['tile all plates', 'tile', '', false, ''],
+      ['workspace 01', 'ws', '1', false, 'alt 1'],
+      ['workspace 02', 'ws', '2', false, 'alt 2'],
+      '-',
+      ['open 11 settings', 'open', 'set', false, 'alt 11'],
+      ['lock session', 'lock', '', false, 'ctrl l']
+    ], 'field');
+  }
+});
+function startDrag(ev, id) {
+  const w = S.wins[id]; if (!w || w.max) return;
+  const e = $('.win[data-id="' + id + '"]');
+  const ox = ev.clientX - e.offsetLeft, oy = ev.clientY - e.offsetTop;
+  e.classList.add('drag');
+  function mv(m) {
+    w.x = m.clientX - ox; w.y = m.clientY - oy;
+    layout();
+  }
+  function up() {
+    e.classList.remove('drag');
+    document.removeEventListener('mousemove', mv);
+    document.removeEventListener('mouseup', up);
+    damage(4);
+  }
+  document.addEventListener('mousemove', mv);
+  document.addEventListener('mouseup', up);
+  ev.preventDefault();
+}
+function startResize(ev, id) {
+  const w = S.wins[id]; if (!w) return;
+  w.max = false;
+  const sx = ev.clientX, sy = ev.clientY, sw2 = w.w, sh = w.h;
+  function mv(m) {
+    w.w = Math.max(260, sw2 + m.clientX - sx);
+    w.h = Math.max(150, sh + m.clientY - sy);
+    layout();
+  }
+  function up() {
+    document.removeEventListener('mousemove', mv);
+    document.removeEventListener('mouseup', up);
+    damage(2);
+  }
+  document.addEventListener('mousemove', mv);
+  document.addEventListener('mouseup', up);
+  ev.preventDefault();
+}
+function startSlider(ev, el) {
+  const key = el.getAttribute('data-slider');
+  const lo = +el.getAttribute('data-lo'), hi = +el.getAttribute('data-hi');
+  function set(e) {
+    const r = el.getBoundingClientRect();
+    const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    S.cfg[key] = Math.round(lo + p * (hi - lo));
+    applyCfg(); redraw('set');
+  }
+  set(ev);
+  function up() { document.removeEventListener('mousemove', set); document.removeEventListener('mouseup', up); damage(); }
+  document.addEventListener('mousemove', set);
+  document.addEventListener('mouseup', up);
+}
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if (ev.shiftKey && (k === 'D' || k === 'd')) { setTheme(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return; }
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); return; }
+    if (k === 'Enter') { runPalette(); return; }
+    if (k === 'ArrowDown') { S.psel = Math.min(pmatch().length - 1, S.psel + 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); return; }
+    if (k.length === 1) { S.pq += k; S.psel = 0; renderPalette(); return; }
+    return;
+  }
+  if ($('#lock').classList.contains('on')) {
+    if (k === 'Escape' || k === 'Enter') { showLock(false); toast('unlocked', 'session resumed on tty1, seat0'); }
+    return;
+  }
+  if (k === 'Escape') { if (ovOn()) showOverview(false); hideMenus(); return; }
+  if (k === 'F1') { showOverview(!ovOn()); ev.preventDefault(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && (k === 'k' || k === 'K')) { S.pq = ''; S.psel = 0; showPalette(true); ev.preventDefault(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && (k === 'l' || k === 'L')) { showLock(true); ev.preventDefault(); return; }
+  if (ev.altKey && (k === '1' || k === '2')) { setWs(+k); ev.preventDefault(); return; }
+});
+
+/* ============================================================ theme ==
+ * The hash is authoritative for BOTH scene and ladder. #files is the
+ * derived work-light ladder, #files-dark is graphite - the home. The
+ * suffix convention matches every other prototype in this directory even
+ * though this direction's default is the suffixed one, because a reader
+ * comparing ten files should not have to remember an exception.
+ */
+const LADDER = {
+  dark: { name: 'graphite', other: 'work light',
+    pitch: 'warm graphite, one raking light, and a focus signal that spends area ' +
+           'instead of contrast. dark native.' },
+  light: { name: 'work light', other: 'graphite',
+    pitch: 'the same machined plate under work light. derived, not inverted - the ' +
+           'struck edge loses its headroom and the cut edge takes over.' }
+};
+function applyTheme() {
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = LADDER[S.theme].pitch;
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-ladder="light">work light</span>' +
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-ladder="dark">graphite</span>';
+}
+function hashName() { return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setTheme(t, announce) {
+  S.theme = t === 'dark' ? 'dark' : 'light';
+  applyTheme(); renderLinks(); drawRaster(); redrawAll();
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    toast(LADDER[S.theme].name, S.theme === 'dark'
+      ? 'ground L* ' + lstar('--zd-base') + ', struck edge carries depth at ' +
+        r3('--zd-lit', '--zd-base') + ':1, groove at ' + r3('--zd-cut', '--zd-base') + ':1'
+      : 'ground L* ' + lstar('--zd-base') + ', no headroom above it, so the cut edge carries at ' +
+        r3('--zd-cut', '--zd-base') + ':1 and the struck run drops to ' + r3('--zd-lit', '--zd-base') + ':1');
+  }
+}
+const SCENES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function renderLinks() {
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENES.map(n => '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === S.scene));
+}
+$('#themetog').addEventListener('mousedown', ev => {
+  const t = ev.target.closest('[data-ladder]');
+  if (t) { ev.preventDefault(); ev.stopPropagation(); setTheme(t.getAttribute('data-ladder'), true); }
+});
+
+/* =========================================================== scenes == */
+function clearAll() {
+  Object.keys(S.wins).forEach(id => { const e = $('.win[data-id="' + id + '"]'); if (e) e.remove(); });
+  S.wins = {}; S.focus = null; ZT = 10;
+  showOverview(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+}
+function put(id, x, y, w, h, ws) { openWin(id, [x, y, w, h], ws || S.ws); }
+function baseDesktop() {
+  clearAll();
+  S.ws = 1;
+  const fw = $('#field').clientWidth || 1400, fh = $('#field').clientHeight || 830;
+  const cw = Math.floor((fw - 34) / 2), ch = Math.floor((fh - 34) / 2);
+  put('shell', 12, 12, cw, ch);
+  put('files', cw + 22, 12, cw, ch);
+  put('mon', 12, ch + 22, cw, ch);
+  put('log', cw + 22, ch + 22, cw, ch);
+  /* one plate deliberately laid ACROSS two others, front most, because
+     the occlusion rule is the whole reason this ground can float its
+     windows and it should be visible without touching anything. */
+  put('regs', Math.floor(fw * 0.30), Math.floor(fh * 0.26), Math.floor(fw * 0.44), Math.floor(fh * 0.50));
+  put('hex', 40, 40, Math.floor(fw * 0.5), Math.floor(fh * 0.55), 2);
+  put('net', Math.floor(fw * 0.4), Math.floor(fh * 0.3), Math.floor(fw * 0.52), Math.floor(fh * 0.6), 2);
+  focusWin('regs');
+  layout(); damage(40);
+}
+function setScene(name, push) {
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  if (SCENES.indexOf(name) < 0) { name = 'desktop'; dark = true; }
+  S.scene = name; S.theme = dark ? 'dark' : 'light';
+  applyTheme(); renderLinks();
+  if (push !== false) history.replaceState(null, '', '#' + hashName());
+
+  if (name === 'desktop') {
+    baseDesktop();
+    toast('five plates, one over two',
+      '13 REGISTERS lies across 01 and 03. its edges are ZD_EDGE_OVER at ' +
+      r2('--zd-edge-over', '--zd-base') + ':1 on the bodies underneath. a groove cannot do it: ' +
+      'pure black on this ground tops out at ' + darkCeil('--zd-base') + ':1, and the floor is 3.00');
+  } else if (name === 'overview') {
+    baseDesktop(); layout(); showOverview(true);
+  } else if (name === 'palette') {
+    baseDesktop(); S.pq = 'mon'; S.psel = 0; showPalette(true);
+  } else if (name === 'files') {
+    clearAll(); S.ws = 1;
+    const fw = $('#field').clientWidth || 1400, fh = $('#field').clientHeight || 830;
+    put('files', 12, 12, Math.floor(fw * 0.44), fh - 24);
+    put('edit', Math.floor(fw * 0.44) + 22, 12, fw - Math.floor(fw * 0.44) - 34, fh - 24);
+    S.fileSel = 1; redraw('files'); redraw('edit');
+    focusWin('files'); layout(); damage(20);
+    toast('selected', 'fb.c 68.4 KiB, opened in 04 EDITOR. the two plates abut and do not ' +
+      'overlap, so both draw ZD_CUT and the occlusion rule is inert');
+  } else if (name === 'monitor') {
+    clearAll(); S.ws = 1;
+    const fw = $('#field').clientWidth || 1400, fh = $('#field').clientHeight || 830;
+    put('mon', 12, 12, Math.floor(fw * 0.56), fh - 24);
+    put('net', Math.floor(fw * 0.50), 60, fw - Math.floor(fw * 0.50) - 24, fh - 100);
+    focusWin('mon'); layout(); damage(60);
+    toast('sampling at 1 Hz', '03 MONITOR is focused and lies over 08 NETWORK, so MONITOR draws ' +
+      'the boundary and NETWORK draws none. the raster strip advances one column per composite, ' +
+      'so a 1 Hz sampler produces one column per second and not sixty');
+  } else if (name === 'settings') {
+    clearAll(); S.ws = 1;
+    const fw = $('#field').clientWidth || 1400, fh = $('#field').clientHeight || 830;
+    put('sys', Math.floor(fw * 0.52), 12, fw - Math.floor(fw * 0.52) - 24, Math.floor(fh * 0.58));
+    put('clock', Math.floor(fw * 0.52), Math.floor(fh * 0.60), fw - Math.floor(fw * 0.52) - 24, Math.floor(fh * 0.38));
+    put('set', 12, 12, Math.floor(fw * 0.50), fh - 24);
+    S.setTab = 0; redraw('set'); focusWin('set'); layout(); damage(12);
+  } else if (name === 'lock') {
+    baseDesktop(); showLock(true);
+  }
+  renderRail(); renderRuler(); applyCfg();
+}
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop-dark', false));
+window.addEventListener('resize', () => { layout(); drawRaster(); if (ovOn()) showOverview(true); });
+
+/* ============================================================ start == */
+applyCfg();
+for (let i = 0; i < 720; i++) S.raster.push({ us: 5200 + Math.round(Math.random() * 7000), k: 0 });
+setScene(location.hash.slice(1) || 'desktop-dark', false);
+drawRaster();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

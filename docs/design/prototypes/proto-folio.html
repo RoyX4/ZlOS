@@ -1,0 +1,2440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio - zlOS desktop prototype</title>
+<style>
+/* ============================================================================
+   FOLIO. Every colour below is a design.h token name, lowercased.
+   Zero hex appears as a CSS value anywhere outside this :root block.
+   ============================================================================ */
+:root{
+  /* ---- PAPER LADDER ---- */
+  --zd-paper-0:   #E9E4DB;
+  --zd-paper-0b:  #E2DCD1;
+  --zd-paper-1:   #F4F1EA;
+  --zd-paper-2:   #FBFAF6;
+  --zd-paper-3:   #DED8CB;
+  /* ---- INK LADDER ---- */
+  --zd-ink-0:     #17150F;
+  --zd-ink-1:     #2E2A22;
+  --zd-ink-2:     #4A4438;
+  --zd-ink-3:     #5E5648;
+  --zd-ink-mute:  #8E8674;
+  /* ---- KEYLINE RANKS ---- */
+  --zd-rule-hair: #C2BAA8;
+  --zd-rule-mid:  #A29A87;
+  --zd-rule-ctrl: #8A8270;
+  /* ---- THE THREE STATE INKS. No accent exists beyond these. ---- */
+  --zd-red:       #A3301B;
+  --zd-green:     #2E6A38;
+  --zd-ochre:     #7E5305;
+
+  /* ATTENTION INK. The single chromatic ink in the system; the Settings
+     "attention ink" control repoints this token and nothing else. */
+  --zd-attn:      var(--zd-red);
+
+  /* derived alphas, declared here so no rule anywhere carries a literal */
+  --zd-hair-45:   rgba(194,186,168,0.45);   /* RULE_HAIR 45% = the drawn grid */
+  --zd-band-60:   rgba(222,216,203,0.60);   /* PAPER_3 60% = drag target columns */
+  --zd-scrim-24:  rgba(23,21,15,0.24);      /* INK_0 24% = modal scrim, flat */
+  --zd-lift:      rgba(23,21,15,0.22);      /* INK_0 22% = the one shadow */
+
+  /* ---- TWO ROLES THAT USED TO BE LITERALS AT THE CALL SITE. ----
+     ui_theme_init_q8() maps role names onto a primitive ladder; a role that is
+     spelled INK_0 in one mode and INK_1 in the other cannot be a literal in CSS
+     either. Both names exist in both modes; only the values move.
+
+     RULE2  is the 2 dp INK_0 DIVIDER (masthead, sheet head). It is decoration
+            weight, and light-on-dark blooms, so dark halves it.
+     FRAME  is the rank-3 KEYLINE (Index sheet, modal box). Dark keeps 2 px
+            because the scrim loses most of its power on a dark ground and the
+            frame has to carry what the scrim can no longer say.
+     KN_*   is THE KNOCKOUT: the one inverted element in the system. On paper the
+            loudest value and the largest area were the same token (INK_0). On a
+            dark ground that makes a near-white slab the brightest thing on
+            screen, so the plate steps down one rung to INK_1 and INK_0 is
+            reserved for marks 3 dp and thinner. */
+  --zd-rule2:     2px;
+  --zd-frame:     2px;
+  --zd-kn-bg:     var(--zd-ink-0);
+  --zd-kn-fg:     var(--zd-paper-1);
+
+  /* Z_FURNITURE. Whether the colophon and the folio are inside the scrim.
+     On paper they are, and they must be: a 24% veil darkens the ground AND the
+     mark together, 5.31:1 becomes 4.14:1, and the line stays a line. Lifting
+     them out on paper is strictly worse - the mark keeps its value while the
+     ground behind it loses 17 dL*, measured 3.21:1. So paper leaves them under.
+     Ink cannot do that. See the dark block. */
+  --zd-z-furniture: 0;
+
+  /* FURNITURE INK, and the third option the paragraph above did not take.
+     Leaving the marks under the veil at INK_3 measured 4.13:1 - below 4.5, on the
+     colophon AND on the inactive workspace numerals, which the folio rule twelve
+     lines down calls information and refuses to fade. Lifting them out is worse
+     (3.32:1). So paper keeps them under the veil, where the physical story is
+     right, and steps the INK one rung while the veil is up: INK_2 veiled measures
+     5.28:1 on the veiled ground. Ink needs no such step - it lifts them clear at
+     z 860 - so both names resolve to the same rung there. */
+  --zd-furn:        var(--zd-ink-3);
+  --zd-furn-veiled: var(--zd-ink-2);
+
+  /* the OTHER mode's ladder, for the side-by-side specimen. Declared here so the
+     "zero hex outside :root" rule survives a two-palette specimen. */
+  --zd-alt-paper-0: #16130D; --zd-alt-paper-0b:#100D09;
+  --zd-alt-paper-1: #221F17; --zd-alt-paper-2: #312C22;
+  --zd-alt-paper-3: #3A3429;
+  --zd-alt-ink-0:   #F3EFE7; --zd-alt-ink-1:   #DDD5C6;
+  --zd-alt-ink-2:   #BDB4A3; --zd-alt-ink-3:   #A99F8D;
+  --zd-alt-ink-mute:#726A5A;
+  --zd-alt-rule-hair:#514937; --zd-alt-rule-mid:#70654D; --zd-alt-rule-ctrl:#877C64;
+  --zd-alt-red:     #DE8D7C; --zd-alt-green:   #7BB584; --zd-alt-ochre:   #D1A654;
+  --zd-alt-kn-bg:   #DDD5C6; --zd-alt-kn-fg:   #16130D;
+
+  /* ---- SCALE. --zd-sc is driven by the Settings UI-scale slider. ---- */
+  --zd-sc: 1;
+  --zd-u: calc(1px * var(--zd-sc));
+
+  /* ---- TYPE. ratio 1.5, three sizes, two weights, four registers ---- */
+  --zd-sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --zd-mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+  --zd-r1:   calc(8  * var(--zd-u));
+  --zd-r2:   calc(12 * var(--zd-u));
+  --zd-r3:   calc(12 * var(--zd-u));
+  --zd-r4:   calc(16 * var(--zd-u));
+  --zd-trk:  calc(0.64 * var(--zd-u));
+
+  /* ---- RADIUS. Three values, chosen by what the element IS. ---- */
+  --zd-r-page:  0px;
+  --zd-r-set:   calc(2 * var(--zd-u));
+  --zd-r-round: 999px;
+
+  /* ---- SPACE ---- */
+  --zd-rail-w: calc(160 * var(--zd-u));
+  --zd-margin: calc(24 * var(--zd-u));
+  --zd-pad:    calc(20 * var(--zd-u));
+  --zd-gap:    calc(8  * var(--zd-u));
+  --zd-row-h:  calc(28 * var(--zd-u));
+  --zd-head-h: calc(32 * var(--zd-u));
+
+  /* ---- MOTION. five tokens. ---- */
+  --zd-ms-fade: 120ms;
+  --zd-ms-pop:   80ms;
+  --zd-ms-press:100ms;
+  --zd-ms-snap: 140ms;
+  --zd-ms-grid: 100ms;
+  --zd-ease-win: cubic-bezier(0.25,0.10,0.25,1);
+}
+
+/* ============================================================================
+   THE SECOND LADDER. Same role names, second set of primitives - exactly the
+   shape ui_theme_init_q8() will have. Nothing below is a new name.
+
+   DERIVATION, one sentence per decision:
+
+   THE GROUND. Folio's ground is not "a light colour", it is PAPER; its opposite
+     in this system's own vocabulary is not black, it is INK - so the dark ground
+     is the ink ladder's own warm brown-black at hue 40, the identical hue axis
+     the paper carries, and the dark ink ladder is the paper ladder's hues used
+     as marks. Nothing here is an inversion of a hex; every rung was placed by
+     target L* and then checked.
+   THE HUE AXIS SURVIVES. Every achromatic token in both modes sits at hue
+     38-44 with 12-33% HSL saturation. A neutral grey dark mode would have made
+     this a different design; the ground is #16130D, not #101010.
+   THE PAPER LADDER STILL ASCENDS. A sheet laid on the desk catches more light
+     than the desk, and a well cut in the sheet shows cleaner stock, so
+     PAPER_0 < PAPER_1 < PAPER_2 in BOTH modes. Only the absolute range moves.
+   THE BAND FLIPS SIDES, and it is the only rung that does. On paper a band is
+     more ink laid down, so PAPER_3 sat below the sheet; on an ink ground more
+     ink says nothing, so the band is the one lateral step that changes sign.
+   RULES GET DIMMER, NOT WIDER. Optical weight is not symmetric, so every rule
+     was placed by matching its dL* against the sheet to the light mode's, not
+     its ratio: RULE_HAIR is 19.8 dL* off the sheet here against 19.5 there.
+   THE 2 dp DIVIDER HALVES. See --zd-rule2 above.
+   THE KNOCKOUT STEPS DOWN A RUNG. See --zd-kn-bg above.
+   THE SCRIM CHANGES SIGN. A scrim means "this page recedes", which physically
+     means less light; INK_0 at 24% would ADD light here, so the dark scrim is
+     near-black at 82%. It can only buy 8.7 dL* of recession against the light
+     mode's 18.9 - the frame makes up the rest. This is a real compromise.
+   THE ONE SHADOW MOSTLY STOPS WORKING, and that is left honest rather than
+     replaced by a glow: a dark lift over a dark ground is nothing. It still
+     registers where a dragged sheet crosses ANOTHER SHEET, which is the case
+     that carries information, and the drag band is stronger here to cover the
+     rest.
+   ============================================================================ */
+:root[data-theme="dark"]{
+  /* ---- PAPER LADDER. Four rungs, same order, wider steps. ---- */
+  --zd-paper-0:   #16130D;   /* ground / desk        L* 6.0  */
+  --zd-paper-0b:  #100D09;   /* gradient bottom stop L* 3.8  */
+  --zd-paper-1:   #221F17;   /* the sheet            L* 11.8 */
+  --zd-paper-2:   #312C22;   /* the well + mount lip L* 18.2 */
+  --zd-paper-3:   #3A3429;   /* the band             L* 22.0 */
+  /* ---- INK LADDER ---- */
+  --zd-ink-0:     #F3EFE7;   /* 14.35:1 on the sheet. Capped below paper-white:
+                                a pure white body of marks blooms.            */
+  --zd-ink-1:     #DDD5C6;   /* 11.29:1 body ink                              */
+  --zd-ink-2:     #BDB4A3;   /*  8.01:1 secondary                             */
+  --zd-ink-3:     #A99F8D;   /*  6.29:1 on the sheet, 4.72:1 on the BAND -
+                                the band is the lightest text-bearing surface
+                                here, exactly as PAPER_3 was the darkest there. */
+  --zd-ink-mute:  #726A5A;   /*  3.07:1 NON-TEXT ONLY, same restriction        */
+  /* ---- KEYLINE RANKS. dL*-matched to light, not ratio-matched. ---- */
+  --zd-rule-hair: #514937;   /* 1.85:1 on the sheet (light 1.71) */
+  --zd-rule-mid:  #70654D;   /* 2.87:1 (light 2.48)              */
+  --zd-rule-ctrl: #877C64;   /* 3.99:1 / 3.37:1 on PAPER_1/PAPER_2, clears 1.4.11 */
+  /* ---- THE THREE STATE INKS. Same hue family, re-picked luminance + sat. ---- */
+  --zd-red:       #DE8D7C;   /* hue 10.4 (was 9.3), sat 60% (was 72%), 6.43:1 */
+  --zd-green:     #7BB584;   /* hue 129 (was 130),  sat 28% (was 40%), 6.88:1 */
+  --zd-ochre:     #D1A654;   /* hue 39  (was 39),   sat 58% (was 92%), 7.28:1 */
+  --zd-attn:      var(--zd-red);
+
+  /* derived alphas, each solved for perceptual parity against the light mode */
+  --zd-hair-45:   rgba(81,73,55,0.26);   /* drawn grid: 6.9 dL* off ground vs light's 6.8 */
+  --zd-band-60:   rgba(58,52,41,0.40);   /* drag target: 6.4 dL* vs light's 2.5 - it is
+                                            stronger on purpose, because it is the only
+                                            pre-drop cue left once the lift stops reading */
+  --zd-scrim-24:  rgba(8,7,5,0.82);      /* recession, not veiling */
+  --zd-lift:      rgba(5,4,3,0.62);      /* reads sheet-on-sheet, not over bare ground */
+
+  /* THE FURNITURE COMES OUT OF THE SCRIM, and this is the one place the two
+     stocks differ in STRUCTURE rather than value. Physically: on paper a shadow
+     falls across desk and printed line together and the line survives, because
+     both terms scale. On ink the veil is the lamp going down, and a light mark
+     fading toward a black ground has nothing left - the colophon measured
+     1.27:1 in Overview and the inactive workspace numerals, which are a
+     CONTROL, went with it. No alpha fixes that: matching light's ratio loss
+     needs 0.30, which buys 1.5 dL* of recession and stops being a scrim.
+     So on ink the desk's own marks are lifted out of the veil (860 = above the
+     modal at 850, below the lock page at 880, which draws its own), and the
+     scrim keeps its full 14.6 dL* on the SHEET, where it is doing the work. */
+  --zd-z-furniture: 860;
+  /* nothing veils them here, so the veiled name is the same rung as the plain one */
+  --zd-furn:        var(--zd-ink-3);
+  --zd-furn-veiled: var(--zd-ink-3);
+
+  --zd-rule2:     1px;                   /* the divider halves */
+  --zd-frame:     2px;                   /* the rank-3 keyline does not */
+  --zd-kn-bg:     var(--zd-ink-1);       /* knockout plate steps down one rung */
+  --zd-kn-fg:     var(--zd-paper-0);     /* 12.72:1 (light knockout was 16.18:1) */
+
+  --zd-alt-paper-0: #E9E4DB; --zd-alt-paper-0b:#E2DCD1;
+  --zd-alt-paper-1: #F4F1EA; --zd-alt-paper-2: #FBFAF6;
+  --zd-alt-paper-3: #DED8CB;
+  --zd-alt-ink-0:   #17150F; --zd-alt-ink-1:   #2E2A22;
+  --zd-alt-ink-2:   #4A4438; --zd-alt-ink-3:   #5E5648;
+  --zd-alt-ink-mute:#8E8674;
+  --zd-alt-rule-hair:#C2BAA8; --zd-alt-rule-mid:#A29A87; --zd-alt-rule-ctrl:#8A8270;
+  --zd-alt-red:     #A3301B; --zd-alt-green:   #2E6A38; --zd-alt-ochre:   #7E5305;
+  --zd-alt-kn-bg:   #17150F; --zd-alt-kn-fg:   #F4F1EA;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--zd-sans);
+  font-size:var(--zd-r2);
+  color:var(--zd-ink-1);
+  background:var(--zd-paper-0);
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+}
+::selection{background:var(--zd-paper-3);color:var(--zd-ink-0)}
+input{font:inherit;color:inherit;background:none;border:0;outline:0}
+svg{display:block}
+
+/* ---------- shared registers ---------- */
+.r1{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);white-space:nowrap}
+.r2{font-size:var(--zd-r2);color:var(--zd-ink-1)}
+.r3{font-size:var(--zd-r3);font-weight:700;color:var(--zd-ink-0)}
+.r4{font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-0);line-height:1.25}
+.mn{font-family:var(--zd-mono);font-variant-numeric:tabular-nums}
+.hair{height:1px;background:var(--zd-rule-hair);flex:none}
+.rule2{height:var(--zd-rule2);background:var(--zd-ink-0);flex:none}
+.gr{color:var(--zd-green)} .oc{color:var(--zd-ochre)} .rd{color:var(--zd-attn)}
+.dim{color:var(--zd-ink-3)} .sec{color:var(--zd-ink-2)}
+
+/* ============================ THE STRIP ============================
+   Harness furniture only: the direction's name and the scene links.   */
+#strip{
+  position:fixed;left:0;top:0;right:0;height:calc(28 * var(--zd-u));
+  background:var(--zd-paper-1);
+  border-bottom:1px solid var(--zd-rule-hair);
+  display:flex;align-items:center;gap:calc(16 * var(--zd-u));
+  padding:0 calc(20 * var(--zd-u));
+  z-index:900;
+}
+#strip .name{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:calc(2 * var(--zd-u));font-weight:700;color:var(--zd-ink-0)}
+#strip nav{display:flex;gap:calc(14 * var(--zd-u));margin-left:auto}
+#strip a{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);
+  color:var(--zd-ink-3);text-decoration:none;padding-bottom:2px;
+  border-bottom:2px solid transparent;
+}
+#strip a.on{color:var(--zd-ink-0);font-weight:700;border-bottom-color:var(--zd-ink-0)}
+/* The mode switch is named in the direction's own vocabulary, not "light/dark",
+   and it is set in R1 like every other label in the strip. */
+#stock{display:flex;gap:calc(10 * var(--zd-u));margin-left:auto;align-items:center}
+#stock .lb{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3)}
+#stock .sw{display:flex;border:1px solid var(--zd-rule-ctrl);border-radius:var(--zd-r-page)}
+#stock .sw span{
+  height:calc(16 * var(--zd-u));display:flex;align-items:center;padding:0 calc(8 * var(--zd-u));
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);
+  color:var(--zd-ink-2);border-left:1px solid var(--zd-rule-ctrl);cursor:default;
+}
+#stock .sw span:first-child{border-left:0}
+#stock .sw span.on{background:var(--zd-kn-bg);color:var(--zd-kn-fg);font-weight:700}
+#strip nav{margin-left:calc(20 * var(--zd-u))}
+
+/* ============================ THE DESK ============================ */
+#desk{
+  position:fixed;left:0;top:calc(28 * var(--zd-u));right:0;bottom:0;
+  overflow:hidden;
+}
+
+/* ---------------- THE TYPE AREA ---------------- */
+#ta{
+  position:absolute;left:var(--zd-rail-w);top:0;right:0;bottom:0;
+  background:linear-gradient(180deg,var(--zd-paper-0) 0%,var(--zd-paper-0b) 100%);
+  overflow:hidden;
+}
+#grid{position:absolute;inset:0;pointer-events:none}
+#grid .gv{position:absolute;top:0;bottom:0;width:1px;background:var(--zd-hair-45)}
+#grid .gh{position:absolute;height:1px;background:var(--zd-hair-45)}
+#drop{position:absolute;inset:0;pointer-events:none}
+#drop .band{
+  position:absolute;background:var(--zd-band-60);
+  opacity:0;transition:opacity var(--zd-ms-grid) linear;
+}
+#drop.live .band{opacity:1}
+/* The colophon and the folio are the DESK's own marks, like the strip (z 900)
+   and the rail. Whether an overlay veils them is a stock decision, not a layout
+   one: see --zd-z-furniture in both :root blocks. */
+#colophon{
+  position:absolute;left:var(--zd-margin);bottom:calc(10 * var(--zd-u));
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);
+  color:var(--zd-furn);
+  z-index:var(--zd-z-furniture);
+}
+#folio{
+  position:absolute;right:var(--zd-margin);bottom:calc(6 * var(--zd-u));
+  z-index:var(--zd-z-furniture);
+  display:flex;gap:calc(10 * var(--zd-u));align-items:baseline;
+  font-family:var(--zd-mono);font-size:var(--zd-r4);font-weight:700;
+}
+/* ZD_INK_MUTE is 2.65:1 on the ground and is banned for text that carries
+   information. An inactive workspace numeral IS information, so the inactive/active
+   split is carried by WEIGHT on one ink (INK_3 5.31:1, INK_0 14.41:1), not by fade. */
+#folio b{color:var(--zd-furn);font-weight:400;cursor:default}
+#folio b.on{color:var(--zd-ink-0);font-weight:700}
+/* THE VEIL IS A STATE, so the ink that answers it is selected on that state.
+   Only the marks that stay UNDER the scrim take the step; on ink the two names
+   are the same rung, so this rule is a no-op there rather than a second design. */
+#ta:has(> #ov.show) #colophon,
+#ta:has(> #modal.show) #colophon{color:var(--zd-furn-veiled)}
+#ta:has(> #ov.show) #folio b,
+#ta:has(> #modal.show) #folio b{color:var(--zd-furn-veiled)}
+#ta:has(> #ov.show) #folio b.on,
+#ta:has(> #modal.show) #folio b.on{color:var(--zd-ink-0)}
+
+/* ---------------- THE RAIL ---------------- */
+#rail{
+  position:absolute;left:0;top:0;bottom:0;width:var(--zd-rail-w);
+  background:var(--zd-paper-1);
+  border-right:1px solid var(--zd-rule-hair);
+  border-radius:var(--zd-r-page);
+  z-index:400;display:flex;flex-direction:column;overflow:hidden;
+}
+.rc{padding:0 var(--zd-pad)}                 /* the 20dp text column */
+#rail .mast{padding:var(--zd-margin) var(--zd-pad) 0}
+#rail .mast .word{font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-0);line-height:calc(20 * var(--zd-u))}
+#rail .mast .ver{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);margin-top:calc(2 * var(--zd-u))}
+#rail .mast .rule2{margin-top:var(--zd-gap)}
+.sect{margin-top:calc(24 * var(--zd-u));flex:none}
+.sect.first{margin-top:calc(28 * var(--zd-u))}
+.sect .hd{padding:0 var(--zd-pad);margin-bottom:calc(4 * var(--zd-u))}
+.sect .hair{margin:0 var(--zd-pad)}
+.list{margin-top:calc(4 * var(--zd-u));overflow:hidden}
+.trow{
+  position:relative;height:var(--zd-row-h);display:flex;align-items:center;
+  padding-left:var(--zd-pad);padding-right:calc(2 * var(--zd-u));
+  border-radius:var(--zd-r-page);cursor:default;
+}
+.trow:hover{background:var(--zd-paper-3)}
+.trow .num{
+  width:calc(20 * var(--zd-u));text-align:right;flex:none;
+  font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3);
+}
+.trow .ttl{
+  margin-left:var(--zd-gap);font-size:var(--zd-r2);color:var(--zd-ink-2);
+  white-space:nowrap;overflow:hidden;
+}
+.trow.on .ttl{font-weight:700;color:var(--zd-ink-0)}
+.trow.on .num{color:var(--zd-ink-0)}
+.trow.min .ttl{color:var(--zd-ink-3)}
+.mark{position:absolute;left:0;top:0;width:calc(3 * var(--zd-u));height:100%;background:var(--zd-ink-0)}
+.lrow{
+  position:relative;height:var(--zd-row-h);display:flex;align-items:center;
+  padding-left:calc(48 * var(--zd-u));font-size:var(--zd-r2);color:var(--zd-ink-2);cursor:default;
+}
+.lrow:hover{background:var(--zd-paper-3)}
+.lrow.idx{color:var(--zd-ink-2);letter-spacing:var(--zd-trk)}
+.spacer{flex:1 1 auto;min-height:calc(12 * var(--zd-u))}
+#marg{flex:none;padding-bottom:var(--zd-pad)}
+#marg .hair{margin:0 var(--zd-pad) calc(10 * var(--zd-u))}
+.mline{display:flex;align-items:baseline;justify-content:space-between;padding:0 var(--zd-pad);height:calc(16 * var(--zd-u))}
+.mline .k{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3)}
+.mline .v{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);font-variant-numeric:tabular-nums}
+
+/* ============================ A WINDOW IS A SHEET ============================ */
+.win{
+  position:absolute;border-radius:var(--zd-r-page);
+  border:1px solid var(--zd-rule-hair);          /* THE MOUNT, outer */
+  background:var(--zd-paper-1);
+}
+/* ZD_MS_FADE applies to a sheet that is being PUT ON the page by the user.
+   A sheet already on the page when you arrive is simply there. */
+.win.fresh{animation:zfade var(--zd-ms-fade) linear}
+#ov.fresh .sheet{animation:zfade var(--zd-ms-fade) linear}
+.toast.fresh{animation:zfade var(--zd-ms-fade) linear}
+@keyframes zfade{from{opacity:0}to{opacity:1}}
+.win.snapping{transition:left var(--zd-ms-snap) var(--zd-ease-win),top var(--zd-ms-snap) var(--zd-ease-win),width var(--zd-ms-snap) var(--zd-ease-win),height var(--zd-ms-snap) var(--zd-ease-win)}
+.win.drag{box-shadow:0 calc(4 * var(--zd-u)) calc(10 * var(--zd-u)) var(--zd-lift)}
+.win-in{
+  height:100%;border:1px solid var(--zd-paper-2);  /* THE MOUNT, inner */
+  background:var(--zd-paper-1);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.head{height:var(--zd-head-h);flex:none;display:flex;align-items:center;padding:0 var(--zd-pad);cursor:default}
+.head .t{font-size:var(--zd-r2);font-weight:400;color:var(--zd-ink-3);white-space:nowrap}
+/* The window subtitle names the OPEN OBJECT - /kernel, fb.c, tty0, eth0. That is
+   information, and INK_MUTE is banned for information by the rule three lines
+   below its own declaration: it measured 3.20:1 on paper and 3.07:1 on ink, and
+   the ink figure is the worse of the two. It is INK_3, the caption ink, in both
+   stocks - 6.42:1 paper, 6.29:1 ink - and INK_MUTE is now non-text everywhere,
+   which is what the token comment always claimed. */
+.head .s{margin-left:calc(12 * var(--zd-u));font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);white-space:nowrap;overflow:hidden}
+.win.on .head .t{font-weight:700;color:var(--zd-ink-0)}
+.win.on .head .s{color:var(--zd-ink-3)}
+.head .unsaved{margin-left:var(--zd-gap);width:calc(3 * var(--zd-u));height:calc(3 * var(--zd-u));background:var(--zd-attn);flex:none}
+.ctrls{margin-left:auto;display:flex;align-items:center;gap:var(--zd-gap);padding-left:calc(12 * var(--zd-u))}
+.ctrl{width:calc(20 * var(--zd-u));height:calc(20 * var(--zd-u));display:flex;align-items:center;justify-content:center;border-radius:var(--zd-r-page)}
+.ctrl svg *{stroke:var(--zd-ink-1);stroke-width:1;fill:none}
+.ctrl:hover{background:var(--zd-paper-3)}
+.ctrl.x:hover svg *{stroke:var(--zd-attn)}
+/* FOCUS IS A RULE. */
+.frule{height:1px;background:var(--zd-rule-hair);flex:none}
+.win.on .frule{height:2px;background:var(--zd-ink-0)}
+.body{flex:1 1 auto;overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:0}
+.pad{padding:var(--zd-pad)}
+
+/* toolbars and status bars are lines of type, not filled bars */
+.tool{height:var(--zd-row-h);flex:none;display:flex;align-items:center;gap:calc(12 * var(--zd-u));padding:0 var(--zd-pad)}
+.tool .k{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3)}
+.tool .v{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1)}
+.tool .rt{margin-left:auto;display:flex;gap:calc(12 * var(--zd-u));align-items:center}
+.tool .act{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-2);cursor:default}
+.tool .act:hover{color:var(--zd-ink-0)}
+.stat-bar{height:calc(24 * var(--zd-u));flex:none;display:flex;align-items:center;gap:calc(14 * var(--zd-u));padding:0 var(--zd-pad)}
+.stat-bar .k{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3)}
+.stat-bar .v{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1)}
+.scrolly{overflow:hidden;flex:1 1 auto;position:relative;min-height:0}
+.body > .pad{flex:none}
+
+/* ---- tables: rules, not fills ---- */
+table.tb{width:100%;border-collapse:collapse;table-layout:fixed}
+table.tb th{
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);
+  color:var(--zd-ink-3);font-weight:400;text-align:left;
+  background:var(--zd-paper-3);
+  height:calc(20 * var(--zd-u));padding:0 var(--zd-gap);
+  border-bottom:1px solid var(--zd-rule-hair);white-space:nowrap;
+}
+table.tb td{
+  font-size:var(--zd-r2);color:var(--zd-ink-1);height:var(--zd-row-h);
+  padding:0 var(--zd-gap);border-bottom:1px solid var(--zd-rule-hair);
+  white-space:nowrap;overflow:hidden;text-overflow:clip;
+}
+table.tb td.n,table.tb th.n{font-family:var(--zd-mono);text-align:right;font-variant-numeric:tabular-nums}
+table.tb td.m{font-family:var(--zd-mono)}
+table.tb tr.sel td{background:var(--zd-paper-3);font-weight:700;color:var(--zd-ink-0)}
+table.tb tr.sel td:first-child{box-shadow:inset calc(3 * var(--zd-u)) 0 0 0 var(--zd-ink-0)}
+table.tb tr:hover td{background:var(--zd-paper-3)}
+table.tb tr.sel:hover td{background:var(--zd-paper-3)}
+.fmark{display:inline-block;vertical-align:-2px;margin-right:var(--zd-gap)}
+.fmark svg *{stroke:var(--zd-ink-1);stroke-width:1;fill:none}
+tr.sel .fmark svg *{stroke:var(--zd-ink-0)}
+
+/* ---- the well: cut into the paper ---- */
+.well{
+  background:var(--zd-paper-2);
+  border:1px solid var(--zd-rule-hair);
+  border-radius:var(--zd-r-set);
+  font-family:var(--zd-mono);font-size:var(--zd-r2);
+  line-height:calc(16 * var(--zd-u));color:var(--zd-ink-1);
+  padding:calc(10 * var(--zd-u));white-space:pre;overflow:hidden;
+}
+.caret{display:inline-block;width:calc(2 * var(--zd-u));height:calc(11 * var(--zd-u));background:var(--zd-attn);vertical-align:-1px;margin-left:1px}
+
+/* ---- stat pair: R1 key over R4 value. no border, no fill. ---- */
+.stats{display:flex;flex-wrap:wrap;gap:calc(20 * var(--zd-u)) calc(28 * var(--zd-u))}
+.stat{min-width:calc(96 * var(--zd-u))}
+.stat .k{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);line-height:calc(12 * var(--zd-u))}
+.stat .v{font-family:var(--zd-mono);font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-0);line-height:calc(20 * var(--zd-u));margin-top:calc(2 * var(--zd-u));font-variant-numeric:tabular-nums}
+.stat .u{font-size:var(--zd-r1);letter-spacing:var(--zd-trk);color:var(--zd-ink-3);margin-left:calc(3 * var(--zd-u))}
+.meter{height:calc(4 * var(--zd-u));background:var(--zd-paper-3);border-radius:var(--zd-r-page);margin-top:calc(6 * var(--zd-u))}
+.meter i{display:block;height:100%;background:var(--zd-ink-1);border-radius:var(--zd-r-page)}
+
+/* ---- controls ---- */
+.btn{
+  height:calc(24 * var(--zd-u));display:inline-flex;align-items:center;padding:0 calc(12 * var(--zd-u));
+  font-size:var(--zd-r3);font-weight:700;border-radius:var(--zd-r-page);
+  border:1px solid var(--zd-rule-ctrl);background:var(--zd-paper-1);color:var(--zd-ink-0);
+  cursor:default;transition:background var(--zd-ms-press) linear;
+}
+.btn:active{background:var(--zd-paper-3)}
+/* THE KNOCKOUT, all four sites. Light: INK_0 plate, PAPER_1 text, 16.18:1.
+   Dark:  INK_1 plate, PAPER_0 text, 12.72:1 - one rung down, so that the
+   brightest value in the dark system only ever appears as a mark 3 dp or
+   thinner (the focus rule, the marginal bar, R4 figures) and a 90 dp button
+   can no longer outshout the focus rule it is sitting under. */
+.btn.pri{background:var(--zd-kn-bg);border-color:var(--zd-kn-bg);color:var(--zd-kn-fg)}
+.btn.tall{height:calc(28 * var(--zd-u));padding:0 calc(16 * var(--zd-u))}
+.btnrow{display:flex;gap:var(--zd-gap);flex-wrap:wrap}
+.tgl{width:calc(28 * var(--zd-u));height:calc(14 * var(--zd-u));border-radius:var(--zd-r-round);background:var(--zd-paper-3);border:1px solid var(--zd-rule-ctrl);position:relative;flex:none;cursor:default;transition:background var(--zd-ms-press) linear}
+.tgl b{position:absolute;top:calc(2 * var(--zd-u));left:calc(2 * var(--zd-u));width:calc(8 * var(--zd-u));height:calc(8 * var(--zd-u));border-radius:var(--zd-r-round);background:var(--zd-ink-2);transition:left var(--zd-ms-press) linear}
+.tgl.on{background:var(--zd-kn-bg);border-color:var(--zd-kn-bg)}
+.tgl.on b{left:calc(16 * var(--zd-u));background:var(--zd-kn-fg)}
+.sld{position:relative;height:calc(4 * var(--zd-u));background:var(--zd-paper-3);border-radius:var(--zd-r-page);flex:1 1 auto;cursor:default}
+.sld i{display:block;height:100%;background:var(--zd-ink-1);border-radius:var(--zd-r-page)}
+.sld b{position:absolute;top:calc(-4 * var(--zd-u));width:calc(12 * var(--zd-u));height:calc(12 * var(--zd-u));border-radius:var(--zd-r-round);background:var(--zd-ink-0);margin-left:calc(-6 * var(--zd-u))}
+.seg{display:flex;border:1px solid var(--zd-rule-ctrl);border-radius:var(--zd-r-page);overflow:hidden;width:max-content}
+.seg span{
+  height:calc(22 * var(--zd-u));display:flex;align-items:center;padding:0 calc(10 * var(--zd-u));
+  font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-2);
+  border-left:1px solid var(--zd-rule-ctrl);cursor:default;
+}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--zd-kn-bg);color:var(--zd-kn-fg);font-weight:700}
+.field{display:flex;align-items:center;gap:calc(12 * var(--zd-u));height:var(--zd-row-h)}
+.field .lb{font-size:var(--zd-r2);color:var(--zd-ink-1);width:calc(116 * var(--zd-u));flex:none}
+.field .st{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-2);width:calc(44 * var(--zd-u));flex:none}
+.field .nm2{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);width:calc(48 * var(--zd-u));flex:none;text-align:right}
+.dl{display:flex;align-items:baseline;height:calc(22 * var(--zd-u));border-bottom:1px solid var(--zd-rule-hair)}
+.dl .k{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);flex:none;width:calc(112 * var(--zd-u))}
+.dl .v{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);margin-left:auto;text-align:right;overflow:hidden;white-space:nowrap}
+/* The thumb needs a gutter of its own: parked over the content it covered the
+   last digit of every right-flush figure in the table beneath it. */
+.sbar{position:absolute;right:calc(4 * var(--zd-u));width:calc(4 * var(--zd-u));border-radius:var(--zd-r-round);background:var(--zd-ink-mute)}
+.scrolly.gut{padding-right:calc(12 * var(--zd-u))}
+
+/* ============================ OVERLAYS ============================ */
+/* #ov already lives inside #ta, which is itself offset by the rail. Offsetting
+   it by the rail a SECOND time pushed every overlay 160dp right of its sheet.
+   It covers the type area exactly, and carries the rank-3 modal scrim. */
+#ov{position:absolute;inset:0;z-index:500;display:none}
+#ov.show{display:block;background:var(--zd-scrim-24)}
+.sheet{
+  position:absolute;inset:var(--zd-margin);
+  background:var(--zd-paper-2);
+  border:var(--zd-frame) solid var(--zd-ink-0);
+  border-radius:var(--zd-r-page);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sheet .shead{padding:var(--zd-pad) var(--zd-pad) 0;flex:none}
+.sheet .shead .rule2{margin-top:calc(10 * var(--zd-u))}
+.searchwell{
+  margin:calc(14 * var(--zd-u)) var(--zd-pad) 0;height:calc(24 * var(--zd-u));flex:none;
+  background:var(--zd-paper-1);border:1px solid var(--zd-rule-ctrl);border-radius:var(--zd-r-set);
+  display:flex;align-items:center;padding:0 var(--zd-gap);gap:var(--zd-gap);
+}
+.searchwell input{flex:1 1 auto;font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-0);caret-color:var(--zd-attn)}
+.searchwell .r1{flex:none}
+.idxcols{flex:1 1 auto;display:flex;overflow:hidden;margin-top:calc(14 * var(--zd-u))}
+.idxcol{flex:1 1 0;border-left:1px solid var(--zd-rule-hair);padding:0 calc(14 * var(--zd-u));overflow:hidden}
+.idxcol:first-child{border-left:0}
+.idxrun{margin-top:calc(10 * var(--zd-u))}
+.idxrun .hair{margin-bottom:calc(2 * var(--zd-u))}
+.irow{height:calc(24 * var(--zd-u));display:flex;align-items:center;gap:var(--zd-gap);position:relative;padding-left:calc(6 * var(--zd-u));cursor:default}
+.irow .g{width:calc(16 * var(--zd-u));flex:none}
+.irow .g svg *{stroke:var(--zd-ink-1);stroke-width:1;fill:none}
+.irow .nm{font-size:var(--zd-r2);color:var(--zd-ink-1);overflow:hidden;white-space:nowrap}
+.irow .kb{margin-left:auto;font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3);flex:none}
+.irow.on{background:var(--zd-paper-3)}
+.irow.on .nm{font-weight:700;color:var(--zd-ink-0)}
+.irow.on .g svg *{stroke:var(--zd-ink-0)}
+.irow:hover{background:var(--zd-paper-3)}
+
+/* command palette: a narrower sheet, still a page */
+#pal .sheet{left:12%;right:12%;top:calc(48 * var(--zd-u));bottom:auto;max-height:78%}
+.cmdrow{height:var(--zd-row-h);display:flex;align-items:center;gap:calc(12 * var(--zd-u));padding:0 var(--zd-pad);position:relative;cursor:default}
+.cmdrow .no{font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3);width:calc(18 * var(--zd-u));text-align:right;flex:none}
+.cmdrow .nm{font-size:var(--zd-r2);color:var(--zd-ink-1);overflow:hidden;white-space:nowrap}
+.cmdrow .cat{margin-left:auto;font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);flex:none}
+.cmdrow .kb{font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3);flex:none;width:calc(56 * var(--zd-u));text-align:right}
+.cmdrow.on{background:var(--zd-paper-3)}
+.cmdrow.on .nm{font-weight:700;color:var(--zd-ink-0)}
+.cmdrow.on .no{color:var(--zd-ink-0)}
+.cmdrow:hover{background:var(--zd-paper-3)}
+
+/* overview: a contents spread */
+#ovw .sheet{background:var(--zd-paper-1)}
+.ovbody{flex:1 1 auto;overflow:hidden;padding:0 var(--zd-pad) var(--zd-pad)}
+.ovsect{margin-top:calc(16 * var(--zd-u))}
+.ovsect .hdr{display:flex;align-items:baseline;gap:var(--zd-gap)}
+.ovsect .hair{margin-top:calc(4 * var(--zd-u))}
+.ovrow{display:flex;gap:calc(16 * var(--zd-u));flex-wrap:wrap;margin-top:calc(12 * var(--zd-u))}
+.mini{cursor:default}
+.mini .frame{
+  border:1px solid var(--zd-rule-hair);background:var(--zd-paper-1);
+  overflow:hidden;position:relative;
+}
+.mini.on .frame{border-color:var(--zd-ink-0);box-shadow:inset 0 0 0 1px var(--zd-ink-0)}
+.mini .cap{display:flex;align-items:baseline;gap:var(--zd-gap);margin-top:calc(6 * var(--zd-u))}
+.mini .cap .no{font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3)}
+.mini .cap .nm{font-size:var(--zd-r2);color:var(--zd-ink-2);white-space:nowrap;overflow:hidden}
+.mini.on .cap .nm{font-weight:700;color:var(--zd-ink-0)}
+.miniscale{transform-origin:0 0;pointer-events:none}
+.ovempty{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-mute);margin-top:calc(12 * var(--zd-u))}
+
+/* menus: rank 2 keyline */
+.menu{
+  position:fixed;z-index:800;background:var(--zd-paper-1);
+  border:1px solid var(--zd-rule-mid);border-radius:var(--zd-r-page);
+  min-width:calc(184 * var(--zd-u));padding:calc(4 * var(--zd-u)) 0;
+  animation:zfade var(--zd-ms-pop) linear;
+}
+.menu .mh{padding:calc(4 * var(--zd-u)) calc(14 * var(--zd-u)) calc(6 * var(--zd-u))}
+.menu .mi{
+  height:var(--zd-row-h);display:flex;align-items:center;gap:calc(16 * var(--zd-u));
+  padding:0 calc(14 * var(--zd-u));font-size:var(--zd-r2);color:var(--zd-ink-1);cursor:default;
+}
+.menu .mi:hover{background:var(--zd-paper-3)}
+.menu .mi .kb{margin-left:auto;font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3)}
+.menu .hair{margin:calc(4 * var(--zd-u)) 0}
+
+/* toasts */
+#toasts{position:absolute;right:var(--zd-margin);bottom:calc(40 * var(--zd-u));z-index:700;display:flex;flex-direction:column;gap:var(--zd-gap);align-items:flex-end}
+.toast{
+  background:var(--zd-paper-1);border:1px solid var(--zd-rule-mid);border-radius:var(--zd-r-page);
+  min-width:calc(220 * var(--zd-u));max-width:calc(320 * var(--zd-u));
+}
+.toast .th{display:flex;align-items:center;gap:var(--zd-gap);padding:var(--zd-gap) calc(12 * var(--zd-u)) calc(6 * var(--zd-u))}
+.toast .hair{margin:0 calc(12 * var(--zd-u))}
+.toast .tb2{padding:calc(6 * var(--zd-u)) calc(12 * var(--zd-u)) calc(10 * var(--zd-u));font-size:var(--zd-r2);color:var(--zd-ink-1);line-height:1.4}
+.toast .tb2 .mn{color:var(--zd-ink-2)}
+.dot{width:calc(3 * var(--zd-u));height:calc(3 * var(--zd-u));flex:none;background:var(--zd-ink-1)}
+.dot.g{background:var(--zd-green)} .dot.o{background:var(--zd-ochre)} .dot.r{background:var(--zd-attn)}
+
+/* modal + scrim */
+#modal{position:absolute;inset:0;z-index:850;display:none}
+#modal.show{display:block}
+#modal .scrim{position:absolute;inset:0;background:var(--zd-scrim-24)}
+#modal .box{
+  position:absolute;left:50%;top:34%;transform:translate(-50%,-34%);
+  width:calc(400 * var(--zd-u));background:var(--zd-paper-1);
+  border:var(--zd-frame) solid var(--zd-ink-0);border-radius:var(--zd-r-page);
+}
+
+/* lock: the title page */
+#lock{position:absolute;inset:0;z-index:880;display:none;background:linear-gradient(180deg,var(--zd-paper-0) 0%,var(--zd-paper-0b) 100%)}
+#lock.show{display:block}
+#lock .plate{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;flex-direction:column;padding:calc(56 * var(--zd-u)) calc(64 * var(--zd-u))}
+#lock .lgrid{position:absolute;inset:0;pointer-events:none}
+#lock .lgrid i{position:absolute;top:0;bottom:0;width:1px;background:var(--zd-hair-45)}
+#lock .lgrid u{position:absolute;height:1px;background:var(--zd-hair-45)}
+#lock .top{display:flex;align-items:baseline;gap:calc(16 * var(--zd-u))}
+#lock .word{font-size:calc(48 * var(--zd-u));font-weight:700;color:var(--zd-ink-0);line-height:1;letter-spacing:calc(-1 * var(--zd-u))}
+#lock .rule2{margin-top:calc(18 * var(--zd-u));width:calc(560 * var(--zd-u));max-width:100%}
+#lock .clock{font-family:var(--zd-mono);font-size:calc(96 * var(--zd-u));font-weight:700;color:var(--zd-ink-0);line-height:1;margin-top:calc(44 * var(--zd-u));font-variant-numeric:tabular-nums}
+#lock .date{margin-top:calc(10 * var(--zd-u))}
+#lock .authwell{
+  margin-top:calc(40 * var(--zd-u));width:calc(320 * var(--zd-u));height:calc(28 * var(--zd-u));
+  background:var(--zd-paper-2);border:1px solid var(--zd-rule-ctrl);border-radius:var(--zd-r-set);
+  display:flex;align-items:center;padding:0 calc(10 * var(--zd-u));gap:var(--zd-gap);
+}
+#lock .authwell .stars{font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-0);letter-spacing:calc(2 * var(--zd-u))}
+#lock .foot{display:flex;align-items:flex-end;justify-content:space-between;margin-top:calc(24 * var(--zd-u))}
+#lock .fnum{font-family:var(--zd-mono);font-size:var(--zd-r4);font-weight:700;color:var(--zd-ink-3)}
+/* The machine facts are FOOT MATTER, not body: the auto margin belongs to the
+   notice so the two bottom groups travel together. With it on .foot the notice
+   was stranded a third of the way down a page with 500 dp of nothing under it. */
+#lock .notice{display:flex;gap:calc(28 * var(--zd-u));margin-top:auto}
+/* THE TITLE PAGE IS A SPREAD: masthead and clock on the recto, the held sheets
+   set as a contents list on the verso. Without these four rules renderLock()'s
+   markup collapses into one column and the held rows run their own words
+   together - the numeral, the sheet name and its open object had no boxes to
+   sit in, so "1" + "Files" + "/kernel" printed as "1Files/kernel". */
+#lock .spread{display:flex;align-items:flex-start;gap:calc(64 * var(--zd-u))}
+#lock .lmain{flex:1 1 auto;min-width:0}
+#lock .held{flex:none;width:calc(300 * var(--zd-u));max-width:38%;margin-top:calc(6 * var(--zd-u))}
+#lock .held .hair{margin:calc(6 * var(--zd-u)) 0 calc(2 * var(--zd-u))}
+#lock .hrow{display:flex;align-items:baseline;gap:var(--zd-gap);height:var(--zd-row-h)}
+#lock .hrow .num{
+  font-family:var(--zd-mono);font-size:var(--zd-r1);color:var(--zd-ink-3);
+  width:calc(16 * var(--zd-u));text-align:right;flex:none;
+}
+#lock .hrow .ttl{font-size:var(--zd-r2);color:var(--zd-ink-1);white-space:nowrap;overflow:hidden}
+#lock .hrow .sb{
+  margin-left:auto;flex:none;font-size:var(--zd-r1);text-transform:uppercase;
+  letter-spacing:var(--zd-trk);color:var(--zd-ink-3);
+}
+
+/* ---- app-specific, all still Folio ---- */
+.term-pane{position:absolute;inset:var(--zd-pad);background:var(--zd-paper-2);border:1px solid var(--zd-rule-hair);border-radius:var(--zd-r-set);padding:calc(10 * var(--zd-u));font-family:var(--zd-mono);font-size:var(--zd-r2);line-height:calc(15 * var(--zd-u));color:var(--zd-ink-1);white-space:pre;overflow:hidden}
+.ed{position:absolute;inset:0;display:flex;font-family:var(--zd-mono);font-size:var(--zd-r2);line-height:calc(16 * var(--zd-u));overflow:hidden}
+.ed .gut{flex:none;width:calc(40 * var(--zd-u));text-align:right;padding:calc(10 * var(--zd-u)) var(--zd-gap) 0 0;color:var(--zd-ink-3);border-right:1px solid var(--zd-rule-hair);white-space:pre}
+.ed .txt{flex:1 1 auto;padding:calc(10 * var(--zd-u)) 0 0 calc(12 * var(--zd-u));white-space:pre;color:var(--zd-ink-1);position:relative;overflow:hidden}
+.ed .ruler{position:absolute;top:0;bottom:0;width:1px;background:var(--zd-rule-hair)}
+.kw{color:var(--zd-ink-0);font-weight:700}
+.cm{color:var(--zd-ink-3)}
+.st2{color:var(--zd-ochre)}
+.calcgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:calc(6 * var(--zd-u))}
+.ck{
+  height:calc(30 * var(--zd-u));display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--zd-rule-ctrl);border-radius:var(--zd-r-page);background:var(--zd-paper-1);
+  font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);cursor:default;
+  transition:background var(--zd-ms-press) linear;
+}
+.ck:hover{background:var(--zd-paper-3)}
+.ck.op{font-weight:700;color:var(--zd-ink-0)}
+.ck.eq{background:var(--zd-kn-bg);border-color:var(--zd-kn-bg);color:var(--zd-kn-fg);font-weight:700}
+.blocks{display:flex;flex-wrap:wrap;gap:1px;width:100%}
+.blocks i{width:calc(6 * var(--zd-u));height:calc(6 * var(--zd-u));background:var(--zd-paper-3);display:block}
+.blocks i.u{background:var(--zd-ink-1)}
+.blocks i.w{background:var(--zd-ochre)}
+.rulebar{height:calc(2 * var(--zd-u));background:var(--zd-ink-1)}
+.face circle,.face line,.face path{fill:none}
+.face .rim{stroke:var(--zd-rule-hair);stroke-width:1}
+.face .tick{stroke:var(--zd-ink-2);stroke-width:1}
+.face .hh{stroke:var(--zd-ink-0);stroke-width:2}
+.face .mh{stroke:var(--zd-ink-1);stroke-width:1}
+.face .sh{stroke:var(--zd-attn);stroke-width:1}
+.spark{width:100%;height:calc(44 * var(--zd-u));display:block}
+.spark polyline{fill:none;stroke:var(--zd-ink-1);stroke-width:1}
+.spark line{stroke:var(--zd-rule-hair);stroke-width:1}
+.glyphgrid{display:flex;flex-wrap:wrap}
+.glyphgrid i{
+  width:calc(24 * var(--zd-u));height:calc(24 * var(--zd-u));
+  border-right:1px solid var(--zd-rule-hair);border-bottom:1px solid var(--zd-rule-hair);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--zd-mono);font-size:var(--zd-r2);color:var(--zd-ink-1);font-style:normal;
+}
+.cols2{display:flex;gap:calc(24 * var(--zd-u))}
+.cols2 > *{flex:1 1 0;min-width:0}
+.manbody{font-size:var(--zd-r2);color:var(--zd-ink-1);line-height:calc(18 * var(--zd-u))}
+.manbody h4{font-size:var(--zd-r1);text-transform:uppercase;letter-spacing:var(--zd-trk);color:var(--zd-ink-3);font-weight:400;margin-top:calc(14 * var(--zd-u))}
+.manbody p{margin-top:calc(4 * var(--zd-u));max-width:64ch}
+.manbody .syn{font-family:var(--zd-mono);color:var(--zd-ink-0)}
+.hexpane{font-family:var(--zd-mono);font-size:var(--zd-r2);line-height:calc(16 * var(--zd-u));white-space:pre;color:var(--zd-ink-1)}
+.hexpane b{color:var(--zd-ink-0);background:var(--zd-paper-3);font-weight:400}
+.hexpane .off{color:var(--zd-ink-3)}
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="name">Folio</span>
+  <span class="r1">zlOS 0.3 desktop prototype</span>
+  <div id="stock">
+    <span class="lb">Stock</span>
+    <span class="sw"><span data-theme-set="light">Paper</span><span data-theme-set="dark">Ink</span></span>
+    <span class="lb">C-b</span>
+  </div>
+  <nav id="scenes"></nav>
+</div>
+
+<div id="desk">
+  <div id="ta">
+    <div id="grid"></div>
+    <div id="drop"></div>
+    <div id="wins"></div>
+    <div id="colophon">ZLOS &middot; 0.3 &middot; NO LIBC &middot; NO HEAP &middot; NO FLOAT</div>
+    <div id="folio"></div>
+    <div id="toasts"></div>
+    <div id="ov"></div>
+    <div id="modal"></div>
+  </div>
+  <div id="rail"></div>
+  <div id="lock"></div>
+</div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   0. helpers
+   ========================================================================== */
+const $ = (s, r) => (r || document).querySelector(s);
+const pad = (n, w, c) => String(n).padStart(w, c || ' ');
+const hex = (n, w) => n.toString(16).toUpperCase().padStart(w || 8, '0');
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+let seed = 20260825;
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+/* ZD_RULE_HAIR -> rule-hair, so the specimen can name a token once and reach
+   both --zd-<t> (this stock) and --zd-alt-<t> (the other one). */
+const tokvar = t => t.slice(3).toLowerCase().replace(/_/g, '-');
+
+/* ==========================================================================
+   1. icons. ONE PEN: 4-unit stroke on a 96 grid, angles 0/90/45 only,
+      outline only, one ink. Rationed to window controls, toolbars,
+      file marks and the Index gutter.
+   ========================================================================== */
+const PEN = {
+  min:  'M5 13.5 H15',
+  fit:  'M5.5 5.5 H14.5 V14.5 H5.5 Z M10 5.5 V14.5',
+  close:'M5.5 5.5 L14.5 14.5 M14.5 5.5 L5.5 14.5',
+  doc:  'M3.5 1.5 H9.5 L12.5 4.5 V14.5 H3.5 Z M9.5 1.5 V4.5 H12.5',
+  dir:  'M1.5 3.5 H6.5 L8.5 5.5 H14.5 V13.5 H1.5 Z',
+  term: 'M1.5 2.5 H14.5 V13.5 H1.5 Z M4 6 L6.5 8 L4 10 M8 10.5 H11.5',
+  mon:  'M1.5 2.5 H14.5 V13.5 H1.5 Z M3.5 10.5 L6.5 7.5 L9 10 L12.5 5.5',
+  edit: 'M2.5 2.5 H9.5 V13.5 H2.5 Z M11 3 L13.5 5.5 M13.5 5.5 L8 11 L5.5 11.5 L6 9 Z',
+  log:  'M1.5 3.5 H14.5 M1.5 6.5 H11.5 M1.5 9.5 H14.5 M1.5 12.5 H8.5',
+  hex:  'M1.5 2.5 H14.5 V13.5 H1.5 Z M6 2.5 V13.5 M10.5 2.5 V13.5 M1.5 8 H14.5',
+  calc: 'M2.5 1.5 H13.5 V14.5 H2.5 Z M4.5 4.5 H11.5 M8 7 V12 M5.5 9.5 H10.5',
+  net:  'M8 13.5 L8 13.5 M2 9 A 8.5 8.5 0 0 1 14 9 M4.5 11 A 5 5 0 0 1 11.5 11 M7 13 L8 12 L9 13 L8 14 Z',
+  clock:'M8 2.5 A 5.5 5.5 0 1 1 7.99 2.5 M8 5 V8 L10.5 9.5',
+  chip: 'M4.5 4.5 H11.5 V11.5 H4.5 Z M2 6 H4.5 M2 9.5 H4.5 M11.5 6 H14 M11.5 9.5 H14 M6 2 V4.5 M9.5 2 V4.5 M6 11.5 V14 M9.5 11.5 V14',
+  set:  'M8 3 A 5 5 0 1 1 7.99 3 M8 6 A 2 2 0 1 1 7.99 6 M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15',
+  disk: 'M8 2 A 6 6 0 1 1 7.99 2 M8 6.5 A 1.5 1.5 0 1 1 7.99 6.5 M12 4 L9 7',
+  reg:  'M1.5 3.5 H14.5 V12.5 H1.5 Z M5.5 3.5 V12.5 M8 6.5 H12 M8 9.5 H12',
+  man:  'M8 3.5 C 8 3.5 6 2 2.5 2.5 V12.5 C 6 12 8 13.5 8 13.5 M8 3.5 C 8 3.5 10 2 13.5 2.5 V12.5 C 10 12 8 13.5 8 13.5 M8 3.5 V13.5',
+  spec: 'M2.5 13.5 L8 2.5 L13.5 13.5 M5 9.5 H11',
+  util: 'M2.5 2.5 H13.5 V13.5 H2.5 Z M2.5 6 H13.5 M6 6 V13.5',
+  ws:   'M1.5 2.5 H7 V8 H1.5 Z M9 2.5 H14.5 V8 H9 Z M1.5 10 H7 V13.5 H1.5 Z M9 10 H14.5 V13.5 H9 Z'
+};
+function ico(n, sz){
+  const s = sz || 16;
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 16 16" shape-rendering="geometricPrecision"><path d="' + (PEN[n] || PEN.util) + '"/></svg>';
+}
+function ctrlIco(n){
+  return '<svg width="20" height="20" viewBox="0 0 20 20" shape-rendering="crispEdges"><path d="' + PEN[n] + '"/></svg>';
+}
+
+/* ==========================================================================
+   2. DATA. Machine text: real kernel-tree names, real register values,
+      plausible timings, real-looking logs.
+   ========================================================================== */
+const TREE = [
+  ['apic.c',        8104,  'C source',  '-rw-r--r--', '11:04'],
+  ['design.h',      9142,  'C header',  '-rw-r--r--', '14:21'],
+  ['fb.c',         41208,  'C source',  '-rw-r--r--', '14:19'],
+  ['font_sub.c',   15702,  'C source',  '-rw-r--r--', '09:52'],
+  ['gen_icons.py',  9088,  'Python',    '-rwxr-xr-x', '13:58'],
+  ['hid.c',        14908,  'C source',  '-rw-r--r--', '10:37'],
+  ['intel.c',      68420,  'C source',  '-rw-r--r--', '14:22'],
+  ['kernel.zl',    51884,  'zl source', '-rw-r--r--', '14:20'],
+  ['link.ld',        612,  'Linker',    '-rw-r--r--', '08:11'],
+  ['nvme.c',       19640,  'C source',  '-rw-r--r--', '12:06'],
+  ['pci.c',         7462,  'C source',  '-rw-r--r--', '10:12'],
+  ['sched.c',      10336,  'C source',  '-rw-r--r--', '11:48'],
+  ['uikit.c',      31580,  'C source',  '-rw-r--r--', '14:21'],
+  ['virtio_gpu.c', 12290,  'C source',  '-rw-r--r--', '09:30'],
+  ['wm.c',         22964,  'C source',  '-rw-r--r--', '14:18'],
+  ['xhci.c',       37226,  'C source',  '-rw-r--r--', '13:41'],
+  ['zlfs.c',       26512,  'C source',  '-rw-r--r--', '12:55'],
+  ['zl.bin',      412944,  'Executable','-rwxr-xr-x', '14:22']
+];
+const DIRS = ['boot/', 'build/', 'hosttest/', 'fonts/'];
+
+const SRC = {
+'fb.c':
+'/* fb.c - the whole renderer. No GPU, no libc, no float. */\n' +
+'#include "design.h"\n' +
+'\n' +
+'static u32 lin_from_srgb[256];   /* built at boot, fb_init() */\n' +
+'static u8  srgb_from_lin[4096];\n' +
+'\n' +
+'/* gamma-correct blend in LINEAR LIGHT. This matters more on a\n' +
+'   light ground: every hairline is a low-contrast blend and a\n' +
+'   naive sRGB average visibly darkens it. */\n' +
+'static inline u32 blend(u32 dst, u32 src, u32 a)\n' +
+'{\n' +
+'    u32 d = lin_from_srgb[dst & 0xff];\n' +
+'    u32 s = lin_from_srgb[src & 0xff];\n' +
+'    return srgb_from_lin[(d * (255 - a) + s * a) >> 8];\n' +
+'}\n' +
+'\n' +
+'void fb_rrect(int x, int y, int w, int h, int r, u32 c)\n' +
+'{\n' +
+'    if (2 * r > h) r = h / 2;          /* ZD_R_ROUND resolves here */\n' +
+'    if (r <= 0) { fb_fill_px(x, y, w, h, c); return; }\n' +
+'    for (int j = 0; j < h; j++) {\n' +
+'        int cov = corner_cov4x4(j, r);  /* 4x4 supersample */\n' +
+'        span(x, y + j, w, c, cov);\n' +
+'    }\n' +
+'}\n',
+'design.h':
+'/* design.h - the ONLY file in the tree that may contain a colour\n' +
+'   literal. ui.c maps these to roles; kernel.zl never sees a hex. */\n' +
+'\n' +
+'#define ZD_PAPER_0   0xE9E4DB   /* ground, top stop of the one gradient */\n' +
+'#define ZD_PAPER_0B  0xE2DCD1   /* ground, bottom stop */\n' +
+'#define ZD_PAPER_1   0xF4F1EA   /* the sheet */\n' +
+'#define ZD_PAPER_2   0xFBFAF6   /* the well */\n' +
+'#define ZD_PAPER_3   0xDED8CB   /* the band */\n' +
+'#define ZD_INK_0     0x17150F\n' +
+'#define ZD_INK_1     0x2E2A22\n' +
+'#define ZD_INK_2     0x4A4438\n' +
+'#define ZD_INK_3     0x5E5648\n' +
+'#define ZD_INK_MUTE  0x8E8674   /* NON-TEXT ONLY. uitest.c asserts this. */\n' +
+'#define ZD_RULE_HAIR 0xC2BAA8\n' +
+'#define ZD_RULE_MID  0xA29A87\n' +
+'#define ZD_RULE_CTRL 0x8A8270\n' +
+'#define ZD_RED       0xA3301B   /* the only chromatic ink */\n' +
+'\n' +
+'#define ZD_R_PAGE     0        /* it is paper */\n' +
+'#define ZD_R_SET      2        /* it is cut into the paper */\n' +
+'#define ZD_R_ROUND  (-1)       /* it moves, or it is a point */\n',
+'wm.c':
+'/* wm.c - stacking window manager with the printer guides. */\n' +
+'#include "design.h"\n' +
+'\n' +
+'/* the wallpaper IS the column grid, so snapping has no new state:\n' +
+'   the guides the user already sees are the guides we snap to. */\n' +
+'int wm_snap_x(int x)\n' +
+'{\n' +
+'    int m = UI_DP(24), mod = UI_DP(64);\n' +
+'    int c = (x - m + mod / 2) / mod;\n' +
+'    if (c < 0) c = 0;\n' +
+'    if (c > wm.cols) c = wm.cols;\n' +
+'    return m + c * mod;\n' +
+'}\n' +
+'\n' +
+'void wm_drop(Win *w)\n' +
+'{\n' +
+'    w->x = wm_snap_x(w->x);\n' +
+'    w->y = wm_snap_y(w->y);\n' +
+'    w->anim = ZD_MS_SNAP;      /* the animation teaches the grid */\n' +
+'    wm.shadow = 0;             /* the sheet is back on the page */\n' +
+'}\n',
+'kernel.zl':
+'# kernel.zl - entry point, called from boot.S after handoff\n' +
+'\n' +
+'fn main() {\n' +
+'  gdt()\n' +
+'  idt()\n' +
+'  apic(0x20)\n' +
+'  pci_scan()\n' +
+'  intel_modeset(1920, 1200, 60)\n' +
+'  zlfs_mount("/dev/nvme0n1p2")\n' +
+'  xhci_init()\n' +
+'  hid_bind()\n' +
+'  wm()\n' +
+'}\n'
+};
+
+const KLOG = [
+  ['0.000000','ok',  'zlOS 0.3 booting, x86_64 long mode'],
+  ['0.000412','ok',  'gdt: flat code + data, tss at 0x00109000'],
+  ['0.001180','ok',  'idt: 256 vectors, ist1 for #DF'],
+  ['0.004902','ok',  'apic: lapic 0xFEE00000, ioapic 0xFEC00000, 8 cpus'],
+  ['0.009114','ok',  'pci: 0000:00:02.0 8086:5917 rev 07 class 0x030000'],
+  ['0.011840','ok',  'pci: 0000:00:14.0 8086:9d2f xhci, bar0 64-bit'],
+  ['0.012006','ok',  'pci: 0000:02:00.0 144d:a808 nvme, 512 GB'],
+  ['0.031772','ok',  'intel: gen9 display, 3 pipes, 4 ports'],
+  ['0.048119','warn','intel: firmware left PSR1 armed on eDP-1, disabling'],
+  ['0.061450','ok',  'intel: dpll2 locked, 241690 kHz, m/n 0x0080D9D0'],
+  ['0.062001','ok',  'intel: pipe A 1920x1200@59.998, eDP-1 lane count 4'],
+  ['0.070912','ok',  'fb: 1920x1200x32 pitch 7680 @ 0x90000000'],
+  ['0.071004','ok',  'fb: gamma luts built, 256 + 4096 entries'],
+  ['0.088341','ok',  'font: prop atlas 16/24/32, mono atlas 16/24'],
+  ['0.104220','ok',  'xhci: 21 ports, scratchpads 8 x 4 KiB'],
+  ['0.140881','warn','xhci: bios owned controller, took ownership in 41 ms'],
+  ['0.191002','ok',  'hid: usb 1-3 boot keyboard, 8-byte reports'],
+  ['0.192447','ok',  'hid: usb 1-5 boot mouse, 4-byte reports'],
+  ['0.208810','ok',  'nvme: admin q depth 32, io q 1024, mdts 512 KiB'],
+  ['0.244903','ok',  'zlfs: mounted /dev/nvme0n1p2 rw, 118 nodes'],
+  ['0.245117','fail','heap: no allocator present, stack only'],
+  ['0.302411','ok',  'sched: 4 runnable, round robin, 100 Hz tick'],
+  ['0.318904','ok',  'wm: 3 sheets, 22 columns at 64 dp module'],
+  ['1.402118','ok',  'wm: composite pass 3.8 ms, 0 frames dropped'],
+  ['3.884120','warn','sched: cpu6 idle 99.4 percent, parking'],
+  ['7.219004','ok',  'zlfs: journal checkpoint, 2 extents, 18 KiB']
+];
+
+const PROCS = [
+  [1,'wm',        'run',  14.2, 22140],
+  [2,'compositor','run',   9.1, 18904],
+  [3,'zlsh',      'sleep', 0.4,  2118],
+  [4,'files',     'sleep', 0.2,  4410],
+  [5,'monitor',   'run',   3.8,  3902],
+  [6,'edit',      'sleep', 0.1,  6280],
+  [7,'klogd',     'sleep', 0.0,   904],
+  [8,'nvme-io',   'wait',  1.6,  1240],
+  [9,'xhci-int',  'wait',  0.7,   812],
+  [10,'zlfs-jrn', 'sleep', 0.3,  1508]
+];
+
+const REGS = [
+  ['0x0006C040','DPLL_CTRL1',    '0x00000C04','link rate 2.7 GHz, ssc off'],
+  ['0x0006C058','DPLL_CTRL2',    '0x00007800','ddi B clock off, ddi A sel dpll2'],
+  ['0x00006014','PIPE_A_LINK_M1','0x0080D9D0','m = 8443344'],
+  ['0x00006018','PIPE_A_LINK_N1','0x00800000','n = 8388608'],
+  ['0x00060000','TRANS_HTOTAL_A','0x0A2F077F','hactive 1920, htotal 2608'],
+  ['0x00060008','TRANS_VTOTAL_A','0x04D504AF','vactive 1200, vtotal 1238'],
+  ['0x00070008','PIPE_A_CONF',   '0x80000000','enable, no interlace'],
+  ['0x0007018C','PLANE_CTL_1_A', '0xD0000400','enable, rgb8888, x-tiled'],
+  ['0x00064040','DDI_BUF_CTL_A', '0x80000018','enable, 4 lanes, trained'],
+  ['0x000C4000','PP_STATUS',     '0xC0000008','panel on, power seq idle'],
+  ['0x00045270','WM_LINETIME_A', '0x00000226','line time 550 ns'],
+  ['0x00070180','PS_CTRL_1_A',   '0x00000000','scaler off']
+];
+
+const IFACES = [
+  ['eth0','e1000e','UP',   '10.0.2.15/24', '52:54:00:12:34:56', 1500, 118422, 96104],
+  ['wlan0','iwlwifi','DOWN','-',            '9c:b6:d0:41:aa:07', 1500,      0,     0],
+  ['lo',  'loopback','UP',  '127.0.0.1/8',  '00:00:00:00:00:00', 65536,  4102,  4102]
+];
+const ROUTES = [
+  ['0.0.0.0/0',   '10.0.2.2',  'eth0', 0],
+  ['10.0.2.0/24', 'link',      'eth0', 0],
+  ['127.0.0.0/8', 'link',      'lo',   0]
+];
+const SOCKS = [
+  ['tcp','10.0.2.15:22',   '10.0.2.2:51884','ESTABLISHED','zlsh'],
+  ['tcp','0.0.0.0:8080',   '*:*',           'LISTEN',     'wmshot'],
+  ['udp','10.0.2.15:68',   '10.0.2.2:67',   'BOUND',      'dhcp'],
+  ['tcp','127.0.0.1:9001', '*:*',           'LISTEN',     'klogd']
+];
+
+const DISKROWS = [
+  ['/kernel',   412944, 'src'],
+  ['/build',   1884320, 'obj'],
+  ['/fonts',    742118, 'atlas'],
+  ['/hosttest', 208440, 'src'],
+  ['/docs',      96214, 'text'],
+  ['/tmp',       18024, 'tmpfs'],
+  ['/boot',    1049600, 'esp']
+];
+
+const CLOCKS = [
+  ['Local',   'UTC+01', 0],
+  ['UTC',     'UTC+00', -60],
+  ['New York','UTC-04', -300],
+  ['Tokyo',   'UTC+09', 480]
+];
+
+const UTILS = [
+  ['Archive Manager','archive of /build, 4 members, deflate'],
+  ['Base Converter','integer, 2 / 8 / 10 / 16, 64-bit twos complement'],
+  ['Battery','no battery device on this machine'],
+  ['Checksum','crc32c, hardware, 4.1 GB/s on this cpu'],
+  ['Clipboard','ring of 8, text only, no images without a heap'],
+  ['Colour Picker','sRGB, and the linear-light value it blends as'],
+  ['Console (tty1)','the raw framebuffer console, 240x75 cells'],
+  ['Cursor Test','pointer sample rate and the depth-1 speed ceiling'],
+  ['Environment','12 variables, read once at exec'],
+  ['Framebuffer','a live readback of /dev/fb0, 1920x1200x32'],
+  ['Image Viewer','ppm and pgm only, no decoder in the tree'],
+  ['Keyboard Tester','xhci boot protocol, 8-byte reports, 6 rollover'],
+  ['Memory Map','e820 regions and what the kernel did with each'],
+  ['PCI Explorer','config space of every function on both buses'],
+  ['Process Table','the same table Monitor draws, without the meters'],
+  ['Regex Tester','the subset the shell uses, no backtracking'],
+  ['Snapshot','writes /tmp/wmshot.ppm from the composite buffer'],
+  ['Sticky Notes','four notes, written into /tmp, lost at power off'],
+  ['Text Diff','line diff, myers, no colour, weight only'],
+  ['Timers','the 100 Hz tick and everything hung off it'],
+  ['Unit Converter','KiB / MiB / GiB and the decimal ones, both shown'],
+  ['USB Tree','the xhci topology, port by port'],
+  ['Wu Line Test','the antialiased line primitive, drawn at 24 angles']
+];
+
+/* ==========================================================================
+   3. APP TABLE
+   ========================================================================== */
+const APPS = {
+  term: {name:'zl shell',        sub:'tty0',            ico:'term',  gw:8,  gh:13},
+  files:{name:'Files',           sub:'/kernel',         ico:'dir',   gw:9,  gh:14},
+  mon:  {name:'System Monitor',  sub:'live',            ico:'mon',   gw:8,  gh:15},
+  edit: {name:'Text Editor',     sub:'fb.c',            ico:'edit',  gw:9,  gh:14, unsaved:true},
+  log:  {name:'Kernel Log',      sub:'dmesg',           ico:'log',   gw:10, gh:12},
+  hexv: {name:'Hex Viewer',      sub:'zl.bin',          ico:'hex',   gw:9,  gh:12},
+  calc: {name:'Calculator',      sub:'prog',            ico:'calc',  gw:5,  gh:15},
+  net:  {name:'Network',         sub:'eth0',            ico:'net',   gw:9,  gh:15},
+  clock:{name:'Clocks',          sub:'4 faces',         ico:'clock', gw:8,  gh:13},
+  sys:  {name:'System Info',     sub:'colophon',        ico:'chip',  gw:8,  gh:15},
+  set:  {name:'Settings',        sub:'appearance',      ico:'set',   gw:9,  gh:19},
+  disk: {name:'Disk Usage',      sub:'nvme0n1p2',       ico:'disk',  gw:8,  gh:14},
+  regs: {name:'Registers',       sub:'intel gen9',      ico:'reg',   gw:10, gh:13},
+  man:  {name:'Manual',          sub:'fb_text_rich(3)', ico:'man',   gw:8,  gh:14},
+  spec: {name:'Specimen',        sub:'folio 0.3',       ico:'spec',  gw:8,  gh:14}
+};
+const PINNED = ['term','files','edit','mon','net','set','man'];
+
+/* ==========================================================================
+   4. STATE
+   ========================================================================== */
+const S = {
+  scale:1, attn:'red', gridOn:true, module:64, margOn:true, snap:true, sub:true,
+  ws:1, wins:[], zc:10, focus:null, seq:1,
+  ov:null,              /* 'index' | 'palette' | 'overview' | null */
+  ovFresh:true,         /* arms ZD_MS_FADE for the NEXT opening of an overlay */
+  q:'', qi:0, locked:false, menu:null, sel:'fb.c', doc:'fb.c',
+  calcAcc:'0', calcTape:['1920 * 1200 = 2304000', '2304000 * 4 = 9216000', '9216000 / 1024 = 9000'],
+  toasts:[], tick:0,
+  scene:'desktop', lastCols:0, lastRows:0,
+  theme:'light'          /* DEFAULT IS PAPER. Ink is opt-in. */
+};
+const ATTN = {red:'--zd-red', green:'--zd-green', ochre:'--zd-ochre', ink:'--zd-ink-0'};
+
+/* ==========================================================================
+   4b. THE TWO LADDERS, as data for the specimen. Ratios are MEASURED, not
+       estimated: every number below came out of a WCAG 2.x relative-luminance
+       computation over these exact hexes, and every text token clears 4.5:1
+       on every surface it is allowed to sit on, in both modes.
+       Column 5/6 are the ratio against THAT MODE's sheet (PAPER_1), except
+       the four PAPER rows, which show the surface STEP against the sheet.
+       ========================================================================== */
+const LADDER = [
+  ['ZD_PAPER_0',   '#E9E4DB', '#16130D', 'ground / desk, top stop of the one gradient',  '1.123', '1.126', 'step'],
+  ['ZD_PAPER_0B',  '#E2DCD1', '#100D09', 'bottom stop. dither it or it bands',           '1.078', '1.046', 'step'],
+  ['ZD_PAPER_1',   '#F4F1EA', '#221F17', 'THE SHEET. window, rail, card, menu',          '-',     '-',     'base'],
+  ['ZD_PAPER_2',   '#FBFAF6', '#312C22', 'the well, and the mount lip',                  '1.080', '1.186', 'step'],
+  ['ZD_PAPER_3',   '#DED8CB', '#3A3429', 'the band. below the sheet there, above it here','1.259', '1.334', 'step'],
+  ['ZD_INK_0',     '#17150F', '#F3EFE7', 'display ink, focus rule, marks under 3 dp',    '16.18', '14.35', 'text'],
+  ['ZD_INK_1',     '#2E2A22', '#DDD5C6', 'body ink, meter and chart fills',              '12.66', '11.29', 'text'],
+  ['ZD_INK_2',     '#4A4438', '#BDB4A3', 'secondary, border on PAPER_0 / PAPER_3',       '8.56',  '8.01',  'text'],
+  ['ZD_INK_3',     '#5E5648', '#A99F8D', 'captions, column heads, marginalia, folio',    '6.42',  '6.29',  'text'],
+  ['ZD_INK_MUTE',  '#8E8674', '#726A5A', 'NON-TEXT and disabled labels only',            '3.20',  '3.07',  'nontext'],
+  ['ZD_RULE_HAIR', '#C2BAA8', '#514937', 'the 1 px hairline. dL* 19.5 vs 19.8',          '1.71',  '1.85',  'rule'],
+  ['ZD_RULE_MID',  '#A29A87', '#70654D', 'rank 2 keyline, popovers and menus',           '2.48',  '2.87',  'rule'],
+  ['ZD_RULE_CTRL', '#8A8270', '#877C64', 'interactive boundary. WCAG 1.4.11',            '3.38',  '3.99',  'rule'],
+  ['ZD_RED',       '#A3301B', '#DE8D7C', 'THE ONLY CHROMATIC INK. caret, fail',          '6.21',  '6.43',  'text'],
+  ['ZD_GREEN',     '#2E6A38', '#7BB584', 'state: healthy / running / pass',              '5.76',  '6.88',  'text'],
+  ['ZD_OCHRE',     '#7E5305', '#D1A654', 'state: warning / read-only / drift',           '5.95',  '7.28',  'text'],
+  ['ZD_KN_BG',     '#17150F', '#DDD5C6', 'knockout plate. INK_0 there, INK_1 here',      '16.18', '12.72', 'kn'],
+  ['ZD_KN_FG',     '#F4F1EA', '#16130D', 'knockout text, against that plate',            '16.18', '12.72', 'kn'],
+  ['ZD_RULE2',     '2 px',    '1 px',    'the INK_0 divider. halved: bright rules bloom', '-',    '-',     'len'],
+  ['ZD_FRAME',     '2 px',    '2 px',    'rank 3 keyline. kept: the scrim lost power',   '-',     '-',     'len']
+];
+/* The worst text pair in each mode, stated rather than buried, because it is the
+   number a gate would assert on. */
+const WORST = [
+  ['paper', 'ZD_INK_3 on ZD_PAPER_3', '5.10'],
+  ['ink',   'ZD_INK_3 on ZD_PAPER_3', '4.72']
+];
+
+/* ==========================================================================
+   5. GEOMETRY. The grid is the layout system, made visible.
+   ========================================================================== */
+function M(){
+  const ta = $('#ta').getBoundingClientRect();
+  const sc = S.scale;
+  const MG = Math.round(24 * sc), COL = Math.round((S.module - 16) * sc),
+        GUT = Math.round(16 * sc), MOD = COL + GUT, ROW = Math.round(28 * sc);
+  const inner = ta.width - 2 * MG;
+  const cols = Math.max(4, Math.floor((inner + GUT) / MOD));
+  const used = cols * MOD - GUT;
+  const ox = Math.floor((ta.width - used) / 2);
+  const rows = Math.max(6, Math.floor((ta.height - 2 * MG) / ROW));
+  return {w:ta.width, h:ta.height, MG, COL, GUT, MOD, ROW, cols, rows, ox, oy:MG};
+}
+function place(w){
+  const m = M();
+  const gw = Math.min(w.gw, m.cols), gh = Math.min(w.gh, m.rows);
+  const gx = clamp(w.gx, 0, m.cols - gw), gy = clamp(w.gy, 0, m.rows - gh);
+  if (w.max) return {x:m.ox, y:m.oy, w:m.cols * m.MOD - m.GUT, h:m.rows * m.ROW};
+  if (w.px != null) return {x:w.px, y:w.py, w:gw * m.MOD - m.GUT, h:gh * m.ROW};
+  return {x:m.ox + gx * m.MOD, y:m.oy + gy * m.ROW, w:gw * m.MOD - m.GUT, h:gh * m.ROW};
+}
+
+/* ==========================================================================
+   6. WINDOW MODEL
+   ========================================================================== */
+function openApp(app, opts){
+  const a = APPS[app]; if (!a) { toast('Index', 'ochre', esc(app) + ' is not in this build.'); return null; }
+  let w = S.wins.find(x => x.app === app);
+  if (w){ w.ws = S.ws; w.min = false; raise(w); return w; }
+  /* fresh:true is what arms ZD_MS_FADE. renderWins() reads w.fresh and clears it,
+     so the 120 ms fade plays exactly once, on the paint that puts the sheet on the
+     page. Nothing set it, so the token was declared, styled and never fired. */
+  w = Object.assign({
+    id:'w' + (S.seq++), app, name:a.name, sub:a.sub, gw:a.gw, gh:a.gh,
+    gx:2, gy:2, px:null, py:null, ws:S.ws, min:false, max:false, z:++S.zc,
+    unsaved:!!a.unsaved, fresh:true
+  }, opts || {});
+  S.wins.push(w); S.focus = w.id; render(); return w;
+}
+function raise(w){ w.z = ++S.zc; S.focus = w.id; render(); }
+function closeWin(w){
+  S.wins = S.wins.filter(x => x !== w);
+  const rest = S.wins.filter(x => x.ws === S.ws && !x.min).sort((a,b) => b.z - a.z);
+  S.focus = rest.length ? rest[0].id : null;
+  toast('Window closed', 'ink', w.name + ' left the folio. ' + S.wins.length + ' sheets remain.');
+  render();
+}
+function focused(){ return S.wins.find(w => w.id === S.focus) || null; }
+
+/* ==========================================================================
+   7. TOASTS
+   ========================================================================== */
+function toast(head, kind, body){
+  const t = {id:'t' + (S.seq++), head, kind, body, fresh:true};
+  S.toasts.push(t); if (S.toasts.length > 3) S.toasts.shift();
+  renderToasts();
+  setTimeout(() => { S.toasts = S.toasts.filter(x => x !== t); renderToasts(); }, 5200);
+}
+/* Same one-shot rule as a sheet: a toast fades in on the paint that puts it on the
+   page, and is simply there on every re-render after that. Re-arming it on each
+   render() would restart the fade under a mouse move, which is a flicker, not motion. */
+function renderToasts(){
+  const k = {ok:'g', warn:'o', fail:'r', ink:''};
+  $('#toasts').innerHTML = S.toasts.map(t => {
+    const fr = t.fresh ? ' fresh' : ''; t.fresh = false;
+    return '<div class="toast' + fr + '"><div class="th"><i class="dot ' + (k[t.kind] || '') + '"></i>' +
+    '<span class="r1">' + esc(t.head) + '</span></div><div class="hair"></div>' +
+    '<div class="tb2">' + t.body + '</div></div>';
+  }).join('');
+}
+
+/* ==========================================================================
+   8. APP BODIES. Every one of these is drawn in the direction:
+      rules not fills, R1 caps keys, mono for figures, radius 0.
+   ========================================================================== */
+const APPBODY = {};
+
+/* ---- zl shell ---- */
+APPBODY.term = () => {
+  const L = [
+    ['dim','zlOS 0.3  ' + String.fromCharCode(183) + '  zl shell  ' + String.fromCharCode(183) + '  41 built-ins, no libc'],
+    ['',''],
+    ['sec','zl@surface /kernel $ '], ['b','ls -l | grep "\\.c$" | wc -l'],
+    ['','12'],
+    ['sec','zl@surface /kernel $ '], ['b','make -j4'],
+    ['','  ZL   kernel.zl        51884 bytes  ->  build/kernel.o'],
+    ['','  CC   fb.c             41208 bytes  ->  build/fb.o'],
+    ['','  CC   intel.c          68420 bytes  ->  build/intel.o'],
+    ['','  CC   wm.c             22964 bytes  ->  build/wm.o'],
+    ['','  LD   zl.bin           412944 bytes'],
+    ['gr','  build ok, 12 objects, 2.418 s'],
+    ['sec','zl@surface /kernel $ '], ['b','wmshot -o /tmp/wmshot.ppm'],
+    ['','  composite 3.8 ms, write 11.2 ms, 9216000 bytes'],
+    ['sec','zl@surface /kernel $ '], ['b','grep -n ZD_INK_MUTE uikit.c'],
+    ['oc','  uikit.c:914:  /* ZD_INK_MUTE: non-text only */'],
+    ['sec','zl@surface /kernel $ '], ['caret','']
+  ];
+  let out = '';
+  L.forEach(([k, t]) => {
+    if (k === 'caret'){ out += '<span class="caret"></span>'; return; }
+    if (k === 'b'){ out += '<span class="kw">' + esc(t) + '</span>\n'; return; }
+    if (k === 'sec'){ out += '<span class="sec">' + esc(t) + '</span>'; return; }
+    out += (k ? '<span class="' + k + '">' + esc(t) + '</span>' : esc(t)) + '\n';
+  });
+  return '<div class="term-pane">' + out + '</div>';
+};
+
+/* ---- Files ---- */
+APPBODY.files = () => {
+  const rows = DIRS.map(d => ['dir', d, '', 'Folder', 'drwxr-xr-x', '14:22'])
+    .concat(TREE.map(f => ['doc', f[0], f[1], f[2], f[3], f[4]]));
+  return '<div class="tool"><span class="k">Path</span><span class="v">/kernel</span>' +
+    '<span class="rt"><span class="act">New</span><span class="act">Rename</span>' +
+    '<span class="act">Hex</span><span class="r1">' + rows.length + ' items</span></span></div>' +
+    '<div class="hair"></div>' +
+    '<div class="scrolly gut"><table class="tb"><colgroup><col><col style="width:14%"><col style="width:20%"><col style="width:20%"><col style="width:12%"></colgroup>' +
+    '<tr><th>Name</th><th class="n">Size</th><th>Type</th><th>Permissions</th><th class="n">Mtime</th></tr>' +
+    rows.map(r =>
+      '<tr class="' + (r[1] === S.sel ? 'sel' : '') + '" data-file="' + esc(r[1]) + '">' +
+      '<td><span class="fmark">' + ico(r[0], 12) + '</span>' + esc(r[1]) + '</td>' +
+      '<td class="n">' + (r[2] === '' ? '-' : r[2].toLocaleString('en-US')) + '</td>' +
+      '<td>' + esc(r[3]) + '</td><td class="m">' + esc(r[4]) + '</td>' +
+      '<td class="n">' + esc(r[5]) + '</td></tr>').join('') +
+    '</table><span class="sbar" style="top:12%;height:44%"></span></div>' +
+    '<div class="hair"></div>' +
+    '<div class="stat-bar"><span class="k">Selected</span><span class="v">' + esc(S.sel) + '</span>' +
+    '<span class="k">Free</span><span class="v">386.2 GiB</span>' +
+    '<span class="k">Fs</span><span class="v">zlfs rw</span></div>';
+};
+
+/* ---- System Monitor ---- */
+function spark(vals, w, h){
+  const mx = Math.max.apply(null, vals) || 1;
+  const pts = vals.map((v, i) => (i * (w / (vals.length - 1))).toFixed(1) + ',' + (h - v / mx * (h - 2)).toFixed(1)).join(' ');
+  return '<svg class="spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+    '<line x1="0" y1="' + (h - 0.5) + '" x2="' + w + '" y2="' + (h - 0.5) + '"/>' +
+    '<line x1="0" y1="0.5" x2="' + w + '" y2="0.5"/>' +
+    '<polyline points="' + pts + '"/></svg>';
+}
+function series(n, base, amp, s){
+  let z = s, out = [];
+  for (let i = 0; i < n; i++){ z = (z * 1103515245 + 12345) & 0x7fffffff; out.push(base + (z / 0x7fffffff) * amp); }
+  return out;
+}
+APPBODY.mon = () => {
+  const cpu = 34 + (S.tick % 5), mem = 61 + (S.tick % 3);
+  return '<div class="pad" style="padding-bottom:0">' +
+    '<div class="stats">' +
+    stat('CPU', cpu, '%', cpu) + stat('MEM', mem, '%', mem) +
+    stat('Composite', '3.8', 'MS', 38) + stat('Sheets', S.wins.length, '', 20) +
+    '</div></div>' +
+    '<div class="pad" style="padding-top:16px;padding-bottom:0">' +
+    '<div class="r1">CPU 0-7 &middot; 60 s &middot; 100 Hz tick</div>' +
+    spark(series(60, 18, 46, 991 + S.tick), 240, 44) +
+    '</div>' +
+    '<div class="scrolly gut" style="margin-top:12px">' +
+    '<table class="tb"><colgroup><col style="width:12%"><col><col style="width:18%"><col style="width:16%"><col style="width:20%"></colgroup>' +
+    '<tr><th class="n">PID</th><th>Command</th><th>State</th><th class="n">CPU %</th><th class="n">RSS KiB</th></tr>' +
+    PROCS.map(p =>
+      '<tr><td class="n">' + p[0] + '</td><td>' + esc(p[1]) + '</td>' +
+      '<td><span class="r1 ' + (p[2] === 'run' ? 'gr' : p[2] === 'wait' ? 'oc' : '') + '">' + p[2] + '</span></td>' +
+      '<td class="n">' + p[3].toFixed(1) + '</td><td class="n">' + p[4].toLocaleString('en-US') + '</td></tr>').join('') +
+    '</table>' +
+    '<div class="pad" style="padding-bottom:0"><div class="r1">Per core &middot; 8 threads</div>' +
+    '<div class="hair" style="margin-top:4px"></div>' +
+    '<div style="display:flex;flex-wrap:wrap;margin-top:8px">' +
+    [0,1,2,3,4,5,6,7].map(i => {
+      const v = [61,44,38,29,22,17,9,4][i] + ((S.tick + i) % 6);
+      return '<div style="width:25%;padding-right:calc(12 * var(--zd-u));margin-bottom:calc(8 * var(--zd-u))">' +
+        '<div style="display:flex;justify-content:space-between"><span class="r1">cpu' + i + '</span>' +
+        '<span class="mn" style="font-size:var(--zd-r1);color:var(--zd-ink-1)">' + v + '%</span></div>' +
+        '<div class="meter" style="margin-top:3px"><i style="width:' + v + '%"></i></div></div>';
+    }).join('') + '</div>' +
+    '<div class="r1" style="margin-top:6px">Memory &middot; 15.5 GiB, no allocator</div>' +
+    '<div class="hair" style="margin-top:4px"></div>' +
+    [['kernel image','412,944 B'],['framebuffer','9,216,000 B'],['font atlases','742,118 B'],
+     ['stacks (8)','2,097,152 B'],['drag buffers','167,772,160 B'],['heap','none']].map(r =>
+      '<div class="dl"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>').join('') +
+    '</div><span class="sbar" style="top:4%;height:38%"></span></div>' +
+    /* a short sheet used to end on a half-cut table row against bare page edge.
+       A status line closes the sheet on a rule, and the thumb says there is more. */
+    '<div class="hair"></div>' +
+    '<div class="stat-bar"><span class="k">Tick</span><span class="v">100 Hz</span>' +
+    '<span class="k">Procs</span><span class="v">' + PROCS.length + '</span>' +
+    '<span class="k">Sched</span><span class="v">round robin</span></div>';
+};
+function stat(k, v, u, pct){
+  return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v +
+    (u ? '<span class="u">' + u + '</span>' : '') + '</div>' +
+    '<div class="meter"><i style="width:' + clamp(pct, 0, 100) + '%"></i></div></div>';
+}
+
+/* ---- Text Editor ---- */
+APPBODY.edit = () => {
+  const body = SRC[S.doc] || ('/* ' + S.doc + ' */\n/* no text preview: this node is binary. */\n');
+  const lines = body.split('\n');
+  const gut = lines.map((_, i) => pad(i + 1, 4)).join('\n');
+  const txt = lines.map(l => {
+    let h = esc(l);
+    h = h.replace(/(\/\*[\s\S]*?\*\/|\/\/.*$|^#.*$)/, '<span class="cm">$1</span>');
+    h = h.replace(/\b(static|inline|void|int|return|if|for|while|const|struct|fn|let|define|include|u32|u8)\b/g, '<span class="kw">$1</span>');
+    h = h.replace(/(&quot;[^&]*?&quot;)/g, '<span class="st2">$1</span>');
+    return h;
+  }).join('\n');
+  return '<div class="tool"><span class="k">File</span><span class="v">/kernel/' + esc(S.doc) + '</span>' +
+    '<span class="rt"><span class="act">Save</span><span class="act">Reload</span>' +
+    '<span class="r1">' + lines.length + ' lines</span></span></div><div class="hair"></div>' +
+    '<div class="scrolly"><div class="ed"><div class="gut">' + gut + '</div>' +
+    '<div class="txt"><div class="ruler" style="left:' + (80 * 7.2 * S.scale) + 'px"></div>' + txt + '<span class="caret"></span></div></div></div>' +
+    '<div class="hair"></div><div class="stat-bar">' +
+    '<span class="k">Ln</span><span class="v">' + lines.length + '</span>' +
+    '<span class="k">Col</span><span class="v">18</span>' +
+    '<span class="k">Enc</span><span class="v">utf-8</span>' +
+    '<span class="k">Eol</span><span class="v">lf</span>' +
+    '<span class="k">Mode</span><span class="v">' + (S.doc.endsWith('.zl') ? 'zl' : 'c') + '</span>' +
+    '<span class="r1 rd" style="margin-left:auto">Unsaved</span></div>';
+};
+
+/* ---- Kernel Log ---- */
+APPBODY.log = () => {
+  const tag = {ok:'gr', warn:'oc', fail:'rd'};
+  return '<div class="tool"><span class="k">Source</span><span class="v">/dev/kmsg</span>' +
+    '<span class="rt"><span class="act">Follow</span><span class="act">Clear</span>' +
+    '<span class="r1">' + KLOG.length + ' records</span></span></div><div class="hair"></div>' +
+    '<div class="scrolly gut"><table class="tb"><colgroup><col style="width:16%"><col style="width:11%"><col></colgroup>' +
+    '<tr><th class="n">Uptime</th><th>Level</th><th>Message</th></tr>' +
+    KLOG.map(r =>
+      '<tr><td class="n dim">' + r[0] + '</td>' +
+      '<td><span class="r1 ' + tag[r[1]] + '">' + r[1] + '</span></td>' +
+      '<td class="m">' + esc(r[2]) + '</td></tr>').join('') +
+    '</table><span class="sbar" style="top:8%;height:52%"></span></div>';
+};
+
+/* ---- Hex Viewer ---- */
+APPBODY.hexv = () => {
+  seed = 771102;
+  const bytes = [];
+  for (let i = 0; i < 24 * 16; i++) bytes.push(Math.floor(rnd() * 256));
+  const seedTxt = 'zlOS 0.3 no libc no heap no float ' + 'ELF64 x86_64 static ';
+  for (let i = 0; i < seedTxt.length; i++) bytes[80 + i] = seedTxt.charCodeAt(i);
+  let out = '';
+  for (let r = 0; r < 24; r++){
+    const off = 0x00108000 + r * 16;
+    let h = '', a = '';
+    for (let c = 0; c < 16; c++){
+      const b = bytes[r * 16 + c];
+      const isSel = (r * 16 + c) >= 80 && (r * 16 + c) < 96;
+      const hh = hex(b, 2);
+      h += (isSel ? '<b>' + hh + '</b>' : hh) + (c === 7 ? '  ' : ' ');
+      const ch = (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+      a += isSel ? '<b>' + esc(ch) + '</b>' : esc(ch);
+    }
+    out += '<span class="off">' + hex(off, 8) + '</span>  ' + h + ' ' + a + '\n';
+  }
+  return '<div class="tool"><span class="k">Node</span><span class="v">/kernel/zl.bin</span>' +
+    '<span class="rt"><span class="act">Goto</span><span class="act">Find</span>' +
+    '<span class="r1">412944 bytes</span></span></div><div class="hair"></div>' +
+    '<div class="scrolly"><div class="pad hexpane" style="padding-top:12px">' + out + '</div></div>' +
+    '<div class="hair"></div><div class="stat-bar">' +
+    '<span class="k">Offset</span><span class="v">0x00108050</span>' +
+    '<span class="k">Sel</span><span class="v">16 bytes</span>' +
+    '<span class="k">Base</span><span class="v">hex</span>' +
+    '<span class="k">Mode</span><span class="v">read only</span></div>';
+};
+
+/* ---- Calculator ---- */
+APPBODY.calc = () => {
+  const keys = ['hex','dec','bin','C', '7','8','9','/', '4','5','6','*', '1','2','3','-', '0','.','<<','+'];
+  return '<div class="pad" style="padding-bottom:0">' +
+    '<div class="r1">Tape</div>' +
+    '<div class="well" style="margin-top:6px;line-height:15px">' +
+    S.calcTape.map(esc).join('\n') + '</div>' +
+    '<div class="r1" style="margin-top:14px">Accumulator</div>' +
+    '<div class="r4 mn" style="text-align:right;margin-top:2px;font-size:calc(24 * var(--zd-u))">' + esc(S.calcAcc) + '</div>' +
+    '<div class="hair" style="margin-top:8px"></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:6px">' +
+    '<span class="r1">hex</span><span class="mn" style="font-size:var(--zd-r2)">0x' + hex(parseInt(String(S.calcAcc).replace(/[^0-9]/g,''), 10) || 0, 8) + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-top:2px">' +
+    '<span class="r1">bin</span><span class="mn dim" style="font-size:var(--zd-r1)">' +
+    ((parseInt(String(S.calcAcc).replace(/[^0-9]/g,''), 10) || 0) >>> 0).toString(2).padStart(32, '0').replace(/(.{8})/g, '$1 ').trim() + '</span></div>' +
+    '</div>' +
+    '<div class="pad" style="padding-top:14px"><div class="calcgrid">' +
+    keys.map(k => '<span class="ck ' + (/[\/*\-+]|<</.test(k) ? 'op' : '') + '" data-ck="' + esc(k) + '">' + esc(k) + '</span>').join('') +
+    '<span class="ck op" data-ck="%" style="grid-column:span 1">%</span>' +
+    '<span class="ck eq" data-ck="=" style="grid-column:span 3">=</span>' +
+    '</div></div>';
+};
+
+/* ---- Network ---- */
+APPBODY.net = () => {
+  const rx = 118 + (S.tick % 7), tx = 96 + (S.tick % 4);
+  return '<div class="pad" style="padding-bottom:0"><div class="stats">' +
+    stat('RX', rx, 'KB/S', rx / 3) + stat('TX', tx, 'KB/S', tx / 3) +
+    stat('RTT', '0.42', 'MS', 12) + stat('Loss', '0.0', '%', 1) +
+    '</div>' +
+    '<div class="r1" style="margin-top:14px">eth0 throughput &middot; 60 s</div>' +
+    spark(series(60, 30, 60, 4471 + S.tick), 240, 44) + '</div>' +
+    '<div class="scrolly" style="margin-top:10px">' +
+    '<table class="tb"><colgroup><col style="width:14%"><col style="width:16%"><col style="width:12%"><col><col style="width:14%"></colgroup>' +
+    '<tr><th>Iface</th><th>Driver</th><th>Link</th><th>Address</th><th class="n">MTU</th></tr>' +
+    IFACES.map(i =>
+      '<tr><td>' + esc(i[0]) + '</td><td class="m">' + esc(i[1]) + '</td>' +
+      '<td><span class="r1 ' + (i[2] === 'UP' ? 'gr' : 'oc') + '">' + i[2] + '</span></td>' +
+      '<td class="m">' + esc(i[3]) + '</td><td class="n">' + i[5] + '</td></tr>').join('') +
+    '</table>' +
+    '<div class="pad" style="padding-bottom:0"><div class="r1">Sockets</div></div>' +
+    '<table class="tb" style="margin-top:4px"><colgroup><col style="width:10%"><col style="width:28%"><col style="width:28%"><col><col style="width:16%"></colgroup>' +
+    '<tr><th>Proto</th><th>Local</th><th>Peer</th><th>State</th><th>Owner</th></tr>' +
+    SOCKS.map(s =>
+      '<tr><td class="m">' + esc(s[0]) + '</td><td class="m">' + esc(s[1]) + '</td>' +
+      '<td class="m">' + esc(s[2]) + '</td><td><span class="r1">' + esc(s[3]) + '</span></td>' +
+      '<td>' + esc(s[4]) + '</td></tr>').join('') +
+    '</table>' +
+    '<div class="pad" style="padding-bottom:0"><div class="r1">Routes</div></div>' +
+    '<table class="tb" style="margin-top:4px"><colgroup><col style="width:30%"><col style="width:26%"><col style="width:18%"><col class="n"></colgroup>' +
+    '<tr><th>Destination</th><th>Gateway</th><th>Iface</th><th class="n">Metric</th></tr>' +
+    ROUTES.map(r => '<tr><td class="m">' + esc(r[0]) + '</td><td class="m">' + esc(r[1]) + '</td>' +
+      '<td>' + esc(r[2]) + '</td><td class="n">' + r[3] + '</td></tr>').join('') +
+    '</table>' +
+    '<div class="pad" style="padding-bottom:0"><div class="r1">eth0 counters</div>' +
+    '<div class="hair" style="margin-top:4px"></div>' +
+    [['rx packets','118,422'],['tx packets','96,104'],['rx bytes','142,881,204'],['tx bytes','38,110,772'],
+     ['errors','0'],['dropped','0'],['collisions','0'],['irq','16, msi-x 3 vectors']].map(r =>
+      '<div class="dl"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>').join('') +
+    '</div></div>';
+};
+
+/* ---- Clocks ---- */
+function faceSVG(mins){
+  const d = new Date(Date.now() + mins * 60000);
+  const h = d.getHours() % 12, m = d.getMinutes(), s = d.getSeconds();
+  const P = (ang, r) => [40 + Math.sin(ang) * r, 40 - Math.cos(ang) * r];
+  const ha = (h + m / 60) / 12 * Math.PI * 2, ma = m / 60 * Math.PI * 2, sa = s / 60 * Math.PI * 2;
+  let ticks = '';
+  for (let i = 0; i < 12; i++){
+    const a = i / 12 * Math.PI * 2, p1 = P(a, 32), p2 = P(a, i % 3 === 0 ? 26 : 29);
+    ticks += '<line class="tick" x1="' + p1[0].toFixed(1) + '" y1="' + p1[1].toFixed(1) + '" x2="' + p2[0].toFixed(1) + '" y2="' + p2[1].toFixed(1) + '"/>';
+  }
+  const hp = P(ha, 18), mp = P(ma, 27), sp = P(sa, 29);
+  return '<svg class="face" width="80" height="80" viewBox="0 0 80 80">' +
+    '<circle class="rim" cx="40" cy="40" r="34"/>' + ticks +
+    '<line class="hh" x1="40" y1="40" x2="' + hp[0].toFixed(1) + '" y2="' + hp[1].toFixed(1) + '"/>' +
+    '<line class="mh" x1="40" y1="40" x2="' + mp[0].toFixed(1) + '" y2="' + mp[1].toFixed(1) + '"/>' +
+    '<line class="sh" x1="40" y1="40" x2="' + sp[0].toFixed(1) + '" y2="' + sp[1].toFixed(1) + '"/></svg>';
+}
+APPBODY.clock = () => {
+  const now = Date.now();
+  const cells = CLOCKS.map(c => {
+    const d = new Date(now + c[2] * 60000);
+    const t = pad(d.getHours(), 2, '0') + ':' + pad(d.getMinutes(), 2, '0');
+    return '<div style="flex:1 1 40%;min-width:calc(120 * var(--zd-u))">' +
+      '<div class="r1">' + esc(c[0]) + ' &middot; ' + esc(c[1]) + '</div>' +
+      '<div style="display:flex;align-items:center;gap:calc(12 * var(--zd-u));margin-top:4px">' +
+      faceSVG(c[2]) +
+      '<div><div class="r4 mn">' + t + '</div>' +
+      '<div class="r1" style="margin-top:2px">' + pad(d.getSeconds(), 2, '0') + ' s</div></div></div></div>';
+  }).join('');
+  return '<div class="pad" style="padding-bottom:0"><div style="display:flex;flex-wrap:wrap;gap:calc(18 * var(--zd-u))">' + cells + '</div></div>' +
+    '<div class="pad" style="padding-top:16px;padding-bottom:0"><div class="r1">Timers hung off the 100 Hz tick</div>' +
+    '<div class="hair" style="margin-top:4px"></div>' +
+    ['tick', 'wm composite', 'zlfs journal', 'hid poll', 'sched quantum'].map((n, i) =>
+      '<div class="dl"><span class="k">' + n + '</span><span class="v">' +
+      ['10.000 ms', '16.667 ms', '5.000 s', '8.000 ms', '10.000 ms'][i] + '</span></div>').join('') +
+    '</div>';
+};
+
+/* ---- System Info ---- */
+APPBODY.sys = () => {
+  const rows = [
+    ['machine', 'Latitude 7490, 1 socket'],
+    ['cpu', 'i5-8350U, 4 core, 8 thread'],
+    ['clock', '1.70 GHz base, 3.60 boost'],
+    ['memory', '15.5 GiB, no allocator'],
+    ['display', 'gen9, eDP-1, 1920x1200'],
+    ['pixel clock', '241690 kHz, 59.998 Hz'],
+    ['framebuffer', '0x90000000, pitch 7680'],
+    ['storage', 'nvme0n1, 512 GB, zlfs'],
+    ['input', 'xhci boot kbd + mouse'],
+    ['fonts', 'prop 16/24/32, mono 16/24'],
+    ['language', 'zl, self hosting'],
+    ['lines', '128,412 hand written'],
+    ['libc', 'none'],
+    ['heap', 'none'],
+    ['float', 'none']
+  ];
+  return '<div class="pad" style="padding-bottom:0">' +
+    '<div class="r4">zlOS 0.3</div>' +
+    '<div class="r2 sec" style="margin-top:6px;max-width:52ch">An operating system, a window manager and a language, written by one person. Every pixel on this screen was drawn by the CPU into one linear framebuffer.</div>' +
+    '<div class="rule2" style="margin-top:14px"></div></div>' +
+    '<div class="scrolly"><div class="pad" style="padding-top:8px">' +
+    rows.map(r => '<div class="dl"><span class="k">' + r[0] + '</span><span class="v">' + esc(r[1]) + '</span></div>').join('') +
+    '</div></div>' +
+    '<div class="pad" style="padding-top:12px"><div class="btnrow">' +
+    '<span class="btn tall">Copy report</span><span class="btn tall pri" data-act="about-ok">Close</span></div></div>';
+};
+
+/* ---- Settings ---- */
+APPBODY.set = () => {
+  const seg = (name, opts, cur) => '<div class="seg">' + opts.map(o =>
+    '<span class="' + (o[0] === cur ? 'on' : '') + '" data-seg="' + name + '" data-v="' + o[0] + '">' + o[1] + '</span>').join('') + '</div>';
+  const tgl = (name, on) => '<span class="tgl ' + (on ? 'on' : '') + '" data-tgl="' + name + '"><b></b></span>';
+  const sld = (name, v, min, max) => {
+    const p = (v - min) / (max - min) * 100;
+    return '<span class="sld" data-sld="' + name + '" data-min="' + min + '" data-max="' + max + '">' +
+      '<i style="width:' + p + '%"></i><b style="left:' + p + '%"></b></span>';
+  };
+  return '<div class="scrolly"><div class="pad">' +
+    '<div class="r1">Attention ink</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div class="r2 sec" style="margin:8px 0 10px;max-width:56ch">There is no accent. One chromatic ink carries every attention signal in the system, and it never fills more than 3 dp. Changing it repoints one token.</div>' +
+    seg('attn', [['red','Oxide'],['ochre','Ochre'],['green','Bottle'],['ink','None']], S.attn) +
+    '<div style="display:flex;gap:calc(20 * var(--zd-u));margin-top:12px;align-items:center">' +
+    '<span class="r1">Sample</span><span class="mn" style="font-size:var(--zd-r2)">caret</span><span class="caret"></span>' +
+    '<span class="r1 rd">FAIL</span><i class="dot r"></i>' +
+    '<span class="r1 dim">the word carries the state as well as the ink</span></div>' +
+
+    '<div class="r1" style="margin-top:22px">Measure</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div class="field" style="margin-top:6px"><span class="lb">UI scale</span>' + sld('scale', S.scale, 0.8, 1.35) +
+    '<span class="nm2">' + Math.round(S.scale * 100) + '%</span></div>' +
+    '<div class="field"><span class="lb">Column module</span>' + sld('module', S.module, 56, 88) +
+    '<span class="nm2">' + S.module + 'dp</span></div>' +
+    '<div class="r1 dim" style="margin-top:2px">The module is the column plus its gutter. Widening it re-lays the grid and every sheet snapped to it.</div>' +
+
+    '<div class="r1" style="margin-top:22px">The page</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div class="field" style="margin-top:6px"><span class="lb">Column grid</span>' + tgl('gridOn', S.gridOn) +
+    '<span class="st">' + (S.gridOn ? 'On' : 'Off') + '</span>' +
+    '<span class="r1 dim">the wallpaper is the layout system</span></div>' +
+    '<div class="field"><span class="lb">Snap to columns</span>' + tgl('snap', S.snap) +
+    '<span class="st">' + (S.snap ? 'On' : 'Off') + '</span>' +
+    '<span class="r1 dim">a guide, not a jail</span></div>' +
+    '<div class="field"><span class="lb">Marginalia</span>' + tgl('margOn', S.margOn) +
+    '<span class="st">' + (S.margOn ? 'On' : 'Off') + '</span>' +
+    '<span class="r1 dim">tabular figures at the foot of the rail</span></div>' +
+    '<div class="field"><span class="lb">Subpixel filter</span>' + tgl('sub', S.sub) +
+    '<span class="st">' + (S.sub ? 'On' : 'Off') + '</span>' +
+    '<span class="r1 dim">5-tap FIR, three alphas per pixel</span></div>' +
+
+    '<div class="r1" style="margin-top:22px">Ladder</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div style="display:flex;margin-top:8px;border:1px solid var(--zd-rule-hair)">' +
+    ['--zd-paper-0','--zd-paper-1','--zd-paper-2','--zd-paper-3','--zd-ink-3','--zd-ink-2','--zd-ink-1','--zd-ink-0'].map(t =>
+      /* Every rung needs its own hairline. PAPER_1 on a PAPER_1 sheet is a 1.00:1
+         rung and it was reading as a hole in the middle of the ladder. */
+      '<i style="flex:1;height:calc(20 * var(--zd-u));background:var(' + t + ');' +
+      'box-shadow:inset -1px 0 0 0 var(--zd-rule-hair)"></i>').join('') +
+    '</div>' +
+    '<div class="r1 dim" style="margin-top:6px">Four paper rungs, four ink rungs, one ladder, no per-surface inversion. ' +
+      'This strip is the stock you are reading now.</div>' +
+    /* THE OTHER STOCK, drawn from --zd-alt-*, so both ladders are on the page at
+       once and the hex never leaves the :root blocks. */
+    '<div style="display:flex;margin-top:10px;border:1px solid var(--zd-rule-hair)">' +
+    ['--zd-alt-paper-0','--zd-alt-paper-1','--zd-alt-paper-2','--zd-alt-paper-3',
+     '--zd-alt-ink-3','--zd-alt-ink-2','--zd-alt-ink-1','--zd-alt-ink-0'].map(t =>
+      '<i style="flex:1;height:calc(20 * var(--zd-u));background:var(' + t + ');' +
+      'box-shadow:inset -1px 0 0 0 var(--zd-rule-hair)"></i>').join('') +
+    '</div>' +
+    '<div class="r1 dim" style="margin-top:6px">And this is the other one. Same eight rungs, same hue axis, ' +
+      'placed by target L* and then measured.</div>' +
+
+    /* THE REGISTERS STAY ABOVE THE FOLD. The second ladder strip and the two-stock
+       token table added roughly 260 dp to this panel, which pushed the four type
+       registers off the bottom of a sheet that used to end on them. They are the
+       proof of the one claim the whole direction rests on - hierarchy is case,
+       weight, scale and air, never hue - so they are what the panel opens on in
+       both stocks; the measurement tables scroll. */
+    '<div class="r1" style="margin-top:22px">Registers</div><div class="hair" style="margin-top:4px"></div>' +
+    [['R1','Folio','8 dp / 16 device &middot; regular &middot; caps, +8% tracked',
+      '<span class="r1">column heads, marginalia, letter runs</span>'],
+     ['R2','Body','12 dp / 24 device &middot; regular',
+      '<span class="r2">everything read continuously</span>'],
+     ['R3','Strong','12 dp / 24 device &middot; bold',
+      '<span class="r3">selected row, focused title, button</span>'],
+     ['R4','Lead','16 dp / 32 device &middot; bold',
+      '<span class="r4">stat values and mastheads</span>']].map(r =>
+      '<div style="display:flex;align-items:baseline;gap:calc(12 * var(--zd-u));height:calc(26 * var(--zd-u));border-bottom:1px solid var(--zd-rule-hair)">' +
+      '<span class="mn" style="font-size:var(--zd-r1);color:var(--zd-ink-3);width:calc(18 * var(--zd-u));flex:none">' + r[0] + '</span>' +
+      '<span class="r1" style="width:calc(46 * var(--zd-u));flex:none">' + r[1] + '</span>' +
+      '<span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap">' + r[3] + '</span>' +
+      '<span class="r1 dim" style="flex:none">' + r[2] + '</span></div>').join('') +
+    '<div class="r1 dim" style="margin-top:6px">Three sizes, two weights. Hierarchy is case, weight, scale and air, never hue.</div>' +
+
+    '<div class="r1" style="margin-top:22px">Both stocks &middot; token, hex, role, measured ratio</div>' +
+    '<div class="hair" style="margin-top:4px"></div>' +
+    '<table class="tb" style="margin-top:8px">' +
+    '<colgroup><col style="width:19%"><col style="width:12.5%"><col style="width:12.5%"><col><col style="width:8.5%"><col style="width:8.5%"></colgroup>' +
+    '<tr><th>Token</th><th>Paper</th><th>Ink</th><th>Role</th>' +
+    '<th class="n">Paper</th><th class="n">Ink</th></tr>' +
+    LADDER.map(r =>
+      '<tr class="' + (r[6] === 'kn' ? 'sel' : '') + '">' +
+      '<td class="m">' + esc(r[0]) + '</td>' +
+      '<td class="m"><i style="display:inline-block;width:calc(9 * var(--zd-u));height:calc(9 * var(--zd-u));' +
+        'vertical-align:-1px;margin-right:calc(5 * var(--zd-u));' +
+        (r[6] === 'len' ? 'background:none;border:0' :
+          'background:' + (S.theme === 'dark' ? 'var(--zd-alt-' : 'var(--zd-') + tokvar(r[0]) + ');' +
+          'box-shadow:inset 0 0 0 1px var(--zd-rule-hair)') + '"></i>' + esc(r[1]) + '</td>' +
+      '<td class="m"><i style="display:inline-block;width:calc(9 * var(--zd-u));height:calc(9 * var(--zd-u));' +
+        'vertical-align:-1px;margin-right:calc(5 * var(--zd-u));' +
+        (r[6] === 'len' ? 'background:none;border:0' :
+          'background:' + (S.theme === 'dark' ? 'var(--zd-' : 'var(--zd-alt-') + tokvar(r[0]) + ');' +
+          'box-shadow:inset 0 0 0 1px var(--zd-rule-hair)') + '"></i>' + esc(r[2]) + '</td>' +
+      '<td>' + esc(r[3]) + '</td>' +
+      '<td class="n">' + r[4] + '</td><td class="n">' + r[5] + '</td></tr>').join('') +
+    '</table>' +
+    '<div class="r1 dim" style="margin-top:6px;white-space:normal;max-width:88ch;line-height:calc(12 * var(--zd-u))">' +
+      'Body text 4.5:1 minimum, large text 3:1. The four PAPER rows show the surface STEP against the sheet, ' +
+      'not a text ratio; INK_MUTE and the three rules are non-text by rule.</div>' +
+    '<div style="display:flex;gap:calc(24 * var(--zd-u));margin-top:10px">' +
+    WORST.map(w => '<div><div class="r1">Worst text pair &middot; ' + w[0] + '</div>' +
+      '<div class="r2" style="margin-top:2px">' + esc(w[1]) + ' <b class="mn">' + w[2] + ':1</b></div></div>').join('') +
+    '</div>' +
+    '<div class="r1" style="margin-top:22px">Value steps</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div class="dl" style="margin-top:6px"><span class="k">Paper</span><span class="v">13 distinct achromatic values</span></div>' +
+    '<div class="dl"><span class="k">Ink</span><span class="v">13 distinct achromatic values</span></div>' +
+    '<div class="r1 dim" style="margin-top:6px;white-space:normal;max-width:88ch;line-height:calc(12 * var(--zd-u))">' +
+      'The ladder did not compress. What moved is where the range is spent: the sheet-to-well step doubled, ' +
+      '3.1 dL* to 6.4, because on ink the mount lip has to do work the hairline did alone on paper.</div>' +
+    /* The panel ran out of content two thirds of the way down a full-height sheet.
+       The four registers are the thing every other decision here rests on, so
+       they are what goes in the hole. */
+    '<div class="r1" style="margin-top:22px">Registers</div><div class="hair" style="margin-top:4px"></div>' +
+    [['R1','Folio','8 dp / 16 device &middot; regular &middot; caps, +8% tracked',
+      '<span class="r1">column heads, marginalia, letter runs</span>'],
+     ['R2','Body','12 dp / 24 device &middot; regular',
+      '<span class="r2">everything read continuously</span>'],
+     ['R3','Strong','12 dp / 24 device &middot; bold',
+      '<span class="r3">selected row, focused title, button</span>'],
+     ['R4','Lead','16 dp / 32 device &middot; bold',
+      '<span class="r4">stat values and mastheads</span>']].map(r =>
+      '<div style="display:flex;align-items:baseline;gap:calc(12 * var(--zd-u));height:calc(26 * var(--zd-u));border-bottom:1px solid var(--zd-rule-hair)">' +
+      '<span class="mn" style="font-size:var(--zd-r1);color:var(--zd-ink-3);width:calc(18 * var(--zd-u));flex:none">' + r[0] + '</span>' +
+      '<span class="r1" style="width:calc(46 * var(--zd-u));flex:none">' + r[1] + '</span>' +
+      '<span style="flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap">' + r[3] + '</span>' +
+      '<span class="r1 dim" style="flex:none">' + r[2] + '</span></div>').join('') +
+    '<div class="r1 dim" style="margin-top:6px">Three sizes, two weights. Hierarchy is case, weight, scale and air &mdash; never hue.</div>' +
+    '</div></div>' +
+    '<div class="hair"></div><div class="stat-bar">' +
+    '<span class="k">Tokens</span><span class="v">design.h</span>' +
+    '<span class="k">Roles</span><span class="v">ui.c</span>' +
+    '<span class="k">Call sites</span><span class="v">unchanged</span></div>';
+};
+
+/* ---- Disk Usage ---- */
+APPBODY.disk = () => {
+  const total = DISKROWS.reduce((a, r) => a + r[1], 0);
+  const blocks = 420;
+  let bl = '';
+  for (let i = 0; i < blocks; i++){
+    const k = i < 214 ? 'u' : i < 238 ? 'w' : '';
+    bl += '<i class="' + k + '"></i>';
+  }
+  return '<div class="tool"><span class="k">Volume</span><span class="v">/dev/nvme0n1p2</span>' +
+    '<span class="rt"><span class="act">Rescan</span><span class="r1">zlfs</span></span></div><div class="hair"></div>' +
+    '<div class="pad" style="padding-bottom:0"><div class="stats">' +
+    stat('Used', '113.8', 'GIB', 24) + stat('Free', '386.2', 'GIB', 76) +
+    stat('Nodes', '118', '', 12) + stat('Extents', '2,904', '', 30) +
+    '</div></div>' +
+    '<div class="pad" style="padding-top:14px;padding-bottom:0"><div class="r1">Allocation map &middot; 1 cell = 256 MiB</div>' +
+    '<div class="blocks" style="margin-top:6px">' + bl + '</div>' +
+    '<div style="display:flex;gap:calc(16 * var(--zd-u));margin-top:6px">' +
+    '<span class="r1"><i class="dot" style="display:inline-block;margin-right:4px"></i>allocated</span>' +
+    '<span class="r1"><i class="dot o" style="display:inline-block;margin-right:4px"></i>journal</span>' +
+    '<span class="r1 dim">free</span></div></div>' +
+    '<div class="scrolly" style="margin-top:12px"><table class="tb">' +
+    '<colgroup><col style="width:26%"><col style="width:16%"><col style="width:14%"><col></colgroup>' +
+    '<tr><th>Path</th><th class="n">Bytes</th><th>Kind</th><th>Share</th></tr>' +
+    DISKROWS.map(r =>
+      '<tr><td class="m">' + esc(r[0]) + '</td><td class="n">' + r[1].toLocaleString('en-US') + '</td>' +
+      '<td><span class="r1">' + r[2] + '</span></td>' +
+      '<td><span class="rulebar" style="display:block;width:' + (r[1] / total * 100).toFixed(1) + '%"></span></td></tr>').join('') +
+    '</table></div>';
+};
+
+/* ---- Registers ---- */
+APPBODY.regs = () => {
+  const bits = ['31 ENABLE','30 GAMMA','29 INTERLACE','28 DITHER','27 BPC[2]','26 BPC[1]','25 BPC[0]','24 RSVD'];
+  return '<div class="tool"><span class="k">Device</span><span class="v">0000:00:02.0</span>' +
+    '<span class="k">Bar</span><span class="v">0xDE000000 +16 MiB</span>' +
+    '<span class="rt"><span class="act">Read</span><span class="act">Watch</span>' +
+    '<span class="r1">' + REGS.length + ' registers</span></span></div><div class="hair"></div>' +
+    '<div class="scrolly"><table class="tb">' +
+    '<colgroup><col style="width:16%"><col style="width:24%"><col style="width:18%"><col></colgroup>' +
+    '<tr><th class="n">Offset</th><th>Name</th><th class="n">Value</th><th>Decoded</th></tr>' +
+    REGS.map(r =>
+      '<tr class="' + (r[1] === 'PIPE_A_CONF' ? 'sel' : '') + '"><td class="n dim">' + r[0] + '</td>' +
+      '<td class="m">' + esc(r[1]) + '</td><td class="n">' + r[2] + '</td>' +
+      '<td>' + esc(r[3]) + '</td></tr>').join('') +
+    '</table>' +
+    '<div class="pad" style="padding-bottom:0"><div class="r1">PIPE_A_CONF bit field &middot; 0x80000000</div>' +
+    '<div class="hair" style="margin-top:4px"></div>' +
+    '<div style="display:flex;flex-wrap:wrap;margin-top:8px">' +
+    bits.map((b, i) => '<div style="width:25%;padding:2px 0"><span class="mn" style="font-size:var(--zd-r2);color:var(--zd-ink-0)">' +
+      (i === 0 ? '1' : '0') + '</span> <span class="r1">' + b + '</span></div>').join('') +
+    '</div></div></div>' +
+    '<div class="hair"></div><div class="stat-bar">' +
+    '<span class="k">Access</span><span class="v">mmio 32-bit</span>' +
+    '<span class="k">Fence</span><span class="v">posting read</span>' +
+    '<span class="k">Source</span><span class="v">intel.c:2214</span></div>';
+};
+
+/* ---- Manual ---- */
+APPBODY.man = () => {
+  return '<div class="tool"><span class="k">Page</span><span class="v">fb_text_rich(3)</span>' +
+    '<span class="rt"><span class="act">Index</span><span class="act">Search</span>' +
+    '<span class="r1">section 3</span></span></div><div class="hair"></div>' +
+    '<div class="scrolly"><div class="pad manbody">' +
+    '<div class="r4">FB_TEXT_RICH(3)</div>' +
+    '<h4>Name</h4><p>fb_text_rich - draw a run of proportional text with per-glyph advances</p>' +
+    '<h4>Synopsis</h4>' +
+    '<div class="well" style="margin-top:6px">int fb_text_rich(int x, int y, const char *s,\n' +
+    '                 int len, int px, u32 ink);</div>' +
+    '<h4>Description</h4>' +
+    '<p>Draws <span class="syn">len</span> bytes of <span class="syn">s</span> at pixel height <span class="syn">px</span> using the proportional atlas. Returns the advance in pixels, so a caller can lay out a line without a second measuring pass.</p>' +
+    '<p>Tracking is not a parameter. ui_text_tracked() in uikit.c draws one character at a time with len 1 and advances by fb_text_rich_w() plus track, where track is (px * 8 + 50) / 100. Integer, no float, no new primitive.</p>' +
+    '<h4>Atlases</h4>' +
+    '<p>Three sizes exist: 16, 24 and 32 device pixels. Asking for any other height resamples, which visibly breaks the LCD filter. The four registers of this design land on those three sizes exactly.</p>' +
+    '<h4>Return value</h4><p>The x advance in pixels. Never negative.</p>' +
+    '<h4>See also</h4><p class="syn">fb_text_aa(3), fb_text_role(3), fb_rrect(3), font_sub(7)</p>' +
+    '</div></div>';
+};
+
+/* ---- Specimen ---- */
+APPBODY.spec = () => {
+  const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;-()[]{}/*+&#@%$'.split('');
+  return '<div class="scrolly"><div class="pad">' +
+    '<div class="r1">Four registers, three sizes, two weights</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div style="margin-top:10px"><div class="r1">R1 folio uppercase tracked</div>' +
+    '<div class="r2" style="margin-top:6px">R2 body regular, everything read continuously</div>' +
+    '<div class="r3" style="margin-top:6px">R3 strong bold, same size, pure weight</div>' +
+    '<div class="r4" style="margin-top:6px">R4 lead bold</div>' +
+    '<div class="mn" style="margin-top:6px;font-size:var(--zd-r2)">mono reserved 0123456789 tabular</div></div>' +
+    '<div class="r1" style="margin-top:20px">Mono atlas 16 &middot; 81 glyphs</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div class="glyphgrid" style="margin-top:8px;border-top:1px solid var(--zd-rule-hair);border-left:1px solid var(--zd-rule-hair)">' +
+    glyphs.map(g => '<i>' + esc(g) + '</i>').join('') + '</div>' +
+    '<div class="r1" style="margin-top:20px">Keyline rank &middot; there is no shadow</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div style="display:flex;gap:calc(20 * var(--zd-u));margin-top:10px">' +
+    '<div><i style="display:block;width:calc(56 * var(--zd-u));height:calc(30 * var(--zd-u));border:1px solid var(--zd-rule-hair);background:var(--zd-paper-1)"></i><div class="r1" style="margin-top:4px">rank 1 hair</div></div>' +
+    '<div><i style="display:block;width:calc(56 * var(--zd-u));height:calc(30 * var(--zd-u));border:1px solid var(--zd-rule-mid);background:var(--zd-paper-1)"></i><div class="r1" style="margin-top:4px">rank 2 mid</div></div>' +
+    '<div><i style="display:block;width:calc(56 * var(--zd-u));height:calc(30 * var(--zd-u));border:2px solid var(--zd-ink-0);background:var(--zd-paper-1)"></i><div class="r1" style="margin-top:4px">rank 3 ink</div></div>' +
+    '</div>' +
+    '<div class="r1" style="margin-top:20px">Radius &middot; classify, then apply</div><div class="hair" style="margin-top:4px"></div>' +
+    '<div style="margin-top:8px">' +
+    '<div class="dl"><span class="k">ZD_R_PAGE 0</span><span class="v">it is paper</span></div>' +
+    '<div class="dl"><span class="k">ZD_R_SET 2</span><span class="v">cut into the paper</span></div>' +
+    '<div class="dl"><span class="k">ZD_R_ROUND h/2</span><span class="v">it moves, or it is a point</span></div>' +
+    '</div></div></div>';
+};
+
+/* ---- generic utility body, for everything in the Index ---- */
+function utilBody(name){
+  const u = UTILS.find(x => x[0] === name);
+  const blurb = u ? u[1] : 'no description in this build';
+  return '<div class="pad" style="padding-bottom:0"><div class="r4">' + esc(name) + '</div>' +
+    '<div class="r2 sec" style="margin-top:6px;max-width:52ch">' + esc(blurb) + '</div>' +
+    '<div class="rule2" style="margin-top:12px"></div></div>' +
+    '<div class="pad" style="padding-top:10px">' +
+    '<div class="dl"><span class="k">binary</span><span class="v">/bin/' + esc(name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)) + '</span></div>' +
+    '<div class="dl"><span class="k">size</span><span class="v">' + (4096 + name.length * 217) + ' bytes</span></div>' +
+    '<div class="dl"><span class="k">links</span><span class="v">static, no libc</span></div>' +
+    '<div class="dl"><span class="k">state</span><span class="v">resident</span></div>' +
+    '<div class="well" style="margin-top:14px">' + esc(name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)) + ' --version\n' +
+    'zlOS 0.3, built from 128412 lines\n\n' + esc(blurb) + '</div></div>';
+}
+
+/* ==========================================================================
+   9. RENDER
+   ========================================================================== */
+function renderGrid(){
+  const m = M(), g = $('#grid'), d = $('#drop');
+  if (!S.gridOn){ g.innerHTML = ''; d.innerHTML = ''; return; }
+  let h = '';
+  for (let c = 0; c <= m.cols; c++){
+    const x = m.ox + c * m.MOD - (c === m.cols ? m.GUT : 0);
+    h += '<i class="gv" style="left:' + x + 'px"></i>';
+    if (c < m.cols) h += '<i class="gv" style="left:' + (m.ox + c * m.MOD + m.COL) + 'px"></i>';
+  }
+  h += '<i class="gh" style="left:' + m.ox + 'px;width:' + (m.cols * m.MOD - m.GUT) + 'px;top:' + m.oy + 'px"></i>';
+  h += '<i class="gh" style="left:' + m.ox + 'px;width:' + (m.cols * m.MOD - m.GUT) + 'px;top:' + (m.oy + m.rows * m.ROW) + 'px"></i>';
+  g.innerHTML = h;
+}
+function renderWins(){
+  const box = $('#wins');
+  const list = S.wins.filter(w => w.ws === S.ws && !w.min).sort((a, b) => a.z - b.z);
+  box.innerHTML = list.map(w => {
+    const p = place(w), on = w.id === S.focus;
+    const fr = w.fresh ? ' fresh' : ''; w.fresh = false;
+    return '<div class="win' + (on ? ' on' : '') + fr + '" data-id="' + w.id + '" style="left:' + p.x + 'px;top:' + p.y +
+      'px;width:' + p.w + 'px;height:' + p.h + 'px;z-index:' + w.z + '">' +
+      '<div class="win-in"><div class="head" data-drag="' + w.id + '">' +
+      '<span class="t" data-wmenu="' + w.id + '">' + esc(w.name) + '</span>' +
+      (w.unsaved ? '<i class="unsaved"></i>' : '') +
+      '<span class="s">' + esc(w.sub) + '</span>' +
+      '<span class="ctrls">' +
+      '<span class="ctrl" data-c="min" data-id="' + w.id + '">' + ctrlIco('min') + '</span>' +
+      '<span class="ctrl" data-c="fit" data-id="' + w.id + '">' + ctrlIco('fit') + '</span>' +
+      '<span class="ctrl x" data-c="close" data-id="' + w.id + '">' + ctrlIco('close') + '</span>' +
+      '</span></div><div class="frule"></div>' +
+      '<div class="body">' + (APPBODY[w.app] ? APPBODY[w.app]() : utilBody(w.name)) + '</div>' +
+      '</div></div>';
+  }).join('');
+}
+function renderRail(){
+  const open = S.wins.filter(w => w.ws === S.ws);
+  const d = new Date();
+  const cpu = 34 + (S.tick % 5), mem = 61 + (S.tick % 3);
+  $('#rail').innerHTML =
+    '<div class="mast"><div class="word">zlOS</div><div class="ver">0.3</div><div class="rule2"></div></div>' +
+    '<div class="sect first"><div class="hd"><span class="r1">Open</span></div><div class="hair"></div>' +
+    '<div class="list">' + (open.length ? open.map((w, i) =>
+      '<div class="trow' + (w.id === S.focus && !w.min ? ' on' : '') + (w.min ? ' min' : '') + '" data-toc="' + w.id + '">' +
+      (w.id === S.focus && !w.min ? '<i class="mark"></i>' : '') +
+      '<span class="num">' + (w.min ? '(' + (i + 1) + ')' : (i + 1)) + '</span>' +
+      '<span class="ttl">' + esc(w.name) + '</span></div>').join('')
+      : '<div class="lrow" style="padding-left:20px;color:var(--zd-ink-mute)">no sheets</div>') + '</div></div>' +
+    '<div class="sect"><div class="hd"><span class="r1">Launch</span></div><div class="hair"></div>' +
+    '<div class="list">' + PINNED.map(a =>
+      '<div class="lrow" data-launch="' + a + '">' + esc(APPS[a].name) + '</div>').join('') +
+    '<div class="lrow idx" data-ov="index">INDEX...</div></div></div>' +
+    '<div class="spacer"></div>' +
+    (S.margOn ? '<div id="marg"><div class="hair"></div>' +
+      mline('Time', pad(d.getHours(), 2, '0') + ':' + pad(d.getMinutes(), 2, '0')) +
+      mline('Cpu', cpu + '%') + mline('Mem', mem + '%') +
+      mline('Cpus', '8') + mline('Sheet', S.ws + '/3') + '</div>' : '<div id="marg"></div>');
+}
+function mline(k, v){ return '<div class="mline"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
+function renderFolio(){
+  $('#folio').innerHTML = [1, 2, 3].map(n =>
+    '<b class="' + (n === S.ws ? 'on' : '') + '" data-ws="' + n + '">' + n + '</b>').join('');
+}
+
+/* ---- the Index: a book index, not a tile grid ---- */
+function indexEntries(){
+  const real = Object.keys(APPS).map(k => ({name:APPS[k].name, ico:APPS[k].ico, app:k}));
+  const util = UTILS.map(u => ({name:u[0], ico:'util', app:null}));
+  return real.concat(util).sort((a, b) => a.name.localeCompare(b.name));
+}
+function renderIndex(){
+  const q = S.q.toLowerCase();
+  const all = indexEntries().filter(e => !q || e.name.toLowerCase().includes(q));
+  const ncols = 4, per = Math.ceil(all.length / ncols);
+  let cols = [];
+  for (let c = 0; c < ncols; c++) cols.push(all.slice(c * per, (c + 1) * per));
+  const kb = n => 'C-' + n.toLowerCase()[0];
+  const colHTML = list => {
+    let out = '', run = '';
+    list.forEach((e, i) => {
+      const L = e.name[0].toUpperCase();
+      if (L !== run){ run = L; out += '<div class="idxrun"><div class="hair"></div><span class="r1">' + L + '</span></div>'; }
+      const gi = all.indexOf(e);
+      out += '<div class="irow' + (gi === S.qi ? ' on' : '') + '" data-idx="' + esc(e.name) + '">' +
+        '<span class="g">' + ico(e.ico, 14) + '</span><span class="nm">' + esc(e.name) + '</span>' +
+        '<span class="kb">' + kb(e.name) + '</span></div>';
+    });
+    return out;
+  };
+  return '<div class="sheet"><div class="shead"><div class="r4">Index</div>' +
+    '<div class="r1" style="margin-top:4px">' + all.length + ' entries &middot; type to filter &middot; esc closes</div>' +
+    '<div class="rule2"></div></div>' +
+    '<div class="searchwell"><span class="r1">Find</span>' +
+    '<input id="qi" value="' + esc(S.q) + '" autocomplete="off" spellcheck="false"><span class="caret"></span></div>' +
+    '<div class="idxcols">' + cols.map(c => '<div class="idxcol">' + colHTML(c) + '</div>').join('') + '</div></div>';
+}
+
+/* ---- the command palette ---- */
+const CMDS = [
+  ['Fit window to columns',        'Window', 'C-Ret',  () => { const w = focused(); if (w){ w.max = !w.max; w.px = null; render(); toast('Column fit', 'ok', w.name + ' now spans all ' + M().cols + ' columns.'); } }],
+  ['Toggle column grid',           'Page',   'C-g',    () => { S.gridOn = !S.gridOn; render(); toast('Column grid', 'ok', 'The wallpaper is ' + (S.gridOn ? 'showing' : 'hiding') + ' the WM grid.'); }],
+  ['Column module: 64 dp',         'Page',   '',       () => { S.module = 64; render(); toast('Grid module', 'ok', 'Column 48 dp plus gutter 16 dp. ' + M().cols + ' columns.'); }],
+  ['Colophon: toggle marginalia',  'Page',   '',       () => { S.margOn = !S.margOn; render(); }],
+  ['Collapse all sheets',          'Window', '',       () => { S.wins.forEach(w => w.min = true); S.focus = null; render(); toast('Collapsed', 'ok', 'Every sheet minimised to the table of contents.'); }],
+  ['Close focused window',         'Window', 'C-w',    () => { const w = focused(); if (w) closeWin(w); }],
+  ['Move sheet to workspace 2',    'Window', 'C-2',    () => { const w = focused(); if (w){ w.ws = 2; render(); toast('Moved', 'ok', w.name + ' moved to sheet 2.'); } }],
+  ['Open Files at /kernel',        'Launch', '',       () => openApp('files')],
+  ['Open Kernel Log',              'Launch', '',       () => openApp('log')],
+  ['Open Registers (intel gen9)',  'Launch', '',       () => openApp('regs')],
+  ['Open Manual: fb_text_rich(3)', 'Launch', '',       () => openApp('man')],
+  ['Open Specimen',                'Launch', '',       () => openApp('spec')],
+  ['Snapshot framebuffer',         'System', '',       () => toast('wmshot', 'ok', 'Wrote <span class="mn">/tmp/wmshot.ppm</span>, 9216000 bytes in 11.2 ms.')],
+  ['Rebuild icon atlas at 48 px',  'System', '',       () => toast('gen_icons', 'ok', '10 icons drawn at 96, box filtered 2:1 to 48. Stroke lands on 1 dp.')],
+  ['Toggle subpixel LCD filter',   'System', '',       () => { S.sub = !S.sub; render(); toast('font_sub', 'warn', 'The 5-tap FIR was tuned on near black. On paper the fringe changes sign.'); }],
+  ['Attention ink: ochre',         'System', '',       () => { setAttn('ochre'); }],
+  ['Dump PCI config space',        'System', '',       () => toast('pci', 'ok', '3 functions on bus 0, 1 on bus 2. Written to <span class="mn">/tmp/pci.txt</span>.')],
+  ['Lock session',                 'System', 'C-l',    () => setLock(true)],
+  ['Show activities overview',     'System', 'C-o',    () => setOv('overview')]
+];
+function cmdMatches(){
+  const q = S.q.trim().toLowerCase();
+  if (!q) return CMDS.slice(0, 10);
+  return CMDS.filter(c => (c[0] + ' ' + c[1]).toLowerCase().includes(q));
+}
+function renderPalette(){
+  const list = cmdMatches();
+  return '<div id="pal"><div class="sheet"><div class="shead"><div class="r4">Command</div>' +
+    '<div class="r1" style="margin-top:4px">' + list.length + ' of ' + CMDS.length + ' &middot; return runs &middot; esc closes</div>' +
+    '<div class="rule2"></div></div>' +
+    '<div class="searchwell"><span class="r1">Run</span>' +
+    '<input id="qi" value="' + esc(S.q) + '" autocomplete="off" spellcheck="false"><span class="caret"></span></div>' +
+    '<div style="margin-top:12px;overflow:hidden">' +
+    (list.length ? list.map((c, i) =>
+      '<div class="cmdrow' + (i === S.qi ? ' on' : '') + '" data-cmd="' + esc(c[0]) + '">' +
+      (i === S.qi ? '<i class="mark"></i>' : '') +
+      '<span class="no">' + (i + 1) + '</span><span class="nm">' + esc(c[0]) + '</span>' +
+      '<span class="cat">' + esc(c[1]) + '</span><span class="kb">' + esc(c[2] || '') + '</span></div>').join('')
+      : '<div class="pad"><span class="r1 oc">No command matches that string.</span></div>') +
+    '</div><div class="hair" style="margin-top:8px"></div>' +
+    '<div class="stat-bar"><span class="k">Query</span><span class="v">' + (esc(S.q) || '-') + '</span>' +
+    '<span class="k">Source</span><span class="v">wm.c cmd table</span></div></div></div>';
+}
+
+/* ---- the overview: a contents spread ---- */
+function renderOverview(){
+  const m = M();
+  const miniW = Math.round(232 * S.scale), miniH = Math.round(150 * S.scale);
+  let sects = '';
+  for (let ws = 1; ws <= 3; ws++){
+    const list = S.wins.filter(w => w.ws === ws).sort((a, b) => a.z - b.z);
+    sects += '<div class="ovsect"><div class="hdr"><span class="r1">Sheet ' + ws + '</span>' +
+      '<span class="r1 dim">' + list.length + (list.length === 1 ? ' window' : ' windows') + '</span>' +
+      (ws === S.ws ? '<span class="r1 r3" style="font-size:var(--zd-r1);color:var(--zd-ink-0)">current</span>' : '') +
+      '</div><div class="hair"></div>';
+    if (!list.length){ sects += '<div class="ovempty">no sheets set on this workspace</div></div>'; continue; }
+    sects += '<div class="ovrow">' + list.map((w, i) => {
+      const p = place(w), k = miniW / p.w;
+      const inner = '<div class="win-in"><div class="head"><span class="t">' + esc(w.name) + '</span>' +
+        (w.unsaved ? '<i class="unsaved"></i>' : '') + '<span class="s">' + esc(w.sub) + '</span>' +
+        '<span class="ctrls"><span class="ctrl">' + ctrlIco('min') + '</span>' +
+        '<span class="ctrl">' + ctrlIco('fit') + '</span><span class="ctrl">' + ctrlIco('close') + '</span></span></div>' +
+        '<div class="frule"></div><div class="body">' +
+        (APPBODY[w.app] ? APPBODY[w.app]() : utilBody(w.name)) + '</div></div>';
+      return '<div class="mini' + (w.id === S.focus && ws === S.ws ? ' on' : '') + '" data-mini="' + w.id + '">' +
+        '<div class="frame" style="width:' + miniW + 'px;height:' + miniH + 'px">' +
+        '<div class="miniscale' + (w.id === S.focus && ws === S.ws ? ' on' : '') + '" style="transform:scale(' + k.toFixed(4) + ');width:' + p.w + 'px;height:' + p.h + 'px">' +
+        '<div class="win' + (w.id === S.focus && ws === S.ws ? ' on' : '') + '" style="position:relative;left:0;top:0;width:' + p.w + 'px;height:' + p.h + 'px;animation:none">' +
+        inner + '</div></div></div>' +
+        '<div class="cap"><span class="no">' + (i + 1) + '</span><span class="nm">' + esc(w.name) + '</span></div></div>';
+    }).join('') + '</div></div>';
+  }
+  return '<div id="ovw"><div class="sheet"><div class="shead"><div class="r4">Contents</div>' +
+    '<div class="r1" style="margin-top:4px">' + S.wins.length + ' sheets across 3 workspaces &middot; ' +
+    m.cols + ' columns at ' + S.module + ' dp module &middot; click to raise</div><div class="rule2"></div></div>' +
+    '<div class="ovbody">' + sects + '</div></div></div>';
+}
+
+function renderOv(){
+  const ov = $('#ov');
+  if (!S.ov){ ov.className = ''; ov.innerHTML = ''; S.ovFresh = true; return; }
+  /* One fade per opening, not one per keystroke: typing in the palette re-renders
+     the sheet on every character, and re-arming the animation there would strobe. */
+  ov.className = S.ovFresh ? 'show fresh' : 'show';
+  S.ovFresh = false;
+  ov.innerHTML = S.ov === 'index' ? renderIndex() : S.ov === 'palette' ? renderPalette() : renderOverview();
+  const inp = $('#qi');
+  if (inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+
+/* ---- lock: the title page ---- */
+function renderLock(){
+  const L = $('#lock');
+  L.className = S.locked ? 'show' : '';
+  if (!S.locked){ L.innerHTML = ''; return; }
+  const d = new Date();
+  const m = M();
+  /* The lock page is the same page. It was drawing one line per module while the
+     desktop draws BOTH edges of every column, and it was missing the two margin
+     horizontals entirely, so the wallpaper did not match itself between scenes. */
+  const rw = parseFloat(getComputedStyle($('#rail')).width);
+  let g = '';
+  for (let c = 0; c <= m.cols; c++){
+    g += '<i style="left:' + (rw + m.ox + c * m.MOD - (c === m.cols ? m.GUT : 0)) + 'px"></i>';
+    if (c < m.cols) g += '<i style="left:' + (rw + m.ox + c * m.MOD + m.COL) + 'px"></i>';
+  }
+  const gwid = m.cols * m.MOD - m.GUT;
+  g += '<u style="left:' + (rw + m.ox) + 'px;width:' + gwid + 'px;top:' + m.oy + 'px"></u>';
+  g += '<u style="left:' + (rw + m.ox) + 'px;width:' + gwid + 'px;top:' + (m.oy + m.rows * m.ROW) + 'px"></u>';
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const mons = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const held = S.wins.map((w, i) =>
+    '<div class="hrow"><span class="num">' + (i + 1) + '</span>' +
+    '<span class="ttl">' + esc(w.name) + '</span>' +
+    '<span class="sb">' + esc(w.sub) + '</span></div>').join('');
+  /* and the plate sits ON that grid: left edge on column 1, right edge on the
+     last column boundary, top under the margin rule. It was using its own 64dp
+     inset, which put the masthead and the colophon outside the page's own grid. */
+  const pl = 'style="left:' + (rw + m.ox) + 'px;right:' + (m.w + rw - (rw + m.ox + gwid)) +
+    'px;padding:' + (m.oy + m.ROW) + 'px 0 ' + m.oy + 'px 0"';
+  L.innerHTML = '<div class="lgrid">' + g + '</div><div class="plate" ' + pl + '>' +
+    '<div class="spread"><div class="lmain">' +
+    '<div class="top"><span class="word">zlOS</span><span class="r1">0.3 &middot; folio</span></div>' +
+    '<div class="rule2"></div>' +
+    '<div class="clock mn">' + pad(d.getHours(), 2, '0') + ':' + pad(d.getMinutes(), 2, '0') + '</div>' +
+    '<div class="date r2 sec">' + days[d.getDay()] + ' ' + d.getDate() + ' ' + mons[d.getMonth()] + '</div>' +
+    '<div class="authwell"><span class="r1">Key</span><span class="stars">' + '&#183;'.repeat(8) + '</span><span class="caret"></span></div>' +
+    '<div class="r1" style="margin-top:10px">press return to unlock &middot; session held, ' + S.wins.length + ' sheets open</div>' +
+    '</div><div class="held"><span class="r1">Held</span><div class="hair"></div>' + held +
+    '<div class="r1" style="margin-top:calc(10 * var(--zd-u))">nothing is discarded on lock</div>' +
+    '</div></div>' +
+    '<div class="notice">' +
+    '<div><div class="r1">Uptime</div><div class="mn r2" style="margin-top:2px">04:18:22</div></div>' +
+    '<div><div class="r1">Load</div><div class="mn r2" style="margin-top:2px">0.42 0.31 0.28</div></div>' +
+    '<div><div class="r1">Storage</div><div class="mn r2" style="margin-top:2px">386.2 GiB free</div></div>' +
+    '<div><div class="r1">Link</div><div class="mn r2" style="margin-top:2px">eth0 up</div></div>' +
+    '</div>' +
+    '<div class="foot"><span class="r1">ZLOS &middot; 0.3 &middot; NO LIBC &middot; NO HEAP &middot; NO FLOAT</span>' +
+    '<span class="fnum">' + S.ws + '</span></div></div>';
+}
+
+function render(){
+  document.documentElement.style.setProperty('--zd-sc', S.scale);
+  document.documentElement.style.setProperty('--zd-attn', 'var(' + ATTN[S.attn] + ')');
+  document.body.style.webkitFontSmoothing = S.sub ? 'antialiased' : 'none';
+  renderGrid(); renderWins(); renderRail(); renderFolio(); renderOv(); renderLock(); renderToasts();
+  renderScenes(); syncBars();
+}
+/* A thumb that is drawn whether or not anything is off the page is a lie about
+   the document. Size it from the real overflow, and remove it when there is none. */
+function syncBars(){
+  document.querySelectorAll('.scrolly').forEach(sc => {
+    const bar = sc.querySelector('.sbar'); if (!bar) return;
+    const ch = sc.clientHeight, sh = sc.scrollHeight;
+    if (sh <= ch + 1){ bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    bar.style.top = '0px';
+    bar.style.height = Math.max(24, Math.round(ch * ch / sh)) + 'px';
+  });
+}
+
+/* ==========================================================================
+   10. SCENES. Reading the hash puts the prototype into a named state,
+       on load and on hashchange.
+   ========================================================================== */
+const SCENE_NAMES = ['desktop','overview','palette','files','monitor','settings','lock'];
+/* Every scene link carries the CURRENT stock, so clicking through the seven
+   scenes never silently drops you back to paper. The seven bare hashes still
+   mean exactly what they meant before: that scene, on paper. */
+function renderScenes(){
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#scenes').innerHTML = SCENE_NAMES.map(n =>
+    '<a href="#' + n + sfx + '" class="' + (n === S.scene ? 'on' : '') + '">' + n + '</a>').join('');
+  document.querySelectorAll('#stock [data-theme-set]').forEach(el =>
+    el.classList.toggle('on', el.dataset.themeSet === S.theme));
+}
+function applyTheme(t){
+  S.theme = (t === 'dark') ? 'dark' : 'light';
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+}
+/* The switch rewrites the hash rather than just flipping the attribute, so the
+   address bar is always a truthful deep link to what is on screen. */
+function setTheme(t){
+  if (t === S.theme) return;
+  location.hash = '#' + S.scene + (t === 'dark' ? '-dark' : '');
+}
+function mk(app, gx, gy, extra){
+  const a = APPS[app];
+  return Object.assign({id:'w' + (S.seq++), app, name:a.name, sub:a.sub, gw:a.gw, gh:a.gh,
+    gx, gy, px:null, py:null, ws:1, min:false, max:false, z:++S.zc, unsaved:!!a.unsaved}, extra || {});
+}
+function baseDesktop(){
+  const m = M(), R = m.rows;
+  const r = (frac, min) => Math.max(min, Math.round(R * frac));
+  S.wins = [
+    mk('files', 8,  0,           {gw:9,  gh:r(0.48, 12)}),
+    mk('log',   8,  r(0.52, 14), {gw:10, gh:r(0.46, 11)}),
+    mk('mon',   0,  r(0.45, 12), {gw:8,  gh:r(0.53, 13)}),
+    mk('edit',  12, r(0.24, 7),  {gw:9,  gh:r(0.52, 13)}),
+    mk('term',  0,  0,           {gw:8,  gh:r(0.44, 12)})
+  ];
+  S.focus = S.wins[S.wins.length - 1].id;
+}
+/* two sheets abutting on a column boundary, filling the type area */
+function twoUp(a, b){
+  const m = M(), half = Math.floor(m.cols / 2), H = Math.max(8, m.rows - 2);
+  a.gx = 0;    a.gw = half;          a.gy = 0; a.gh = H;
+  b.gx = half; b.gw = m.cols - half; b.gy = 0; b.gh = H;
+  a.px = b.px = null;
+}
+function applyScene(name){
+  S.scene = name;
+  const m0 = M(); S.lastCols = m0.cols; S.lastRows = m0.rows;
+  S.wins = []; S.zc = 10; S.seq = 1; S.ov = null; S.locked = false;
+  S.ws = 1; S.q = ''; S.qi = 0; S.toasts = []; S.menu = null;
+  closeMenu();
+  if (name === 'desktop'){
+    baseDesktop();
+    setTimeout(() => toast('wmshot', 'ok', 'Wrote <span class="mn">/tmp/wmshot.ppm</span>, 9216000 bytes in 11.2 ms.'), 60);
+  } else if (name === 'overview'){
+    baseDesktop();
+    S.wins.push(mk('net', 2, 2, {ws:2, gh:15}), mk('clock', 11, 4, {ws:2}), mk('regs', 1, 6, {ws:3}));
+    S.ov = 'overview';
+  } else if (name === 'palette'){
+    baseDesktop();
+    S.ov = 'palette'; S.q = 'col'; S.qi = 0;
+  } else if (name === 'files'){
+    S.wins = [mk('edit', 0, 0), mk('files', 0, 0)];
+    twoUp(S.wins[1], S.wins[0]);
+    S.focus = S.wins[1].id; S.sel = 'fb.c'; S.doc = 'fb.c';
+  } else if (name === 'monitor'){
+    S.wins = [mk('net', 0, 0), mk('mon', 0, 0)];
+    twoUp(S.wins[1], S.wins[0]);
+    S.focus = S.wins[1].id;
+  } else if (name === 'settings'){
+    /* The split is a FRACTION of the column count, not a fixed 7 + 11. At 22
+       columns the fixed pair used 18 and left four columns of bare page on the
+       right, and a 7-column shell clipped its own build log mid-word. */
+    const m = M(), R = Math.max(8, m.rows - 2);
+    const L = clamp(Math.round(m.cols * 0.42), 8, m.cols - 8);
+    S.wins = [
+      mk('term',  0, 0,                   {gw:L, gh:Math.round(R * 0.48)}),
+      mk('files', 0, Math.round(R * 0.5), {gw:L, gh:R - Math.round(R * 0.5)}),
+      mk('set',   L, 0,                   {gw:m.cols - L, gh:R})
+    ];
+    S.focus = S.wins[2].id;
+  } else if (name === 'lock'){
+    baseDesktop();
+    S.locked = true;
+  }
+  render();
+}
+/* DEEP LINKS. "#files" is the scene on paper; "#files-dark" is the same scene on
+   ink with no clicks, on load and on hashchange. The suffix is stripped BEFORE
+   the scene lookup, so the seven original hashes resolve exactly as they did. */
+function readHash(){
+  let h = (location.hash || '#desktop').slice(1);
+  let theme = 'light';
+  if (h.slice(-5) === '-dark'){ theme = 'dark'; h = h.slice(0, -5); }
+  if (SCENE_NAMES.indexOf(h) < 0) h = 'desktop';
+  const sameScene = (h === S.scene && S.wins.length > 0);
+  applyTheme(theme);
+  /* Flipping stock must not rebuild the desk under you: if only the theme moved,
+     re-render, do not re-lay the scene. */
+  if (sameScene) render(); else applyScene(h);
+}
+window.addEventListener('hashchange', readHash);
+
+/* ==========================================================================
+   11. INTERACTION
+   ========================================================================== */
+function setAttn(v){ S.attn = v; render(); toast('Attention ink', 'ok', 'One token repointed. No call site changed.'); }
+function setOv(v){ S.ov = (S.ov === v) ? null : v; S.q = ''; S.qi = 0; render(); }
+function setLock(v){ S.locked = v; render(); }
+function closeMenu(){ const m = document.querySelector('.menu'); if (m) m.remove(); }
+function showMenu(x, y, head, items){
+  closeMenu();
+  const el = document.createElement('div');
+  el.className = 'menu';
+  el.innerHTML = (head ? '<div class="mh"><span class="r1">' + esc(head) + '</span></div><div class="hair"></div>' : '') +
+    items.map((it, i) => it === '-' ? '<div class="hair"></div>' :
+      '<div class="mi" data-mi="' + i + '">' + esc(it[0]) + '<span class="kb">' + esc(it[1] || '') + '</span></div>').join('');
+  el.style.left = Math.min(x, innerWidth - 200) + 'px';
+  el.style.top = Math.min(y, innerHeight - 40 - items.length * 28) + 'px';
+  document.body.appendChild(el);
+  el.addEventListener('click', e => {
+    const t = e.target.closest('[data-mi]'); if (!t) return;
+    const it = items[+t.dataset.mi]; closeMenu(); if (it && it[2]) it[2]();
+  });
+}
+
+/* ---- drag, with the one shadow and the column bands ---- */
+let drag = null;
+document.addEventListener('pointerdown', e => {
+  if (!e.target.closest('.menu')) closeMenu();
+  const sl = e.target.closest('[data-sld]');
+  if (sl){ dragSlider(sl, e); return; }
+  const dh = e.target.closest('[data-drag]');
+  if (dh && !e.target.closest('.ctrl')){
+    const w = S.wins.find(x => x.id === dh.dataset.drag); if (!w) return;
+    raise(w);
+    const node = $('#wins [data-id="' + w.id + '"]'); if (!node) return;
+    const p = place(w);
+    drag = {w, sx:e.clientX, sy:e.clientY, ox:p.x, oy:p.y, w0:p.w, h0:p.h, moved:false};
+    node.classList.add('drag');
+    e.preventDefault();
+  }
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
+  drag.moved = true;
+  const node = $('#wins [data-id="' + drag.w.id + '"]'); if (!node) return;
+  const nx = drag.ox + dx, ny = drag.oy + dy;
+  node.style.left = nx + 'px'; node.style.top = ny + 'px';
+  node.classList.remove('snapping');
+  showBands(nx, drag.w0);
+});
+window.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const node = $('#wins [data-id="' + drag.w.id + '"]');
+  const m = M();
+  if (node && drag.moved){
+    const nx = parseFloat(node.style.left), ny = parseFloat(node.style.top);
+    if (S.snap){
+      const gx = clamp(Math.round((nx - m.ox) / m.MOD), 0, m.cols - Math.min(drag.w.gw, m.cols));
+      const gy = clamp(Math.round((ny - m.oy) / m.ROW), 0, m.rows - Math.min(drag.w.gh, m.rows));
+      drag.w.gx = gx; drag.w.gy = gy; drag.w.px = null; drag.w.py = null;
+      const p = place(drag.w);
+      node.classList.add('snapping');
+      node.style.left = p.x + 'px'; node.style.top = p.y + 'px';
+    } else { drag.w.px = nx; drag.w.py = ny; }
+  }
+  if (node) node.classList.remove('drag');
+  $('#drop').className = '';
+  const w = drag.w; drag = null;
+  setTimeout(() => { if (node) node.classList.remove('snapping'); renderRail(); }, 180);
+});
+function showBands(x, wpx){
+  const m = M(), d = $('#drop');
+  if (!S.gridOn || !S.snap){ d.className = ''; return; }
+  const c0 = clamp(Math.round((x - m.ox) / m.MOD), 0, m.cols - 1);
+  const n = Math.max(1, Math.round((wpx + m.GUT) / m.MOD));
+  let h = '';
+  for (let c = c0; c < Math.min(c0 + n, m.cols); c++)
+    h += '<i class="band" style="left:' + (m.ox + c * m.MOD) + 'px;top:' + m.oy + 'px;width:' + m.COL + 'px;height:' + (m.rows * m.ROW) + 'px"></i>';
+  d.innerHTML = h; d.className = 'live';
+}
+function dragSlider(el, e){
+  const name = el.dataset.sld, min = +el.dataset.min, max = +el.dataset.max;
+  const set = ev => {
+    const r = el.getBoundingClientRect();
+    const t = clamp((ev.clientX - r.left) / r.width, 0, 1);
+    let v = min + t * (max - min);
+    if (name === 'scale') v = Math.round(v * 20) / 20;
+    if (name === 'module') v = Math.round(v / 8) * 8;
+    S[name] = v; render();
+  };
+  set(e);
+  const mv = ev => set(ev);
+  const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+  window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  e.preventDefault();
+}
+
+/* ---- clicks ---- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  /* the stock switch sits in the harness strip and works even while locked -
+     the lock scene is one of the seven, and you have to be able to see it in ink */
+  const ts = t.closest('[data-theme-set]');
+  if (ts){ setTheme(ts.dataset.themeSet); return; }
+  if (S.locked){ setLock(false); return; }
+
+  const c = t.closest('.ctrl[data-c]');
+  if (c){
+    const w = S.wins.find(x => x.id === c.dataset.id); if (!w) return;
+    if (c.dataset.c === 'min'){ w.min = true; if (S.focus === w.id) S.focus = null; render(); }
+    else if (c.dataset.c === 'fit'){ w.max = !w.max; w.px = null; raise(w); }
+    else closeWin(w);
+    return;
+  }
+  const toc = t.closest('[data-toc]');
+  if (toc){
+    const w = S.wins.find(x => x.id === toc.dataset.toc); if (!w) return;
+    if (w.min){ w.min = false; raise(w); }
+    else if (S.focus === w.id){ w.min = true; S.focus = null; render(); }
+    else raise(w);
+    return;
+  }
+  const la = t.closest('[data-launch]'); if (la){ openApp(la.dataset.launch); return; }
+  const ovb = t.closest('[data-ov]');    if (ovb){ setOv(ovb.dataset.ov); return; }
+  const wsb = t.closest('[data-ws]');
+  if (wsb){ S.ws = +wsb.dataset.ws; const f = S.wins.filter(w => w.ws === S.ws && !w.min).sort((a,b) => b.z - a.z);
+    S.focus = f.length ? f[0].id : null; render(); toast('Workspace', 'ok', 'Sheet ' + S.ws + ' of 3, ' + f.length + ' windows.'); return; }
+
+  const mini = t.closest('[data-mini]');
+  if (mini){
+    const w = S.wins.find(x => x.id === mini.dataset.mini); if (!w) return;
+    S.ws = w.ws; w.min = false; S.ov = null; raise(w); return;
+  }
+  const idx = t.closest('[data-idx]');
+  if (idx){
+    const e2 = indexEntries().find(x => x.name === idx.dataset.idx);
+    S.ov = null;
+    if (e2 && e2.app) openApp(e2.app);
+    else { const w = openUtil(e2 ? e2.name : idx.dataset.idx); }
+    return;
+  }
+  const cmd = t.closest('[data-cmd]');
+  if (cmd){ const c2 = CMDS.find(x => x[0] === cmd.dataset.cmd); S.ov = null; render(); if (c2) c2[3](); return; }
+
+  const fr = t.closest('tr[data-file]');
+  if (fr){ S.sel = fr.dataset.file; if (SRC[S.sel]) S.doc = S.sel; render(); return; }
+
+  const sg = t.closest('[data-seg]');
+  if (sg){ if (sg.dataset.seg === 'attn') setAttn(sg.dataset.v); return; }
+  const tg = t.closest('[data-tgl]');
+  if (tg){ S[tg.dataset.tgl] = !S[tg.dataset.tgl]; render(); return; }
+
+  const ck = t.closest('[data-ck]');
+  if (ck){ calcKey(ck.dataset.ck); return; }
+
+  const wm2 = t.closest('[data-wmenu]');
+  if (wm2){ const w = S.wins.find(x => x.id === wm2.dataset.wmenu); if (w) winMenu(w, e.clientX, e.clientY + 8); return; }
+
+  const win = t.closest('.win[data-id]');
+  if (win){ const w = S.wins.find(x => x.id === win.dataset.id); if (w && w.id !== S.focus) raise(w); return; }
+});
+function openUtil(name){
+  let w = S.wins.find(x => x.name === name);
+  if (w){ w.ws = S.ws; w.min = false; raise(w); return w; }
+  w = {id:'w' + (S.seq++), app:'__util', name, sub:'utility', gw:8, gh:12, gx:3, gy:4,
+       px:null, py:null, ws:S.ws, min:false, max:false, z:++S.zc, unsaved:false};
+  S.wins.push(w); S.focus = w.id; render(); return w;
+}
+function calcKey(k){
+  if (k === 'C'){ S.calcAcc = '0'; }
+  else if (k === '='){ S.calcTape = S.calcTape.slice(-4).concat([S.calcAcc + ' = ' + S.calcAcc]); }
+  else if (/[0-9.]/.test(k)) S.calcAcc = (S.calcAcc === '0' ? '' : S.calcAcc) + k;
+  else S.calcAcc = S.calcAcc + ' ' + k + ' ';
+  render();
+}
+function winMenu(w, x, y){
+  showMenu(x, y, w.name, [
+    ['Raise', 'Ret', () => raise(w)],
+    ['Minimise', '', () => { w.min = true; if (S.focus === w.id) S.focus = null; render(); }],
+    ['Fit to columns', 'C-Ret', () => { w.max = !w.max; w.px = null; raise(w); }],
+    '-',
+    ['Move to workspace 1', 'C-1', () => { w.ws = 1; render(); }],
+    ['Move to workspace 2', 'C-2', () => { w.ws = 2; render(); }],
+    ['Move to workspace 3', 'C-3', () => { w.ws = 3; render(); }],
+    '-',
+    ['Close', 'C-w', () => closeWin(w)]
+  ]);
+}
+document.addEventListener('contextmenu', e => {
+  if (S.locked) return;
+  e.preventDefault();
+  const win = e.target.closest('.win[data-id]');
+  if (win){ const w = S.wins.find(x => x.id === win.dataset.id); if (w){ raise(w); winMenu(w, e.clientX, e.clientY); return; } }
+  showMenu(e.clientX, e.clientY, 'Page', [
+    ['New shell', '', () => openApp('term')],
+    ['Open Files', '', () => openApp('files')],
+    ['Index...', 'C-i', () => setOv('index')],
+    ['Command...', 'C-k', () => setOv('palette')],
+    '-',
+    ['Toggle column grid', 'C-g', () => { S.gridOn = !S.gridOn; render(); }],
+    ['Fit all to columns', '', () => { S.wins.filter(w => w.ws === S.ws).forEach((w, i) => { w.gx = (i % 2) * 9; w.gy = 0; w.gw = 9; w.gh = 18; w.px = null; }); render(); toast('Tidied', 'ok', 'Every sheet snapped to the column grid.'); }],
+    ['Activities', 'C-o', () => setOv('overview')],
+    '-',
+    ['Lock session', 'C-l', () => setLock(true)]
+  ]);
+});
+document.addEventListener('dblclick', e => {
+  const dh = e.target.closest('[data-drag]');
+  if (dh){ const w = S.wins.find(x => x.id === dh.dataset.drag); if (w){ w.max = !w.max; w.px = null; raise(w); } }
+});
+
+/* ---- keyboard ---- */
+document.addEventListener('keydown', e => {
+  /* C-b flips the stock. Bound before the lock guard for the same reason the
+     switch is: the lock scene has to be inspectable in both. */
+  if (e.ctrlKey && e.key.toLowerCase() === 'b'){
+    e.preventDefault(); setTheme(S.theme === 'dark' ? 'light' : 'dark'); return;
+  }
+  if (S.locked){ if (e.key === 'Enter' || e.key === 'Escape'){ setLock(false); e.preventDefault(); } return; }
+  const inPal = S.ov === 'palette' || S.ov === 'index';
+  if (e.ctrlKey && e.key.toLowerCase() === 'k'){ e.preventDefault(); setOv('palette'); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'i'){ e.preventDefault(); setOv('index'); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'o'){ e.preventDefault(); setOv('overview'); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'l'){ e.preventDefault(); setLock(true); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'g'){ e.preventDefault(); S.gridOn = !S.gridOn; render(); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'w'){ e.preventDefault(); const w = focused(); if (w) closeWin(w); return; }
+  if (e.ctrlKey && '123'.includes(e.key)){ e.preventDefault(); S.ws = +e.key;
+    const f = S.wins.filter(w => w.ws === S.ws && !w.min).sort((a,b) => b.z - a.z);
+    S.focus = f.length ? f[0].id : null; render(); return; }
+  if (e.key === 'Escape'){ if (S.ov){ S.ov = null; render(); } closeMenu(); return; }
+  if (inPal){
+    const list = S.ov === 'palette' ? cmdMatches() : indexEntries().filter(x => !S.q || x.name.toLowerCase().includes(S.q.toLowerCase()));
+    if (e.key === 'ArrowDown'){ e.preventDefault(); S.qi = clamp(S.qi + 1, 0, list.length - 1); renderOv(); return; }
+    if (e.key === 'ArrowUp'){ e.preventDefault(); S.qi = clamp(S.qi - 1, 0, list.length - 1); renderOv(); return; }
+    if (e.key === 'Enter'){
+      e.preventDefault();
+      const it = list[S.qi]; S.ov = null; render();
+      if (!it) return;
+      if (S.ov === null && Array.isArray(it)) it[3]();
+      else if (it && it[3]) it[3]();
+      else if (it && it.app) openApp(it.app);
+      else if (it && it.name) openUtil(it.name);
+      return;
+    }
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.id !== 'qi') return;
+  S.q = e.target.value; S.qi = 0;
+  const box = $('#ov');
+  const scrollQ = e.target.value;
+  box.innerHTML = S.ov === 'index' ? renderIndex() : renderPalette();
+  const inp = $('#qi'); if (inp){ inp.value = scrollQ; inp.focus(); inp.setSelectionRange(scrollQ.length, scrollQ.length); }
+});
+
+/* ---- live tick. Values move, nothing animates for decoration. ---- */
+setInterval(() => {
+  if (S.locked){ renderLock(); return; }
+  S.tick++;
+  renderRail();
+  const live = S.wins.filter(w => w.ws === S.ws && !w.min && (w.app === 'mon' || w.app === 'net' || w.app === 'clock'));
+  live.forEach(w => {
+    const node = $('#wins [data-id="' + w.id + '"] .body');
+    if (node) node.innerHTML = APPBODY[w.app]();
+  });
+  syncBars();
+}, 1000);
+
+/* A scene's sheet geometry is expressed in COLUMNS AND ROWS, and both are a
+   function of the page size. Re-rendering alone redrew the grid at the new
+   count while the sheets kept the old one, so the page stopped being filled.
+   Re-lay the scene whenever the count actually moves; plain render otherwise. */
+window.addEventListener('resize', () => {
+  if (drag) return;
+  const m = M();
+  if (m.cols !== S.lastCols || m.rows !== S.lastRows){
+    S.lastCols = m.cols; S.lastRows = m.rows;
+    applyScene(S.scene || 'desktop');
+    return;
+  }
+  render();
+});
+
+/* boot */
+readHash();
+</script>
+</body>
+</html>

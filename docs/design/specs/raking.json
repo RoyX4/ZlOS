@@ -1,0 +1,288 @@
+{
+ "direction": "Raking",
+ "one_line_pitch": "A warm-graphite machine lit by one cold light from the upper left: depth is a 1px lit edge and a 1px cut groove, focus means \"turned toward the light\", and all system furniture collapses into a single left rail.",
+ "why_not_default": "Four concrete departures a generic \"dark desktop UI\" prompt does not produce. (1) The surfaces are not near-black and not grey: the ladder runs L* 10.9 to 23.2 at hue 22 deg, 18-31% saturation \u2014 a warm graphite with real hue. The current ZD_SURF_0 #07080A is L* 2.0. A default prompt produces L* 2-8 neutrals. (2) Adjacent surface steps are DELIBERATELY sub-threshold (1.07:1 to 1.13:1) \u2014 the surfaces do not separate themselves, a 1px LIT run on the top edge and a CUT ring underneath do. A default system separates panels with luminance steps plus a soft drop shadow; here shadow is deleted from every resting window and survives on exactly four object classes. (3) The accent is LOW chroma (43% sat) and is the light source, not a brand colour \u2014 focus is signalled by repainting the plate's top and left edge STEEL instead of LIT, so focus, selection, the caret, links and every raised object's highlight are the same colour by physical construction rather than by convention. A default produces a HIGH-chroma neon and a glowing ring. (4) There is no top bar and no dock. One 56dp left rail carries launcher, running apps, status and clock; the clock is stacked HH over MM because a narrow rail forces it. Top-bar + floating windows + bottom dock is precisely the arrangement the brief calls default, and it is gone.",
+ "palette": {
+  "mode": "dark",
+  "tokens": [
+   {
+    "name": "ZD_CUT",
+    "hex": "#19120E",
+    "role": "the groove. 1px ring under every seated plate, and the top+left inner edge of every sunken well. Never carries a glyph."
+   },
+   {
+    "name": "ZD_WELL",
+    "hex": "#231C18",
+    "role": "sunken: text inputs, meter/slider tracks, terminal and editor ground, segmented-control track."
+   },
+   {
+    "name": "ZD_VOID",
+    "hex": "#29221E",
+    "role": "the field \u2014 the desktop behind everything, right of the rail."
+   },
+   {
+    "name": "ZD_BASE",
+    "hex": "#322B27",
+    "role": "the plate \u2014 window interior, the content ground."
+   },
+   {
+    "name": "ZD_RAISE",
+    "hex": "#38312D",
+    "role": "raised on a plate: the rail, toolbars, status bars, cards, control faces, tab strip."
+   },
+   {
+    "name": "ZD_FLOAT",
+    "hex": "#3D3632",
+    "role": "off the plane: menus, popovers, modals, toasts. The lightest ground any glyph sits on."
+   },
+   {
+    "name": "ZD_LITSOFT",
+    "hex": "#4A433F",
+    "role": "the grazed edge \u2014 the 1px LEFT run of a raised object, and the bottom run of a sunken well. Also the wallpaper light's colour."
+   },
+   {
+    "name": "ZD_LIT",
+    "hex": "#5F5854",
+    "role": "the struck edge \u2014 the 1px TOP run of every raised object, unfocused."
+   },
+   {
+    "name": "ZD_TEXT_0",
+    "hex": "#F2EDE4",
+    "role": "emphasis: focused window title, display numerals, the value in a key/value row."
+   },
+   {
+    "name": "ZD_TEXT_1",
+    "hex": "#DAD3C7",
+    "role": "BODY \u2014 the root ink of the desktop."
+   },
+   {
+    "name": "ZD_TEXT_2",
+    "hex": "#BDB5A7",
+    "role": "secondary: captions, status bars, unfocused window title, list rows that are not selected."
+   },
+   {
+    "name": "ZD_TEXT_3",
+    "hex": "#AAA194",
+    "role": "tertiary: uppercase micro labels, column heads, hints, units, timestamps. The dimmest ink permitted to carry a glyph."
+   },
+   {
+    "name": "ZD_TEXT_INERT",
+    "hex": "#6A635A",
+    "role": "STRUCTURE ONLY, never a glyph on an active control: hairline dividers inside a plate, the resize grip, disabled-control ink. WCAG 1.4.3 exempts inactive components; nothing else may use this."
+   },
+   {
+    "name": "ZD_STEEL",
+    "hex": "#7FB2E0",
+    "role": "THE STRUCTURAL ACCENT AND THE LIGHT. Focused plate's top+left edge, focus ring on a control, selection bar, text caret, links, the rail's running-app bar, live values. Hue 208, saturation 43% \u2014 low chroma on purpose."
+   },
+   {
+    "name": "ZD_STEEL_BR",
+    "hex": "#A9CFF2",
+    "role": "the light at full strength: a value that just changed, a control being pressed, the 240ms settle flash on an app becoming active."
+   },
+   {
+    "name": "ZD_OK",
+    "hex": "#7FBF63",
+    "role": "state only: healthy, running, pass. Never identity."
+   },
+   {
+    "name": "ZD_WARN",
+    "hex": "#E3A63F",
+    "role": "state only: warning, read-only mount, drift. Hue 38 \u2014 170 deg from the accent, so it can never be mistaken for identity. This is the collision ui.h line 54-60 warns about, resolved by putting the accent on the cold side of the neutral axis."
+   },
+   {
+    "name": "ZD_BAD",
+    "hex": "#E8664B",
+    "role": "FILL ONLY: close-box hover face, error dot, the filled portion of a critical meter. Fails 4.5:1 on RAISE and FLOAT and is therefore banned as text."
+   },
+   {
+    "name": "ZD_BAD_INK",
+    "hex": "#E58972",
+    "role": "the text form of failure \u2014 error strings, a failed row's label. Use this and never ZD_BAD when the pixels form a glyph."
+   },
+   {
+    "name": "ZD_INK_DARK",
+    "hex": "#181310",
+    "role": "the only ink that goes ON a filled accent or state colour. ui_ink_on() returns this or ZD_TEXT_0; on every colour in this palette it returns this."
+   },
+   {
+    "name": "ZD_R_BOLT",
+    "hex": "0",
+    "role": "RADIUS token, not a colour. Bolted to the screen: the rail, the field, a maximised window, any bar spanning full width."
+   },
+   {
+    "name": "ZD_R_PLATE",
+    "hex": "10",
+    "role": "RADIUS. Moves as a whole: window plate, menu, popover, modal, toast."
+   },
+   {
+    "name": "ZD_R_INSET",
+    "hex": "5",
+    "role": "RADIUS. Nested one level inside a plate: card, toolbar, well, list row, tab, control face, input."
+   },
+   {
+    "name": "ZD_R_CHIP",
+    "hex": "3",
+    "role": "RADIUS. The smallest object: rail slot hover face, close-glyph box, sparkline clip."
+   }
+  ],
+  "contrast": [
+   {
+    "fg": "#DAD3C7",
+    "bg": "#322B27",
+    "ratio": 9.35
+   },
+   {
+    "fg": "#DAD3C7",
+    "bg": "#3D3632",
+    "ratio": 7.97
+   },
+   {
+    "fg": "#F2EDE4",
+    "bg": "#322B27",
+    "ratio": 11.92
+   },
+   {
+    "fg": "#F2EDE4",
+    "bg": "#38312D",
+    "ratio": 10.95
+   },
+   {
+    "fg": "#BDB5A7",
+    "bg": "#322B27",
+    "ratio": 6.84
+   },
+   {
+    "fg": "#BDB5A7",
+    "bg": "#3D3632",
+    "ratio": 5.83
+   },
+   {
+    "fg": "#AAA194",
+    "bg": "#38312D",
+    "ratio": 5
+   },
+   {
+    "fg": "#AAA194",
+    "bg": "#3D3632",
+    "ratio": 4.65
+   },
+   {
+    "fg": "#AAA194",
+    "bg": "#231C18",
+    "ratio": 6.58
+   },
+   {
+    "fg": "#7FB2E0",
+    "bg": "#322B27",
+    "ratio": 6.19
+   },
+   {
+    "fg": "#7FB2E0",
+    "bg": "#38312D",
+    "ratio": 5.68
+   },
+   {
+    "fg": "#7FB2E0",
+    "bg": "#3D3632",
+    "ratio": 5.27
+   },
+   {
+    "fg": "#A9CFF2",
+    "bg": "#322B27",
+    "ratio": 8.54
+   },
+   {
+    "fg": "#7FBF63",
+    "bg": "#322B27",
+    "ratio": 6.31
+   },
+   {
+    "fg": "#7FBF63",
+    "bg": "#3D3632",
+    "ratio": 5.38
+   },
+   {
+    "fg": "#E3A63F",
+    "bg": "#322B27",
+    "ratio": 6.48
+   },
+   {
+    "fg": "#E3A63F",
+    "bg": "#3D3632",
+    "ratio": 5.53
+   },
+   {
+    "fg": "#E58972",
+    "bg": "#322B27",
+    "ratio": 5.4
+   },
+   {
+    "fg": "#E58972",
+    "bg": "#3D3632",
+    "ratio": 4.6
+   },
+   {
+    "fg": "#181310",
+    "bg": "#7FB2E0",
+    "ratio": 8.2
+   },
+   {
+    "fg": "#181310",
+    "bg": "#A9CFF2",
+    "ratio": 11.32
+   },
+   {
+    "fg": "#181310",
+    "bg": "#E3A63F",
+    "ratio": 8.59
+   },
+   {
+    "fg": "#181310",
+    "bg": "#7FBF63",
+    "ratio": 8.37
+   },
+   {
+    "fg": "#181310",
+    "bg": "#E8664B",
+    "ratio": 5.65
+   },
+   {
+    "fg": "#7FB2E0",
+    "bg": "#5F5854",
+    "ratio": 3.1
+   }
+  ]
+ },
+ "structure": "ONE RAIL, ONE FIELD. No top bar, no dock, no top island.\n\nTHE RAIL. 56dp wide, full screen height, flush left, ZD_R_BOLT (square \u2014 it meets three screen edges and a radius there would be a lie). Fill ZD_RAISE. Its ONLY edge is a 1px ZD_LIT vertical run at x = rail_w-1 \u2014 the rail's own lit edge, which is also the visible source of the field's light. Contents, top to bottom, all centred on the 56dp width:\n  - launcher mark: 24dp icon at y = 16dp, ink ZD_TEXT_1. Opens the app grid as a FLOAT plate anchored to the rail, not a full-screen overlay.\n  - a 1px ZD_CUT divider at y = 56dp, inset 12dp each side.\n  - app slots: 44dp tall each, 24dp icon centred, 4dp between. Ink ZD_TEXT_3 when idle, ZD_TEXT_0 when the app owns the focused window.\n  - THE RUNNING INDICATOR REPLACES THE TILE. There is no tile, no rounded face, no box. A running app gets a 2dp x 16dp ZD_STEEL bar at x = rail_w-2, vertically centred on its slot \u2014 it sits on the rail's lit edge and points into the field at the window it owns. Hover adds a ZD_RAISE+1-step face at ZD_R_CHIP behind the icon; that face is the ONLY rectangle in the rail. This is the direct answer to \"seven identical rounded tiles in a row\": there are no tiles.\n  - flex space.\n  - status column: 24dp icons (network, volume, power), 32dp pitch, ink ZD_TEXT_3, recoloured to ZD_OK / ZD_WARN / ZD_BAD by state only.\n  - a 1px ZD_CUT divider.\n  - THE CLOCK, stacked: hours on one line, minutes on the next, ZD_T_LG, ZD_TEXT_0, tabular. A 56dp rail cannot hold \"23:41\" on one line at display size, and stacking it is what makes the rail read as an instrument face rather than a sidebar. Date below in ZD_T_SM ZD_TEXT_3. Bottom pad 16dp.\n\nTHE FIELD. Everything right of the rail. Fill ZD_VOID, then exactly ONE decoration: fb_glow(-w/8, -h/6, w*11/8, h*11/8, ZD_LITSOFT, 26, 0, 100) \u2014 a single raking light entering from off-screen upper-left and falling to ZD_VOID at the lower right. That is the whole wallpaper. Deleted: the vignette, the 64/252px technical grid, the two conic wedges, the three coloured glows, the 7s sweep. Nine layers become one call, and the light is the identity rather than a texture.\n\nWINDOWS. wm.c is mechanically unchanged \u2014 floating, draggable, resizable, z-ordered, and its per-window fb_surface cache still applies. What changes is that a window is SEATED in the field rather than floating over it (see `depth`). Windows open into the field only; the rail is never covered \u2014 wm_open's default x clamps to rail_w + 24dp.\n\nWHAT MOVED WHERE, explicitly: kernel.zl's top island (clock, status chips, separators) -> the rail's lower half. kernel.zl's dock (bar, 7 tiles, tray text, running dots) -> the rail's app column. kernel.zl's dock_fill()/island_fill() rgb() literals are deleted, not recoloured \u2014 they are the token-architecture violation the brief names, and this direction removes their call sites entirely.",
+ "chrome": "TITLE BAR 28dp (down from ZD_TITLE_H 36). Fill: none \u2014 the title bar is not a separate surface, it is the top 28dp of the plate. Deleting the title-bar fill removes fb_rrect_grad_top from the window path and removes one whole surface from the ladder.\n\nTITLE. Left-aligned at 12dp from the plate edge, ZD_T_MD, TEXT_BOLD weight. Focused ZD_TEXT_0 (11.92:1), unfocused ZD_TEXT_2 (6.84:1). Not centred \u2014 centring forces the safe_l/safe_r clamp dance in wm.c:1945-1951, which exists only because the title is centred; left-aligning deletes it.\n\nCONTROLS. Three glyphs (minimize 22, maximize/restore 23/24, close 13) at 20dp hit boxes, 4dp apart, right-aligned 8dp from the plate edge. NO FACE AT REST \u2014 three bare glyphs at ZD_TEXT_3 on the plate. The current three filled 26dp circles are three unnecessary rectangles on every window. On hover the glyph gets a ZD_R_CHIP face: ZD_RAISE for minimize/maximize, ZD_BAD for close, with ink ZD_INK_DARK (5.65:1). On press, fb_rrect_blend the face with ZD_CUT at 48.\n\nFOCUS IS ONE SIGNAL AND IT IS THE LIGHT. A focused plate's top run and left run are painted ZD_STEEL instead of ZD_LIT. Nothing else changes \u2014 no ring, no outer glow, no coloured title bar, no accent underline. Measured loudness: ZD_STEEL on ZD_BASE is 6.19:1, ZD_LIT on ZD_BASE is 1.99:1, and ZD_STEEL against ZD_LIT is 3.10:1, so the transition is unmistakable at 1px. This deletes ZD_RING_FOCUS_A, ZD_RING_BLUR_A and ZD_RING_OFF_A. wm.c's shell_state_key already carries `focused`, so the cached surface re-keys correctly with no change.\n\nSHADOW. A resting window has NONE. chrome_shadow() is called for exactly four cases: a WF_MODAL window, an open menu/popover, a toast, and the window currently being dragged (drag is the one moment a window genuinely leaves the plane). Parameters for those: off 6dp, soft 14dp, alpha 55% \u2014 half the current ZD_SHADOW_DY 20 / BLUR 50 / ALPHA 72, because a shadow that no longer has to do the separating can be much smaller. This also shrinks fb_shadow's damage reach, which wm.c:2231-2241 documents as the source of the drag-smear class.\n\nTABS. Unchanged in mechanism. The active tab is a ZD_R_INSET ZD_BASE shape continuous with the client area and carries its own 1px ZD_LIT top run; inactive tabs are bare text at ZD_TEXT_3 on the plate with no face.\n\nRESIZE GRIP. Kept, three 45-degree rules stepping in from the corner, ink ZD_TEXT_INERT (this is exactly the structure-only role that token exists for).",
+ "type_scale": "THREE SIZES, because fb.c generates three atlases and there is no font server \u2014 the constraint is real and the scale is built around it rather than pretending eight sizes exist and resampling to three (which is what design.h's ZD_T_9..ZD_T_12_5 does today).\n\n  ZD_T_SM  22  (11.0px, stored x2)  micro labels, column heads, units, timestamps\n  ZD_T_MD  26  (13.0px)             THE ROOT. Everything a person reads as prose.\n  ZD_T_LG  42  (21.0px)             display numerals only: the rail clock, a meter's value, a stat card's figure.\n\nRatios: SM->MD 1.182, MD->LG 1.615. The large jump is deliberate \u2014 LG is not \"a bigger heading\", it is a different job (numerals you read at a glance from across a desk), so it must not sit on a smooth ramp with body text or it reads as a heading and gets used as one.\n\nHIERARCHY IS CARRIED BY INK AND WEIGHT, NOT BY SIZE. With three sizes there is no room to signal five levels dimensionally, so the ramp does it: ZD_TEXT_0 emphasis / ZD_TEXT_1 body / ZD_TEXT_2 secondary / ZD_TEXT_3 label, all at ZD_T_MD except labels which drop to ZD_T_SM. Weight adds one more bit via fb_text_role's TEXT_BOLD. A micro label is additionally set UPPERCASE at the call site \u2014 that is free (the string is written that way) and it substitutes for the letter-spacing the reference uses, which zlOS cannot do without a tracking parameter on fb_text_role, i.e. a new primitive. Not worth one.\n\nMONO stays exactly as it is: one size, the fixed-cell AA font, terminal and editor only. The proportional/mono split in fb.c is correct and untouched.",
+ "radius_system": "FOUR RADII AND ONE COMPUTED, FROM ONE RULE: radius encodes how much the object can move, and nesting halves it. design.h currently measures fifteen radii and ui.c collapses all of them to theme.radius = 16 \u2014 the fifteen are unused and the one is universal. This replaces both.\n\n  ZD_R_BOLT   0     Bolted to the screen. The rail, the field, a maximised window, any bar that spans the full width. These touch a screen edge; a corner radius against a screen edge is a lie about a shape that cannot be seen.\n  ZD_R_PLATE  10    Moves as a whole. Window plate, menu, popover, modal, toast. Down from 16 \u2014 at 16 with a 28dp title bar the corner eats a third of the bar's height.\n  ZD_R_INSET  5     Nested one level inside a plate. Card, toolbar, status bar, well, list row, tab, control face, input, sparkline frame. Half of PLATE (rounded down), so a nested corner is visibly concentric with its parent instead of parallel to it.\n  ZD_R_CHIP   3     The smallest object. Rail slot hover face, title-control hover face, close-glyph box. At 5 on a 20dp box the corners merge into a blob.\n  capsule     h/2   COMPUTED, not a token. Pill, chip, badge, dot, meter track, progress track, segmented-control track, toggle body, slider thumb. These are things that are round-ended by nature, and a fixed number cannot follow them across UI scales \u2014 ZD_R_11 on a 22dp toggle is a rounded rectangle, h/2 is a switch.\n\nThe nesting rule is mechanical and is what stops corner drift: a child drawn 1px inside its parent uses parent_r - 1 (fb.c's existing convention); a child that is a NEW nesting level uses the next token down. Two levels of inset (a well inside a card inside a plate) is the maximum the system permits \u2014 a third would need a radius below 3 and should be a hairline instead.",
+ "depth": "DEPTH IS LIGHT DIRECTION, NOT SHADOW. One implied source, upper-left, everywhere, no exceptions. Two recipes, and the second is the first with the sign flipped. Both use only existing primitives.\n\nRAISED (window plate, card, toolbar, rail, control face, active tab) \u2014 four calls:\n  1. fb_rrect(x, y, w, h, r, ZD_CUT)                    the seat: a 1px groove ring all round\n  2. fb_rrect(x+1, y+1, w-2, h-2, r-1, <surface>)       the object\n  3. fb_fill_px(x+r, y, w-2r, 1, ZD_LIT)                the struck top edge\n  4. fb_fill_px(x, y+r, 1, h-2r, ZD_LITSOFT)            the grazed left edge, one step dimmer\nSteps 3 and 4 run only BETWEEN the corner arcs, so they meet the arc where its tangent is horizontal/vertical and there is no seam; the arc itself is covered by the ZD_CUT ring from step 1, which is correct \u2014 a corner turned away from a raking light is dark. Bottom and right stay ZD_CUT. Focused window: ZD_STEEL in both 3 and 4.\n\nSUNKEN (input, meter/slider track, terminal ground, segmented track) \u2014 the same four with the sign flipped:\n  1. fb_rrect(x, y, w, h, r, ZD_WELL)\n  2. fb_fill_px(x+r, y, w-2r, 1, ZD_CUT)                the cut top edge\n  3. fb_fill_px(x, y+r, 1, h-2r, ZD_CUT)\n  4. fb_fill_px(x+r, y+h-1, w-2r, 1, ZD_LITSOFT)        light caught on the far wall\n\nTHE SURFACE STEPS DO NOT SEPARATE, AND THAT IS THE POINT. Measured: WELL->VOID 1.073:1, VOID->BASE 1.126:1, BASE->RAISE 1.089:1, RAISE->FLOAT 1.077:1 \u2014 every one below any perceptual threshold. All separation power is in the 1px edges: ZD_LIT on ZD_BASE is 1.99:1 and ZD_CUT on ZD_BASE is 1.33:1, which at one pixel against a flat ground is a hard, legible line. The consequence is that the edge recipe is LOAD-BEARING and must live in exactly one function each (ui_raised_edge / ui_sunken_edge in uikit.c), never copy-pasted \u2014 if an edge is dropped or clipped away, the panels genuinely merge.\n\nSHADOW IS DEMOTED TO A FIFTH SURFACE, NOT A SEPARATOR. fb_shadow is called for four object classes only: modal, menu/popover, toast, and the window under active drag. Everything else \u2014 including every resting window, every card, every toolbar \u2014 is seated. This is the direct fix for \"shadow used as separation instead of layout\".\n\nGamma-correct linear-light blending does real work here that it does not do in the current design: a 1px highlight blended in gamma space against a dark warm ground reads as a dirty grey line. fb.c's two boot-built LUTs are what make a 1px ZD_LIT run read as light. Same for the wallpaper's single radial \u2014 a 10%-alpha ramp across 1920px will band visibly without fb.c's ordered 4x4 dither, and it is the only gradient left in the system, so it carries all of that burden alone.",
+ "icons": "MACHINED FROM THE SAME PLATE. gen_icons.py keeps its exact pipeline \u2014 geometry drawn at 4x supersample, box-filtered, emitted at BOTH 24 and 48 native (verified: icons.c holds icons24[89][24][24] and icons48[89][48][48], and fb_icon24 picks the native atlas and bilinear-resamples only for scales past 3x, so the nearest-neighbour blockiness bug desktop-look.md describes is already fixed and must not be reintroduced). What changes is the drawing rules, which are a review pass over the coordinate lists, not a rewrite of the generator.\n\nFOUR RULES.\n\n1. TWO STROKE WEIGHTS, WITH A JOB EACH. W_MAIN = 8 master (2.0px at 24) for the silhouette \u2014 the outline that says what the object is. W_THIN = 6 master (1.5px at 24) for interior detail \u2014 text rules, fold lines, dial ticks. W_BOLD = 10 is retired: a third weight in a 24px icon is not resolvable and it is what makes a set look hand-tuned per icon.\n\n2. 45/90 ARMATURE. Every straight segment is horizontal, vertical, or exactly 45 degrees. No arbitrary angles anywhere. Curves appear only where the object is physically round \u2014 clock face, power ring, network arcs, the drive platter. This is the machining constraint, and it is what makes 89 icons drawn over months read as one set.\n\n3. EXACTLY ONE SOLID MASS PER ICON. Everything else is stroke. The solid is the icon's subject \u2014 the thing that catches the light. files: folder stroked, front tab solid. terminal: frame stroked, caret solid. monitor: frame stroked, the tallest bar solid. search: ring stroked, handle solid. warning: triangle stroked, the bang solid. An icon with no solid reads as a wireframe; an icon with two has no subject. This single rule is what replaces \"outline glyphs in a row\" with a set that has figure and ground.\n\n4. OPTICAL BOX 20x20 inside the 24x24 cell (PAD = 2*SS master, already the file's value), and every open terminal keeps its round cap (path()'s caps=True, already the default). Round caps are not decoration here \u2014 they are the tool radius, and squaring them breaks rule 2's story.\n\nBANNED: any icon that is a letterform, any icon whose meaning depends on colour, any emoji, any pictorial detail below 1.5px at 24. Icon ink is always a single ui_color() role \u2014 ZD_TEXT_3 at rest, ZD_TEXT_0 active, ZD_STEEL when the icon IS the accent (caret, selection tick), ZD_OK/WARN/BAD when it reports state and only then.",
+ "motion": "THREE DURATIONS, KEYED TO DISTANCE TRAVELLED, replacing the current ten.\n\n  ZD_MS_RISE    90   appears in place: menu, popover, chip, toast entering, tooltip. Opacity 0->100 plus a 4dp rise. Distance is nearly zero, so the time is nearly zero.\n  ZD_MS_TRAVEL 160   crosses the screen: window open/close, modal, drag settle, minimise to rail. Scale 965->1000 plus 10dp translate, exactly the current zwin transform.\n  ZD_MS_SETTLE 240   a value coming to rest: meter fill, focus edge changing colour, an app becoming active. No transform, colour and length only.\n\nONE CURVE for all three: the existing ZD_EASE_WIN_X1/Y1/X2/Y2 (200, 850, 300, 1000), already stored as integers scaled by 1000. No second easing \u2014 a system with one light source has one hand.\n\nTHE FOCUS TRANSITION IS THE SIGNATURE MOTION. When focus moves, the losing plate's top+left edge crosses ZD_STEEL -> ZD_LIT and the winning plate's crosses ZD_LIT -> ZD_STEEL over ZD_MS_SETTLE, both at once. It is two 1px runs interpolating between two colours \u2014 integer lerp per frame, no new primitive, and it reads as the light physically swinging to the new window.\n\nDELETED: ZD_MS_PULSE (1000) and ZD_MS_PULSE_SLOW (2600), the two infinite loops. A dock dot that breathes forever is decoration that costs a repaint every frame; an app becoming active instead flashes its rail bar ZD_STEEL_BR and settles to ZD_STEEL over ZD_MS_SETTLE \u2014 one transition, then still. Also deleted: ZD_MS_SWEEP (7000), the wallpaper sweep, which has no wallpaper left to sweep.\n\nEverything is integer: durations in ms, transforms in px, scales per-mille, opacity in percent, colour interpolation in 0..255 per channel. Nothing in the drawing path takes a float.",
+ "preserves": [
+  "the subpixel LCD text pipeline - font_sub.c and fb.c blend_sub's 5-tap (1,2,3,2,1)/9 FIR, untouched",
+  "gamma-correct blending in LINEAR LIGHT, fb.c:195-273's two boot-built LUTs - load-bearing here, since a 1px highlight blended in gamma space reads as a dirty grey line",
+  "dithered gradients, the ordered 4x4 threshold at fb.c:459-512 - the wallpaper's single radial is the only gradient left and depends on it entirely",
+  "anti-aliased rounded corners, fb_rrect's 4x4 supersampled coverage - the seat recipe draws two concentric rrects and needs both curves to be the same curve",
+  "icons as GEOMETRY in gen_icons.py, drawn at 4x and box-filtered, emitted natively at 24 and 48",
+  "real TrueType glyphs in font_aa.c and the proportional DejaVu Sans atlas from gen_prop_font.py, with per-glyph advances",
+  "soft shadows via chebyshev falloff - kept, demoted to four object classes, parameters halved",
+  "the q8 UI scale and UI_DP() - every number in this spec is a design pixel and goes through it",
+  "the three-layer token architecture: primitives in design.h, semantics in ui.c's theme struct, roles at the call site, no hex outside design.h",
+  "ui.c's immediate-mode layout cursor and the hit-test-by-redraw contract - no widget takes an action as an argument",
+  "wm.c's floating window manager, z-order, drag, resize, tabs, and its per-window fb_surface cache (shell_state_key already carries `focused`, so the light-based focus signal re-keys correctly)",
+  "ui.h's 29 colour roles - this remaps their values, it does not renumber the enum, so no ui_color() index moves and kernel.zl needs no reindexing"
+ ],
+ "new_primitives": [],
+ "risks": [
+  "MUDDY-BROWN RISK. The surface ladder sits at hue 22 with 18-31% saturation. On a poorly calibrated or strongly blue-shifted panel that can read as brown rather than warm graphite. This is the one thing that must be judged on the ThinkPad X1 Carbon's actual panel and not in a PPM viewer - render hosttest/wmshot first, but do not accept the direction until it has been seen on the target display.",
+  "THE 1PX EDGE IS LOAD-BEARING AND FAILS SILENTLY. Adjacent surface steps are 1.07:1 to 1.13:1 by design, so if an edge run is clipped away, drawn in the wrong order, or omitted in one widget, that widget does not look slightly wrong - it vanishes into its parent. Mitigation: exactly one ui_raised_edge() and one ui_sunken_edge() in uikit.c, and a hosttest assertion that samples the pixel at (x+r, y) of every raised widget and requires it to differ from the fill.",
+  "REMOVING fb_shadow FROM RESTING WINDOWS TOUCHES DAMAGE MATH. wm.c:2231-2241 documents that fb_shadow's reach (x+off-soft outward) is entangled with the repaint region and was the source of a drag-smear bug. Shrinking the shadow is the safe direction, but the damage rectangle is computed from the shadow's extent in at least two places and both must be found before the parameters change.",
+  "STEEL IS A BLUE ACCENT, THE MOST COMMON ACCENT HUE IN SOFTWARE. Its entire differentiation is that it is LOW chroma (43% sat) sitting on a WARM ground and that it means 'the light' rather than 'the brand'. If a later change raises its saturation, or a second cold hue is added, the system collapses into generic dark-UI-with-blue. Saturation should be treated as a locked value, not a taste knob.",
+  "THE RAIL MUST NEVER BE COVERED, AND wm.c DOES NOT KNOW THAT. With no top bar and no dock, the rail is the only route to every system function. wm_open, drag, and maximise all need a left clamp at rail_w, and maximise in particular currently has no concept of a reserved strut. A window dragged over the rail hides the clock, the launcher and every running app at once - a strictly worse failure than covering a dock you could still reach at the screen edge.",
+  "FOUR TEXT COLOURS CLEAR 4.5:1 BY A MARGIN UNDER 1.0 (T3 4.65 on FLOAT, BAD_INK 4.60 on FLOAT, T2 5.83, STEEL 5.27). Those are computed against the exact FLOAT hex #3D3632; lightening FLOAT by even two steps breaks T3 and BAD_INK. The gate is that any change to ZD_FLOAT must re-run the contrast script, and hosttest should carry the check rather than a comment claiming it was done.",
+  "SCOPE. This is not a palette swap. Concretely it rewrites design.h (about 40 tokens out, 24 in), the theme mapping in ui.c, the frame and title path in wm.c, the edge recipe across roughly 50 widgets in uikit.c, and deletes and rebuilds the island and dock sections of kernel.zl. The first shippable increment is design.h + ui.c + wm.c's chrome_shell/chrome_shadow alone: that changes every window in hosttest/wmshot with kernel.zl untouched, and is enough to judge the direction before the rail is built."
+ ]
+}

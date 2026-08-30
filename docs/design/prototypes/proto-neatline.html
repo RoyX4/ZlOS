@@ -1,0 +1,3000 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neatline / zlOS living prototype</title>
+<style>
+/* ============================================================== design.h
+   NEATLINE. The desktop is ONE MAP SHEET.
+
+   Chrome is a full perimeter apron, not a rail: eastings and the sheet title
+   on the top edge, northings on the left, the tick channel on the right, and
+   the KEY along the bottom. Inside the neatline the field is ruled on a
+   100 unit grid, 1 px, every fifth line heavier.
+
+   FIVE INKS, AND EACH ONE MEANS EXACTLY ONE CLASS OF THING, because the key
+   on screen says so:
+
+     INK      structure, type, rules. everything that is not a referent.
+     WATER    i/o, net, pipes, streams.
+     WOOD     user data and files.
+     CONTOUR  level and pressure. cpu, memory, heat. drawn as banded fills
+              exactly as contours are.
+     ROAD     routes and actions. the one primary action, and failure.
+
+   Three laws follow from that, and they are enforced in this stylesheet:
+     1. NO LEXICAL INK IS EVER SET AS TEXT. They are marks, fills and rules.
+        Every text colour in this document is ZD_INK, ZD_INK_2, ZD_INK_3 or a
+        knockout rank. Grep for "color: var(--zd-water" and you will not
+        find one.
+     2. NO LEXICAL INK CARRIES STATE. Focus, selection, hover and pressed are
+        all made with the neatline, with weight, and with value inversion.
+        A hue never moves to say "this one".
+     3. THE KEY IS ALWAYS ON SCREEN. The bottom apron collapses from the full
+        96 dp KEY to a 24 dp LIVE LEGEND carrying only the inks and symbols
+        actually on screen, but it never collapses to nothing. The contract is
+        the legal justification for spending five inks and it is the one thing
+        that may not be cut.
+
+   Zero hex appears as a CSS value anywhere outside the two :root blocks.
+   Every custom property name below exists in BOTH modes.
+   ------------------------------------------------------------------------ */
+:root {
+  /* -------------------------------------------------------- the stock --
+     THE MARGIN IS BRIGHTER THAN THE FIELD. This is the one relationship
+     that inverts PLATE. On a real sheet the margin is unprinted paper and
+     the body carries the base tint, so the apron sits ABOVE the field in
+     luminance (1.16:1) rather than below it. */
+  --zd-apron:      #F5F2E8;   /* the marginal apron. unprinted stock.       */
+  --zd-paper:      #F1EDE1;   /* a window sheet.                            */
+  --zd-field:      #E7E2D4;   /* the ruled field inside the neatline.       */
+  --zd-well:       #DFDACA;   /* a sunken box: input, plot ground, track.   */
+  --zd-tint:       #DCD6C6;   /* the zebra tint. CARRIES TEXT.              */
+
+  --zd-ink:        #101211;   /* 16.07:1 on paper, 14.53:1 on the field.    */
+  --zd-ink-2:      #3A3831;   /* 10.02 / 9.07                               */
+  --zd-ink-3:      #56534A;   /* 6.57 / 5.94                                */
+
+  --zd-grid:       #8E897A;   /* the 1 px grid line. 2.70:1 on the field.   */
+  --zd-grid-5:     #6E6A5D;   /* every fifth line. 4.18:1 on the field.     */
+  --zd-rule-1:     #6E6A5D;   /* 1 px hairline inside a sheet.              */
+  --zd-rule-2:     #101211;   /* 2 px structural rule. the neatline.        */
+
+  /* ------------------------------------------------- the five inks ----
+     Measured, not estimated. Each is quoted against the FIELD and against
+     PAPER, the two grounds a mark can land on, and the key prints these
+     same numbers live off :root at run time. None is used as text, so the
+     binding floor is the 3:1 non text floor; all four clear 4.10. */
+  --zd-water:      #42718A;   /* 4.10 field / 4.53 paper  i/o, net, streams */
+  --zd-wood:       #4F6F44;   /* 4.40 / 4.86              user data, files  */
+  --zd-contour:    #95592D;   /* 4.33 / 4.79              level, pressure   */
+  --zd-road:       #B23A22;   /* 4.61 / 5.09              routes, actions   */
+
+  /* the contour ramp. a level is drawn as BANDED FILL, the way a contour
+     map draws height, never as a single bar in one colour. band 4 is the
+     contour ink itself; 1 to 3 are its screened tints. */
+  --zd-band-1:     #E3D6C0;
+  --zd-band-2:     #D3BB98;
+  --zd-band-3:     #BE9C6C;
+  --zd-band-4:     #95592D;
+
+  /* ------------------------------------------------------ the knockout --
+     The one value inversion in the system. It marks a SELECTED ROW, a
+     pressed control and a menu head. It never marks window focus: that is
+     the neatline's job, and giving it two signals would make the neatline
+     decorative. */
+  --zd-slab:       #101211;
+  --zd-slab-0:     #F5F2E8;   /* 16.79:1 on the slab                        */
+  --zd-slab-1:     #BDB8A9;   /*  9.49:1 on the slab                        */
+
+  /* the three status words. not lexical inks: these are TYPE, so they are
+     held to the 4.5:1 body floor on every ground they can land on. */
+  --zd-ok:         #1C5F34;
+  --zd-warn:       #6B4400;
+  --zd-bad:        #A3210F;
+
+  /* ------------------------------------------------------------ metrics */
+  --ui: 1;
+  --ap:        calc(24px * var(--ui));   /* apron on three edges           */
+  --keyh:      calc(24px * var(--ui));   /* bottom apron. 24 live, 96 full */
+  --neat:      calc(6px * var(--ui));    /* 2 outer + 3 paper + 1 inner    */
+  --pitch:     20px;                     /* grid pitch, px per 20 units    */
+  --row-h:     calc(24px * var(--ui));
+  --cell-h:    calc(20px * var(--ui));
+  --hdr-h:     calc(26px * var(--ui));
+  --pad:       calc(12px * var(--ui));
+  --gap:       calc(8px  * var(--ui));
+  --r-0: 0px;
+
+  /* THREE TYPE SIZES AND ONE DISPLAY SIZE. 11 / 15 / 22 map onto the baked
+     8x16, 16x32 and 24x48 atlases at 1.0 scale; 44 is 24x48 doubled, used
+     once, on the lock clock. Nothing else upscales. */
+  --fs-data:   calc(11px * var(--ui));
+  --lh-data:   calc(16px * var(--ui));
+  --fs-body:   calc(15px * var(--ui));
+  --lh-body:   calc(22px * var(--ui));
+  --fs-title:  calc(22px * var(--ui));
+  --lh-title:  calc(26px * var(--ui));
+  --fs-disp:   calc(44px * var(--ui));
+  --track:     calc(2px * var(--ui));
+  --track-tt:  calc(1px * var(--ui));
+
+  --sans: ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+/* ========================================================= design.h, dark
+   THE NIGHT SHEET, and it is made of a documented real thing rather than
+   taste. IHO S-52 defines a NIGHT colour table for ECDIS, the chart display
+   on a ship's bridge, whose whole job is to stay readable without wrecking
+   the watch officer's dark adaptation. Four things follow from adopting it,
+   and all four are visible below:
+
+   1. THE GROUND IS COOL, NOT NEUTRAL. #0D1214 is a teal black. A neutral
+      near black is the stock answer and it is what the current zlOS desktop
+      already is; the chart ground is specifically NOT that.
+   2. NOTHING IS WHITE. "Chart white" at night is #D6DAD6, 13.34:1 on the
+      ground. A real white would be a lamp.
+   3. NO LARGE AREA IS EVER BRIGHT. This is why the knockout does not
+      invert literally. On paper the slab is ink and the type is stock; at
+      night the slab CANNOT become chart white, because a selected table row
+      would then be the brightest object in the room. So ZD_SLAB steps to a
+      lifted band #3E4A4F (2.06:1 above the ground) and the type on it comes
+      DOWN to #E8ECE8. Same rank, same operation, no lamp.
+   4. THE FIVE INKS ARE RETUNED, NOT LIGHTENED. Each keeps its hue family
+      and its meaning and is re-measured on the night ground: water 5.56,
+      wood 5.50, contour 5.08, road 4.95 on the field.
+
+   The apron stays BRIGHTER than the field in this mode too, because that
+   relationship is the direction, not a light mode artifact.
+   ------------------------------------------------------------------------ */
+:root[data-theme="dark"] {
+  --zd-apron:      #151D20;   /* margin, still above the field: 1.10:1      */
+  --zd-paper:      #1E262A;   /* a window sheet. 1.23:1 on the ground.      */
+  --zd-field:      #0D1214;   /* S-52 NIGHT ground. cool teal black.        */
+  --zd-well:       #171E21;
+  --zd-tint:       #273035;
+
+  --zd-ink:        #D6DAD6;   /* chart white. 13.34:1 on the field.         */
+  --zd-ink-2:      #AFB6B4;   /* 9.13 on field / 7.45 on paper              */
+  --zd-ink-3:      #949C9A;   /* 6.72 / 5.48                                */
+
+  --zd-grid:       #333E43;   /* 1.72:1. structure at night, not a net.     */
+  --zd-grid-5:     #4A575C;   /* 2.52:1                                     */
+  --zd-rule-1:     #4A575C;
+  --zd-rule-2:     #D6DAD6;
+
+  --zd-water:      #5A93AB;   /* 5.56 field / 4.54 paper                    */
+  --zd-wood:       #6E9560;   /* 5.50 / 4.49                                */
+  --zd-contour:    #B0793F;   /* 5.08 / 4.14                                */
+  --zd-road:       #D2604A;   /* 4.95 / 4.04                                */
+
+  --zd-band-1:     #232B2C;
+  --zd-band-2:     #3C3B33;
+  --zd-band-3:     #6B5334;
+  --zd-band-4:     #B0793F;
+
+  --zd-slab:       #3E4A4F;   /* NOT chart white. see note 3 above.         */
+  --zd-slab-0:     #E8ECE8;   /* 7.66:1 on the slab                         */
+  --zd-slab-1:     #B4BDBB;   /* 4.76:1 on the slab                         */
+
+  --zd-ok:         #64C08A;
+  --zd-warn:       #D2A44E;
+  --zd-bad:        #EE8F76;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--zd-field); font-family: var(--sans); overflow: hidden;
+       -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--zd-well); border-left: 1px solid var(--zd-rule-1); }
+::-webkit-scrollbar-thumb { background: var(--zd-ink-3); border-radius: var(--r-0); }
+
+/* ================================================================ type == */
+.t-data  { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+           color: var(--zd-ink-2); font-variant-numeric: tabular-nums; }
+.t-label { font-family: var(--sans); font-size: var(--fs-data); line-height: var(--lh-data);
+           font-weight: 700; text-transform: uppercase; letter-spacing: var(--track);
+           margin-right: calc(-1 * var(--track)); color: var(--zd-ink-3); }
+.t-body  { font-family: var(--sans); font-size: var(--fs-body); line-height: var(--lh-body);
+           color: var(--zd-ink-2); }
+.t-title { font-family: var(--sans); font-size: var(--fs-title); line-height: var(--lh-title);
+           font-weight: 700; text-transform: uppercase; letter-spacing: calc(4px * var(--ui));
+           margin-right: calc(-4px * var(--ui)); color: var(--zd-ink); }
+.t-disp  { font-family: var(--mono); font-size: var(--fs-disp); line-height: 1.15;
+           font-weight: 700; color: var(--zd-ink); font-variant-numeric: tabular-nums;
+           letter-spacing: calc(3px * var(--ui)); }
+.i0 { color: var(--zd-ink); } .i2 { color: var(--zd-ink-2); } .i3 { color: var(--zd-ink-3); }
+.k0 { color: var(--zd-slab-0); } .k1 { color: var(--zd-slab-1); }
+.w-ok { color: var(--zd-ok); } .w-warn { color: var(--zd-warn); } .w-bad { color: var(--zd-bad); }
+.b { font-weight: 700; }
+.mono { font-family: var(--mono); }
+
+/* ================================================== prototype furniture = */
+#strip { position: fixed; left: 0; right: 0; top: 0; height: 28px; z-index: 500;
+         background: var(--zd-slab); display: flex; align-items: stretch; padding-left: 12px;
+         border-bottom: 2px solid var(--zd-rule-2); }
+#strip .nm { display: flex; align-items: center; color: var(--zd-slab-0); }
+#strip .pitchtxt { display: block; line-height: 28px; padding: 0 14px; color: var(--zd-slab-1);
+         font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden;
+         text-overflow: ellipsis; min-width: 0; }
+#strip .links { margin-left: auto; display: flex; }
+#strip a, #strip .tk, #strip .thint {
+         display: flex; align-items: center; padding: 0 10px; text-decoration: none;
+         border-left: 1px solid var(--zd-slab-1); color: var(--zd-slab-1);
+         font-family: var(--sans); font-size: 11px; font-weight: 700;
+         text-transform: uppercase; letter-spacing: 2px; }
+#strip .thint { font-family: var(--mono); font-weight: 400; text-transform: none; letter-spacing: 0; }
+#strip a.on, #strip .tk.on { background: var(--zd-slab-0); color: var(--zd-slab); }
+#strip .tk { cursor: pointer; }
+#strip .thm { display: flex; align-items: stretch; }
+
+#os { position: fixed; left: 0; right: 0; top: 28px; bottom: 0;
+      background: var(--zd-apron); overflow: hidden; }
+
+/* ================================================================ apron =
+   Chrome on all four edges. This is the move: the desktop is a BOUNDED
+   SHEET with an outside, not a field with a sidebar. */
+.apron { position: absolute; background: var(--zd-apron); z-index: 40; overflow: hidden; }
+#ap-top    { left: 0; right: 0; top: 0; height: var(--ap); }
+#ap-left   { left: 0; top: var(--ap); bottom: var(--keyh); width: var(--ap); }
+#ap-right  { right: 0; top: var(--ap); bottom: var(--keyh); width: var(--ap); }
+#ap-bottom { left: 0; right: 0; bottom: 0; height: var(--keyh);
+             border-top: 1px solid var(--zd-rule-1); }
+
+#ap-top .sheetname { position: absolute; left: calc(var(--ap) + var(--neat)); top: 0;
+             height: var(--ap); display: flex; align-items: center; gap: 10px;
+             background: var(--zd-apron); padding: 0 12px 0 6px; z-index: 3; }
+#ap-top .sheetno { position: absolute; right: calc(var(--ap) + var(--neat) + 6px); top: 0;
+             height: var(--ap); display: flex; align-items: center; gap: 10px;
+             background: var(--zd-apron); padding-left: 12px; z-index: 3; }
+.apsvg { position: absolute; left: 0; top: 0; pointer-events: none; }
+.apsvg.echo { z-index: 6; }
+
+/* the neatline of the SHEET ITSELF: 2 px outer, 3 px stock, 1 px inner. */
+#neatframe { position: absolute; left: var(--ap); right: var(--ap); top: var(--ap);
+             bottom: var(--keyh); border: 2px solid var(--zd-rule-2);
+             background: var(--zd-apron); padding: 3px; z-index: 10; pointer-events: none; }
+#neatframe > i { display: block; width: 100%; height: 100%; border: 1px solid var(--zd-rule-2); }
+
+#field { position: absolute; left: calc(var(--ap) + var(--neat)); right: calc(var(--ap) + var(--neat));
+         top: calc(var(--ap) + var(--neat)); bottom: calc(var(--keyh) + var(--neat));
+         background: var(--zd-field); overflow: hidden; z-index: 12; }
+#gridsvg { position: absolute; left: 0; top: 0; pointer-events: none; }
+#wins { position: absolute; inset: 0; }
+
+/* ================================================================== key =
+   THE KEY IS THE LAUNCHER. A key's job is to explain a sheet you have never
+   seen; a dock's job is to hold seven things you already know. That is why
+   this one still works at 53 apps: it scrolls and it stays alphabetical. */
+#ap-bottom.full { height: calc(96px * var(--ui)); }
+.keyhead { height: calc(16px * var(--ui)); display: flex; align-items: center; gap: 10px;
+           padding: 0 calc(var(--ap)) 0 var(--ap); border-bottom: 1px solid var(--zd-rule-1); }
+.keybody { display: flex; height: calc(80px * var(--ui)); }
+.keycols { flex: 1; min-width: 0; display: flex; overflow-x: auto; overflow-y: hidden;
+           padding-left: var(--ap); }
+.keycol  { flex: none; width: calc(212px * var(--ui)); display: flex; flex-direction: column;
+           border-right: 1px solid var(--zd-rule-1); }
+.keyrow  { height: calc(20px * var(--ui)); display: flex; align-items: center;
+           gap: calc(6px * var(--ui)); padding: 0 calc(8px * var(--ui)); cursor: pointer; }
+.keyrow:hover { background: var(--zd-slab); }
+.keyrow:hover .t-label, .keyrow:hover .t-data { color: var(--zd-slab-0); }
+.keyrow .sym { flex: none; width: calc(24px * var(--ui)); height: calc(20px * var(--ui));
+               display: flex; align-items: center; justify-content: center; color: var(--zd-ink); }
+.keyrow:hover .sym { color: var(--zd-slab-0); }
+.keyrow .nm { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
+              text-overflow: ellipsis; color: var(--zd-ink-2); }
+.keyrow .sc { flex: none; color: var(--zd-ink-3); }
+.keyrow.run .nm { color: var(--zd-ink); font-weight: 700; }
+.keyrow.run .sym::after { content: ''; }
+.keyrow .lit { flex: none; width: 3px; height: calc(12px * var(--ui)); background: transparent; }
+.keyrow.run .lit { background: var(--zd-ink); }
+.keyrow.hold .lit { background: var(--zd-ink-3); }
+
+.keyside { flex: none; display: flex; border-left: 2px solid var(--zd-rule-2); }
+.inkkey  { width: calc(304px * var(--ui)); padding: 0 calc(10px * var(--ui)); }
+.inkrow  { height: calc(16px * var(--ui)); display: flex; align-items: center; gap: 8px; }
+.inkrow .sw { flex: none; width: calc(22px * var(--ui)); height: calc(9px * var(--ui));
+              border: 1px solid var(--zd-rule-1); }
+.inkrow .mn { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+.inkrow .rt { flex: none; color: var(--zd-ink-3); }
+.scalebox { width: calc(196px * var(--ui)); padding: calc(4px * var(--ui)) calc(10px * var(--ui));
+            border-left: 1px solid var(--zd-rule-1); display: flex; flex-direction: column;
+            justify-content: center; }
+.northbox { width: calc(86px * var(--ui)); border-left: 1px solid var(--zd-rule-1);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+/* the 24 dp LIVE LEGEND. only what is on screen, and it is never absent. */
+.legend { height: calc(24px * var(--ui)); display: flex; align-items: center;
+          gap: calc(10px * var(--ui)); padding: 0 calc(10px * var(--ui)) 0 var(--ap);
+          flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.legend .lit { display: flex; align-items: center; gap: 5px; flex: none; white-space: nowrap; }
+.legend > * { flex: none; }
+.legend .t-data, .legend .t-label { white-space: nowrap; }
+.legend .sw { width: calc(18px * var(--ui)); height: calc(8px * var(--ui));
+              border: 1px solid var(--zd-rule-1); }
+.legend .vr { width: 1px; height: calc(12px * var(--ui)); background: var(--zd-rule-1); flex: none; }
+.legend .grow { margin-left: auto; }
+.legend .hint { cursor: pointer; }
+.legend .syms { display: flex; align-items: center; gap: 3px; color: var(--zd-ink); }
+
+/* =============================================================== window =
+   FOCUS IS THE NEATLINE. Unfocused a sheet carries a single 1 px frame;
+   focused it carries the full border of a map sheet, 2 px outer rule,
+   3 px of stock, 1 px inner rule. The 6 px is reserved in BOTH states, so
+   focus never reflows a single glyph. */
+/* THE ONLY MOTION besides the 500 ms caret: a 100 ms linear slide when a sheet
+   moves. It is deliberately NOT applied to width or height. A transitioned
+   size means the DOM and the pixels disagree for 100 ms, which is invisible in
+   use and wrong every time something measures the sheet: a headless capture, a
+   screenshot gate, or the index sheet cloning a live window. Position animates,
+   extent does not. */
+.win { position: absolute; border: 2px solid transparent; padding: 3px; background: transparent;
+       display: flex; border-radius: var(--r-0);
+       transition: left 100ms linear, top 100ms linear; }
+.win.drag { transition: none; }
+.win.hidden { display: none; }
+.win.foc { border-color: var(--zd-rule-2); background: var(--zd-apron); }
+.frame { flex: 1; min-width: 0; border: 1px solid var(--zd-rule-2); background: var(--zd-paper);
+         display: flex; flex-direction: column; overflow: hidden; }
+.hdr { height: var(--hdr-h); flex: none; display: flex; align-items: center;
+       gap: calc(8px * var(--ui)); padding-left: calc(7px * var(--ui));
+       border-bottom: 1px solid var(--zd-rule-1); user-select: none; cursor: default; }
+.win.foc .hdr { border-bottom: 2px solid var(--zd-rule-2); }
+.hdr .ico { flex: none; width: calc(20px * var(--ui)); height: calc(20px * var(--ui));
+            color: var(--zd-ink); cursor: pointer; display: flex; align-items: center; }
+.hdr .ttl { color: var(--zd-ink-2); flex: none; white-space: nowrap; }
+.win.foc .hdr .ttl { color: var(--zd-ink); }
+.hdr .sub { color: var(--zd-ink-3); flex: 0 1 auto; min-width: 0; overflow: hidden;
+            white-space: nowrap; }
+/* the grid reference, in the real format: two letters, four digits, which is
+   exactly six mono cells wide. */
+.hdr .ref { color: var(--zd-ink-2); flex: none; margin-left: auto; letter-spacing: 1px;
+            padding-right: calc(6px * var(--ui)); white-space: nowrap; }
+.win.foc .hdr .ref { color: var(--zd-ink); font-weight: 700; }
+.ctls { display: flex; height: 100%; flex: none; }
+.ctl { width: calc(22px * var(--ui)); display: flex; align-items: center; justify-content: center;
+       border-left: 1px solid var(--zd-rule-1); color: var(--zd-ink-2); cursor: pointer; }
+.ctl:hover { background: var(--zd-slab); color: var(--zd-slab-0); }
+.body { flex: 1; min-height: 0; padding: calc(9px * var(--ui)); display: flex;
+        flex-direction: column; overflow: hidden; }
+
+/* =========================================================== primitives = */
+.scroll { overflow: auto; min-height: 0; flex: 1; }
+.hr1 { height: 1px; background: var(--zd-rule-1); flex: none; }
+.hr2 { height: 2px; background: var(--zd-rule-2); flex: none; }
+.vr1 { width: 1px; background: var(--zd-rule-1); align-self: stretch; flex: none; }
+.row { display: flex; align-items: center; gap: var(--gap); flex: none; overflow: hidden; }
+.row > .t-label, .row > .t-data { white-space: nowrap; }
+.grow { margin-left: auto; }
+.stack { display: flex; flex-direction: column; min-height: 0; }
+.cols2 { display: flex; gap: calc(10px * var(--ui)); min-height: 0; flex: 1; }
+.cols2 > * { flex: 1; min-width: 0; }
+.well { background: var(--zd-well); border: 1px solid var(--zd-rule-1);
+        padding: calc(5px * var(--ui)) calc(8px * var(--ui)); }
+.slab { background: var(--zd-slab); padding: calc(5px * var(--ui)) calc(8px * var(--ui)); }
+.slab .t-data { color: var(--zd-slab-0); }
+.slab .dim { color: var(--zd-slab-1); }
+.pre { font-family: var(--mono); font-size: var(--fs-data); line-height: var(--lh-data);
+       white-space: pre; color: var(--zd-ink-2); }
+.slab .pre { color: var(--zd-slab-0); }
+
+.tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tbl th { text-align: left; height: var(--cell-h); padding: 0 calc(4px * var(--ui));
+          border-bottom: 1px solid var(--zd-rule-1); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; font-family: var(--sans); font-size: var(--fs-data);
+          font-weight: 700; text-transform: uppercase; letter-spacing: var(--track-tt);
+          color: var(--zd-ink-3); }
+.tbl td { height: var(--cell-h); padding: 0 calc(4px * var(--ui));
+          border-bottom: 1px solid var(--zd-rule-1); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; font-family: var(--mono); font-size: var(--fs-data);
+          line-height: var(--lh-data); color: var(--zd-ink-2); font-variant-numeric: tabular-nums; }
+.tbl th.r, .tbl td.r { text-align: right; }
+.zeb .tbl tbody tr:nth-child(even) td { background: var(--zd-tint); }
+.zeb .tbl tbody tr.sel td, .tbl tbody tr.sel td { background: var(--zd-slab); color: var(--zd-slab-0); }
+.tbl tr.sel td .i3, .tbl tr.sel td .i2 { color: var(--zd-slab-1); }
+.tbl tr.pick { cursor: pointer; }
+.tbl tr.pick:hover:not(.sel) td { background: var(--zd-well); }
+/* a cell whose VALUE is a referent gets a 3 px ink bar, not coloured text.
+   this is how a lexical ink reaches a table without becoming type. */
+.cbar { display: inline-block; width: 3px; height: calc(11px * var(--ui));
+        vertical-align: -1px; margin-right: 5px; }
+
+.btn { height: calc(22px * var(--ui)); padding: 0 calc(10px * var(--ui)); display: inline-flex;
+       align-items: center; border: 1px solid var(--zd-rule-1); background: var(--zd-paper);
+       cursor: pointer; flex: none; border-radius: var(--r-0); }
+.btn .t-label { color: var(--zd-ink-2); }
+.btn:hover { background: var(--zd-well); }
+.btn:active, .btn.down { background: var(--zd-slab); border-color: var(--zd-slab); }
+.btn:active .t-label, .btn.down .t-label { color: var(--zd-slab-0); }
+/* the ONE primary action per sheet. ROAD means routes and actions, so the
+   primary action is marked with a 3 px road rule down its leading edge.
+   the label stays ink: the ink is the mark, never the type. */
+.btn.prim { border-left: 3px solid var(--zd-road); }
+.btn.prim .t-label { color: var(--zd-ink); }
+
+.seg { display: flex; border: 1px solid var(--zd-rule-1); flex: none; }
+.seg > span { flex: 1; height: calc(22px * var(--ui)); display: flex; align-items: center;
+       justify-content: center; background: var(--zd-well);
+       border-right: 1px solid var(--zd-rule-1); cursor: pointer; }
+.seg > span:last-child { border-right: 0; }
+.seg > span .t-label { color: var(--zd-ink-2); }
+.seg > span.on { background: var(--zd-slab); }
+.seg > span.on .t-label { color: var(--zd-slab-0); }
+
+/* CONTOUR: a level is drawn as banded fill. four bands, hard edges, exactly
+   the way a contour map draws height. no gradient, no single bar. */
+.cmeter { margin-bottom: calc(6px * var(--ui)); flex: none; }
+.crow { display: flex; align-items: baseline; }
+.crow .t-data { margin-left: auto; color: var(--zd-ink); font-weight: 700; }
+.ctrack { height: calc(11px * var(--ui)); background: var(--zd-well);
+          border: 1px solid var(--zd-rule-1); display: flex; overflow: hidden; }
+.ctrack > i { display: block; height: 100%; }
+.cb1 { background: var(--zd-band-1); } .cb2 { background: var(--zd-band-2); }
+.cb3 { background: var(--zd-band-3); } .cb4 { background: var(--zd-band-4); }
+.ctrack > u { display: block; height: 100%; width: 1px; background: var(--zd-rule-1); }
+
+.kvgrid { display: grid; grid-template-columns: 1fr 1fr; column-gap: calc(14px * var(--ui));
+          flex: none; }
+.kv { display: flex; align-items: baseline; border-bottom: 1px solid var(--zd-rule-1);
+      height: var(--cell-h); flex: none; overflow: hidden; }
+.kv .v { margin-left: auto; padding-left: calc(10px * var(--ui)); color: var(--zd-ink-2);
+         font-family: var(--mono); font-size: var(--fs-data); white-space: nowrap;
+         font-variant-numeric: tabular-nums; }
+
+.plotbox { position: relative; flex: 1; min-height: calc(38px * var(--ui));
+           max-height: calc(320px * var(--ui));
+           background: var(--zd-well); border: 1px solid var(--zd-rule-1); overflow: hidden; }
+.plotbox svg { display: block; }
+.meanline { position: absolute; left: 0; right: 0; height: 1px; background: var(--zd-ink-3); }
+
+.ctlrow { min-height: calc(28px * var(--ui)); display: flex; align-items: center; flex: none;
+          border-bottom: 1px solid var(--zd-rule-1); }
+.ctlrow .right { margin-left: auto; display: flex; align-items: center; gap: calc(10px * var(--ui)); }
+.sw { width: calc(32px * var(--ui)); height: calc(16px * var(--ui)); background: var(--zd-well);
+      border: 1px solid var(--zd-rule-2); position: relative; cursor: pointer; flex: none; }
+.sw > i { position: absolute; left: 1px; top: 1px; width: calc(12px * var(--ui));
+          height: calc(12px * var(--ui)); background: var(--zd-ink-3); }
+.sw.on { background: var(--zd-slab); }
+.sw.on > i { left: auto; right: 1px; background: var(--zd-slab-0); }
+.slider { position: relative; width: calc(178px * var(--ui)); height: calc(16px * var(--ui));
+          display: flex; align-items: center; cursor: pointer; flex: none; }
+.slider .st { position: absolute; left: 0; right: 0; height: calc(8px * var(--ui));
+              background: var(--zd-well); border: 1px solid var(--zd-rule-1); }
+.slider .sf { position: absolute; left: 1px; top: calc(50% - (4px * var(--ui)) + 1px);
+              height: calc(6px * var(--ui)); background: var(--zd-ink-3); }
+.slider .sh { position: absolute; top: 0; width: calc(8px * var(--ui)); height: calc(16px * var(--ui));
+              background: var(--zd-apron); border: 2px solid var(--zd-rule-2); }
+.slider .tick { position: absolute; top: calc(16px * var(--ui)); width: 1px;
+                height: calc(3px * var(--ui)); background: var(--zd-rule-1); }
+.caret { display: inline-block; width: calc(7px * var(--ui)); height: var(--lh-data);
+         background: var(--zd-ink); vertical-align: text-bottom; }
+.slab .caret { background: var(--zd-slab-0); }
+.blinkon .caret { animation: bl 500ms steps(1, end) infinite; }
+@keyframes bl { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+.silo { display: flex; flex-wrap: wrap; gap: calc(6px * var(--ui)); }
+.silo > span { width: calc(34px * var(--ui)); height: calc(34px * var(--ui));
+               border: 1px solid var(--zd-rule-1); display: flex; align-items: center;
+               justify-content: center; background: var(--zd-well); color: var(--zd-ink); }
+
+/* ============================================================= overview = */
+#overview { position: absolute; inset: 0; background: var(--zd-field); z-index: 60; display: none;
+            flex-direction: column; padding: calc(12px * var(--ui)); }
+#overview.on { display: flex; }
+.ovhead { display: flex; align-items: baseline; gap: calc(12px * var(--ui)); flex: none;
+          border-bottom: 2px solid var(--zd-rule-2); padding-bottom: calc(6px * var(--ui)); }
+/* the plans are sized from the field's own aspect ratio, so the row is as
+   tall as the plans are and no taller. a fixed percentage left a dead band
+   between the plans and the register. */
+.ovbody { flex: none; display: flex; gap: calc(20px * var(--ui)); align-items: flex-start;
+          padding-top: calc(10px * var(--ui)); }
+.ovws { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ovlab { display: flex; align-items: baseline; gap: calc(8px * var(--ui)); flex: none;
+         padding-bottom: calc(4px * var(--ui)); }
+.ovfield { position: relative; background: var(--zd-field);
+           border: 1px solid var(--zd-rule-2); overflow: hidden; cursor: pointer; }
+.ovfield.cur { border: 2px solid var(--zd-rule-2); }
+.ovscale { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ovscale .win { transition: none; }
+.ovpick { position: absolute; cursor: pointer; z-index: 5; }
+.ovpick:hover { outline: 2px solid var(--zd-ink); outline-offset: 0; }
+.ovreg { flex: 1; min-height: 0; display: flex; flex-direction: column;
+         padding-top: calc(10px * var(--ui)); }
+/* the register keeps ruling to the foot of the sheet whether or not there are
+   rows to put on it. that is what a printed register does, and it is why the
+   empty half of the index sheet reads as a form rather than as a hole. */
+.ovreg .scroll { background: repeating-linear-gradient(to bottom,
+                 transparent 0, transparent calc(var(--cell-h) - 1px),
+                 var(--zd-rule-1) calc(var(--cell-h) - 1px), var(--zd-rule-1) var(--cell-h)); }
+
+/* ============================================================== palette = */
+#palette { position: absolute; inset: 0; z-index: 120; display: none; }
+#palette.on { display: block; }
+#palette .scrim { position: absolute; inset: 0; }
+#palette .sheet { position: absolute; left: 50%; top: calc(48px * var(--ui));
+                  transform: translateX(-50%); width: calc(640px * var(--ui));
+                  background: var(--zd-apron); border: 2px solid var(--zd-rule-2); padding: 3px;
+                  display: flex; flex-direction: column; }
+#palette .inner { border: 1px solid var(--zd-rule-2); background: var(--zd-paper);
+                  display: flex; flex-direction: column; }
+.phead { height: var(--hdr-h); background: var(--zd-slab); display: flex; align-items: center;
+         gap: calc(8px * var(--ui)); padding: 0 calc(9px * var(--ui)); flex: none; }
+.pin { display: flex; align-items: center; gap: calc(6px * var(--ui)); background: var(--zd-well);
+       border-bottom: 1px solid var(--zd-rule-1);
+       padding: calc(6px * var(--ui)) calc(10px * var(--ui)); }
+.prow { display: flex; align-items: center; height: var(--row-h); padding: 0 calc(10px * var(--ui));
+        gap: calc(10px * var(--ui)); border-bottom: 1px solid var(--zd-rule-1); cursor: pointer;
+        position: relative; }
+.prow.on { background: var(--zd-slab); }
+.prow.on .t-label { color: var(--zd-slab-0); }
+.prow.on .t-data { color: var(--zd-slab-1); }
+.prow .hint { margin-left: auto; color: var(--zd-ink-3); }
+.pfoot { display: flex; align-items: center; gap: calc(14px * var(--ui));
+         padding: calc(5px * var(--ui)) calc(10px * var(--ui)); border-top: 2px solid var(--zd-rule-2); }
+
+/* ================================================================= lock = */
+#lock { position: absolute; inset: 0; z-index: 300; background: var(--zd-field); display: none; }
+#lock.on { display: block; }
+#locksvg { position: absolute; left: 0; top: 0; pointer-events: none; }
+#lock .sheet { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+               width: calc(780px * var(--ui)); background: var(--zd-apron);
+               border: 2px solid var(--zd-rule-2); padding: 3px; }
+#lock .inner { border: 1px solid var(--zd-rule-2); background: var(--zd-paper); display: flex; }
+#lock .lmar { width: calc(232px * var(--ui)); flex: none; background: var(--zd-apron);
+              border-right: 1px solid var(--zd-rule-2);
+              padding: calc(12px * var(--ui)); display: flex; flex-direction: column; }
+#lock .lmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#lock .lhead { height: var(--hdr-h); background: var(--zd-slab); display: flex; align-items: center;
+               gap: calc(8px * var(--ui)); padding: 0 calc(12px * var(--ui)); }
+#lock .lbody { padding: calc(13px * var(--ui)); display: flex; flex-direction: column; }
+#lock .hold { display: flex; align-items: center; gap: calc(8px * var(--ui));
+              border-bottom: 1px solid var(--zd-rule-1); height: calc(20px * var(--ui)); }
+
+/* ================================================================= menu = */
+.menu { position: absolute; z-index: 200; background: var(--zd-apron);
+        border: 2px solid var(--zd-rule-2); padding: 3px;
+        min-width: calc(200px * var(--ui)); display: none; }
+.menu.on { display: block; }
+.menu > .mw { border: 1px solid var(--zd-rule-2); background: var(--zd-paper); }
+.menu .mh { background: var(--zd-slab); padding: 0 calc(8px * var(--ui));
+            height: calc(20px * var(--ui)); display: flex; align-items: center; gap: 8px; }
+.menu .mi { height: var(--row-h); display: flex; align-items: center; gap: calc(10px * var(--ui));
+            padding: 0 calc(10px * var(--ui)); border-bottom: 1px solid var(--zd-rule-1);
+            cursor: pointer; }
+.menu .mi:last-child { border-bottom: 0; }
+.menu .mi:hover { background: var(--zd-slab); }
+.menu .mi:hover .t-label { color: var(--zd-slab-0); }
+.menu .mi:hover .t-data { color: var(--zd-slab-1); }
+.menu .mi .hint { margin-left: auto; color: var(--zd-ink-3); }
+
+/* =============================================================== toasts = */
+#toasts { position: absolute; right: calc(12px * var(--ui)); bottom: calc(12px * var(--ui));
+          z-index: 150; display: flex; flex-direction: column; gap: var(--gap);
+          align-items: flex-end; }
+.toast { background: var(--zd-apron); border: 2px solid var(--zd-rule-2); padding: 3px;
+         width: calc(312px * var(--ui)); }
+.toast > .tw { border: 1px solid var(--zd-rule-2); background: var(--zd-paper);
+               padding: calc(5px * var(--ui)) calc(9px * var(--ui)) calc(6px * var(--ui)); }
+.toast .tl { display: flex; align-items: baseline; }
+.toast .tx { display: block; color: var(--zd-ink-2); }
+.toast .cl { margin-left: auto; cursor: pointer; color: var(--zd-ink-3); display: flex; }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="nm t-label">Neatline</span>
+  <span class="pitchtxt" id="pitch"></span>
+  <span class="links" id="links"></span>
+  <span class="thm" id="themetog"></span>
+</div>
+
+<div id="os">
+  <div class="apron" id="ap-top">
+    <svg class="apsvg" id="svg-top" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <svg class="apsvg echo" id="svg-top-f" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <span class="sheetname">
+      <span class="t-label i0" id="sheettitle">zlos desktop</span>
+      <span class="t-data i3" id="sheetseries"></span>
+    </span>
+    <span class="sheetno">
+      <span class="t-data i3" id="sheetclock"></span>
+    </span>
+  </div>
+  <div class="apron" id="ap-left">
+    <svg class="apsvg" id="svg-left" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <svg class="apsvg echo" id="svg-left-f" shape-rendering="crispEdges" aria-hidden="true"></svg>
+  </div>
+  <div class="apron" id="ap-right">
+    <svg class="apsvg" id="svg-right" shape-rendering="crispEdges" aria-hidden="true"></svg>
+  </div>
+
+  <div id="neatframe"><i></i></div>
+
+  <div id="field">
+    <svg id="gridsvg" shape-rendering="crispEdges" aria-hidden="true"></svg>
+    <div id="wins"></div>
+    <div id="overview"></div>
+    <div id="lock">
+      <svg id="locksvg" shape-rendering="crispEdges" aria-hidden="true"></svg>
+      <div class="sheet"><div class="inner">
+        <div class="lmar" id="lockmar"></div>
+        <div class="lmain">
+          <div class="lhead">
+            <span class="t-label k0">session locked</span>
+            <span class="t-data k1">tty1 &middot; seat0</span>
+            <span class="t-data k1 grow" id="lockup"></span>
+          </div>
+          <div class="lbody" id="lockbody"></div>
+        </div>
+      </div></div>
+    </div>
+    <div id="toasts"></div>
+  </div>
+
+  <div class="apron" id="ap-bottom"></div>
+
+  <div id="palette">
+    <div class="scrim"></div>
+    <div class="sheet"><div class="inner">
+      <div class="phead">
+        <span class="t-label k0">command</span>
+        <span class="t-data k1">zlsh builtin</span>
+        <span class="t-data k1 grow" id="pcount"></span>
+      </div>
+      <div class="pin">
+        <span class="t-label">run</span>
+        <span class="t-data i0" id="pq"></span><span class="caret"></span>
+      </div>
+      <div id="presults"></div>
+      <div class="pfoot">
+        <span class="t-label">enter</span><span class="t-data i3">run</span>
+        <span class="t-label">up down</span><span class="t-data i3">select</span>
+        <span class="t-label">esc</span><span class="t-data i3">dismiss</span>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="menu" id="ctxmenu"></div>
+  <div class="menu" id="winmenu"></div>
+</div>
+
+<script>
+'use strict';
+/* ========================================================================= *
+ * NEATLINE. The zlOS desktop as one map sheet.
+ *
+ *   apron   full perimeter chrome. eastings + sheet title on top, northings
+ *           left, tick channel right, THE KEY along the bottom.
+ *   key     the launcher, the tasklist AND the definition of every mark on
+ *           screen. two state: 24 dp live legend, 96 dp full alphabetical key.
+ *   field   ruled on a 100 unit grid, 1 px, every fifth line heavier.
+ *   focus   the neatline itself plus four heavy ticks in the margin.
+ *
+ * The five inks are LEXICAL. They are never text, never state, never mood.
+ * ========================================================================= */
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const pad2 = n => (n < 10 ? '0' : '') + n;
+const hx = (n, w) => (n >>> 0).toString(16).toUpperCase().padStart(w || 8, '0');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ------------------------------------------------------ token readback --
+ * The key and the settings sheet print the stock's own hex values and its
+ * contrast ratios. Typed literals would be a CLAIM: move a token and the
+ * sheet keeps printing the old number. These read the live custom property
+ * off :root, so what is printed is by construction what is rendered. */
+function tokRaw(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function tokResolve(name, depth) {
+  const v = tokRaw(name);
+  const m = /^var\((--[\w-]+)\)$/.exec(v);
+  if (m && (depth || 0) < 8) return tokResolve(m[1], (depth || 0) + 1);
+  return v;
+}
+function tokHex(name) { return tokResolve(name).toUpperCase(); }
+function tokRGB(name) {
+  const h = tokResolve(name).replace('#', '');
+  if (h.length !== 6) return null;
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+function relLum(c) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function tokRatio(fg, bg) {
+  const a = tokRGB(fg), b = tokRGB(bg);
+  if (!a || !b) return '--';
+  let l1 = relLum(a), l2 = relLum(b);
+  if (l1 < l2) { const t = l1; l1 = l2; l2 = t; }
+  return ((l1 + 0.05) / (l2 + 0.05)).toFixed(2);
+}
+
+/* ---------------------------------------------------------------- state - */
+const S = {
+  ws: 1,
+  theme: 'light',
+  scene: 'desktop',
+  focus: null,
+  pitch: 20,          /* px per fine cell. one fine cell is 20 map units.   */
+  ui: 1,
+  keyFull: false,     /* 24 dp live legend by default. hold K for the key.  */
+  grid: true,
+  fifth: true,
+  zebra: true,
+  ticks: true,        /* the margin focus echo                             */
+  bands: true,        /* contour banding on level readouts                 */
+  blink: true,
+  snap: true,
+  fileSel: 1,
+  procSel: 2,
+  calcAcc: '241690',
+  setTab: 0,
+  pq: '',
+  psel: 0,
+  t: 0,
+  clock: 14 * 3600 + 32 * 60 + 7,
+  hist: { cpu: [], net: [], mem: [] },
+  cpu: [34, 21, 47, 12],
+  memPct: 62,
+  load: 0.31,
+  rx: 148.2,
+  tx: 22.7,
+  wins: {}
+};
+for (let i = 0; i < 72; i++) {
+  S.hist.cpu.push(18 + ((i * 37) % 46));
+  S.hist.net.push(6 + ((i * 53) % 58));
+  S.hist.mem.push(56 + ((i * 17) % 12));
+}
+
+/* ---------------------------------------------------------------- grid --
+ * The sheet is measured in MAP UNITS. One fine cell is 20 units; every fifth
+ * line, 100 units, is heavier. Northings run UP from the bottom edge, which
+ * is the map convention and the opposite of a screen's y axis.
+ * A grid reference is two letters and four digits, which is exactly six
+ * mono cells wide, which is why the window header can carry one. */
+const LET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const UNITS_PER_CELL = 20;
+const BLOCK = 400;                 /* units per lettered block */
+function upx() { return UNITS_PER_CELL / S.pitch; }        /* units per px */
+function eastOf(xpx) { return Math.round(xpx * upx()); }
+function northOf(ypx, hpx) { return Math.round((hpx - ypx) * upx()); }
+function refOf(xpx, ypx, hpx) {
+  const e = Math.max(0, eastOf(xpx)), n = Math.max(0, northOf(ypx, hpx));
+  const l1 = LET[Math.floor(e / BLOCK) % LET.length];
+  const l2 = LET[Math.floor(n / BLOCK) % LET.length];
+  return l1 + l2 + pad2(Math.floor((e % BLOCK) / 4)) + pad2(Math.floor((n % BLOCK) / 4));
+}
+
+/* --------------------------------------------------------------- icons --
+ * Stencils on a 96 x 96 field, 8 x 8 modules of 12, every vertex on a
+ * multiple of 2. One stroke weight, 8 at 96.
+ *
+ * THE OPEN ITEM THIS DIRECTION SHIPPED WITH, RESOLVED HERE. Because colour
+ * is doing referent work it cannot also do identity work, so a key symbol
+ * has to be told apart by SILHOUETTE ALONE. So every stencil declares its
+ * outer boundary explicitly as `s`, the drawn icon strokes exactly that
+ * boundary, and Settings renders all sixteen as flat ink silhouettes at
+ * 24 dp so the claim can be checked rather than asserted. No two share an
+ * outer shape: notched rect, folder, circle, chamfered portrait, comb,
+ * hexagon, tee, triangle, stemmed circle, legged square, three bars, a
+ * parallelogram, a stepped ell, four squares, an ay, a cross. */
+const ICON = {
+  shell: { s: 'M6 18 H90 V78 H36 L6 48 Z',
+           d: 'M26 36 L40 48 L26 60 M52 62 H74' },
+  files: { s: 'M6 16 H34 L44 30 H90 V80 H6 Z',
+           d: 'M6 30 H90 M20 46 H60' },
+  mon:   { s: 'M48 12 A36 36 0 0 1 48 84 A36 36 0 0 1 48 12 Z',
+           d: 'M48 48 L70 30 M48 48 H14' },
+  edit:  { s: 'M20 8 H66 L80 22 V88 H20 Z',
+           d: 'M32 34 H64 M32 50 H64 M32 66 H52' },
+  log:   { s: 'M30 12 H88 V84 H30 V74 H6 V62 H30 V54 H6 V42 H30 V34 H6 V22 H30 Z',
+           d: 'M42 30 H76 M42 48 H76 M42 66 H62' },
+  hex:   { s: 'M30 12 H66 L84 48 L66 84 H30 L12 48 Z',
+           d: 'M48 12 V84 M20 32 H76 M20 64 H76' },
+  calc:  { s: 'M10 10 H86 V34 H60 V86 H36 V34 H10 Z',
+           d: 'M20 20 H76 M44 46 H52 M44 62 H52 M44 78 H52' },
+  net:   { s: 'M48 12 L88 84 H8 Z',
+           d: 'M28 66 H68 M48 40 V52' },
+  clock: { s: 'M38 4 H58 V26 H38 Z M52 22 A32 32 0 0 1 52 86 A32 32 0 0 1 52 22 Z',
+           d: 'M52 54 V34 M52 54 H74' },
+  chip:  { s: 'M48 4 L92 48 L48 92 L4 48 Z',
+           d: 'M48 26 L70 48 L48 70 L26 48 Z' },
+  set:   { s: 'M8 6 H90 V26 H8 Z M8 40 H62 V60 H8 Z M8 74 H34 V94 H8 Z',
+           d: 'M74 16 H82 M50 50 H56 M22 84 H26' },
+  disk:  { s: 'M24 18 H92 L70 82 H2 Z',
+           d: 'M18 50 H78 M60 32 H72' },
+  proc:  { s: 'M8 8 H56 V40 H88 V88 H40 V56 H8 Z',
+           d: 'M20 22 H44 M52 70 H76' },
+  regs:  { s: 'M4 4 H38 V38 H4 Z M58 4 H92 V38 H58 Z M4 58 H38 V92 H4 Z M58 58 H92 V92 H58 Z',
+           d: 'M14 21 H28 M68 21 H82 M14 75 H28 M68 75 H82' },
+  type:  { s: 'M40 8 H56 L88 88 H70 L62 66 H34 L26 88 H8 Z',
+           d: 'M40 48 H56' },
+  grid:  { s: 'M36 8 H60 V36 H88 V60 H60 V88 H36 V60 H8 V36 H36 Z',
+           d: 'M36 36 H60 V60 H36 Z' }
+};
+function icon(name, px) {
+  const g = ICON[name];
+  return '<svg width="' + (px || 20) + '" height="' + (px || 20) + '" viewBox="-4 -4 104 104"' +
+    ' fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="butt"' +
+    ' stroke-linejoin="miter" aria-hidden="true"><path d="' + g.s + '"/>' +
+    '<path d="' + g.d + '"/></svg>';
+}
+function silhouette(name, px) {
+  return '<svg width="' + (px || 24) + '" height="' + (px || 24) + '" viewBox="-6 -6 108 108"' +
+    ' fill="currentColor" stroke="currentColor" stroke-width="8" stroke-linejoin="miter"' +
+    ' aria-hidden="true"><path d="' + ICON[name].s + '"/></svg>';
+}
+const CTL_MIN = '<svg width="11" height="11" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="9" width="12" height="2" fill="currentColor"/></svg>';
+const CTL_MAX = '<svg width="11" height="11" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+const CTL_CLS = '<svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M0 0 L12 12 M12 0 L0 12" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>';
+
+/* ---------------------------------------------------------- the 5 inks --
+ * The written contract. The key renders THIS array, so the definition on
+ * screen and the definition in the source cannot drift apart. */
+const INKS = [
+  ['ink',     '--zd-ink',     'structure, type, rules',   'structure'],
+  ['water',   '--zd-water',   'i/o, net, pipes, streams', 'i/o and streams'],
+  ['wood',    '--zd-wood',    'user data and files',      'user data'],
+  ['contour', '--zd-contour', 'level and pressure',       'level'],
+  ['road',    '--zd-road',    'routes, actions, failure', 'routes and actions']
+];
+const INKVAR = { ink: '--zd-ink', water: '--zd-water', wood: '--zd-wood',
+                 contour: '--zd-contour', road: '--zd-road' };
+
+/* --------------------------------------------------------------- tables */
+function TH(cols) {
+  return '<tr>' + cols.map(c => '<th class="' + (c.r ? 'r' : '') + '"' +
+    (c.w ? ' style="width:' + c.w + '"' : '') + '>' + c.h + '</th>').join('') + '</tr>';
+}
+function TR(cells, attr) {
+  return '<tr ' + (attr || '') + '>' + cells.map(c => {
+    if (typeof c === 'string') return '<td>' + c + '</td>';
+    return '<td class="' + (c.c || '') + '">' + c.t + '</td>';
+  }).join('') + '</tr>';
+}
+function TBL(head, rows) {
+  return '<table class="tbl"><thead>' + TH(head) + '</thead><tbody>' + rows.join('') +
+    '</tbody></table>';
+}
+/* a lexical ink reaching a table cell. a 3 px bar, never coloured type. */
+function bar(ink) { return '<span class="cbar" style="background:var(' + INKVAR[ink] + ')"></span>'; }
+function statword(w) {
+  const c = w === 'OK' ? 'w-ok' : w === 'WARN' ? 'w-warn' : (w === 'FAIL' || w === 'ERR') ? 'w-bad' : 'i3';
+  return '<span class="t-label ' + c + '">' + w + '</span>';
+}
+function kv(k, v) {
+  return '<div class="kv"><span class="t-label">' + k + '</span><span class="v">' + v + '</span></div>';
+}
+/* CONTOUR. A level is banded, never a solid bar: four hard steps, the way a
+   contour map draws height. The band edges are at 25 / 50 / 75 per cent. */
+function contourMeter(label, val, unit, note) {
+  const v = clamp(val, 0, 100);
+  let inner = '';
+  if (S.bands) {
+    const edges = [25, 50, 75, 100];
+    let prev = 0;
+    edges.forEach((e, i) => {
+      const seg = clamp(v, prev, e) - prev;
+      if (seg > 0) {
+        inner += '<i class="cb' + (i + 1) + '" style="width:' + seg + '%"></i>';
+        if (v > e) inner += '<u></u>';
+      }
+      prev = e;
+    });
+  } else {
+    inner = '<i class="cb4" style="width:' + v + '%"></i>';
+  }
+  return '<div class="cmeter"><div class="crow"><span class="t-label">' + label + '</span>' +
+    (note ? '<span class="t-data i3" style="margin-left:8px">' + note + '</span>' : '') +
+    '<span class="t-data">' + val + (unit || '') + '</span></div>' +
+    '<div class="ctrack">' + inner + '</div></div>';
+}
+/* a column plot. the SERIES ink is passed in and is always a lexical ink. */
+function plotFlex(series, max, inkVar, minH) {
+  const n = series.length, bw = 100 / n;
+  let bars = '';
+  series.forEach((v, i) => {
+    const h = Math.max(1, (v / max) * 100);
+    bars += '<rect x="' + (i * bw).toFixed(2) + '" y="' + (100 - h).toFixed(2) +
+      '" width="' + (bw * 0.7).toFixed(2) + '" height="' + h.toFixed(2) + '"/>';
+  });
+  const mean = series.reduce((a, b) => a + b, 0) / n;
+  return '<div class="plotbox"' + (minH ? ' style="min-height:' + minH + 'px"' : '') + '>' +
+    '<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" ' +
+    'fill="var(' + inkVar + ')" aria-hidden="true">' + bars + '</svg>' +
+    '<span class="meanline" style="top:' + (100 - (mean / max) * 100).toFixed(2) + '%"></span></div>';
+}
+
+/* =================================================================== vfs */
+const FILES = [
+  ['kernel.zl',        '41.2 KiB',  'zl source',  '-r--r--r--', '12:04', 3],
+  ['fb.c',             '68.4 KiB',  'C source',   '-r--r--r--', '12:04', 3],
+  ['intel.c',          '112.9 KiB', 'C source',   '-rw-r--r--', '11:58', 3],
+  ['xhci.c',           '54.1 KiB',  'C source',   '-r--r--r--', '09:41', 3],
+  ['hid.c',            '19.6 KiB',  'C source',   '-r--r--r--', '09:41', 3],
+  ['zlfs.c',           '37.8 KiB',  'C source',   '-r--r--r--', '10:22', 3],
+  ['nvme.c',           '28.3 KiB',  'C source',   '-r--r--r--', '10:22', 3],
+  ['apic.c',           '11.4 KiB',  'C source',   '-r--r--r--', '08:50', 2],
+  ['wm.c',             '46.0 KiB',  'C source',   '-r--r--r--', '12:01', 3],
+  ['uikit.c',          '52.7 KiB',  'C source',   '-r--r--r--', '12:01', 3],
+  ['design.h',         '18.9 KiB',  'C header',   '-r--r--r--', '12:03', 3],
+  ['font_aa.c',        '24.5 KiB',  'C source',   '-r--r--r--', '07:31', 2],
+  ['font_sub.c',       '9.8 KiB',   'C source',   '-r--r--r--', '07:31', 2],
+  ['gen_icons.py',     '7.2 KiB',   'Python',     '-rwxr-xr-x', '12:00', 3],
+  ['link.ld',          '412 B',     'Linker',     '-r--r--r--', '06:12', 1],
+  ['Makefile',         '3.1 KiB',   'Makefile',   '-r--r--r--', '12:03', 3],
+  ['zlos.elf',         '249.8 KiB', 'Executable', '-rwxr-xr-x', '12:04', 3],
+  ['boot.log',         '2.4 KiB',   'Log',        '-r--r--r--', '12:04', 3],
+  ['ui.c',             '33.6 KiB',  'C source',   '-r--r--r--', '12:01', 3],
+  ['wm_drag.c',        '14.2 KiB',  'C source',   '-r--r--r--', '11:44', 3],
+  ['pci.c',            '16.8 KiB',  'C source',   '-r--r--r--', '08:50', 2],
+  ['dpll.c',           '21.7 KiB',  'C source',   '-rw-r--r--', '11:58', 3],
+  ['edid.c',           '8.9 KiB',   'C source',   '-r--r--r--', '09:02', 2],
+  ['ps2.c',            '6.4 KiB',   'C source',   '-r--r--r--', '07:12', 1],
+  ['sched.c',          '12.1 KiB',  'C source',   '-r--r--r--', '10:40', 2],
+  ['heap.c',           '9.3 KiB',   'C source',   '-r--r--r--', '10:40', 2],
+  ['memmap.h',         '5.2 KiB',   'C header',   '-r--r--r--', '11:12', 2],
+  ['atlas48.bin',      '196.0 KiB', 'Binary',     '-r--r--r--', '12:00', 3],
+  ['dejavu_mono.ttf',  '641.0 KiB', 'Font',       '-r--r--r--', '06:04', 3],
+  ['zlfs.img',         '4.0 MiB',   'Disk image', '-rw-r--r--', '12:04', 3],
+  ['core.dump',        '256.0 KiB', 'Core dump',  '-rw-------', '11:41', 1],
+  ['GUARDS.md',        '11.7 KiB',  'Markdown',   '-r--r--r--', '12:02', 3]
+];
+const SRC = {
+  'fb.c':
+'1168  /* subpixel LCD text. 5 tap (1,2,3,2,1)/9 FIR over the\n' +
+'1169     three colour stripes of one cell. gamma correct in\n' +
+'1170     linear light through the two boot built LUTs. */\n' +
+'1171  static void blend_sub(u32 *dst, const u8 *cov, u32 fg)\n' +
+'1172  {\n' +
+'1173      u32 bg = *dst;\n' +
+'1174      int r = fir5(cov, 0), g = fir5(cov, 1), b = fir5(cov, 2);\n' +
+'1175      u32 lr = lut_to_lin[(bg >> 16) & 0xff];\n' +
+'1176      u32 lg = lut_to_lin[(bg >>  8) & 0xff];\n' +
+'1177      u32 lb = lut_to_lin[(bg      ) & 0xff];\n' +
+'1178      lr = lr + (((lut_to_lin[(fg >> 16) & 0xff] - lr) * r) >> 8);\n' +
+'1179      lg = lg + (((lut_to_lin[(fg >>  8) & 0xff] - lg) * g) >> 8);\n' +
+'1180      lb = lb + (((lut_to_lin[(fg      ) & 0xff] - lb) * b) >> 8);\n' +
+'1181      *dst = (lut_to_srgb[lr] << 16)\n' +
+'1182           | (lut_to_srgb[lg] <<  8)\n' +
+'1183           |  lut_to_srgb[lb];\n' +
+'1184  }\n' +
+'1185\n' +
+'1186  /* NEATLINE draws more 1 px rules than any other client of\n' +
+'1187     this file: the field grid alone is ~130 of them every\n' +
+'1188     compose. fb_line is the hot path, not fb_rrect. */\n' +
+'1189  void fb_line(int x, int y, int len, int vert, u32 c)\n' +
+'1190  {\n' +
+'1191      if (vert) fb_fill_px(x, y, 1, len, c);\n' +
+'1192      else      fb_fill_px(x, y, len, 1, c);\n' +
+'1193  }\n' +
+'1194\n' +
+'1195  /* the whole sheet is radius 0, so the supersampled corner\n' +
+'1196     never runs. fb_rrect degenerates to fb_fill_px and the\n' +
+'1197     4x4 coverage loop is dead code in this design. */\n' +
+'1198  void fb_rrect(int x, int y, int w, int h, int r, u32 c)\n' +
+'1199  {\n' +
+'1200      if (r == 0) { fb_fill_px(x, y, w, h, c); return; }\n' +
+'1201      for (int k = 0; k < 4; k++) corner_ss(x, y, w, h, r, k, c);\n' +
+'1202  }',
+  'intel.c':
+'2041  /* Gen9 display. the DPLL is the point of this file.\n' +
+'2042     measured on the host: 241690 kHz, 59.998 Hz. */\n' +
+'2043  static u32 dpll_from_link(u32 m, u32 n, u32 bpp)\n' +
+'2044  {\n' +
+'2045      /* PIPE_LINK_M / PIPE_LINK_N, 24 bit fixed point */\n' +
+'2046      u64 num = (u64)m * 270000ull * 8ull;\n' +
+'2047      u64 den = (u64)n * bpp;\n' +
+'2048      return (u32)(num / den);          /* kHz */\n' +
+'2049  }\n' +
+'2050\n' +
+'2051  /* WARNING: writing PIPE_CONF while PSR is armed parks\n' +
+'2052     the panel with the backlight on. read PSR_STATUS and\n' +
+'2053     wait for idle before touching the pipe. */\n' +
+'2054  static int pipe_safe(void)\n' +
+'2055  {\n' +
+'2056      u32 psr = mmio_rd(PSR_STATUS);\n' +
+'2057      for (int i = 0; i < 200 && (psr & PSR_BUSY); i++) {\n' +
+'2058          udelay(500);\n' +
+'2059          psr = mmio_rd(PSR_STATUS);\n' +
+'2060      }\n' +
+'2061      return (psr & PSR_BUSY) == 0;\n' +
+'2062  }\n' +
+'2063\n' +
+'2064  void intel_modeset(const struct mode *m)\n' +
+'2065  {\n' +
+'2066      if (!pipe_safe()) { klog(WARN, "psr busy"); return; }\n' +
+'2067      mmio_wr(HTOTAL_A,     (m->htotal - 1) << 16 | (m->hact - 1));\n' +
+'2068      mmio_wr(VTOTAL_A,     (m->vtotal - 1) << 16 | (m->vact - 1));\n' +
+'2069      mmio_wr(PIPE_A_SRCSZ, (m->hact   - 1) << 16 | (m->vact - 1));\n' +
+'2070      mmio_wr(PIPE_A_LINK_M, m->link_m);\n' +
+'2071      mmio_wr(PIPE_A_LINK_N, m->link_n);\n' +
+'2072      mmio_wr(PIPE_A_CONF, PIPE_ENABLE | BPC_8);\n' +
+'2073      klog(OK, "pixel clock %u kHz", dpll_from_link(\n' +
+'2074           m->link_m, m->link_n, 24));\n' +
+'2075  }',
+  'kernel.zl':
+'   1  # zlOS entry. called from boot.S after the handoff.\n' +
+'   2  fn main() {\n' +
+'   3      gdt()\n' +
+'   4      idt()\n' +
+'   5      apic(4)                 # 4 logical CPUs\n' +
+'   6      pit(1000)               # 1193182 / 1000\n' +
+'   7      xhci()                  # usb hid keyboard + mouse\n' +
+'   8      fb(1600, 1000, 32)\n' +
+'   9      zlfs_mount("rd0")\n' +
+'  10      desktop()               # the compositor IS the boot state\n' +
+'  11  }\n' +
+'  12\n' +
+'  13  fn desktop() {\n' +
+'  14      ui_theme_init_q8(256)   # ui scale 1.0 in q8\n' +
+'  15      apron()                 # four edges. eastings, northings, key\n' +
+'  16      neatline()              # 2 px outer, 3 px stock, 1 px inner\n' +
+'  17      field(20)               # 20 units per cell, fifth line heavy\n' +
+'  18      loop { input() compose() }\n' +
+'  19  }',
+  'design.h':
+'   1  /* design.h - every literal in the desktop lives here.\n' +
+'   2     kernel.zl names roles only. ui.c maps roles to these. */\n' +
+'   3\n' +
+'   4  #define ZD_APRON      0xF5F2E8   /* margin, above field */\n' +
+'   5  #define ZD_PAPER      0xF1EDE1   /* a sheet             */\n' +
+'   6  #define ZD_FIELD      0xE7E2D4   /* inside the neatline */\n' +
+'   7  #define ZD_INK        0x101211   /* 14.53:1 on field    */\n' +
+'   8  #define ZD_GRID       0x8E897A   /* 2.70:1, 1 px        */\n' +
+'   9  #define ZD_GRID_5     0x6E6A5D   /* 4.18:1, every fifth */\n' +
+'  10\n' +
+'  11  /* THE FIVE LEXICAL INKS. never type, never state. */\n' +
+'  12  #define ZD_WATER      0x42718A   /* i/o, net, streams   */\n' +
+'  13  #define ZD_WOOD       0x4F6F44   /* user data, files    */\n' +
+'  14  #define ZD_CONTOUR    0x95592D   /* level and pressure  */\n' +
+'  15  #define ZD_ROAD       0xB23A22   /* routes and actions  */\n' +
+'  16\n' +
+'  17  #define ZD_AP         24         /* apron, three edges  */\n' +
+'  18  #define ZD_KEY_LIVE   24         /* live legend         */\n' +
+'  19  #define ZD_KEY_FULL   96         /* the full key        */\n' +
+'  20  #define ZD_NEAT_OUT   2\n' +
+'  21  #define ZD_NEAT_GAP   3\n' +
+'  22  #define ZD_NEAT_IN    1\n' +
+'  23  #define ZD_R_0        0          /* the only radius     */',
+  'memmap.h':
+'   1  /* zlOS address space. five fixed maps, not two. */\n' +
+'   2  #define HI_FB      0x04000000   /*  64 MiB  framebuffer */\n' +
+'   3  #define HI_NET     0x08000000   /*  64 MiB  virtio_net  */\n' +
+'   4  #define HI_DOM     0x0C000000   /*  64 MiB  parser arena*/\n' +
+'   5  #define HI_DRAG    0x08000000   /* 128 MiB  wm scratch  */\n' +
+'   6  #define HI_BLUR    0x0A000000   /* 160 MiB  fb_blur     */\n' +
+'   7\n' +
+'   8  _Static_assert(HI_DRAG + DRAG_SZ <= RAM_TOP,\n' +
+'   9                 "drag buffer outside RAM");',
+  'Makefile':
+'   1  ZL      = tools/zlc\n' +
+'   2  CFLAGS  = -ffreestanding -mno-red-zone -Wall -Werror\n' +
+'   3  OBJ     = build/kernel.o build/fb.o build/intel.o \\\n' +
+'   4            build/xhci.o build/hid.o build/zlfs.o\n' +
+'   5\n' +
+'   6  all: build/zlos.elf\n' +
+'   7\n' +
+'   8  build/zlos.elf: $(OBJ) link.ld\n' +
+'   9  \tld -T link.ld -o $@ $(OBJ)\n' +
+'  10\n' +
+'  11  build/%.o: %.zl\n' +
+'  12  \t$(ZL) -c $< -o $@'
+};
+
+/* ================================================================= apps =
+ * `inks` declares which lexical inks a sheet can put on screen. The LIVE
+ * LEGEND renders the union of the open sheets' declarations, which is what
+ * makes a 24 dp legend an honest contract rather than a decoration. */
+const APPS = [
+  { id: 'calc',  key: 'C', name: 'calculator',   sub: 'int64',      ico: 'calc',  inks: [],                        p: [8, 1, 4, 6] },
+  { id: 'clock', key: 'K', name: 'clocks',       sub: 'monotonic',  ico: 'clock', inks: [],                        p: [3, 1, 6, 5] },
+  { id: 'disk',  key: 'D', name: 'disk usage',   sub: 'zlfs rd0',   ico: 'disk',  inks: ['wood', 'contour'],       p: [6, 0, 6, 5] },
+  { id: 'edit',  key: 'E', name: 'editor',       sub: 'fb.c',       ico: 'edit',  inks: ['wood'],                  p: [0, 0, 6, 8] },
+  { id: 'files', key: 'F', name: 'files',        sub: 'zlfs',       ico: 'files', inks: ['wood'],                  p: [7, 0, 5, 4] },
+  { id: 'grid',  key: 'G', name: 'sheet index',  sub: 'module',     ico: 'grid',  inks: [],                        p: [2, 1, 7, 5] },
+  { id: 'hex',   key: 'H', name: 'hex viewer',   sub: 'rd0',        ico: 'hex',   inks: ['wood'],                  p: [4, 1, 6, 5] },
+  { id: 'log',   key: 'L', name: 'kernel log',   sub: 'dmesg',      ico: 'log',   inks: ['road', 'contour'],       p: [0, 4, 7, 4] },
+  { id: 'mon',   key: 'M', name: 'monitor',      sub: '1 Hz',       ico: 'mon',   inks: ['contour', 'water'],      p: [0, 5, 7, 3] },
+  { id: 'net',   key: 'N', name: 'network',      sub: 'enp0s31f6',  ico: 'net',   inks: ['water', 'road'],         p: [7, 4, 5, 4] },
+  { id: 'proc',  key: 'P', name: 'processes',    sub: '42 tasks',   ico: 'proc',  inks: ['contour', 'road'],       p: [2, 1, 7, 5] },
+  { id: 'regs',  key: 'R', name: 'registers',    sub: 'pipe A',     ico: 'regs',  inks: ['water'],                 p: [3, 0, 7, 6] },
+  { id: 'set',   key: 'S', name: 'settings',     sub: 'design.h',   ico: 'set',   inks: ['ink', 'water', 'wood', 'contour', 'road'], p: [0, 0, 7, 8] },
+  { id: 'sys',   key: 'I', name: 'system info',  sub: '0.3',        ico: 'chip',  inks: ['contour', 'water', 'wood'], p: [3, 2, 6, 4] },
+  { id: 'term',  key: 'T', name: 'terminal',     sub: 'zlsh',       ico: 'shell', inks: ['road'],                  p: [0, 0, 7, 5] },
+  { id: 'type',  key: 'Y', name: 'type atlas',   sub: 'DejaVu',     ico: 'type',  inks: [],                        p: [2, 1, 8, 6] }
+];
+const APP = {};
+APPS.forEach(a => { APP[a.id] = a; });
+
+/* ======================================================= app renderers = */
+const R = {};
+
+/* 01 TERMINAL. ROAD marks the command line, because a command is an action.
+      the text stays ink; the ink is the 3 px rule down the prompt. */
+R.term = () => {
+  const L = [
+    ['zlsh 0.3  ' + 'seat0 tty1', 'dim'], null,
+    ['$ make -C kernel modeset', 'cmd'],
+    ['  ZL   kernel.zl -> build/kernel.o', 'dim'],
+    ['  CC   fb.c intel.c xhci.c hid.c zlfs.c nvme.c', 'dim'],
+    ['  LD   build/zlos.elf', 'dim'],
+    ['       text 218432  data 30720  bss 1441792', 'dim'],
+    ['$ ./tools/regdump --pipe A', 'cmd'],
+    ['  PIPE_A_CONF     0xC0000000   enabled, 8 bpc', 'dim'],
+    ['  PIPE_A_LINK_M   0x0080D9E4', 'dim'],
+    ['  PIPE_A_LINK_N   0x00800000', 'dim'],
+    ['  DPLL_CTRL1      0x00000601   link 2.7 GHz', 'dim'],
+    ['  pixel clock 241690 kHz -> 59.998 Hz', 'ok'],
+    ['$ zlfs fsck rd0', 'cmd'],
+    ['  generation 3, 0 orphan extents', 'dim'],
+    ['  power cycle 1 -> 2 -> 3 survived', 'ok'],
+    ['$ wguard.sh', 'cmd'],
+    ['  planted defect caught, -w still silences it', 'dim'],
+    ['  source set clean under 4 fatal warnings', 'ok'],
+    ['$ ', 'caret']
+  ];
+  let out = '<div class="slab stack" style="flex:1;min-height:0;overflow:hidden">';
+  L.forEach(l => {
+    if (!l) { out += '<div style="height:6px"></div>'; return; }
+    if (l[1] === 'caret') { out += '<span class="t-data">' + l[0] + '<span class="caret"></span></span>'; return; }
+    if (l[1] === 'cmd') {
+      out += '<div style="display:flex"><span style="width:3px;background:var(--zd-road);' +
+        'margin-right:6px;flex:none"></span><span class="t-data">' + l[0] + '</span></div>';
+      return;
+    }
+    const c = l[1] === 'ok' ? ' style="color:var(--zd-slab-0);font-weight:700"' :
+              l[1] === 'dim' ? ' class="dim"' : '';
+    out += '<span class="t-data"' + c + '>' + l[0] + '</span>';
+  });
+  out += '</div>' +
+    '<div class="row" style="margin-top:8px">' +
+    '<span class="btn prim" data-act="toast" data-arg="build"><span class="t-label">rebuild</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="fsck"><span class="t-label">fsck rd0</span></span>' +
+    '<span class="t-data i3 grow">exit 0 &middot; 1.84 s &middot; 6 objects</span></div>';
+  return out;
+};
+
+/* 02 FILES. WOOD is user data, so the size column carries a wood bar. */
+R.files = () => {
+  const rows = FILES.map((f, i) => TR(
+    [{ t: f[0], c: i === S.fileSel ? 'b' : '' },
+     { t: bar('wood') + f[1], c: 'r' }, f[2],
+     { t: f[3], c: 'i3' }, { t: f[4], c: 'r i3' }],
+    'class="pick' + (i === S.fileSel ? ' sel' : '') + '" data-act="file" data-arg="' + i + '"'));
+  let bytes = 0;
+  FILES.forEach(f => {
+    const n = parseFloat(f[1]);
+    bytes += /MiB/.test(f[1]) ? n * 1024 : /KiB/.test(f[1]) ? n : n / 1024;
+  });
+  return '<div class="row" style="padding-bottom:6px">' +
+    '<span class="t-label i0">/rd0/kernel</span>' +
+    '<span class="t-data i3">zlfs generation 3</span>' +
+    '<span class="t-data i3 grow">' + FILES.length + ' entries &middot; ' +
+      (bytes / 1024).toFixed(1) + ' MiB</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '" style="margin-top:0">' +
+    TBL([{ h: 'name', w: '34%' }, { h: 'size', w: '18%', r: 1 }, { h: 'kind', w: '18%' },
+         { h: 'mode', w: '18%' }, { h: 'mtime', w: '12%', r: 1 }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row" style="height:var(--row-h)">' +
+    '<span class="t-label">selected</span>' +
+    '<span class="t-data i0">' + FILES[S.fileSel][0] + '</span>' +
+    '<span class="t-data i3">1 extent, contiguous, crc verified</span>' +
+    '<span class="grow"></span>' +
+    '<span class="btn prim" data-act="open" data-arg="edit"><span class="t-label">open in editor</span></span>' +
+    '</div>';
+};
+
+/* 03 MONITOR. CONTOUR is level and pressure: cpu, memory, heat are banded
+      fills. WATER is the throughput plot, because throughput is a stream. */
+R.mon = () => {
+  const cores = S.cpu.map((v, i) => contourMeter('cpu ' + i, v, ' %',
+    i === 0 ? 'p-core' : i === 1 ? 'p-core' : 'e-core')).join('');
+  const procs = [
+    ['1', 'zlinit', '0.0', '1.2', 'S', 'OK'],
+    ['12', 'compositor', '11.4', '18.6', 'R', 'OK'],
+    ['18', 'xhci_evt', '0.8', '0.4', 'S', 'OK'],
+    ['24', 'zlfs_flush', '2.1', '3.0', 'D', 'WARN'],
+    ['31', 'netd', '1.6', '2.2', 'S', 'OK'],
+    ['42', 'regdump', '0.2', '0.6', 'S', 'OK'],
+    ['61', 'soak', '38.9', '9.4', 'R', 'OK'],
+    ['77', 'intel_lt', '0.0', '0.8', 'Z', 'FAIL']
+  ].map((p, i) => TR([p[0], { t: p[1], c: i === S.procSel ? 'b' : '' },
+      { t: p[2], c: 'r' }, { t: p[3], c: 'r' }, p[4],
+      { t: statword(p[5]), c: 'r' }],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">system load</span>' +
+    '<span class="t-data i3">sample 1 Hz &middot; window 72 s &middot; sched CFS q8</span>' +
+    '<span class="t-data i0 grow b">' + S.load.toFixed(2) + '</span></div><div class="hr2"></div>' +
+    '<div class="cols2" style="padding-top:8px;flex:none">' +
+    '<div class="stack">' + cores + '</div>' +
+    '<div class="stack">' +
+      contourMeter('memory', S.memPct, ' %', '15.0 GiB') +
+      contourMeter('package temp', Math.round(38 + S.cpu[0] * 0.32), ' C', 'tj 100') +
+      contourMeter('gpu busy', Math.round(S.cpu[3] * 0.7), ' %', 'gen9') +
+      contourMeter('swap', 4, ' %', '0 pressure') +
+    '</div></div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">aggregate cpu</span>' +
+    '<span class="t-data i3">contour band edges 25 / 50 / 75</span>' +
+    '<span class="t-data i3 grow">max ' + Math.max.apply(null, S.hist.cpu) + ' %</span></div>' +
+    plotFlex(S.hist.cpu, 100, '--zd-contour', 46) +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">tasks</span>' +
+    '<span class="t-data i3">42 total, 2 running, 1 zombie</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '" style="flex:1;min-height:100px">' +
+    TBL([{ h: 'pid', w: '12%' }, { h: 'command', w: '32%' }, { h: 'cpu', w: '15%', r: 1 },
+         { h: 'mem', w: '15%', r: 1 }, { h: 'st', w: '10%' }, { h: 'state', w: '16%', r: 1 }],
+        procs) + '</div>';
+};
+
+/* 04 EDITOR */
+R.edit = () => {
+  const name = FILES[S.fileSel][0];
+  const body = SRC[name];
+  if (!body) {
+    return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">' + name +
+      '</span><span class="t-data i3">no text representation</span></div><div class="hr2"></div>' +
+      '<div class="well" style="margin-top:10px"><span class="t-data">' +
+      'binary or generated. open in 06 HEX VIEWER.</span></div>' +
+      '<div class="row" style="margin-top:10px">' +
+      '<span class="btn prim" data-act="open" data-arg="hex"><span class="t-label">open in hex viewer</span></span></div>';
+  }
+  const lines = body.split('\n');
+  return '<div class="row" style="padding-bottom:6px">' +
+    '<span class="t-label i0">' + name + '</span>' +
+    '<span class="t-data i3">' + lines.length + ' lines shown &middot; utf-8 &middot; lf</span>' +
+    '<span class="t-data i3 grow">read only</span></div><div class="hr2"></div>' +
+    '<div class="scroll" style="margin-top:8px"><div class="pre">' +
+    lines.map(l => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('\n') +
+    '</div></div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row" style="height:var(--row-h)">' +
+    '<span class="t-label">col</span><span class="t-data i0">1</span>' +
+    '<span class="vr1" style="height:12px"></span>' +
+    '<span class="t-label">ln</span><span class="t-data i0">1</span>' +
+    '<span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data i3">tab 4 &middot; no trailing space &middot; zlfmt clean</span>' +
+    '<span class="grow"></span>' + statword('OK') + '</div>';
+};
+
+/* 05 KERNEL LOG. ROAD is failure. It is a 3 px rule in the gutter of the
+      failing line, never the colour of the line's text. */
+R.log = () => {
+  const L = [
+    ['0.000041', 'boot', 'zlOS 0.3 x86_64, multiboot handoff at 0x00100000', ''],
+    ['0.000188', 'mem',  'e820: 15.0 GiB usable, 5 fixed maps reserved', ''],
+    ['0.004120', 'apic', 'xAPIC id 0, 4 logical CPUs, timer 1000 Hz', ''],
+    ['0.010773', 'pci',  '8086:9b41 rev 02, bar0 0xD0000000 len 16 MiB', ''],
+    ['0.031908', 'intel', 'edid: 1600x1000, 60.0 Hz, panel LP140WFA', ''],
+    ['0.044210', 'intel', 'psr busy, waited 2 ms, pipe A safe', 'warn'],
+    ['0.061554', 'intel', 'pixel clock 241690 kHz -> 59.998 Hz', 'ok'],
+    ['0.088014', 'fb',   'gamma luts built, 2 x 256 entries, linear light', ''],
+    ['0.121760', 'xhci', 'bar0 64 bit, 8 scratchpad pages, ownership taken', ''],
+    ['0.133402', 'hid',  'boot protocol keyboard on slot 1 ep 1 in', ''],
+    ['0.133994', 'hid',  'usb-mouse on slot 2 ep 1 in, depth 1', ''],
+    ['0.187330', 'nvme', 'ns1 476.9 GiB, 4 KiB lba, 1 io queue', ''],
+    ['0.204118', 'zlfs', 'mount rd0, generation 3, 0 orphan extents', 'ok'],
+    ['0.219845', 'sched', '4 runqueues, load balance every 8 ms', ''],
+    ['0.240012', 'wm',   'compositor is the boot state, 1600x1000x32', ''],
+    ['0.240988', 'ui',   'theme init q8 256, apron 24, key 24 live', ''],
+    ['1.402219', 'intel', 'lt_armed false, cursor writes ungated', 'warn'],
+    ['4.881003', 'zlfs', 'flush 24: extent 0x11A4C0 crc mismatch, retry 1', 'bad'],
+    ['4.881440', 'zlfs', 'retry ok, generation 3 intact', 'ok'],
+    ['9.120774', 'net',  'enp0s31f6 link up, 1000 Mb/s full duplex', ''],
+    ['12.44018', 'net',  'dhcp lease 10.0.2.15/24, gw 10.0.2.2, 86400 s', '']
+  ];
+  const rows = L.map(l => {
+    const ink = l[3] === 'bad' ? '--zd-road' : l[3] === 'warn' ? '--zd-contour' :
+                l[3] === 'ok' ? '--zd-wood' : null;
+    return TR([{ t: (ink ? '<span class="cbar" style="background:var(' + ink + ')"></span>' : '') + l[0], c: '' },
+               { t: l[1], c: 'i3' },
+               { t: l[2].replace(/</g, '&lt;'), c: l[3] === 'bad' ? 'b' : '' }]);
+  });
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">dmesg</span>' +
+    '<span class="t-data i3">ring 64 KiB &middot; 21 of 318 records &middot; klog level 6</span>' +
+    '<span class="t-data i3 grow">2 warn &middot; 1 err</span></div><div class="hr2"></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'monotonic', w: '15%' }, { h: 'source', w: '11%' }, { h: 'record', w: '74%' }],
+        rows) + '</div>';
+};
+
+/* 06 HEX VIEWER */
+R.hex = () => {
+  const base = 0x0011A4C0;
+  const seed = [0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+  const rows = [];
+  for (let r = 0; r < 20; r++) {
+    let cells = '', txt = '';
+    for (let i = 0; i < 16; i++) {
+      const b = r === 0 ? seed[i] : ((base + r * 16 + i) * 37 + r * 13) & 0xff;
+      cells += hx(b, 2) + (i === 7 ? '  ' : ' ');
+      txt += (b >= 32 && b < 127) ? String.fromCharCode(b).replace(/</g, '&lt;').replace(/&(?!lt;)/g, '&amp;') : '.';
+    }
+    rows.push(TR([{ t: hx(base + r * 16, 8), c: 'i3' }, cells.trim(), { t: txt, c: '' }]));
+  }
+  return '<div class="row" style="padding-bottom:6px">' +
+    '<span class="t-label i0">rd0 offset 0x0011A4C0</span>' +
+    '<span class="t-data i3">' + bar('wood') + 'zlfs extent 24 &middot; 4096 B &middot; crc 0x9C41A2E7</span>' +
+    '<span class="t-data i3 grow">320 of 4096 shown</span></div><div class="hr2"></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'offset', w: '14%' }, { h: '00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f', w: '62%' },
+         { h: 'ascii', w: '24%' }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row" style="height:var(--row-h)"><span class="t-label">magic</span>' +
+    '<span class="t-data i0">7f 45 4c 46</span><span class="t-data i3">ELF64 little endian</span>' +
+    '<span class="grow"></span>' + statword('OK') + '</div>';
+};
+
+/* 07 CALCULATOR. no lexical ink at all: nothing here is a referent. */
+R.calc = () => {
+  const keys = [
+    ['7', '7'], ['8', '8'], ['9', '9'], ['div', '/ 2'],
+    ['4', '4'], ['5', '5'], ['6', '6'], ['mul', 'x 2'],
+    ['1', '1'], ['2', '2'], ['3', '3'], ['sub', '- 1'],
+    ['0', '0'], ['clr', 'clr'], ['eq', '='], ['add', '+ 1']
+  ];
+  const n = parseInt(S.calcAcc, 10) || 0;
+  let grid = '<div style="display:grid;grid-template-columns:repeat(4,1fr);' +
+    'border-left:1px solid var(--zd-rule-1);border-top:1px solid var(--zd-rule-1);flex:none">';
+  keys.forEach(k => {
+    grid += '<span data-act="calc" data-arg="' + k[0] + '" style="height:calc(30px * var(--ui));' +
+      'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+      'border-right:1px solid var(--zd-rule-1);border-bottom:1px solid var(--zd-rule-1)">' +
+      '<span class="t-label">' + k[1] + '</span></span>';
+  });
+  grid += '</div>';
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">int64</span>' +
+    '<span class="t-data i3">no floating point anywhere in this build</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="well" style="margin:8px 0;text-align:right">' +
+    '<span class="t-data i0 b" style="font-size:var(--fs-title);line-height:var(--lh-title)">' +
+    S.calcAcc + '</span></div>' + grid +
+    '<div class="kvgrid" style="margin-top:10px">' +
+    kv('hex', '0x' + hx(n, 8)) + kv('octal', '0o' + (n >>> 0).toString(8)) +
+    kv('binary', (n >>> 0).toString(2).padStart(24, '0').slice(-24)) +
+    kv('popcount', String((n >>> 0).toString(2).split('1').length - 1)) +
+    kv('as kHz', (n / 1000).toFixed(3) + ' MHz') +
+    kv('at 24 bpp', (n / 1000 / 1600 / 1000 * 1000).toFixed(3) + ' Hz est') +
+    '</div>' +
+    '<div class="row" style="margin-top:8px"><span class="t-data i3">' +
+    '241690 is the measured pipe A pixel clock in kHz</span></div>';
+};
+
+/* 08 NETWORK. WATER for every stream, ROAD for the routing table, which is
+      literally routes. Two inks, two referents, both defined in the key. */
+R.net = () => {
+  const ifs = [
+    ['enp0s31f6', 'up', '10.0.2.15/24', '1000 Mb/s', S.rx.toFixed(1), S.tx.toFixed(1)],
+    ['lo', 'up', '127.0.0.1/8', 'unbound', '0.4', '0.4'],
+    ['virtio0', 'down', '', '0', '0.0', '0.0']
+  ].map(i => TR([{ t: bar('water') + i[0] }, { t: statword(i[1] === 'up' ? 'OK' : 'DOWN') },
+    i[2], { t: i[3], c: 'r' }, { t: i[4], c: 'r' }, { t: i[5], c: 'r' }]));
+  const routes = [
+    ['0.0.0.0/0', '10.0.2.2', 'enp0s31f6', '100'],
+    ['10.0.2.0/24', 'link', 'enp0s31f6', '0'],
+    ['127.0.0.0/8', 'link', 'lo', '0']
+  ].map(r => TR([{ t: bar('road') + r[0] }, r[1], r[2], { t: r[3], c: 'r' }]));
+  const socks = [
+    ['tcp', '10.0.2.15:22', '10.0.2.2:52218', 'ESTAB'],
+    ['tcp', '0.0.0.0:9000', '', 'LISTEN'],
+    ['udp', '10.0.2.15:68', '10.0.2.2:67', 'BOUND'],
+    ['tcp', '10.0.2.15:443', '140.82.121.4:443', 'ESTAB']
+  ].map(s => TR([s[0], s[1], { t: s[2] || '', c: 'i3' }, { t: statword(s[3]), c: 'r' }]));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">enp0s31f6</span>' +
+    '<span class="t-data i3">e1000e &middot; 52:54:00:12:34:56 &middot; mtu 1500</span>' +
+    '<span class="t-data i0 grow b">' + S.rx.toFixed(1) + ' k rx</span></div><div class="hr2"></div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">receive, 72 s</span>' +
+    '<span class="t-data i3 grow">peak ' + Math.max.apply(null, S.hist.net) + ' k</span></div>' +
+    plotFlex(S.hist.net, 90, '--zd-water', 44) +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">interfaces</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '" style="flex:none">' +
+    TBL([{ h: 'iface', w: '24%' }, { h: 'link', w: '12%' }, { h: 'address', w: '24%' },
+         { h: 'speed', w: '16%', r: 1 }, { h: 'rx k', w: '12%', r: 1 },
+         { h: 'tx k', w: '12%', r: 1 }], ifs) + '</div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">routes</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '" style="flex:none">' +
+    TBL([{ h: 'destination', w: '34%' }, { h: 'via', w: '24%' }, { h: 'dev', w: '26%' },
+         { h: 'metric', w: '16%', r: 1 }], routes) + '</div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">sockets</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'proto', w: '14%' }, { h: 'local', w: '32%' }, { h: 'peer', w: '34%' },
+         { h: 'state', w: '20%', r: 1 }], socks) + '</div>';
+};
+
+/* 09 CLOCKS */
+function hhmmss(s) {
+  s = ((s % 86400) + 86400) % 86400;
+  return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60);
+}
+R.clock = () => {
+  const t = S.clock;
+  const zones = [['local', 0, 'Europe/London', 'BST'], ['utc', -3600, 'Etc/UTC', 'Z'],
+                 ['pacific', -28800, 'America/Los_Angeles', 'PDT'],
+                 ['tokyo', 28800, 'Asia/Tokyo', 'JST'], ['boot', 0, 'monotonic', 'CLOCK']];
+  const rows = zones.map(z => TR([z[0], { t: hhmmss(z[1] === 0 && z[0] === 'boot' ? 4211 + S.t : t + z[1]), c: 'r b' },
+    { t: z[2], c: 'i3' }, { t: z[3], c: 'r i3' }]));
+  const sec = t % 60, min = Math.floor(t / 60) % 60, hr = Math.floor(t / 3600) % 12;
+  const ang = (deg, len) => {
+    const r = (deg - 90) * Math.PI / 180;
+    return [48 + Math.cos(r) * len, 48 + Math.sin(r) * len];
+  };
+  const hp = ang(hr * 30 + min * 0.5, 21), mp = ang(min * 6, 32), sp = ang(sec * 6, 35);
+  let ticks = '';
+  for (let i = 0; i < 12; i++) {
+    const a = ang(i * 30, 40), b = ang(i * 30, i % 3 === 0 ? 32 : 36);
+    ticks += '<path d="M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) + ' L' + b[0].toFixed(1) +
+      ' ' + b[1].toFixed(1) + '" stroke="var(--zd-ink-3)" stroke-width="' + (i % 3 === 0 ? 3 : 1.5) + '"/>';
+  }
+  const dial = '<svg width="132" height="132" viewBox="0 0 96 96" fill="none" aria-hidden="true">' +
+    '<rect x="2" y="2" width="92" height="92" fill="none" stroke="var(--zd-rule-1)" stroke-width="1"/>' +
+    '<circle cx="48" cy="48" r="42" stroke="var(--zd-ink)" stroke-width="2"/>' + ticks +
+    '<path d="M48 48 L' + hp[0].toFixed(1) + ' ' + hp[1].toFixed(1) + '" stroke="var(--zd-ink)" stroke-width="5"/>' +
+    '<path d="M48 48 L' + mp[0].toFixed(1) + ' ' + mp[1].toFixed(1) + '" stroke="var(--zd-ink)" stroke-width="3"/>' +
+    '<path d="M48 48 L' + sp[0].toFixed(1) + ' ' + sp[1].toFixed(1) + '" stroke="var(--zd-ink-3)" stroke-width="1.5"/>' +
+    '</svg>';
+  const timers = [['build watch', '00:04:12', 'RUN'], ['soak test', '02:41:55', 'RUN'],
+                  ['panel T12 guard', '00:00:00', 'IDLE'], ['ntp poll', '00:11:03', 'RUN']]
+    .map(x => TR([x[0], { t: x[1], c: 'r' }, { t: statword(x[2]), c: 'r' }]));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">clocks</span>' +
+    '<span class="t-data i3">tsc invariant &middot; hpet 24 MHz &middot; drift +0.4 ppm</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="cols2" style="padding-top:10px;flex:none">' +
+    '<div style="display:flex;align-items:center;justify-content:center">' + dial + '</div>' +
+    '<div class="stack">' +
+    '<span class="t-label">local</span>' +
+    '<span class="t-data i0 b" style="font-size:var(--fs-title);line-height:var(--lh-title)">' +
+      hhmmss(t) + '</span>' +
+    '<span class="t-data i3">friday 12 september &middot; week 37 &middot; day 255</span>' +
+    '<div class="hr1" style="margin:8px 0"></div>' +
+    kv('uptime', hhmmss(4211 + S.t)) + kv('boot', '13:21:56') +
+    kv('tsc', (2903000000 + S.t * 2903000).toLocaleString('en-GB')) +
+    kv('pit', '1193182 / 1000') +
+    '</div></div>' +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">zones</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '" style="flex:none">' +
+    TBL([{ h: 'name', w: '28%' }, { h: 'time', w: '26%', r: 1 }, { h: 'zone', w: '32%' },
+         { h: 'abbr', w: '14%', r: 1 }], rows) + '</div>' +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">timers</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'timer', w: '48%' }, { h: 'elapsed', w: '30%', r: 1 },
+         { h: 'state', w: '22%', r: 1 }], timers) + '</div>';
+};
+
+/* 10 SYSTEM INFO */
+R.sys = () => {
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">zlOS 0.3</span>' +
+    '<span class="t-data i3">x86_64 &middot; no libc &middot; no heap &middot; no float</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="kvgrid" style="padding-top:8px">' +
+    kv('kernel', 'zlOS 0.3 (zl 0.9.4)') +
+    kv('build', 'f6e0ec3 clean') +
+    kv('cpu', 'i7-10610U CML-U') +
+    kv('cores', '4 physical, 8 logical') +
+    kv('base clock', '1.80 GHz') +
+    kv('turbo', '4.90 GHz') +
+    kv('memory', '15.0 GiB usable') +
+    kv('page size', '4 KiB, no huge pages') +
+    kv('display', '8086:9B41 gen9') +
+    kv('panel', 'LP140WFA 1600x1000') +
+    kv('pixel clock', '241690 kHz') +
+    kv('refresh', '59.998 Hz') +
+    kv('storage', 'nvme0n1 476.9 GiB') +
+    kv('filesystem', 'zlfs generation 3') +
+    kv('input', 'xHCI HID kbd + mouse') +
+    kv('firmware', 'UEFI, our own BOOTX64') +
+    '</div>' +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">resident subsystems</span>' +
+    '<span class="t-data i3 grow">bss 1441792 B</span></div>' +
+    '<div class="stack" style="flex:none">' +
+    contourMeter('framebuffer', 61, ' %', '6.4 MiB of 10.4') +
+    contourMeter('dom arena', 47, ' %', '15574 of 32768 nodes') +
+    contourMeter('drag scratch', 22, ' %', '128 MiB at HI_DRAG') +
+    '</div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">fixed maps</span>' +
+    '<span class="t-data i3 grow">five, not two</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '">' +
+    TBL([{ h: 'region', w: '26%' }, { h: 'base', w: '26%' }, { h: 'size', w: '20%', r: 1 },
+         { h: 'owner', w: '28%' }],
+      [['HI_FB', '0x04000000', '64 MiB', 'fb.c', 'water'],
+       ['HI_NET', '0x08000000', '64 MiB', 'virtio_net.c', 'water'],
+       ['HI_DOM', '0x0C000000', '64 MiB', 'parser arena', 'wood'],
+       ['HI_DRAG', '0x08000000', '128 MiB', 'wm_drag.c', 'wood'],
+       ['HI_BLUR', '0x0A000000', '160 MiB', 'fb_blur_paint', 'contour']]
+      .map(m => TR([{ t: bar(m[4]) + m[0] }, m[1], { t: m[2], c: 'r' }, { t: m[3], c: 'i3' }]))) +
+    '</div>';
+};
+
+/* 12 DISK USAGE */
+R.disk = () => {
+  const mounts = [
+    ['rd0', 'zlfs', '4.0 MiB', '2.6 MiB', 65, '/'],
+    ['nvme0n1p1', 'vfat', '512 MiB', '38 MiB', 7, '/boot/efi'],
+    ['nvme0n1p2', 'zlfs', '476.4 GiB', '211.8 GiB', 44, '/store'],
+    ['tmp0', 'ram', '64 MiB', '4 MiB', 6, '/tmp']
+  ].map(m => TR([{ t: bar('wood') + m[0] }, { t: m[1], c: 'i3' }, { t: m[2], c: 'r' },
+    { t: m[3], c: 'r' }, { t: m[4] + ' %', c: 'r b' }, m[5]]));
+  const blocks = [['build', 62, 'cb4'], ['src', 21, 'cb3'], ['docs', 9, 'cb2'],
+                  ['tmp', 5, 'cb1'], ['free', 3, '']];
+  let bar2 = '<div style="display:flex;height:calc(26px * var(--ui));' +
+    'border:1px solid var(--zd-rule-1)">';
+  blocks.forEach((b, i) => {
+    bar2 += '<div class="' + b[2] + '" style="width:' + b[1] + '%;' +
+      (i ? 'border-left:1px solid var(--zd-rule-1);' : '') +
+      (b[2] ? '' : 'background:var(--zd-well);') + '"></div>';
+  });
+  bar2 += '</div>';
+  let leg = '<div class="row" style="padding-top:5px;flex-wrap:wrap">';
+  blocks.forEach(b => {
+    leg += '<span class="row" style="gap:5px"><span style="width:11px;height:9px;' +
+      'border:1px solid var(--zd-rule-1);background:var(' +
+      (b[2] === 'cb4' ? '--zd-band-4' : b[2] === 'cb3' ? '--zd-band-3' :
+       b[2] === 'cb2' ? '--zd-band-2' : b[2] === 'cb1' ? '--zd-band-1' : '--zd-well') +
+      ')"></span><span class="t-label">' + b[0] + '</span>' +
+      '<span class="t-data i3">' + b[1] + '%</span></span>';
+  });
+  leg += '</div>';
+  const big = [
+    ['dejavu_mono.ttf', '641.0 KiB', '/rd0/kernel'],
+    ['atlas48.bin', '196.0 KiB', '/rd0/kernel'],
+    ['core.dump', '256.0 KiB', '/rd0/kernel'],
+    ['zlos.elf', '249.8 KiB', '/rd0/kernel'],
+    ['intel.c', '112.9 KiB', '/rd0/kernel'],
+    ['fb.c', '68.4 KiB', '/rd0/kernel'],
+    ['xhci.c', '54.1 KiB', '/rd0/kernel']
+  ].map(b => TR([{ t: bar('wood') + b[0] }, { t: b[1], c: 'r' }, { t: b[2], c: 'i3' }]));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">disk usage</span>' +
+    '<span class="t-data i3">du -x, one filesystem, no cross device</span>' +
+    '<span class="t-data i0 grow b">2.6 MiB used</span></div><div class="hr2"></div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">rd0 by directory</span>' +
+    '<span class="t-data i3 grow">banded exactly as a contour, largest inside</span></div>' +
+    bar2 + leg +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">mounts</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '" style="flex:none">' +
+    TBL([{ h: 'device', w: '24%' }, { h: 'fs', w: '12%' }, { h: 'size', w: '16%', r: 1 },
+         { h: 'used', w: '16%', r: 1 }, { h: 'pct', w: '12%', r: 1 },
+         { h: 'mount', w: '20%' }], mounts) + '</div>' +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">largest objects</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'name', w: '44%' }, { h: 'size', w: '22%', r: 1 }, { h: 'path', w: '34%' }],
+        big) + '</div>';
+};
+
+/* 13 PROCESSES */
+R.proc = () => {
+  const rows = [
+    ['1', 'zlinit', '0', 'S', 0.0, 1.2, '00:00:01', 'OK'],
+    ['12', 'compositor', '1', 'R', 11.4, 18.6, '00:14:22', 'OK'],
+    ['18', 'xhci_evt', '1', 'S', 0.8, 0.4, '00:00:44', 'OK'],
+    ['21', 'hid_kbd', '1', 'S', 0.1, 0.2, '00:00:06', 'OK'],
+    ['24', 'zlfs_flush', '12', 'D', 2.1, 3.0, '00:01:12', 'WARN'],
+    ['31', 'netd', '1', 'S', 1.6, 2.2, '00:03:51', 'OK'],
+    ['38', 'zlsh', '12', 'S', 0.4, 1.1, '00:09:02', 'OK'],
+    ['42', 'regdump', '38', 'S', 0.2, 0.6, '00:00:02', 'OK'],
+    ['55', 'ntpd', '1', 'S', 0.0, 0.3, '00:12:40', 'OK'],
+    ['61', 'soak', '38', 'R', 38.9, 9.4, '02:41:55', 'OK'],
+    ['70', 'wmshot', '38', 'S', 0.9, 1.8, '00:00:11', 'OK'],
+    ['77', 'intel_lt', '1', 'Z', 0.0, 0.8, '00:00:00', 'FAIL']
+  ].map((p, i) => TR([p[0], { t: p[1], c: i === S.procSel ? 'b' : '' }, { t: p[2], c: 'i3' },
+    p[3], { t: bar('contour') + p[4].toFixed(1), c: 'r' }, { t: p[5].toFixed(1), c: 'r' },
+    { t: p[6], c: 'r i3' }, { t: statword(p[7]), c: 'r' }],
+    'class="pick' + (i === S.procSel ? ' sel' : '') + '" data-act="proc" data-arg="' + i + '"'));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">task table</span>' +
+    '<span class="t-data i3">42 total &middot; 2 running &middot; 1 uninterruptible &middot; 1 zombie</span>' +
+    '<span class="t-data i0 grow b">load ' + S.load.toFixed(2) + '</span></div><div class="hr2"></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '" style="margin-top:0">' +
+    TBL([{ h: 'pid', w: '9%' }, { h: 'command', w: '24%' }, { h: 'ppid', w: '9%' },
+         { h: 'st', w: '7%' }, { h: 'cpu', w: '15%', r: 1 }, { h: 'mem', w: '11%', r: 1 },
+         { h: 'time', w: '14%', r: 1 }, { h: 'state', w: '11%', r: 1 }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row" style="height:var(--row-h)">' +
+    '<span class="btn prim" data-act="toast" data-arg="reap"><span class="t-label">reap zombie</span></span>' +
+    '<span class="btn" data-act="toast" data-arg="renice"><span class="t-label">renice 10</span></span>' +
+    '<span class="t-data i3 grow">pid 77 intel_lt exited without a reaper</span></div>';
+};
+
+/* 14 REGISTERS. WATER: an mmio window is i/o. */
+R.regs = () => {
+  const regs = [
+    ['PIPE_A_CONF', 0x70008, 0xC0000000, 'enabled, 8 bpc'],
+    ['PIPE_A_SRCSZ', 0x6001C, 0x063F03E7, '1600 x 1000'],
+    ['HTOTAL_A', 0x60000, 0x06BF063F, 'htotal 1728'],
+    ['HBLANK_A', 0x60004, 0x06BF063F, ''],
+    ['HSYNC_A', 0x60008, 0x0687065F, ''],
+    ['VTOTAL_A', 0x6000C, 0x03F303E7, 'vtotal 1012'],
+    ['VBLANK_A', 0x60010, 0x03F303E7, ''],
+    ['VSYNC_A', 0x60014, 0x03EB03E9, ''],
+    ['PIPE_A_LINK_M', 0x60040, 0x0080D9E4, 'm 8444132'],
+    ['PIPE_A_LINK_N', 0x60044, 0x00800000, 'n 8388608'],
+    ['DPLL_CTRL1', 0x6C058, 0x00000601, 'link 2.7 GHz'],
+    ['DPLL_STATUS', 0x6C060, 0x00008000, 'dpll0 locked'],
+    ['PLANE_CTL_A', 0x70180, 0x84000400, 'enabled, xrgb8888'],
+    ['PLANE_SURF_A', 0x7019C, 0x04000000, 'HI_FB'],
+    ['PSR_STATUS', 0x64840, 0x00000000, 'idle'],
+    ['CUR_CTL_A', 0x70080, 0x00000027, 'ungated write path'],
+    ['GMBUS0', 0xC5100, 0x00000003, 'ddc pin 3'],
+    ['PP_STATUS', 0xC7200, 0x80000008, 'panel on, T12 met']
+  ].map(r => TR([{ t: bar('water') + r[0] }, { t: '0x' + hx(r[1], 5), c: 'r i3' },
+    { t: '0x' + hx(r[2], 8), c: 'r b' }, { t: r[3], c: 'i3' }]));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">pipe A</span>' +
+    '<span class="t-data i3">bar0 0xD0000000 &middot; 8 MiB mapped, not 16 &middot; read only</span>' +
+    '<span class="t-data i3 grow">i915 detached</span></div><div class="hr2"></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'register', w: '30%' }, { h: 'offset', w: '16%', r: 1 },
+         { h: 'value', w: '20%', r: 1 }, { h: 'decoded', w: '34%' }], regs) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row" style="height:var(--row-h)"><span class="t-label">derived</span>' +
+    '<span class="t-data i0">241690 kHz</span>' +
+    '<span class="t-data i3">m x 270000 x 8 / (n x 24), 59.998 Hz</span>' +
+    '<span class="grow"></span>' + statword('OK') + '</div>';
+};
+
+/* 15 TYPE ATLAS. three baked sizes and their variants; no rasteriser. */
+R.type = () => {
+  const glyphs = '0123456789ABCDEFabcdefghij.,:;-_/\\[]{}()<>=+*&%$#@!?';
+  let atlas = '<div style="display:flex;flex-wrap:wrap;border-left:1px solid var(--zd-rule-1);' +
+    'border-top:1px solid var(--zd-rule-1)">';
+  for (let i = 0; i < glyphs.length; i++) {
+    atlas += '<span class="t-data i0" style="width:calc(22px * var(--ui));' +
+      'height:calc(22px * var(--ui));display:flex;align-items:center;justify-content:center;' +
+      'border-right:1px solid var(--zd-rule-1);border-bottom:1px solid var(--zd-rule-1)">' +
+      glyphs[i].replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;') + '</span>';
+  }
+  atlas += '</div>';
+  const sizes = [
+    ['8 x 16', 'mono', 'data, tables, readouts, the apron', '11 px', '4544 B'],
+    ['16 x 32', 'mono + prop', 'body, sheet titles', '15 / 22 px', '18176 B'],
+    ['24 x 48', 'prop', 'lock clock only, doubled once', '44 px', '40896 B']
+  ].map(s => TR([{ t: s[0], c: 'b' }, s[1], s[2], { t: s[3], c: 'r' }, { t: s[4], c: 'r i3' }]));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">type atlas</span>' +
+    '<span class="t-data i3">DejaVu Sans Mono, baked &middot; no runtime rasteriser</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">three baked sizes</span>' +
+    '<span class="t-data i3 grow">a fourth would mean upscaling</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '" style="flex:none">' +
+    TBL([{ h: 'atlas', w: '16%' }, { h: 'form', w: '18%' }, { h: 'used for', w: '38%' },
+         { h: 'render', w: '14%', r: 1 }, { h: 'bytes', w: '14%', r: 1 }], sizes) + '</div>' +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">8 x 16 cells</span>' +
+    '<span class="t-data i3 grow">subpixel LCD path, gamma correct in linear light</span></div>' +
+    atlas +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">register change</span></div>' +
+    '<div class="stack">' +
+    '<span class="t-title">sheet title, 22</span>' +
+    '<span class="t-body">body at 15, set in the sans face. a real register change, ' +
+    'not a size bump: case, weight and face all move together.</span>' +
+    '<span class="t-data">data at 11, mono, tabular figures, 0x0080D9E4</span>' +
+    '</div>';
+};
+
+/* 16 SHEET INDEX. the module grid is the layout system, drawn as itself. */
+R.grid = () => {
+  const g = GRID;
+  const wins = Object.values(S.wins).filter(w => w.ws === S.ws);
+  let cells = '<div style="position:relative;flex:1;min-height:120px;' +
+    'border:1px solid var(--zd-rule-2);background:var(--zd-well);overflow:hidden">';
+  const k = 1;
+  wins.forEach(w => {
+    const sx = 100 * w.cx / Math.max(1, g.nx), sy = 100 * w.cy / Math.max(1, g.ny);
+    const sw = 100 * w.cw / Math.max(1, g.nx), sh = 100 * w.ch / Math.max(1, g.ny);
+    cells += '<div style="position:absolute;left:' + sx.toFixed(2) + '%;top:' + sy.toFixed(2) +
+      '%;width:' + sw.toFixed(2) + '%;height:' + sh.toFixed(2) + '%;' +
+      'border:' + (S.focus === w.id ? '2px' : '1px') + ' solid var(--zd-rule-2);' +
+      'background:var(--zd-paper);display:flex;align-items:center;justify-content:center">' +
+      '<span class="t-data i2">' + w.ref + '</span></div>';
+  });
+  cells += '</div>';
+  const rows = wins.map(w => TR([{ t: APP[w.id].key, c: 'b' }, APP[w.id].name,
+    { t: w.ref, c: 'r b' }, { t: w.cw + ' x ' + w.ch, c: 'r' },
+    { t: (w.cw * UNITS_PER_CELL) + ' x ' + (w.ch * UNITS_PER_CELL), c: 'r i3' },
+    { t: statword(S.focus === w.id ? 'FOCUS' : w.min ? 'HELD' : 'PLACED'), c: 'r' }]));
+  return '<div class="row" style="padding-bottom:6px"><span class="t-label i0">sheet index</span>' +
+    '<span class="t-data i3">the ruled grid IS the layout system</span>' +
+    '<span class="t-data i3 grow">' + g.nx + ' x ' + g.ny + ' cells</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="row" style="padding:8px 0 4px"><span class="t-label">plan</span>' +
+    '<span class="t-data i3 grow">1 cell = ' + UNITS_PER_CELL + ' units = ' + S.pitch + ' px</span></div>' +
+    cells +
+    '<div class="row" style="padding:10px 0 4px"><span class="t-label">placed sheets</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'k', w: '8%' }, { h: 'sheet', w: '30%' }, { h: 'grid ref', w: '18%', r: 1 },
+         { h: 'cells', w: '14%', r: 1 }, { h: 'units', w: '16%', r: 1 },
+         { h: 'state', w: '14%', r: 1 }], rows) + '</div>' +
+    '<div class="hr1"></div>' +
+    '<div class="row" style="height:var(--row-h)">' +
+    '<span class="btn prim" data-act="toast" data-arg="retile"><span class="t-label">re-rule every sheet</span></span>' +
+    '<span class="t-data i3 grow">snap ' + (S.snap ? 'on' : 'off') + ' &middot; every sheet sits on a cell boundary</span></div>';
+};
+
+/* 11 SETTINGS. every control here changes something you can see on the sheet
+      behind it, and the ink table prints the LIVE token values. */
+const UI_STEPS = [0.9, 1.0, 1.1, 1.25];
+const PITCH_STEPS = [16, 20, 24, 28, 32];
+
+function sliderHTML(name, steps, val, fmt) {
+  const i = steps.indexOf(val);
+  const pct = steps.length === 1 ? 0 : i / (steps.length - 1);
+  const ticks = steps.map((s, k) => '<span class="tick" style="left:' +
+    (steps.length === 1 ? 0 : (k / (steps.length - 1)) * 100).toFixed(2) + '%"></span>').join('');
+  return '<span class="slider" data-slider="' + name + '"><span class="st"></span>' +
+    '<span class="sf" style="width:calc(' + (pct * 100).toFixed(2) + '% - 2px)"></span>' +
+    '<span class="sh" style="left:calc(' + (pct * 100).toFixed(2) + '% - ' +
+    (pct * 8).toFixed(2) + 'px)"></span>' + ticks + '</span>' +
+    '<span class="t-data i0 b" style="width:calc(58px * var(--ui));text-align:right">' +
+    fmt(val) + '</span>';
+}
+function toggleRow(label, key, note) {
+  return '<div class="ctlrow"><span class="t-label">' + label + '</span>' +
+    '<span class="t-data i3" style="margin-left:10px">' + note + '</span>' +
+    '<span class="right"><span class="t-data i3">' + (S[key] ? 'on' : 'off') + '</span>' +
+    '<span class="sw' + (S[key] ? ' on' : '') + '" data-toggle="' + key + '"><i></i></span>' +
+    '</span></div>';
+}
+function inkTable() {
+  let out = '<div class="row" style="padding:2px 0 4px"><span class="t-label i0">the five inks</span>' +
+    '<span class="t-data i3 grow">read live off :root, not typed in</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '">' +
+    TBL([{ h: 'ink', w: '17%' }, { h: 'hex', w: '17%' }, { h: 'means', w: '38%' },
+         { h: 'on field', w: '14%', r: 1 }, { h: 'on paper', w: '14%', r: 1 }],
+      INKS.map(k => TR([
+        { t: '<span class="cbar" style="background:var(' + k[1] + ')"></span>' + k[0] },
+        { t: tokHex(k[1]), c: 'i3' }, k[2],
+        { t: tokRatio(k[1], '--zd-field'), c: 'r b' },
+        { t: tokRatio(k[1], '--zd-paper'), c: 'r b' }]))) + '</div>';
+  out += '<div class="row" style="padding:10px 0 4px"><span class="t-label i0">the contour ramp</span>' +
+    '<span class="t-data i3 grow">a level is banded, never a solid bar</span></div>' +
+    '<div style="display:flex;height:calc(22px * var(--ui));border:1px solid var(--zd-rule-1)">' +
+    [1, 2, 3, 4].map(i => '<div class="cb' + i + '" style="flex:1' +
+      (i > 1 ? ';border-left:1px solid var(--zd-rule-1)' : '') + '"></div>').join('') +
+    '</div>' +
+    '<div class="row" style="padding-top:4px">' +
+    [1, 2, 3, 4].map(i => '<span class="t-data i3" style="flex:1">band ' + i + ' ' +
+      tokHex('--zd-band-' + i) + '</span>').join('') + '</div>';
+  out += '<div class="row" style="padding:12px 0 4px"><span class="t-label i0">silhouette proof</span>' +
+    '<span class="t-data i3 grow">colour is doing referent work, so identity is SHAPE alone</span></div>' +
+    '<div class="t-data i3" style="padding-bottom:6px">every key symbol as a flat ink ' +
+    'silhouette at 24 dp. no two share an outer boundary; nothing here is told ' +
+    'apart by hue, weight or detail.</div>' +
+    '<div class="silo">' + APPS.map(a => '<span title="' + a.name + '">' +
+      silhouette(a.ico, 26) + '</span>').join('') +
+    '</div>';
+  return out;
+}
+function stockTable() {
+  const ladder = [
+    ['--zd-apron', 'marginal apron, the unprinted stock', '--zd-field'],
+    ['--zd-paper', 'a window sheet', '--zd-field'],
+    ['--zd-field', 'the ruled field inside the neatline', '--zd-apron'],
+    ['--zd-ink', 'every rule, every mark that is not a referent', '--zd-field'],
+    ['--zd-ink-2', 'body and data', '--zd-paper'],
+    ['--zd-ink-3', 'labels and captions', '--zd-paper'],
+    ['--zd-grid', 'the 1 px grid line', '--zd-field'],
+    ['--zd-grid-5', 'every fifth line', '--zd-field'],
+    ['--zd-slab', 'the one value inversion', '--zd-field'],
+    ['--zd-slab-0', 'type on the slab', '--zd-slab'],
+    ['--zd-slab-1', 'second rank on the slab', '--zd-slab']
+  ];
+  return '<div class="row" style="padding:2px 0 4px"><span class="t-label i0">stock ladder, ' +
+    (S.theme === 'dark' ? 'night' : 'day') + '</span>' +
+    '<span class="t-data i3 grow">every name exists in both modes</span></div>' +
+    '<div class="' + (S.zebra ? 'zeb' : '') + '">' +
+    TBL([{ h: 'token', w: '24%' }, { h: 'hex', w: '15%' }, { h: 'role', w: '43%' },
+         { h: 'ratio', w: '18%', r: 1 }],
+      ladder.map(t => TR([{ t: t[0].replace('--zd-', 'ZD_').toUpperCase().replace(/-/g, '_'), c: '' },
+        { t: tokHex(t[0]), c: 'i3' }, t[1],
+        { t: tokRatio(t[0], t[2]) + ':1', c: 'r b' }]))) + '</div>';
+}
+R.set = () => {
+  const tabs = ['ink', 'stock', 'sheet', 'key'];
+  let out = '<div class="row" style="padding-bottom:6px"><span class="t-label i0">settings</span>' +
+    '<span class="t-data i3">design.h, live</span>' +
+    '<span class="t-data i3 grow">ui ' + S.ui.toFixed(2) + ' &middot; pitch ' + S.pitch +
+    ' px &middot; ' + (S.theme === 'dark' ? 'night' : 'day') + '</span></div>' +
+    '<div class="hr2"></div>' +
+    '<div class="seg" data-seg="settab" style="margin:8px 0">' + tabs.map((t, i) =>
+      '<span class="' + (S.setTab === i ? 'on' : '') + '" data-arg="' + i + '">' +
+      '<span class="t-label">' + t + '</span></span>').join('') + '</div>' +
+    '<div class="scroll">';
+  if (S.setTab === 0) out += inkTable();
+  if (S.setTab === 1) {
+    out += stockTable();
+    out += '<div class="row" style="padding:12px 0 4px"><span class="t-label i0">stock</span></div>' +
+      '<div class="seg" data-seg="stock" style="width:calc(240px * var(--ui))">' +
+      '<span class="' + (S.theme === 'light' ? 'on' : '') + '" data-arg="0"><span class="t-label">day</span></span>' +
+      '<span class="' + (S.theme === 'dark' ? 'on' : '') + '" data-arg="1"><span class="t-label">night</span></span>' +
+      '</div>' +
+      '<div class="t-data i3" style="padding-top:8px">night is the IHO S-52 NIGHT colour ' +
+      'table that ECDIS chart displays on a ship bridge use, so a sheet can be read on ' +
+      'watch without wrecking dark adaptation. the ground is teal black, nothing is ' +
+      'white, and no large area is ever bright: that last rule is why the slab does not ' +
+      'invert to chart white but steps to a lifted band at ' + tokHex('--zd-slab') + '.</div>';
+  }
+  if (S.setTab === 2) {
+    out += '<div class="ctlrow"><span class="t-label">ui scale</span>' +
+      '<span class="right">' + sliderHTML('ui', UI_STEPS, S.ui, v => v.toFixed(2)) + '</span></div>' +
+      '<div class="ctlrow"><span class="t-label">grid pitch</span>' +
+      '<span class="right">' + sliderHTML('pitch', PITCH_STEPS, S.pitch, v => v + ' px') +
+      '</span></div>' +
+      toggleRow('rule the grid', 'grid', 'the 1 px 20 unit mesh on the field') +
+      toggleRow('every fifth heavier', 'fifth', '100 unit lines at ' + tokHex('--zd-grid-5')) +
+      toggleRow('margin tick echo', 'ticks', 'four heavy ticks track the focused sheet') +
+      toggleRow('contour banding', 'bands', 'levels drawn in four bands, not one bar') +
+      toggleRow('zebra tint', 'zebra', 'alternate table rows on ' + tokHex('--zd-tint')) +
+      toggleRow('snap to cell', 'snap', 'a dragged sheet lands on a grid line') +
+      toggleRow('caret blink', 'blink', '500 ms, the only motion besides the 100 ms slide') +
+      '<div class="row" style="padding:12px 0 4px"><span class="t-label i0">measured</span></div>' +
+      '<div class="kvgrid">' +
+      kv('field', GRID.W + ' x ' + GRID.H + ' px') +
+      kv('cells', GRID.nx + ' x ' + GRID.ny) +
+      kv('cell', S.pitch + ' px = ' + UNITS_PER_CELL + ' units') +
+      kv('heavy square', (S.pitch * 5) + ' px = 100 units') +
+      kv('apron cost', Math.round(100 * (48 + (S.keyFull ? 96 : 24)) /
+         ($('#os').clientHeight || 1000)) + ' % of height') +
+      kv('units per px', upx().toFixed(3)) +
+      '</div>';
+  }
+  if (S.setTab === 3) {
+    out += '<div class="row" style="padding:2px 0 6px"><span class="t-label i0">the key is two state</span></div>' +
+      '<div class="t-data i3" style="padding-bottom:8px">the apron costs 24 dp on three ' +
+      'edges permanently. the fourth edge is the only one that can move, and it moves ' +
+      'between a 24 dp LIVE LEGEND carrying only the inks and symbols currently on ' +
+      'screen and the 96 dp full alphabetical KEY. it never collapses to nothing: the ' +
+      'contract on screen is the legal justification for spending five inks, and cutting ' +
+      'it turns this into a polychrome desktop with no contract, which is the one thing ' +
+      'it claims not to be.</div>' +
+      '<div class="seg" data-seg="keymode" style="width:calc(300px * var(--ui))">' +
+      '<span class="' + (!S.keyFull ? 'on' : '') + '" data-arg="0"><span class="t-label">live legend 24</span></span>' +
+      '<span class="' + (S.keyFull ? 'on' : '') + '" data-arg="1"><span class="t-label">full key 96</span></span>' +
+      '</div>' +
+      '<div class="row" style="padding:10px 0 4px"><span class="t-label">cost</span></div>' +
+      '<div class="kvgrid">' +
+      kv('apron, three edges', '24 dp each') +
+      kv('bottom, live', '24 dp') +
+      kv('bottom, full', '96 dp') +
+      kv('neatline', '6 dp, both states') +
+      kv('permanent, live', Math.round(100 * (24 + 24 + 12) / ($('#os').clientHeight || 1000)) + ' %') +
+      kv('permanent, full', Math.round(100 * (24 + 96 + 12) / ($('#os').clientHeight || 1000)) + ' %') +
+      '</div>' +
+      '<div class="row" style="padding:12px 0 4px"><span class="t-label i0">why a key and not a dock</span></div>' +
+      '<div class="t-data i3">a dock holds seven things you already know. a key explains a ' +
+      'sheet you have never seen, so it gets MORE useful as the sheet gets busier. at 53 ' +
+      'apps this one scrolls and stays alphabetical; a rail of 53 numbered rows does not.</div>' +
+      '<div class="row" style="padding:12px 0 4px"><span class="t-label i0">hold K</span>' +
+      '<span class="t-data i3 grow">or click the legend</span></div>';
+  }
+  out += '</div>';
+  return out;
+};
+
+/* ================================================================== grid */
+let GRID = { W: 0, H: 0, nx: 0, ny: 0 };
+function computeGrid() {
+  const f = $('#field');
+  GRID.W = f.clientWidth; GRID.H = f.clientHeight;
+  GRID.nx = Math.max(1, Math.floor(GRID.W / S.pitch));
+  GRID.ny = Math.max(1, Math.floor(GRID.H / S.pitch));
+}
+function drawGrid() {
+  const svg = $('#gridsvg'), g = GRID;
+  svg.setAttribute('width', g.W); svg.setAttribute('height', g.H);
+  if (!S.grid) { svg.innerHTML = ''; return; }
+  let s = '';
+  for (let i = 0; i <= g.nx; i++) {
+    const heavy = S.fifth && i % 5 === 0;
+    s += '<rect x="' + (i * S.pitch) + '" y="0" width="1" height="' + g.H +
+      '" fill="var(' + (heavy ? '--zd-grid-5' : '--zd-grid') + ')"/>';
+  }
+  for (let j = 0; j <= g.ny; j++) {
+    const heavy = S.fifth && (g.ny - j) % 5 === 0;
+    s += '<rect x="0" y="' + (j * S.pitch) + '" width="' + g.W +
+      '" height="1" fill="var(' + (heavy ? '--zd-grid-5' : '--zd-grid') + ')"/>';
+  }
+  svg.innerHTML = s;
+}
+
+/* ================================================================= apron
+ * Eastings on the top edge, northings on the left, the tick channel on the
+ * right, and four heavy ticks that track the focused sheet. The ticks are
+ * the glance signal: they jump in peripheral vision when focus changes, so
+ * the cue does not require reading the sheet you are not looking at. */
+function drawApron() {
+  const g = GRID, ap = 24 * S.ui, neat = 6 * S.ui;
+  const ox = ap + neat;                    /* field origin inside #os        */
+  const oy = ap + neat;
+  const os = $('#os');
+  const W = os.clientWidth, H = os.clientHeight;
+  const f = S.focus && S.wins[S.focus] && !S.wins[S.focus].min ? S.wins[S.focus] : null;
+  const fr = f ? winRect(f) : null;
+
+  /* --- top: eastings ------------------------------------------------- */
+  const top = $('#svg-top');
+  top.setAttribute('width', W); top.setAttribute('height', ap);
+  let s = '';
+  for (let i = 0; i <= g.nx; i++) {
+    const x = ox + i * S.pitch;
+    if (x > W - ap) break;
+    const heavy = i % 5 === 0;
+    s += '<rect x="' + x + '" y="' + (ap - (heavy ? 7 : 3)) + '" width="1" height="' +
+      (heavy ? 7 : 3) + '" fill="var(--zd-' + (heavy ? 'ink-3' : 'grid') + ')"/>';
+    if (heavy && i > 0) {
+      const e = eastOf(i * S.pitch);
+      const blockEdge = (e % BLOCK) === 0;
+      s += '<text x="' + (x + 3) + '" y="' + (ap - 10) + '" font-family="ui-monospace, ' +
+        "'DejaVu Sans Mono', monospace" + '" font-size="' + (10 * S.ui) + '" ' +
+        'fill="var(--zd-ink-' + (blockEdge ? '2' : '3') + ')"' +
+        (blockEdge ? ' font-weight="700"' : '') + '>' +
+        (blockEdge ? LET[Math.floor(e / BLOCK) % LET.length]
+                   : pad2(Math.floor((e % BLOCK) / 4))) + '</text>';
+    }
+  }
+  top.innerHTML = s;
+  /* THE MARGIN ECHO. four heavy ticks track the focused sheet's four edges,
+     the way a drafting machine's coordinate readout does. this is the glance
+     signal: the ticks jump in peripheral vision when focus changes, so the
+     cue never requires reading the sheet you are not looking at. they are
+     drawn on a layer ABOVE the margin figures, because a readout overrides
+     the printed numbers rather than hiding behind them. */
+  const topF = $('#svg-top-f');
+  topF.setAttribute('width', W); topF.setAttribute('height', ap);
+  topF.innerHTML = (S.ticks && fr) ? [fr.x, fr.x + fr.w].map(px =>
+    '<rect x="' + (ox + px - 3) + '" y="0" width="6" height="' + ap +
+    '" fill="var(--zd-ink)"/>').join('') : '';
+
+  /* --- left: northings ----------------------------------------------- */
+  const left = $('#svg-left');
+  const lh = H - ap - keyH();
+  left.setAttribute('width', ap); left.setAttribute('height', lh);
+  s = '';
+  for (let j = 0; j <= g.ny; j++) {
+    const y = neat + j * S.pitch;
+    if (y > lh) break;
+    const n = northOf(j * S.pitch, g.ny * S.pitch);
+    const heavy = (g.ny - j) % 5 === 0;
+    s += '<rect x="' + (ap - (heavy ? 7 : 3)) + '" y="' + y + '" width="' + (heavy ? 7 : 3) +
+      '" height="1" fill="var(--zd-' + (heavy ? 'ink-3' : 'grid') + ')"/>';
+    if (heavy && y > 14) {
+      const blockEdge = (n % BLOCK) === 0;
+      s += '<text x="2" y="' + (y - 3) + '" font-family="ui-monospace, ' +
+        "'DejaVu Sans Mono', monospace" + '" font-size="' + (10 * S.ui) + '" ' +
+        'fill="var(--zd-ink-' + (blockEdge ? '2' : '3') + ')"' +
+        (blockEdge ? ' font-weight="700"' : '') + '>' +
+        (blockEdge ? LET[Math.floor(n / BLOCK) % LET.length]
+                   : pad2(Math.floor((n % BLOCK) / 4))) + '</text>';
+    }
+  }
+  left.innerHTML = s;
+  const leftF = $('#svg-left-f');
+  leftF.setAttribute('width', ap); leftF.setAttribute('height', lh);
+  leftF.innerHTML = (S.ticks && fr) ? [fr.y, fr.y + fr.h].map(py =>
+    '<rect x="0" y="' + (neat + py - 3) + '" width="' + ap + '" height="6" ' +
+    'fill="var(--zd-ink)"/>').join('') : '';
+
+  /* --- right: the tick channel --------------------------------------- */
+  const right = $('#svg-right');
+  right.setAttribute('width', ap); right.setAttribute('height', lh);
+  s = '';
+  for (let j = 0; j <= g.ny; j++) {
+    const y = neat + j * S.pitch;
+    if (y > lh) break;
+    const heavy = (g.ny - j) % 5 === 0;
+    s += '<rect x="0" y="' + y + '" width="' + (heavy ? 11 : 4) + '" height="1" ' +
+      'fill="var(--zd-' + (heavy ? 'ink-3' : 'grid') + ')"/>';
+  }
+  s += '<rect x="' + (ap - 1) + '" y="0" width="1" height="' + lh + '" fill="var(--zd-grid)"/>';
+  if (S.ticks && fr) {
+    s += '<rect x="' + (ap - 6) + '" y="' + (neat + fr.y) + '" width="6" height="' + fr.h +
+      '" fill="var(--zd-ink-3)"/>';
+  }
+  right.innerHTML = s;
+
+  $('#sheetseries').textContent = 'series ZL-1  ·  1:1  ·  ' + g.nx + ' x ' + g.ny +
+    ' cells  ·  ' + UNITS_PER_CELL + ' u';
+  $('#sheetclock').textContent = (f ? APP[f.id].name.toUpperCase() + '  ' + f.ref + '  ·  ' : '') +
+    'ws ' + pad2(S.ws) + '  ·  load ' + S.load.toFixed(2) + '  ·  ' + hhmmss(S.clock);
+}
+function keyH() { return (S.keyFull ? 96 : 24) * S.ui; }
+function applyKeyH() {
+  document.documentElement.style.setProperty('--keyh', keyH() + 'px');
+  $('#ap-bottom').classList.toggle('full', S.keyFull);
+}
+
+/* =================================================================== key */
+function northSVG(px) {
+  const q = [['M22 3 L31 22 L13 22 Z', 1], ['M41 22 L22 31 L22 13 Z', 2],
+             ['M22 41 L13 22 L31 22 Z', 3], ['M3 22 L22 13 L22 31 Z', 4]];
+  const counts = {};
+  Object.values(S.wins).forEach(w => { counts[w.ws] = (counts[w.ws] || 0) + 1; });
+  return '<svg width="' + px + '" height="' + px + '" viewBox="0 0 44 44" aria-hidden="true">' +
+    q.map(k => '<path d="' + k[0] + '" fill="' +
+      (S.ws === k[1] ? 'var(--zd-ink)' : counts[k[1]] ? 'var(--zd-ink-3)' : 'none') +
+      '" stroke="var(--zd-ink-3)" stroke-width="1" data-nq="' + k[1] + '"/>').join('') +
+    '<circle cx="22" cy="22" r="1.6" fill="var(--zd-ink)"/></svg>';
+}
+function scaleBarSVG(w) {
+  const p = S.pitch, n = Math.min(5, Math.max(1, Math.floor((w - 30) / p)));
+  let s = '<svg width="' + (n * p + 2) + '" height="10" shape-rendering="crispEdges" aria-hidden="true">';
+  for (let i = 0; i < n; i++) {
+    s += '<rect x="' + (i * p + 1) + '" y="1" width="' + p + '" height="8" fill="var(--zd-' +
+      (i % 2 ? 'apron' : 'ink') + ')" stroke="var(--zd-ink)" stroke-width="1"/>';
+  }
+  s += '</svg>';
+  return s;
+}
+function inksOnScreen() {
+  const set = {};
+  Object.values(S.wins).filter(w => w.ws === S.ws && !w.min)
+    .forEach(w => APP[w.id].inks.forEach(k => { set[k] = 1; }));
+  return INKS.filter(k => set[k[0]]);
+}
+function renderKey() {
+  const host = $('#ap-bottom');
+  if (!S.keyFull) {
+    const live = inksOnScreen();
+    const open = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min)
+      .sort((a, b) => APP[a.id].name.localeCompare(APP[b.id].name));
+    host.innerHTML = '<div class="legend">' +
+      '<span class="t-label i0">legend</span>' +
+      '<span class="vr"></span>' +
+      (live.length ? live.map(k => '<span class="lit"><span class="sw" style="background:var(' +
+         k[1] + ')"></span><span class="t-label">' + k[0] + '</span>' +
+         '<span class="t-data i3">' + k[3] + '</span></span>').join('')
+       : '<span class="t-data i3">no lexical ink on this sheet</span>') +
+      '<span class="vr"></span>' +
+      '<span class="syms">' + open.slice(0, 10).map(w =>
+        '<span data-keyapp="' + w.id + '" style="cursor:pointer;display:flex">' +
+        icon(APP[w.id].ico, 14 * S.ui) + '</span>').join('') + '</span>' +
+      '<span class="t-data i3">' + open.length + ' placed</span>' +
+      '<span class="grow"></span>' +
+      '<span class="row" style="gap:6px">' + scaleBarSVG(90) +
+      '<span class="t-data i3">100 u = ' + (S.pitch * 5) + ' px</span></span>' +
+      '<span class="vr"></span>' +
+      '<span style="display:flex;align-items:center">' + northSVG(18 * S.ui) + '</span>' +
+      '<span class="t-data i3">ws ' + pad2(S.ws) + '</span>' +
+      '<span class="vr"></span>' +
+      '<span class="t-label hint" data-keytog="1">hold K for the full key</span>' +
+      '</div>';
+    return;
+  }
+  const sorted = APPS.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const perCol = 4;
+  let cols = '';
+  for (let i = 0; i < sorted.length; i += perCol) {
+    cols += '<div class="keycol">';
+    sorted.slice(i, i + perCol).forEach(a => {
+      const w = S.wins[a.id];
+      const cls = w ? (w.min ? 'hold' : 'run') : '';
+      cols += '<div class="keyrow ' + cls + '" data-keyapp="' + a.id + '">' +
+        '<span class="lit"></span>' +
+        '<span class="sym">' + icon(a.ico, 17 * S.ui) + '</span>' +
+        '<span class="t-label nm">' + a.name + '</span>' +
+        '<span class="t-data sc">' + a.key + '</span></div>';
+    });
+    cols += '</div>';
+  }
+  const live = inksOnScreen().map(k => k[0]);
+  host.innerHTML =
+    '<div class="keyhead">' +
+      '<span class="t-label i0">key</span>' +
+      '<span class="t-data i3">' + APPS.length + ' symbols, alphabetical, scrolls. ' +
+        'the letter is its alt shortcut</span>' +
+      '<span class="vr1" style="height:10px"></span>' +
+      '<span class="t-data i3">every mark on this sheet is defined here</span>' +
+      '<span class="grow"></span>' +
+      '<span class="t-data i3">sheet ZL-1 &middot; ws ' + pad2(S.ws) + ' &middot; ' +
+        Object.values(S.wins).filter(w => w.ws === S.ws).length + ' placed</span>' +
+      '<span class="t-label" data-keytog="1" style="cursor:pointer">release K</span>' +
+    '</div>' +
+    '<div class="keybody">' +
+      '<div class="keycols">' + cols + '</div>' +
+      '<div class="keyside">' +
+        '<div class="inkkey">' + INKS.map(k =>
+          '<div class="inkrow"><span class="sw" style="background:var(' + k[1] + ')"></span>' +
+          '<span class="t-label' + (live.indexOf(k[0]) >= 0 ? ' i0' : '') + '">' + k[0] + '</span>' +
+          '<span class="t-data mn i3">' + k[2] + '</span>' +
+          '<span class="t-data rt">' + tokRatio(k[1], '--zd-field') + '</span></div>').join('') +
+        '</div>' +
+        '<div class="scalebox">' +
+          '<span class="t-label">scale</span>' +
+          '<div class="row" style="gap:6px;padding:3px 0">' + scaleBarSVG(150) +
+          '<span class="t-data i3">100 u</span></div>' +
+          '<span class="t-data i3">1 cell ' + UNITS_PER_CELL + ' u = ' + S.pitch +
+            ' px &middot; ui ' + S.ui.toFixed(2) + '</span>' +
+          '<span class="t-data i3">field ' + GRID.nx + ' x ' + GRID.ny + ' cells</span>' +
+        '</div>' +
+        '<div class="northbox">' + northSVG(38 * S.ui) +
+          '<span class="t-label" style="padding-top:2px">ws ' + pad2(S.ws) + '</span></div>' +
+      '</div>' +
+    '</div>';
+}
+
+/* ========================================================== window mgmt */
+let ZTOP = 10;
+/* A sheet remembers the MODULE it was authored at, not the pixel size it
+   happened to get. Re-deriving the cell box from that spec on every layout is
+   what keeps a sheet filling its share of the field when the pitch, the ui
+   scale, the key height or the window changes; storing pixels instead is the
+   reflow bug PLATE shipped with. */
+function specToCells(w) {
+  const g = GRID, p = w.spec;
+  w.cw = clamp(Math.round(p[2] / 12 * g.nx), 4, g.nx);
+  w.ch = clamp(Math.round(p[3] / 8 * g.ny), 3, g.ny);
+  w.cx = clamp(Math.round(p[0] / 12 * g.nx), 0, Math.max(0, g.nx - w.cw));
+  w.cy = clamp(Math.round(p[1] / 8 * g.ny), 0, Math.max(0, g.ny - w.ch));
+  /* a sheet authored flush to an edge stays flush to that edge */
+  if (p[0] + p[2] >= 12) w.cx = g.nx - w.cw;
+  if (p[1] + p[3] >= 8) w.cy = g.ny - w.ch;
+}
+function winRect(w) {
+  if (w.free) return { x: w.px, y: w.py, w: w.pw, h: w.ph };
+  return { x: w.cx * S.pitch, y: w.cy * S.pitch, w: w.cw * S.pitch, h: w.ch * S.pitch };
+}
+function openWin(id, place, ws) {
+  const a = APP[id];
+  if (!a) return;
+  if (S.wins[id]) { S.wins[id].min = false; focusWin(id); return; }
+  const p = place || a.p;
+  const g = GRID;
+  const w = {
+    id: id, ws: ws || S.ws, min: false, max: false, free: false, moved: false,
+    spec: [p[0], p[1], p[2], p[3]], prev: null, z: ++ZTOP,
+    cx: clamp(Math.round(p[0] / 12 * g.nx), 0, g.nx - 4),
+    cy: clamp(Math.round(p[1] / 8 * g.ny), 0, g.ny - 3),
+    cw: clamp(Math.round(p[2] / 12 * g.nx), 4, g.nx),
+    ch: clamp(Math.round(p[3] / 8 * g.ny), 3, g.ny),
+    px: 0, py: 0, pw: 0, ph: 0, ref: '------'
+  };
+  if (w.cx + w.cw > g.nx) w.cx = Math.max(0, g.nx - w.cw);
+  if (w.cy + w.ch > g.ny) w.cy = Math.max(0, g.ny - w.ch);
+  S.wins[id] = w;
+  buildWin(id);
+  focusWin(id);
+  layout();
+}
+function closeWin(id) {
+  const e = $('.win[data-id="' + id + '"]');
+  if (e) e.remove();
+  delete S.wins[id];
+  if (S.focus === id) {
+    const rest = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = rest.length ? rest[0].id : null;
+  }
+  layout();
+}
+function focusWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].z = ++ZTOP;
+  S.wins[id].min = false;
+  S.focus = id;
+  layout();
+}
+function minWin(id) {
+  if (!S.wins[id]) return;
+  S.wins[id].min = true;
+  if (S.focus === id) {
+    const rest = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = rest.length ? rest[0].id : null;
+  }
+  layout();
+}
+function maxWin(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  if (w.max) { Object.assign(w, w.prev); w.max = false; }
+  else {
+    w.prev = { cx: w.cx, cy: w.cy, cw: w.cw, ch: w.ch, free: w.free,
+               px: w.px, py: w.py, pw: w.pw, ph: w.ph };
+    w.cx = 0; w.cy = 0; w.cw = GRID.nx; w.ch = GRID.ny; w.free = false; w.max = true;
+  }
+  focusWin(id);
+}
+function buildWin(id) {
+  const a = APP[id];
+  const e = document.createElement('div');
+  e.className = 'win';
+  e.setAttribute('data-id', id);
+  e.innerHTML =
+    '<div class="frame">' +
+      '<div class="hdr">' +
+        '<span class="ico" data-act="winmenu">' + icon(a.ico, 18) + '</span>' +
+        '<span class="t-label ttl">' + a.name + '</span>' +
+        '<span class="t-data sub">' + a.sub + '</span>' +
+        '<span class="t-data ref"></span>' +
+        '<span class="ctls">' +
+          '<span class="ctl" data-act="min">' + CTL_MIN + '</span>' +
+          '<span class="ctl" data-act="max">' + CTL_MAX + '</span>' +
+          '<span class="ctl" data-act="close">' + CTL_CLS + '</span>' +
+        '</span>' +
+      '</div>' +
+      '<div class="body"></div>' +
+    '</div>';
+  $('#wins').appendChild(e);
+  redraw(id);
+}
+function redraw(id) {
+  const w = S.wins[id];
+  if (!w) return;
+  const e = $('.win[data-id="' + id + '"]');
+  if (!e) return;
+  const b = $('.body', e);
+  b.className = 'body' + (S.zebra ? ' zeb' : '');
+  b.innerHTML = R[id] ? R[id]() : '';
+}
+function redrawAll() { Object.keys(S.wins).forEach(redraw); }
+
+function layout() {
+  computeGrid();
+  drawGrid();
+  Object.values(S.wins).forEach(w => {
+    const e = $('.win[data-id="' + w.id + '"]');
+    if (!e) return;
+    const vis = w.ws === S.ws && !w.min;
+    e.classList.toggle('hidden', !vis);
+    if (!w.free && !w.max && !w.moved) specToCells(w);
+    if (!w.free) {
+      w.cw = clamp(w.cw, 4, GRID.nx); w.ch = clamp(w.ch, 3, GRID.ny);
+      w.cx = clamp(w.cx, 0, Math.max(0, GRID.nx - w.cw));
+      w.cy = clamp(w.cy, 0, Math.max(0, GRID.ny - w.ch));
+    }
+    const rr = winRect(w);
+    /* A sheet sitting on the last ruled line runs out to the neatline: the
+       field is not always an exact whole number of cells, and a 19 px strip of
+       bare grid inside the neatline is a defect, not a margin.
+       The far edge is held by CSS (right:0 / bottom:0), not by a pixel width
+       JS measured. That matters: the measurement and the paint do not always
+       happen at the same viewport, and a JS pixel height freezes whatever the
+       field was when layout last ran. Position is JS, extent is CSS. */
+    const fillX = !w.free && w.cx + w.cw >= GRID.nx;
+    const fillY = !w.free && w.cy + w.ch >= GRID.ny;
+    if (fillX) rr.w = GRID.W - rr.x;
+    if (fillY) rr.h = GRID.H - rr.y;
+    e.style.left = rr.x + 'px'; e.style.top = rr.y + 'px';
+    if (fillX) { e.style.right = '0px'; e.style.width = 'auto'; }
+    else { e.style.right = 'auto'; e.style.width = rr.w + 'px'; }
+    if (fillY) { e.style.bottom = '0px'; e.style.height = 'auto'; }
+    else { e.style.bottom = 'auto'; e.style.height = rr.h + 'px'; }
+    e.style.zIndex = String(w.z);
+    /* the grid reference is taken at the SOUTH WEST corner, which is where a
+       map reference is always taken. two letters, four digits, six cells. */
+    w.ref = refOf(rr.x, rr.y + rr.h, GRID.ny * S.pitch);
+    $('.ref', e).textContent = w.ref;
+    e.classList.toggle('foc', w.id === S.focus);
+  });
+  drawApron();
+  renderKey();
+}
+
+/* ============================================================= overview */
+function overviewOn() { return $('#overview').classList.contains('on'); }
+function showOverview(on) {
+  const ov = $('#overview');
+  if (!on) { ov.classList.remove('on'); ov.innerHTML = ''; return; }
+  const g = GRID;
+  let html = '<div class="ovhead"><span class="t-title">index sheet</span>' +
+    '<span class="t-data i3">every placed sheet, all workspaces, to scale</span>' +
+    '<span class="t-data i3 grow">esc or click to return</span></div><div class="ovbody">';
+  [1, 2, 3, 4].forEach(ws => {
+    const n = Object.values(S.wins).filter(w => w.ws === ws).length;
+    html += '<div class="ovws"><div class="ovlab">' +
+      '<span class="t-label i0">ws ' + pad2(ws) + '</span>' +
+      '<span class="t-data i3">' + n + ' sheet' + (n === 1 ? '' : 's') + '</span>' +
+      (ws === S.ws ? '<span class="t-label i0 grow">current</span>' : '<span class="grow"></span>') +
+      '</div><div class="ovfield' + (ws === S.ws ? ' cur' : '') + '" data-ovws="' + ws + '"></div></div>';
+  });
+  html += '</div>';
+  const rows = Object.values(S.wins).sort((a, b) => APP[a.id].name.localeCompare(APP[b.id].name))
+    .map(w => {
+      const st = w.min ? 'HELD' : w.free ? 'OFF GRID' : w.max ? 'FULL' : 'PLACED';
+      return TR([{ t: APP[w.id].key, c: 'b' },
+        { t: '<span class="t-label i0">' + APP[w.id].name + '</span>' },
+        APP[w.id].sub, 'ws ' + pad2(w.ws), { t: w.ref, c: 'r b' },
+        { t: w.cw + ' x ' + w.ch, c: 'r' },
+        { t: APP[w.id].inks.map(k => bar(k)).join('') || '', c: '' },
+        { t: statword(st), c: 'r' },
+        { t: S.focus === w.id ? '<span class="t-label i0">FOCUS</span>' : '', c: 'r' }],
+        'class="pick" data-ovpick="' + w.id + '" data-ovws="' + w.ws + '"');
+    });
+  html += '<div class="ovreg"><div class="row" style="padding-bottom:4px">' +
+    '<span class="t-label i0">sheet register</span>' +
+    '<span class="t-data i3 grow">' + Object.keys(S.wins).length + ' open &middot; field ' +
+    g.nx + ' x ' + g.ny + ' cells &middot; 1 cell = ' + UNITS_PER_CELL + ' units</span></div>' +
+    '<div class="scroll' + (S.zebra ? ' zeb' : '') + '">' +
+    TBL([{ h: 'k', w: '5%' }, { h: 'sheet', w: '17%' }, { h: 'subtitle', w: '15%' },
+         { h: 'ws', w: '8%' }, { h: 'grid ref', w: '13%', r: 1 }, { h: 'cells', w: '11%', r: 1 },
+         { h: 'inks', w: '13%' }, { h: 'state', w: '11%', r: 1 }, { h: '', w: '7%', r: 1 }],
+        rows) + '</div>' +
+    '<div class="hr2" style="margin-top:auto"></div>' +
+    '<div class="row" style="height:var(--row-h)">' +
+    '<span class="t-label">index sheet</span>' +
+    '<span class="t-data i3">4 workspaces, the four quadrants of the north point</span>' +
+    '<span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data i3">scale <span data-kscale>1.00</span></span>' +
+    '<span class="grow"></span>' + statword('OK') +
+    '<span class="t-data i3">click a plan, a sheet or a row to return to it</span></div></div>';
+  ov.innerHTML = html;
+  ov.classList.add('on');
+  $$('.ovfield', ov).forEach(host => {
+    const ws = Number(host.getAttribute('data-ovws'));
+    const k = host.clientWidth / Math.max(1, g.W);
+    host.style.width = Math.round(g.W * k) + 'px';
+    host.style.height = Math.round(g.H * k) + 'px';
+    const ks = $('[data-kscale]', ov);
+    if (ks) ks.textContent = k.toFixed(2);
+    const wrap = document.createElement('div');
+    wrap.className = 'ovscale';
+    wrap.style.width = g.W + 'px'; wrap.style.height = g.H + 'px';
+    wrap.style.transform = 'scale(' + k + ')';
+    Object.values(S.wins).filter(w => w.ws === ws).sort((a, b) => a.z - b.z).forEach(w => {
+      const src = $('.win[data-id="' + w.id + '"]');
+      if (!src) return;
+      const c = src.cloneNode(true);
+      c.classList.remove('hidden');
+      c.style.pointerEvents = 'none';
+      if (w.min) c.style.opacity = '0.5';
+      wrap.appendChild(c);
+      const hit = document.createElement('div');
+      hit.className = 'ovpick';
+      hit.style.left = (src.offsetLeft * k) + 'px';
+      hit.style.top = (src.offsetTop * k) + 'px';
+      hit.style.width = (src.offsetWidth * k) + 'px';
+      hit.style.height = (src.offsetHeight * k) + 'px';
+      hit.setAttribute('data-ovpick', w.id);
+      hit.setAttribute('data-ovws', String(ws));
+      host.appendChild(hit);
+    });
+    host.insertBefore(wrap, host.firstChild);
+  });
+}
+
+/* ============================================================== palette */
+const CMDS = [];
+APPS.forEach(a => CMDS.push({
+  n: a.key, name: 'open ' + a.name, hint: 'alt ' + a.key,
+  run: () => { openWin(a.id); toast('placed', a.name.toUpperCase() + ' at ' +
+    (S.wins[a.id] ? S.wins[a.id].ref : '')); }
+}));
+CMDS.push(
+  { n: '.', name: 'show the full key', hint: 'hold k', run: () => { setKeyFull(true); toast('key', '16 symbols, alphabetical, with the ink contract'); } },
+  { n: '.', name: 'collapse to the live legend', hint: 'k', run: () => { setKeyFull(false); toast('legend', 'only the inks and symbols currently on screen'); } },
+  { n: '.', name: 'rule the field grid off', hint: 'ctrl g', run: () => { S.grid = false; layout(); redraw('set'); toast('grid', 'unruled'); } },
+  { n: '.', name: 'rule the field grid on', hint: 'ctrl g', run: () => { S.grid = true; layout(); redraw('set'); toast('grid', '1 px at 20 units, every fifth heavier'); } },
+  { n: '.', name: 'set grid pitch 24 px', hint: 'grid', run: () => { S.pitch = 24; layout(); redrawAll(); toast('pitch', '24 px per cell, 120 px per heavy square'); } },
+  { n: '.', name: 'take a grid reference of the focused sheet', hint: 'ref', run: () => { if (S.focus) toast('grid ref', S.wins[S.focus].ref + ' at the south west corner'); } },
+  { n: '.', name: 'send focused sheet to workspace 02', hint: 'shift 2', run: () => { if (S.focus) { S.wins[S.focus].ws = 2; layout(); toast('moved', S.focus.toUpperCase() + ' to ws 02'); } } },
+  { n: '.', name: 'dump pipe A registers', hint: 'mmio', run: () => { openWin('regs'); toast('regdump', '18 registers read from bar0 0xD0000000'); } },
+  { n: '.', name: 'run fsck on rd0', hint: 'zlfs', run: () => toast('zlfs', 'generation 3, 0 orphan extents, OK') },
+  { n: '.', name: 'lock session', hint: 'ctrl l', run: () => setScene('lock') },
+  { n: '.', name: 'open the index sheet', hint: 'ctrl space', run: () => setScene('overview') },
+  { n: '.', name: 'clear this workspace', hint: 'wm', run: () => { Object.values(S.wins).filter(w => w.ws === S.ws).forEach(w => closeWin(w.id)); toast('cleared', 'workspace ' + pad2(S.ws)); } },
+  { n: '.', name: 'switch stock day night', hint: 'shift d', run: () => setStock(S.theme === 'dark' ? 'light' : 'dark', true) }
+);
+function paletteResults() {
+  const q = S.pq.trim().toLowerCase();
+  return CMDS.filter(c => !q || c.name.includes(q));
+}
+function renderPalette() {
+  const res = paletteResults();
+  if (S.psel >= res.length) S.psel = Math.max(0, res.length - 1);
+  $('#pq').innerHTML = S.pq.replace(/ /g, '&nbsp;') || '<span class="i3">type a command</span>';
+  $('#pcount').textContent = res.length + ' of ' + CMDS.length;
+  $('#presults').innerHTML = res.slice(0, 8).map((c, i) =>
+    '<div class="prow' + (i === S.psel ? ' on' : '') + '" data-pi="' + i + '">' +
+    '<span class="t-data i3">' + c.n + '</span>' +
+    '<span class="t-label">' + c.name + '</span>' +
+    '<span class="t-data hint">' + c.hint + '</span></div>').join('') ||
+    '<div class="prow"><span class="t-label">no command matches</span></div>';
+}
+function showPalette(on) { $('#palette').classList.toggle('on', on); if (on) renderPalette(); }
+function runPalette() {
+  const res = paletteResults();
+  const c = res[S.psel];
+  showPalette(false);
+  if (c) c.run();
+}
+
+/* ================================================================= lock */
+function renderLock() {
+  $('#lockup').textContent = 'up ' + hhmmss(4211 + S.t);
+  const held = Object.values(S.wins);
+  $('#lockmar').innerHTML =
+    '<span class="t-title">zlos</span>' +
+    '<span class="t-data i3">0.3 &middot; x86_64 &middot; sheet ZL-1</span>' +
+    '<div class="hr2" style="margin:10px 0 8px"></div>' +
+    '<span class="t-label">held sheets</span>' +
+    held.slice(0, 8).map(w =>
+      '<div class="hold"><span class="t-label">' + APP[w.id].key + '</span>' +
+      '<span class="t-data i0">' + APP[w.id].name + '</span>' +
+      '<span class="t-data i3 grow">' + w.ref + '</span></div>').join('') +
+    '<div style="margin-top:auto;padding-top:10px">' +
+    kv('load', S.load.toFixed(2)) + kv('mem', S.memPct + ' %') +
+    kv('net', S.rx.toFixed(0) + ' k') + kv('ws', pad2(S.ws)) +
+    '</div>';
+  $('#lockbody').innerHTML =
+    '<span class="t-label">local time</span>' +
+    '<span class="t-disp">' + hhmmss(S.clock) + '</span>' +
+    '<span class="t-data i3">friday 12 september &middot; week 37 &middot; day 255</span>' +
+    '<div class="hr2" style="margin:10px 0 8px"></div>' +
+    '<div class="row"><span class="t-label">operator</span>' +
+    '<span class="t-data i0">zac</span><span class="vr1" style="height:12px"></span>' +
+    '<span class="t-data i3">seat0 &middot; tty1 &middot; console 200x62</span></div>' +
+    '<div class="well row" style="margin-top:8px">' +
+    '<span class="t-label">passphrase</span>' +
+    '<span class="t-data i0" style="letter-spacing:3px">' +
+    '•••••••••</span>' +
+    '<span class="caret"></span></div>' +
+    '<div class="row" style="margin-top:4px">' +
+    '<span class="t-data i3">press enter, or click anywhere, to unlock</span>' +
+    '<span class="grow"></span>' + statword('OK') +
+    '<span class="t-data i3">' + held.length + ' sheets held</span></div>' +
+    '<div class="hr1" style="margin:10px 0 0"></div>' +
+    kv('session', 'seat0 since 13:21:56') +
+    kv('compositor', 'parked, back buffer retained') +
+    kv('framebuffer', '1600 x 1000 x 32, dimmed 0 %') +
+    kv('input', 'xHCI HID keyboard, boot protocol') +
+    '<div class="row" style="margin-top:12px">' +
+    '<span class="btn prim" data-act="unlock"><span class="t-label">unlock</span></span>' +
+    '<span class="btn"><span class="t-label">switch operator</span></span>' +
+    '<span class="t-data i3 grow">esc also unlocks</span></div>';
+  const svg = $('#locksvg');
+  const w = $('#lock').clientWidth, h = $('#lock').clientHeight;
+  svg.setAttribute('width', w); svg.setAttribute('height', h);
+  let s = '';
+  for (let i = 0; i * S.pitch <= w; i++) {
+    const heavy = i % 5 === 0;
+    s += '<rect x="' + (i * S.pitch) + '" y="0" width="1" height="' + h +
+      '" fill="var(' + (heavy ? '--zd-grid-5' : '--zd-grid') + ')"/>';
+  }
+  for (let j = 0; j * S.pitch <= h; j++) {
+    const heavy = j % 5 === 0;
+    s += '<rect x="0" y="' + (j * S.pitch) + '" width="' + w +
+      '" height="1" fill="var(' + (heavy ? '--zd-grid-5' : '--zd-grid') + ')"/>';
+  }
+  svg.innerHTML = s;
+}
+function showLock(on) { $('#lock').classList.toggle('on', on); if (on) renderLock(); }
+
+/* =============================================================== toasts */
+const TOAST_MS = 4400, TOAST_MAX = 3;
+function toast(title, body) {
+  const host = $('#toasts');
+  while (host.children.length >= TOAST_MAX) host.removeChild(host.firstChild);
+  const e = document.createElement('div');
+  e.className = 'toast';
+  e.innerHTML = '<div class="tw"><div class="tl"><span class="t-label i0">' + title + '</span>' +
+    '<span class="cl" data-act="untoast">' + CTL_CLS + '</span></div>' +
+    '<span class="t-data tx">' + body + '</span></div>';
+  host.appendChild(e);
+  setTimeout(() => { if (e.parentNode) e.remove(); }, TOAST_MS);
+}
+
+/* ================================================================ menus */
+function showMenu(el, x, y, items, head) {
+  el.innerHTML = '<div class="mw">' +
+    (head ? '<div class="mh"><span class="t-label k0">' + head + '</span>' +
+            '<span class="t-data k1 grow"></span></div>' : '') +
+    items.map((it, i) => '<div class="mi" data-mi="' + i + '"><span class="t-label">' + it[0] +
+      '</span><span class="t-data hint">' + (it[1] || '') + '</span></div>').join('') + '</div>';
+  el.classList.add('on');
+  const os = $('#os').getBoundingClientRect();
+  el.style.left = Math.min(x, os.width - el.offsetWidth - 8) + 'px';
+  el.style.top = Math.min(y, os.height - el.offsetHeight - 8) + 'px';
+}
+function hideMenus() { $('#ctxmenu').classList.remove('on'); $('#winmenu').classList.remove('on'); }
+
+/* ================================================================= tick */
+function walk(v, lo, hi, amp) { return clamp(v + (Math.random() - 0.5) * amp, lo, hi); }
+function tick() {
+  S.t += 1; S.clock += 1;
+  S.cpu = S.cpu.map(v => Math.round(walk(v, 2, 99, 22)));
+  S.memPct = Math.round(walk(S.memPct, 40, 92, 3));
+  S.load = Math.round(walk(S.load, 0.05, 3.2, 0.22) * 100) / 100;
+  S.rx = Math.round(walk(S.rx, 0, 420, 90) * 10) / 10;
+  S.tx = Math.round(walk(S.tx, 0, 180, 30) * 10) / 10;
+  S.hist.cpu.push(Math.round(S.cpu.reduce((a, b) => a + b, 0) / 4)); S.hist.cpu.shift();
+  S.hist.net.push(Math.min(88, Math.round(S.rx / 4.6))); S.hist.net.shift();
+  ['mon', 'net', 'clock', 'proc'].forEach(id => { if (S.wins[id] && !S.wins[id].min) redraw(id); });
+  /* belt and braces for the case where neither resize nor ResizeObserver has
+     fired: if the field has changed size under us, re-rule the sheet. */
+  const f = $('#field');
+  if (f.clientWidth !== GRID.W || f.clientHeight !== GRID.H) { relayout(); return; }
+  drawApron();
+  if ($('#lock').classList.contains('on')) renderLock();
+}
+
+/* ============================================================ settings  */
+function applyUI() { document.documentElement.style.setProperty('--ui', String(S.ui)); }
+function setKeyFull(v) {
+  if (S.keyFull === v) return;
+  S.keyFull = v;
+  applyKeyH();
+  layout();
+  redraw('set');
+}
+
+/* ============================================================== events  */
+document.addEventListener('mousedown', ev => {
+  const t = ev.target;
+  if (!t.closest('.menu')) hideMenus();
+
+  if ($('#lock').classList.contains('on')) {
+    if (t.closest('#lock')) { setScene('desktop'); toast('session', 'unlocked, sheets restored'); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    const pr = t.closest('.prow');
+    if (pr && pr.getAttribute('data-pi') !== null) { S.psel = Number(pr.getAttribute('data-pi')); runPalette(); return; }
+    if (!t.closest('.sheet')) showPalette(false);
+    return;
+  }
+  if (overviewOn()) {
+    const pick = t.closest('[data-ovpick]');
+    if (pick) {
+      S.ws = Number(pick.getAttribute('data-ovws'));
+      showOverview(false);
+      focusWin(pick.getAttribute('data-ovpick'));
+      return;
+    }
+    const fld = t.closest('.ovfield');
+    if (fld) { S.ws = Number(fld.getAttribute('data-ovws')); showOverview(false); layout(); return; }
+    if (!t.closest('.ovhead')) showOverview(false);
+    return;
+  }
+
+  /* the key IS the launcher */
+  const kr = t.closest('[data-keyapp]');
+  if (kr) {
+    const id = kr.getAttribute('data-keyapp');
+    const w = S.wins[id];
+    if (!w) openWin(id);
+    else if (w.min || w.ws !== S.ws) { w.ws = S.ws; w.min = false; focusWin(id); }
+    else if (S.focus === id) minWin(id);
+    else focusWin(id);
+    return;
+  }
+  if (t.closest('[data-keytog]')) { setKeyFull(!S.keyFull); return; }
+  const nq = t.closest('[data-nq]');
+  if (nq) {
+    S.ws = Number(nq.getAttribute('data-nq'));
+    const top = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+    layout();
+    toast('workspace', 'quadrant ' + pad2(S.ws) + ', ' + top.length + ' sheets placed');
+    return;
+  }
+
+  const win = t.closest('.win');
+  if (win) {
+    const id = win.getAttribute('data-id');
+    const actEl = t.closest('[data-act]');
+    const act = actEl ? actEl.getAttribute('data-act') : null;
+    if (act === 'close') { closeWin(id); return; }
+    if (act === 'min') { minWin(id); return; }
+    if (act === 'max') { maxWin(id); return; }
+    if (act === 'winmenu') {
+      focusWin(id);
+      const r = win.getBoundingClientRect(), os = $('#os').getBoundingClientRect();
+      showMenu($('#winmenu'), r.left - os.left, r.top - os.top + 28, [
+        ['raise to front', 'click'],
+        ['minimise', 'ctrl m'],
+        [S.wins[id].max ? 'restore' : 'fill the sheet', 'ctrl f'],
+        [S.wins[id].free ? 'return to the grid' : 'take off the grid', 'ctrl d'],
+        ['send to ws ' + pad2(S.ws === 1 ? 2 : 1), 'shift ' + (S.ws === 1 ? '2' : '1')],
+        ['read grid reference', 'ref'],
+        ['close sheet', 'ctrl w']
+      ], APP[id].name + '  ' + S.wins[id].ref);
+      $('#winmenu')._win = id;
+      return;
+    }
+    if (S.focus !== id) focusWin(id);
+    handleWinAction(id, t);
+    const hdr = t.closest('.hdr');
+    if (hdr && !t.closest('.ctls') && !t.closest('.ico')) startDrag(ev, id, win);
+    return;
+  }
+});
+
+document.addEventListener('contextmenu', ev => {
+  if ($('#lock').classList.contains('on')) return;
+  const os = $('#os').getBoundingClientRect();
+  const inField = ev.target.closest('#field') && !ev.target.closest('.win');
+  if (!inField && !ev.target.closest('.win')) return;
+  ev.preventDefault();
+  const x = ev.clientX - os.left, y = ev.clientY - os.top;
+  if (inField) {
+    const f = $('#field').getBoundingClientRect();
+    const ref = refOf(ev.clientX - f.left, ev.clientY - f.top, GRID.ny * S.pitch);
+    showMenu($('#ctxmenu'), x, y, [
+      ['new terminal here', 'alt T'],
+      ['command palette', 'ctrl k'],
+      ['index sheet', 'ctrl space'],
+      [S.grid ? 'unrule the grid' : 'rule the grid', 'ctrl g'],
+      [S.keyFull ? 'collapse the key' : 'show the full key', 'k'],
+      ['re-rule every sheet', 'ctrl t'],
+      ['lock session', 'ctrl l'],
+      ['stock ' + (S.theme === 'dark' ? 'day' : 'night'), 'shift d']
+    ], 'field  ' + ref);
+    $('#ctxmenu')._kind = 'field';
+  } else {
+    const id = ev.target.closest('.win').getAttribute('data-id');
+    showMenu($('#ctxmenu'), x, y, [
+      ['raise to front', 'click'],
+      ['fill the sheet', 'ctrl f'],
+      ['minimise', 'ctrl m'],
+      ['send to ws ' + pad2(S.ws === 1 ? 2 : 1), 'shift'],
+      ['close sheet', 'ctrl w']
+    ], APP[id].name + '  ' + S.wins[id].ref);
+    $('#ctxmenu')._kind = 'win';
+    $('#ctxmenu')._win = id;
+  }
+});
+
+$('#ctxmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi');
+  if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const el = $('#ctxmenu');
+  hideMenus();
+  if (el._kind === 'field') {
+    [() => openWin('term'), () => showPalette(true), () => setScene('overview'),
+     () => { S.grid = !S.grid; layout(); redraw('set'); toast('grid', S.grid ? 'ruled' : 'unruled'); },
+     () => setKeyFull(!S.keyFull),
+     () => tileAll(), () => setScene('lock'),
+     () => setStock(S.theme === 'dark' ? 'light' : 'dark', true)][i]();
+  } else {
+    const id = el._win;
+    [() => focusWin(id), () => maxWin(id), () => minWin(id),
+     () => { S.wins[id].ws = S.ws === 1 ? 2 : 1; layout(); toast('moved', id.toUpperCase() + ' to ws ' + pad2(S.ws === 1 ? 2 : 1)); },
+     () => closeWin(id)][i]();
+  }
+});
+$('#winmenu').addEventListener('mousedown', ev => {
+  const mi = ev.target.closest('.mi');
+  if (!mi) return;
+  const i = Number(mi.getAttribute('data-mi'));
+  const id = $('#winmenu')._win;
+  hideMenus();
+  const w = S.wins[id];
+  [() => focusWin(id), () => minWin(id), () => maxWin(id),
+   () => {
+     if (w.free) { w.free = false; }
+     else {
+       const r = winRect(w);
+       w.free = true; w.px = r.x + 14; w.py = r.y + 9; w.pw = r.w; w.ph = r.h;
+     }
+     layout();
+     toast(w.free ? 'off grid' : 'back on the grid',
+       w.free ? id.toUpperCase() + ' no longer sits on a cell boundary'
+              : id.toUpperCase() + ' snapped to ' + w.ref);
+   },
+   () => { w.ws = S.ws === 1 ? 2 : 1; layout(); toast('moved', id.toUpperCase() + ' to ws ' + pad2(w.ws)); },
+   () => toast('grid ref', APP[id].name.toUpperCase() + ' south west corner ' + w.ref),
+   () => closeWin(id)][i]();
+});
+
+function handleWinAction(id, t) {
+  const node = t.closest('[data-act], [data-toggle], [data-seg], [data-slider]');
+  if (!node) return;
+  if (node.hasAttribute('data-toggle')) {
+    const k = node.getAttribute('data-toggle');
+    S[k] = !S[k];
+    if (k === 'zebra' || k === 'bands') redrawAll();
+    if (k === 'blink') document.body.classList.toggle('blinkon', S.blink);
+    layout(); redraw('set');
+    toast(k, S[k] ? 'on' : 'off');
+    return;
+  }
+  const segp = t.closest('[data-seg]');
+  if (segp && t.closest('[data-arg]')) {
+    const av = Number(t.closest('[data-arg]').getAttribute('data-arg'));
+    const which = segp.getAttribute('data-seg');
+    if (which === 'stock') { setStock(av ? 'dark' : 'light', true); return; }
+    if (which === 'keymode') { setKeyFull(!!av); return; }
+    S.setTab = av; redraw('set');
+    return;
+  }
+  const act = node.getAttribute('data-act');
+  const arg = node.getAttribute('data-arg');
+  if (act === 'file') { S.fileSel = Number(arg); redraw('files'); redraw('edit'); return; }
+  if (act === 'proc') { S.procSel = Number(arg); redraw('mon'); redraw('proc'); return; }
+  if (act === 'open') { openWin(arg); return; }
+  if (act === 'calc') { calcKey(arg); redraw('calc'); return; }
+  if (act === 'toast') {
+    const M = {
+      build: ['make', 'zlos.elf relinked, text 218432 data 30720 bss 1441792'],
+      fsck:  ['zlfs', 'generation 3, 0 orphan extents, crc verified'],
+      reap:  ['reaped', 'pid 77 intel_lt removed from the task table'],
+      renice: ['renice', 'pid 61 soak moved to nice 10'],
+      retile: ['re-ruled', 'every sheet snapped back to a cell boundary']
+    }[arg] || ['ok', arg];
+    if (arg === 'retile') tileAll();
+    toast(M[0], M[1]);
+    return;
+  }
+}
+function calcKey(k) {
+  if (k === 'clr') { S.calcAcc = '0'; return; }
+  if (k === 'eq') { S.calcAcc = String(parseInt(S.calcAcc, 10) || 0); return; }
+  if (/^[0-9]$/.test(k)) { S.calcAcc = (S.calcAcc === '0' ? '' : S.calcAcc) + k; return; }
+  const n = parseInt(S.calcAcc, 10) || 0;
+  if (k === 'div') { S.calcAcc = String(Math.floor(n / 2)); return; }
+  if (k === 'mul') { S.calcAcc = String(n * 2); return; }
+  if (k === 'add') { S.calcAcc = String(n + 1); return; }
+  if (k === 'sub') { S.calcAcc = String(n - 1); return; }
+}
+function tileAll() {
+  const list = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min);
+  const n = list.length;
+  if (!n) return;
+  const perRow = n <= 2 ? n : Math.ceil(n / 2);
+  const rowsN = n <= 2 ? 1 : 2;
+  list.forEach((w, i) => {
+    const rr = Math.floor(i / perRow), cc = i % perRow;
+    w.free = false; w.max = false; w.moved = true;
+    w.cw = Math.floor(GRID.nx / perRow); w.ch = Math.floor(GRID.ny / rowsN);
+    w.cx = cc * w.cw; w.cy = rr * w.ch;
+  });
+  layout();
+  toast('re-ruled', n + ' sheets onto the ' + GRID.nx + ' x ' + GRID.ny + ' cell grid');
+}
+
+/* -------------------------------------------------------------- sliders */
+let SL = null;
+document.addEventListener('mousedown', ev => {
+  const s = ev.target.closest('[data-slider]');
+  if (!s) return;
+  SL = s; setSlider(ev);
+});
+document.addEventListener('mousemove', ev => { if (SL) setSlider(ev); });
+document.addEventListener('mouseup', () => { SL = null; });
+function setSlider(ev) {
+  const name = SL.getAttribute('data-slider');
+  const r = SL.getBoundingClientRect();
+  const p = clamp((ev.clientX - r.left) / r.width, 0, 1);
+  const steps = name === 'ui' ? UI_STEPS : PITCH_STEPS;
+  const v = steps[Math.round(p * (steps.length - 1))];
+  if (name === 'ui') { if (v === S.ui) return; S.ui = v; applyUI(); applyKeyH(); }
+  else { if (v === S.pitch) return; S.pitch = v; }
+  layout(); redrawAll();
+}
+
+/* ----------------------------------------------------------------- drag */
+function startDrag(ev, id, el) {
+  const w = S.wins[id];
+  if (w.max) return;
+  const r = el.getBoundingClientRect(), f = $('#field').getBoundingClientRect();
+  const ox = ev.clientX - r.left, oy = ev.clientY - r.top;
+  const wid = r.width, hgt = r.height;
+  el.classList.add('drag');
+  function move(e) {
+    w.free = true;
+    w.px = Math.round(e.clientX - f.left - ox);
+    w.py = Math.round(e.clientY - f.top - oy);
+    w.pw = wid; w.ph = hgt;
+    layout();
+  }
+  function up() {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    el.classList.remove('drag');
+    if (S.snap && w.free) {
+      w.cx = clamp(Math.round(w.px / S.pitch), 0, Math.max(0, GRID.nx - w.cw));
+      w.cy = clamp(Math.round(w.py / S.pitch), 0, Math.max(0, GRID.ny - w.ch));
+      w.free = false; w.moved = true;
+      layout();
+      toast('placed', APP[id].name.toUpperCase() + ' at ' + w.ref);
+    }
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* -------------------------------------------------------------- keyboard */
+let KEYHELD = false;
+document.addEventListener('keydown', ev => {
+  const k = ev.key;
+  if ($('#lock').classList.contains('on')) {
+    if (k === 'Enter' || k === 'Escape') { setScene('desktop'); toast('session', 'unlocked, sheets restored'); ev.preventDefault(); }
+    return;
+  }
+  if ($('#palette').classList.contains('on')) {
+    if (k === 'Escape') { showPalette(false); ev.preventDefault(); return; }
+    if (k === 'Enter') { runPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowDown') { S.psel = Math.min(S.psel + 1, Math.min(7, paletteResults().length - 1)); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'ArrowUp') { S.psel = Math.max(0, S.psel - 1); renderPalette(); ev.preventDefault(); return; }
+    if (k === 'Backspace') { S.pq = S.pq.slice(0, -1); S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    if (k.length === 1 && !ev.ctrlKey && !ev.metaKey) { S.pq += k; S.psel = 0; renderPalette(); ev.preventDefault(); return; }
+    return;
+  }
+  if (ev.shiftKey && (k === 'D' || k === 'd') && !ev.ctrlKey && !ev.altKey) {
+    setStock(S.theme === 'dark' ? 'light' : 'dark', true); ev.preventDefault(); return;
+  }
+  if (!ev.ctrlKey && !ev.altKey && !ev.shiftKey && (k === 'k' || k === 'K')) {
+    if (!KEYHELD) { KEYHELD = true; setKeyFull(true); }
+    ev.preventDefault(); return;
+  }
+  if (ev.ctrlKey && (k === 'k' || k === 'K')) { S.pq = ''; S.psel = 0; showPalette(true); ev.preventDefault(); return; }
+  if (ev.ctrlKey && k === ' ') { setScene(overviewOn() ? 'desktop' : 'overview'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'l' || k === 'L')) { setScene('lock'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'g' || k === 'G')) { S.grid = !S.grid; layout(); redraw('set'); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 't' || k === 'T')) { tileAll(); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'w' || k === 'W')) { if (S.focus) closeWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'f' || k === 'F')) { if (S.focus) maxWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && (k === 'm' || k === 'M')) { if (S.focus) minWin(S.focus); ev.preventDefault(); return; }
+  if (ev.ctrlKey && /^[1-4]$/.test(k)) {
+    S.ws = Number(k);
+    const top = Object.values(S.wins).filter(w => w.ws === S.ws && !w.min).sort((a, b) => b.z - a.z);
+    S.focus = top.length ? top[0].id : null;
+    layout(); ev.preventDefault(); return;
+  }
+  if (ev.altKey && /^[a-zA-Z]$/.test(k)) {
+    const a = APPS.find(x => x.key === k.toUpperCase());
+    if (a) { openWin(a.id); ev.preventDefault(); }
+    return;
+  }
+  if (k === 'Escape') { if (overviewOn()) setScene('desktop'); hideMenus(); }
+});
+document.addEventListener('keyup', ev => {
+  if ((ev.key === 'k' || ev.key === 'K') && KEYHELD) { KEYHELD = false; setKeyFull(false); }
+});
+
+/* ================================================================ stock */
+const STOCK = {
+  light: { name: 'day', other: 'night',
+    pitch: 'one map sheet. a full perimeter apron, a ruled 100 unit field, and five inks ' +
+           'that each mean exactly one class of thing because the key on screen says so.',
+    toast: ['day', () => 'unprinted margin ' + tokHex('--zd-apron') + ' above the field ' +
+            tokHex('--zd-field') + ', ink at ' + tokRatio('--zd-ink', '--zd-field') + ':1'] },
+  dark:  { name: 'night', other: 'day',
+    pitch: 'the same sheet on the bridge at night. IHO S-52 NIGHT: teal black ground, ' +
+           'chart white at 13.34:1, and no large area is ever allowed to be bright.',
+    toast: ['night', () => 'S-52 night table, ground ' + tokHex('--zd-field') +
+            ', chart white ' + tokHex('--zd-ink') + ' at ' +
+            tokRatio('--zd-ink', '--zd-field') + ':1'] }
+};
+function applyTheme() {
+  if (S.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  $('#pitch').textContent = STOCK[S.theme].pitch;
+  $('#themetog').innerHTML =
+    '<span class="tk' + (S.theme === 'light' ? ' on' : '') + '" data-stock="light">day</span>' +
+    '<span class="tk' + (S.theme === 'dark' ? ' on' : '') + '" data-stock="dark">night</span>' +
+    '<span class="thint">shift D</span>';
+}
+function hashName() { return S.scene + (S.theme === 'dark' ? '-dark' : ''); }
+function setStock(t, announce) {
+  const next = t === 'dark' ? 'dark' : 'light';
+  if (next === S.theme && announce) return;
+  S.theme = next;
+  applyTheme(); renderLinks(); redraw('set'); layout();
+  if (announce) {
+    history.replaceState(null, '', '#' + hashName());
+    const tb = STOCK[S.theme].toast[1];
+    toast(STOCK[S.theme].toast[0], typeof tb === 'function' ? tb() : tb);
+  }
+}
+function renderLinks() {
+  const sfx = S.theme === 'dark' ? '-dark' : '';
+  $('#links').innerHTML = SCENE_NAMES.map(n => '<a href="#' + n + sfx + '">' + n + '</a>').join('');
+  markLinks(S.scene);
+}
+function markLinks(name) {
+  $$('#links a').forEach(a => a.classList.toggle('on',
+    a.getAttribute('href').slice(1).replace(/-dark$/, '') === name));
+}
+
+/* =============================================================== scenes */
+const SCENE_NAMES = ['desktop', 'overview', 'palette', 'files', 'monitor', 'settings', 'lock'];
+function clearAll() {
+  Object.keys(S.wins).forEach(id => { const e = $('.win[data-id="' + id + '"]'); if (e) e.remove(); });
+  S.wins = {}; S.focus = null; ZTOP = 10;
+  showOverview(false); showPalette(false); showLock(false); hideMenus();
+  $('#toasts').innerHTML = '';
+}
+function place(id, c, r, cw, rh, ws) { openWin(id, [c, r, cw, rh], ws || S.ws); }
+function baseDesktop() {
+  clearAll();
+  S.ws = 1;
+  place('term', 0, 0, 7, 4);
+  place('files', 7, 0, 5, 4);
+  place('mon', 0, 4, 7, 4);
+  place('net', 7, 4, 5, 4);
+  place('log', 0, 0, 7, 4, 2);
+  place('regs', 7, 0, 5, 5, 2);
+  place('hex', 0, 4, 12, 4, 2);
+  /* one sheet deliberately off the grid, to show the state exists */
+  openWin('sys', [3, 2, 6, 5]);
+  const w = S.wins.sys;
+  const r = winRect(w);
+  w.free = true; w.px = r.x + 17; w.py = r.y - 23; w.pw = r.w; w.ph = r.h;
+  focusWin('sys');
+  layout();
+}
+function setScene(name, push) {
+  let dark = false;
+  if (/-dark$/.test(name)) { dark = true; name = name.slice(0, -5); }
+  if (SCENE_NAMES.indexOf(name) < 0) { name = 'desktop'; dark = false; }
+  S.scene = name;
+  S.theme = dark ? 'dark' : 'light';
+  applyTheme(); renderLinks();
+  if (push !== false && location.hash.slice(1) !== hashName()) {
+    history.replaceState(null, '', '#' + hashName());
+  }
+  markLinks(name);
+  computeGrid();
+  if (name === 'desktop') {
+    baseDesktop();
+    toast('placed', '4 sheets on ws 01, one off the grid and marked');
+  } else if (name === 'overview') {
+    baseDesktop(); layout(); showOverview(true);
+  } else if (name === 'palette') {
+    baseDesktop(); S.pq = 'grid'; S.psel = 0; showPalette(true);
+  } else if (name === 'files') {
+    clearAll(); S.ws = 1;
+    place('files', 0, 0, 5, 8);
+    place('edit', 5, 0, 7, 8);
+    S.fileSel = 1;
+    redraw('files'); redraw('edit');
+    focusWin('files');
+    toast('selected', 'fb.c 68.4 KiB, opened in EDITOR');
+  } else if (name === 'monitor') {
+    clearAll(); S.ws = 1;
+    place('mon', 0, 0, 7, 8);
+    place('net', 7, 0, 5, 8);
+    focusWin('mon');
+    toast('sampling', 'monitor and network at 1 Hz, 72 s history');
+  } else if (name === 'settings') {
+    clearAll(); S.ws = 1;
+    place('sys', 7, 0, 5, 5);
+    place('clock', 7, 5, 5, 3);
+    place('set', 0, 0, 7, 8);
+    S.setTab = 0;
+    redraw('set');
+    focusWin('set');
+  } else if (name === 'lock') {
+    baseDesktop(); showLock(true);
+  }
+  layout();
+}
+$('#themetog').addEventListener('mousedown', ev => {
+  const t = ev.target.closest('[data-stock]');
+  if (t) { ev.preventDefault(); setStock(t.getAttribute('data-stock'), true); }
+});
+window.addEventListener('hashchange', () => setScene(location.hash.slice(1) || 'desktop', false));
+/* Synchronous, not deferred. A deferred relayout depends on a frame being
+   scheduled, and there are two real cases where one is not: a headless capture
+   that resizes the viewport after load, and a background tab. layout() does
+   not change the size of #field, so observing #field and laying out inside the
+   callback cannot loop. */
+let RELAY = 0;
+function relayout() {
+  if (RELAY) return;
+  RELAY = 1;
+  layout();
+  if (overviewOn()) showOverview(true);
+  if ($('#lock').classList.contains('on')) renderLock();
+  RELAY = 0;
+}
+window.addEventListener('resize', relayout);
+if (window.ResizeObserver) new ResizeObserver(relayout).observe($('#field'));
+
+/* ================================================================ start */
+document.body.classList.add('blinkon');
+applyTheme(); applyUI(); applyKeyH();
+computeGrid();
+setScene(location.hash.slice(1) || 'desktop', false);
+relayout();
+window.addEventListener('load', relayout);
+/* The viewport is not necessarily final when the first layout runs: fonts
+   settle, a scrollbar appears or disappears, and a headless capture resizes
+   after load. Four cheap re-rules cover every case that has actually bitten,
+   and the ResizeObserver covers the rest. */
+[0, 60, 250, 800].forEach(ms => setTimeout(relayout, ms));
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

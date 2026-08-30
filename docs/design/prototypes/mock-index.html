@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zlOS desktop directions / index</title>
+<style>
+:root{
+  --bg:#1e1e1e;
+  --fg:#d6d2c9;
+  --fg-dim:#8f8b83;
+  --fg-faint:#6a6761;
+  --rule:#383734;
+  --rule-hi:#4c4a46;
+  --link:#e8e4db;
+  --sans:ui-sans-serif, system-ui, 'DejaVu Sans', sans-serif;
+  --mono:ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg)}
+body{
+  font-family:var(--sans);
+  font-size:13px;
+  line-height:1.55;
+  color:var(--fg);
+  -webkit-font-smoothing:antialiased;
+  padding:40px 24px 72px;
+}
+.wrap{max-width:920px;margin:0 auto}
+
+h1{
+  font-size:13px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--fg);margin-bottom:6px;
+}
+.sub{font-family:var(--mono);font-size:11px;color:var(--fg-dim);max-width:78ch}
+
+.note{
+  margin-top:20px;padding-top:16px;border-top:1px solid var(--rule);
+  font-size:12px;color:var(--fg-dim);max-width:78ch;
+}
+.note p + p{margin-top:8px}
+.note strong{color:var(--fg);font-weight:600}
+.note .scores{font-family:var(--mono);font-size:11px;color:var(--fg)}
+
+.item{border-top:1px solid var(--rule);padding:26px 0 24px}
+.item:first-of-type{border-top:1px solid var(--rule-hi)}
+
+.name{
+  font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--link);
+}
+.facts{
+  font-family:var(--mono);font-size:11px;color:var(--fg-dim);
+  margin-top:4px;
+}
+.pitch{margin-top:10px;max-width:78ch;color:var(--fg)}
+
+.label{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--fg-faint);margin-top:16px;margin-bottom:6px;
+}
+.move{max-width:78ch;color:var(--fg-dim)}
+
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.sw{width:78px}
+.sw .chip{height:26px;border:1px solid var(--rule-hi)}
+.sw .hex{font-family:var(--mono);font-size:9.5px;color:var(--fg-dim);margin-top:3px;display:block}
+.sw .tok{font-family:var(--mono);font-size:9.5px;color:var(--fg-faint);display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+a.open{
+  display:inline-block;margin-top:20px;
+  font-family:var(--mono);font-size:15px;
+  color:var(--link);text-decoration:underline;text-underline-offset:4px;
+  padding:6px 0;
+}
+a.open:hover{color:#fff}
+a.open .path{font-size:11px;color:var(--fg-faint);text-decoration:none;display:block;margin-top:4px}
+
+.missing{
+  font-family:var(--mono);font-size:12px;color:#e8664b;margin-top:20px;
+}
+.foot{
+  border-top:1px solid var(--rule);margin-top:8px;padding-top:14px;
+  font-family:var(--mono);font-size:10.5px;color:var(--fg-faint);
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>zlOS desktop / four directions</h1>
+  <p class="sub">Pick one. Each row is a name, the pitch as written on that mockup, its palette, its mode, its one structural move, and a link to the full 1280x720 picture.</p>
+
+  <div class="note">
+    <p>These are <strong>pictures, not ports</strong>. Every file is static HTML and CSS made to be looked at. None of it is zl, none of it runs on the compositor, and nothing here has been proven buildable against the real renderer. Treat them as paint, not as code.</p>
+    <p>A judged ranking across identity, buildability and regression risk came out:
+      <span class="scores">PLATE 24/30, Raking 20/30, Folio 20/30, Datum 14/30</span>.
+      That is one opinion scored on three axes, and Raking and Folio tie. It is information, not a verdict. <strong>The choice is yours.</strong> If the one you want to look at every day is the one that scored 14, pick that one and the score is wrong, not you.</p>
+  </div>
+
+  <!-- ============================= PLATE ============================= -->
+  <div class="item">
+    <div class="name">Plate</div>
+    <div class="facts">light mode &nbsp;/&nbsp; mock-plate.html</div>
+    <p class="pitch">zlOS is a printed technical document - warm paper, black ink, hard rules, one vermilion overprint - and the modular grid the windows are set on is ruled onto the desk where you can see it.</p>
+
+    <div class="label">Structural move</div>
+    <p class="move">The layout grid is drawn on the desk itself, and every window snaps visibly onto it.</p>
+
+    <div class="label">Palette</div>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#F2EFE6"></div><span class="hex">#F2EFE6</span><span class="tok">paper</span></div>
+      <div class="sw"><div class="chip" style="background:#E4E0D5"></div><span class="hex">#E4E0D5</span><span class="tok">desk</span></div>
+      <div class="sw"><div class="chip" style="background:#D6D0C0"></div><span class="hex">#D6D0C0</span><span class="tok">well</span></div>
+      <div class="sw"><div class="chip" style="background:#BFB8A4"></div><span class="hex">#BFB8A4</span><span class="tok">fill</span></div>
+      <div class="sw"><div class="chip" style="background:#A69E8A"></div><span class="hex">#A69E8A</span><span class="tok">grid-line</span></div>
+      <div class="sw"><div class="chip" style="background:#655F4E"></div><span class="hex">#655F4E</span><span class="tok">text-6</span></div>
+      <div class="sw"><div class="chip" style="background:#5C5646"></div><span class="hex">#5C5646</span><span class="tok">text-5</span></div>
+      <div class="sw"><div class="chip" style="background:#5C574C"></div><span class="hex">#5C574C</span><span class="tok">rule-1 / text-4</span></div>
+      <div class="sw"><div class="chip" style="background:#46413A"></div><span class="hex">#46413A</span><span class="tok">rule-1-ko</span></div>
+      <div class="sw"><div class="chip" style="background:#2A2721"></div><span class="hex">#2A2721</span><span class="tok">plate-1</span></div>
+      <div class="sw"><div class="chip" style="background:#26231D"></div><span class="hex">#26231D</span><span class="tok">text-1</span></div>
+      <div class="sw"><div class="chip" style="background:#14120E"></div><span class="hex">#14120E</span><span class="tok">rule-2 / ink</span></div>
+      <div class="sw"><div class="chip" style="background:#C4341C"></div><span class="hex">#C4341C</span><span class="tok">accent</span></div>
+      <div class="sw"><div class="chip" style="background:#D14A2E"></div><span class="hex">#D14A2E</span><span class="tok">accent-ko</span></div>
+      <div class="sw"><div class="chip" style="background:#1F6B3A"></div><span class="hex">#1F6B3A</span><span class="tok">ok</span></div>
+      <div class="sw"><div class="chip" style="background:#7D5200"></div><span class="hex">#7D5200</span><span class="tok">warn</span></div>
+      <div class="sw"><div class="chip" style="background:#A31D11"></div><span class="hex">#A31D11</span><span class="tok">bad</span></div>
+      <div class="sw"><div class="chip" style="background:#5FC07E"></div><span class="hex">#5FC07E</span><span class="tok">ok-ko</span></div>
+      <div class="sw"><div class="chip" style="background:#E5B14A"></div><span class="hex">#E5B14A</span><span class="tok">warn-ko</span></div>
+      <div class="sw"><div class="chip" style="background:#FF8E76"></div><span class="hex">#FF8E76</span><span class="tok">bad-ko</span></div>
+    </div>
+
+    <a class="open" href="mock-plate.html">Open the Plate mockup
+      <span class="path">mock-plate.html</span></a>
+  </div>
+
+  <!-- ============================= FOLIO ============================= -->
+  <div class="item">
+    <div class="name">Folio</div>
+    <div class="facts">light mode &nbsp;/&nbsp; mock-folio.html</div>
+    <p class="pitch">The desktop is a printed page: a warm paper ground with a real type area, a left margin rail carrying the running table of contents, windows as square-cornered sheets snapped to a 12-column grid, and every distinction made with weight, case, scale, rule-thickness and whitespace, never with colour.</p>
+
+    <div class="label">Structural move</div>
+    <p class="move">A left margin rail holds the running table of contents, and hierarchy is carried by type alone.</p>
+
+    <div class="label">Palette</div>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#FBFAF6"></div><span class="hex">#FBFAF6</span><span class="tok">paper-2</span></div>
+      <div class="sw"><div class="chip" style="background:#F4F1EA"></div><span class="hex">#F4F1EA</span><span class="tok">paper-1</span></div>
+      <div class="sw"><div class="chip" style="background:#E9E4DB"></div><span class="hex">#E9E4DB</span><span class="tok">paper-0</span></div>
+      <div class="sw"><div class="chip" style="background:#E2DCD1"></div><span class="hex">#E2DCD1</span><span class="tok">paper-0b</span></div>
+      <div class="sw"><div class="chip" style="background:#DED8CB"></div><span class="hex">#DED8CB</span><span class="tok">paper-3</span></div>
+      <div class="sw"><div class="chip" style="background:#C2BAA8"></div><span class="hex">#C2BAA8</span><span class="tok">rule-hair</span></div>
+      <div class="sw"><div class="chip" style="background:#A29A87"></div><span class="hex">#A29A87</span><span class="tok">rule-mid</span></div>
+      <div class="sw"><div class="chip" style="background:#8E8674"></div><span class="hex">#8E8674</span><span class="tok">ink-mute</span></div>
+      <div class="sw"><div class="chip" style="background:#8A8270"></div><span class="hex">#8A8270</span><span class="tok">rule-ctrl</span></div>
+      <div class="sw"><div class="chip" style="background:#5E5648"></div><span class="hex">#5E5648</span><span class="tok">ink-3</span></div>
+      <div class="sw"><div class="chip" style="background:#4A4438"></div><span class="hex">#4A4438</span><span class="tok">ink-2</span></div>
+      <div class="sw"><div class="chip" style="background:#2E2A22"></div><span class="hex">#2E2A22</span><span class="tok">ink-1</span></div>
+      <div class="sw"><div class="chip" style="background:#17150F"></div><span class="hex">#17150F</span><span class="tok">ink-0</span></div>
+      <div class="sw"><div class="chip" style="background:#A3301B"></div><span class="hex">#A3301B</span><span class="tok">red</span></div>
+      <div class="sw"><div class="chip" style="background:#2E6A38"></div><span class="hex">#2E6A38</span><span class="tok">green</span></div>
+      <div class="sw"><div class="chip" style="background:#7E5305"></div><span class="hex">#7E5305</span><span class="tok">ochre</span></div>
+    </div>
+
+    <a class="open" href="mock-folio.html">Open the Folio mockup
+      <span class="path">mock-folio.html</span></a>
+  </div>
+
+  <!-- ============================ RAKING ============================= -->
+  <div class="item">
+    <div class="name">Raking</div>
+    <div class="facts">dark mode &nbsp;/&nbsp; mock-raking.html</div>
+    <p class="pitch">A warm-graphite machine lit by one cold light from the upper left: depth is a 1px lit edge and a 1px cut groove, focus means "turned toward the light", and all system furniture collapses into a single left rail.</p>
+
+    <div class="label">Structural move</div>
+    <p class="move">One fixed light source from the upper left defines every edge, and all system furniture collapses into a single left rail.</p>
+
+    <div class="label">Palette</div>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#19120E"></div><span class="hex">#19120E</span><span class="tok">cut</span></div>
+      <div class="sw"><div class="chip" style="background:#181310"></div><span class="hex">#181310</span><span class="tok">ink-dark</span></div>
+      <div class="sw"><div class="chip" style="background:#231C18"></div><span class="hex">#231C18</span><span class="tok">well</span></div>
+      <div class="sw"><div class="chip" style="background:#29221E"></div><span class="hex">#29221E</span><span class="tok">void</span></div>
+      <div class="sw"><div class="chip" style="background:#322B27"></div><span class="hex">#322B27</span><span class="tok">base</span></div>
+      <div class="sw"><div class="chip" style="background:#38312D"></div><span class="hex">#38312D</span><span class="tok">raise</span></div>
+      <div class="sw"><div class="chip" style="background:#3D3632"></div><span class="hex">#3D3632</span><span class="tok">float</span></div>
+      <div class="sw"><div class="chip" style="background:#4A433F"></div><span class="hex">#4A433F</span><span class="tok">litsoft</span></div>
+      <div class="sw"><div class="chip" style="background:#5F5854"></div><span class="hex">#5F5854</span><span class="tok">lit</span></div>
+      <div class="sw"><div class="chip" style="background:#6A635A"></div><span class="hex">#6A635A</span><span class="tok">text-inert</span></div>
+      <div class="sw"><div class="chip" style="background:#AAA194"></div><span class="hex">#AAA194</span><span class="tok">text-3</span></div>
+      <div class="sw"><div class="chip" style="background:#BDB5A7"></div><span class="hex">#BDB5A7</span><span class="tok">text-2</span></div>
+      <div class="sw"><div class="chip" style="background:#DAD3C7"></div><span class="hex">#DAD3C7</span><span class="tok">text-1</span></div>
+      <div class="sw"><div class="chip" style="background:#F2EDE4"></div><span class="hex">#F2EDE4</span><span class="tok">text-0</span></div>
+      <div class="sw"><div class="chip" style="background:#7FB2E0"></div><span class="hex">#7FB2E0</span><span class="tok">steel</span></div>
+      <div class="sw"><div class="chip" style="background:#A9CFF2"></div><span class="hex">#A9CFF2</span><span class="tok">steel-br</span></div>
+      <div class="sw"><div class="chip" style="background:#7FBF63"></div><span class="hex">#7FBF63</span><span class="tok">ok</span></div>
+      <div class="sw"><div class="chip" style="background:#E3A63F"></div><span class="hex">#E3A63F</span><span class="tok">warn</span></div>
+      <div class="sw"><div class="chip" style="background:#E8664B"></div><span class="hex">#E8664B</span><span class="tok">bad</span></div>
+      <div class="sw"><div class="chip" style="background:#E58972"></div><span class="hex">#E58972</span><span class="tok">bad-ink</span></div>
+    </div>
+
+    <a class="open" href="mock-raking.html">Open the Raking mockup
+      <span class="path">mock-raking.html</span></a>
+  </div>
+
+  <!-- ============================= DATUM ============================= -->
+  <div class="item">
+    <div class="name">Datum</div>
+    <div class="facts">light mode &nbsp;/&nbsp; mock-datum.html</div>
+    <p class="pitch">The desktop is an engineering drawing on warm paper, ruled from a single left datum edge, and the only dark material on screen is the machine itself - a full-height ink rail and a full-width raster strip that carry the five numbers zlOS alone can measure.</p>
+
+    <div class="label">Structural move</div>
+    <p class="move">Everything is dimensioned off one left datum edge, with a dark ink rail and a full-width raster strip as the only machine surfaces.</p>
+
+    <div class="label">Palette</div>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#F5F3EE"></div><span class="hex">#F5F3EE</span><span class="tok">paper-1</span></div>
+      <div class="sw"><div class="chip" style="background:#ECE9E3"></div><span class="hex">#ECE9E3</span><span class="tok">paper-2</span></div>
+      <div class="sw"><div class="chip" style="background:#E4E1DA"></div><span class="hex">#E4E1DA</span><span class="tok">paper-0</span></div>
+      <div class="sw"><div class="chip" style="background:#DBD7CF"></div><span class="hex">#DBD7CF</span><span class="tok">paper-3</span></div>
+      <div class="sw"><div class="chip" style="background:#C3BEB4"></div><span class="hex">#C3BEB4</span><span class="tok">rule</span></div>
+      <div class="sw"><div class="chip" style="background:#847E73"></div><span class="hex">#847E73</span><span class="tok">rule-hi</span></div>
+      <div class="sw"><div class="chip" style="background:#635E54"></div><span class="hex">#635E54</span><span class="tok">t-3</span></div>
+      <div class="sw"><div class="chip" style="background:#4E4A41"></div><span class="hex">#4E4A41</span><span class="tok">t-2</span></div>
+      <div class="sw"><div class="chip" style="background:#232019"></div><span class="hex">#232019</span><span class="tok">t-1</span></div>
+      <div class="sw"><div class="chip" style="background:#14130F"></div><span class="hex">#14130F</span><span class="tok">t-0</span></div>
+      <div class="sw"><div class="chip" style="background:#383E47"></div><span class="hex">#383E47</span><span class="tok">ink-track</span></div>
+      <div class="sw"><div class="chip" style="background:#2A2F36"></div><span class="hex">#2A2F36</span><span class="tok">ink-2</span></div>
+      <div class="sw"><div class="chip" style="background:#191D22"></div><span class="hex">#191D22</span><span class="tok">ink-1</span></div>
+      <div class="sw"><div class="chip" style="background:#101317"></div><span class="hex">#101317</span><span class="tok">ink-0</span></div>
+      <div class="sw"><div class="chip" style="background:#8E8980"></div><span class="hex">#8E8980</span><span class="tok">it-2</span></div>
+      <div class="sw"><div class="chip" style="background:#B9B4AA"></div><span class="hex">#B9B4AA</span><span class="tok">it-1</span></div>
+      <div class="sw"><div class="chip" style="background:#F0EEE8"></div><span class="hex">#F0EEE8</span><span class="tok">it-0</span></div>
+      <div class="sw"><div class="chip" style="background:#0B5E78"></div><span class="hex">#0B5E78</span><span class="tok">mark</span></div>
+      <div class="sw"><div class="chip" style="background:#5CD2F2"></div><span class="hex">#5CD2F2</span><span class="tok">mark-hi</span></div>
+      <div class="sw"><div class="chip" style="background:#1E6B34"></div><span class="hex">#1E6B34</span><span class="tok">ok</span></div>
+      <div class="sw"><div class="chip" style="background:#7A4E04"></div><span class="hex">#7A4E04</span><span class="tok">warn</span></div>
+      <div class="sw"><div class="chip" style="background:#A32112"></div><span class="hex">#A32112</span><span class="tok">bad</span></div>
+      <div class="sw"><div class="chip" style="background:#56C97C"></div><span class="hex">#56C97C</span><span class="tok">ok-i</span></div>
+      <div class="sw"><div class="chip" style="background:#E6A83A"></div><span class="hex">#E6A83A</span><span class="tok">warn-i</span></div>
+      <div class="sw"><div class="chip" style="background:#FF7B62"></div><span class="hex">#FF7B62</span><span class="tok">bad-i</span></div>
+    </div>
+
+    <a class="open" href="mock-datum.html">Open the Datum mockup
+      <span class="path">mock-datum.html</span></a>
+  </div>
+
+  <div class="foot">
+    All four files verified present and non-empty. Links are relative, so keep this file in the same folder as the mockups.
+  </div>
+
+</div>
+</body>
+</html>
