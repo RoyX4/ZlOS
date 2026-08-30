@@ -1,10 +1,10 @@
 {
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
-    "branch": "codex/consolidate-all-2026-08-30",
+    "branch": "codex/final-topology-cleanup-2026-08-30",
     "dirty": false,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "8d68fae495381391fe12a1378d7a404ab1ef4db6"
+    "head": "02adffa29dd81a83ca6ecc2bc89c0eb8b238f7cd"
   },
   "identity_sha256": "9aeb5f46dffa99a1072a38b224380857f14c7e33fd1e6cd42603d3eb2968fd28",
   "routes": [
