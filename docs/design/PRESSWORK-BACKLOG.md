@@ -91,6 +91,34 @@ still absent.** The widget exists for it now; the readings do not. This kernel
 counts composites, and drawing a rung for a clock nothing counts would be the
 dead control this whole round has been removing.
 
+## FOUND WHILE FIXING, NOT BY THE FLEET
+
+Three things the round-eleven list did not contain, found by walking the tree
+rather than by an audit:
+
+- **`kl_filter` was implemented, read, and unreachable.** `kl_shown`
+  (apps_sys2.zl:219-225) filters the Kernel Log by it - "the reference's
+  filter, verbatim" - and nothing in the tree ever wrote it. The authority's
+  own route to it is the palette row `dmesg --level warn` (proto:1528), which
+  was one of four rows a comment declared impossible. **Three of those four
+  were reachable**; only `modeset` was genuinely absent. A wrong "not
+  supported" never gets tested, because nobody tries what they are told is
+  missing.
+- **Fifteen globals and three constants with one mention each: their own.** The
+  predecessor Snake (`s_*`, `SNAKE_CELL/RATE/MAX`), the pre-compositor window
+  model (`mon_open`, `ab_open`, `focus_win`), and `wm_live`. `focus_win` was
+  the worst - wm.c has a static of the same name meaning a slot index.
+- **`wm_live` looked like a missing guard and was not.** The paragraph above it
+  describes a real re-entrancy hazard and sat on top of it, reading as "this is
+  the guard". The guard is `wm_run()` at kernel.zl:13943. Checked before
+  deleting: a variable that looks like a guard and a guard that exists
+  elsewhere are two different findings, and only one is a bug.
+
+The search that found the second and third: every module-level assignment in
+`kernel.zl` and `kernel/apps/*.zl`, counted across the tree. 119 candidates
+with four mentions or fewer; the ones with exactly one are dead by definition.
+Worth re-running after any large removal.
+
 | # | severity | status | gate | finding |
 |---|---|---|---|---|
 | 1 | invented-figure | **DONE** `fe0ce88` | — | The Files detail block prints an unconditional green OK verdict swatch for every selected file — nothing is checked |
