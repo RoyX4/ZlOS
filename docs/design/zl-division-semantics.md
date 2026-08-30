@@ -105,13 +105,28 @@ so the next reader finds the correction where the claim was. The `idiv` calls
 are kept: they are not worse, and rewriting 26 sites again would be churn on top
 of churn.
 
-## What is still open
+## What is still open — and one thing now closed
 
 If any of those controls **is** actually dead, its cause has not been found, and
-the reports were closed against a mechanism that was not it. That question is
-reopened, not answered. The one place there is evidence: `probe-calckeys.py`
-passed both before and after the calculator's conversion, which is consistent
-with the keypad never having been broken this way.
+the reports were closed against a mechanism that was not it.
+
+**The Files list is now settled: it was never broken.** `probe-files-click.py`
+clicks one row, clicks it again, then clicks another, and reads the detail block
+that names the selected file:
+
+```
+as shipped                       same row 0.0000   other row 0.5855   PASS
+files_mouse_slot forced to -1    same row 0.0000   other row 0.0000   FAIL
+```
+
+So "the Files list ignored nineteen clicks in twenty" was wrong about the
+mechanism *and* wrong about the effect. It described a failure nobody had seen,
+in a sentence shaped like a measurement, and it took a probe — not more
+reasoning — to establish that.
+
+The calculator has weaker but consistent evidence: `probe-calckeys.py` passed
+both before and after its conversion. The remaining three claims from those
+commits are still unestablished in either direction.
 
 ## What survives from that work
 
