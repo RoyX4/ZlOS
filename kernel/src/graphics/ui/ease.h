@@ -13,14 +13,40 @@
 
 /* The named curves. CSS's own timing functions, plus the reference's one
  * bespoke curve. Values in ease.c. */
-#define EASE_LINEAR  0   /* zsweep                                    */
-#define EASE_OUT     1   /* zpop, zov, ztoast - the common one        */
-#define EASE_STD     2   /* CSS `ease` - zpress                       */
-#define EASE_IN_OUT  3   /* zpulse                                    */
-#define EASE_WIN     4   /* zwin - cubic-bezier(.2,.85,.3,1)          */
+/* PRESSWORK HAS ONE CURVE AND THESE FIVE ARE ITS PREDECESSOR'S.
+ *
+ * presswork-prototype.html:203-209 - "Graphite's three durations, one curve" -
+ * declares `--ease: cubic-bezier(0.200, 0.850, 0.300, 1.000)` and every
+ * transition and animation in it uses that one. EASE_WIN is that curve, so it
+ * is the only one wm.c's table now selects.
+ *
+ * THE OTHER FOUR ARE KEPT, AND TWO OF THEM ARE STILL USED - which is not the
+ * same statement as "wm.c selects them", and the first draft of this comment
+ * said the wrong one. Checked rather than assumed:
+ *
+ *   EASE_LINEAR   anim_curve's NONE entry, which has no duration
+ *   EASE_STD      ease_press_scale, INSIDE ease.c - it shapes the two halves
+ *                 of zpress's keyframe dip, which is a shape and not a
+ *                 timeline curve
+ *   EASE_IN_OUT   ease_pulse, the same way - it eases the triangle so the turn
+ *                 at each end is not a corner
+ *   EASE_OUT      nothing selects it
+ *
+ * What proto:209 governs is which curve a TIMELINE runs on, and that is now
+ * EASE_WIN everywhere. A keyframe list with a stop in the middle is a
+ * different object and the authority states it separately. If a second
+ * timeline curve is ever wanted, the argument has to be made against proto:209
+ * rather than won by a table nobody reread. */
+#define EASE_LINEAR  0   /* anim_curve's NONE only                    */
+#define EASE_OUT     1   /* unused - the predecessor's common one     */
+#define EASE_STD     2   /* CSS `ease` - shapes zpress inside ease.c  */
+#define EASE_IN_OUT  3   /* shapes zpulse inside ease.c               */
+#define EASE_WIN     4   /* THE curve - cubic-bezier(.2,.85,.3,1)     */
 
 /* zwin's control points, x1 y1 x2 y2, thousandths.
- * ds-reference.html line 15: cubic-bezier(.2,.85,.3,1). */
+ * presswork-prototype.html:209 - cubic-bezier(0.200, 0.850, 0.300, 1.000).
+ * The figures are identical to ds-reference.html:15, which is why this line
+ * survived the migration uncorrected; the CITATION was the stale half. */
 #define EASE_WIN_X1  200
 #define EASE_WIN_Y1  850
 #define EASE_WIN_X2  300

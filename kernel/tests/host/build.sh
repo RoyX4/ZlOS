@@ -56,6 +56,9 @@ echo "built ./palette       (run: ./palette)"
 gcc $HOST_INCLUDES -O2 -Wall -Wextra -o easetest easetest.c ../../src/graphics/ui/ease.c -lm
 echo "built ./easetest      (run: ./easetest)"
 
+gcc $HOST_INCLUDES -O2 -Wall -Wextra -o retest retest.c
+echo "built ./retest        (run: ./retest)"
+
 # The proportional text engine, asserted. fbbench times fb.c and browsershot
 # photographs it; neither NOTICES when a style flag stops changing the pixels.
 # Both regressions this gate exists for shipped green: italic silently rendered
@@ -473,6 +476,14 @@ echo "built ./exectest      (run: ./exectest)"
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../../src/fs/fs.c
 echo "built ./fstest        (run: ./fstest)"
+
+# The ustar the Archive Manager writes, read back by the SHELL'S OWN tar. A
+# test that parses back the layout its own writer just emitted agrees with
+# itself by construction; `tar -tvf` does not. Same -Wall -Wextra as fstest,
+# for the same reason - this one writes files.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
+    -o tartest tartest.c ../../src/fs/fs.c ../../src/fs/tar.c
+echo "built ./tartest       (run: ./tartest)"
 gcc $HOST_INCLUDES -O2 -no-pie -w -o blocktest blocktest.c
 echo "built ./blocktest     (run: ./blocktest)"
 

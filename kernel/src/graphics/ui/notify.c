@@ -42,16 +42,27 @@
 typedef unsigned int u32;
 
 #include "telemetry.h"
+/* THE NUMBERS COME FROM design.h NOW, WHICH IS WHERE THEY LIVE.
+ *
+ * This file carried its own NOTE_W 280 and NOTE_TICKS 300 while design.h said
+ * ZD_TOAST_W 300 / ZD_TOAST_MS 4200 and the prototype said 340 / 8000. Three
+ * sources for two facts, and the one that actually ran agreed with neither -
+ * exactly the one-fact-many-copies shape this repo has documented twice
+ * already, in the window reserves and in the app count. design.h has been
+ * corrected to the prototype (its own header says the prototype wins) and this
+ * file now reads it rather than restating it. */
+#include "design.h"
 
 void zl_putc_pub(char c);
 
 #define NOTE_SLOTS  4
 #define NOTE_TEXT   64
-#define NOTE_TICKS  300          /* three seconds at 100 Hz */
+#define NOTE_TICKS  (ZD_TOAST_MS / 10)   /* design.h ms -> PIT centiseconds */
 
 struct note {
-    char text[NOTE_TEXT];
-    u32  ticks;                  /* how long it should be visible */
+    char text[NOTE_TEXT];        /* the TITLE - .t-lab, --zd-text-1        */
+    char body[NOTE_TEXT];        /* the line under it - .t-num ink2        */
+    u32  ticks;                  /* how long it should be visible          */
 };
 
 static struct note q[NOTE_SLOTS];
@@ -73,20 +84,30 @@ static void copy_text(char *d, const char *s)
 void notify_reset(void)
 {
     qn = 0; showing = 0; expires_at = 0; dropped = 0; posted = 0;
-    for (int i = 0; i < NOTE_SLOTS; i++) q[i].text[0] = 0;
+    for (int i = 0; i < NOTE_SLOTS; i++) { q[i].text[0] = 0; q[i].body[0] = 0; }
 }
 
 /* Post a message. Returns 1 if it was queued, 0 if the queue was full and the
  * oldest WAITING one had to go - never 0 silently. The live toast is never the
  * one dropped: taking away something the user is currently reading to make
  * room for something they have not seen yet is the wrong trade. */
+int notify_post2(const char *text, const char *body, u32 ticks);
+
 int notify_post(const char *text, u32 ticks)
+{
+    return notify_post2(text, 0, ticks);
+}
+
+/* Title and body. notify_post stays as it was so that no existing caller has to
+ * change, and every one of them keeps posting a title-only toast. */
+int notify_post2(const char *text, const char *body, u32 ticks)
 {
     if (ticks == 0) ticks = NOTE_TICKS;
     posted++;
 
     if (qn < NOTE_SLOTS) {
         copy_text(q[qn].text, text);
+        if (body) copy_text(q[qn].body, body); else q[qn].body[0] = 0;
         q[qn].ticks = ticks;
         qn++;
         return 1;
@@ -100,6 +121,13 @@ int notify_post(const char *text, u32 ticks)
     p_str("  notify: queue full, dropped an older message\n");
     for (int i = 1; i < NOTE_SLOTS - 1; i++) q[i] = q[i + 1];
     copy_text(q[NOTE_SLOTS - 1].text, text);
+    /* THE BODY IS PART OF THE MESSAGE AND HAS TO BE OVERWRITTEN WITH IT.
+     * The shift above leaves the last slot holding the EVICTED toast's fields;
+     * only .text and .ticks were being replaced, so a one-line message landing
+     * in a full queue inherited the previous message's second line and showed
+     * it as its own. Two toasts' worth of text, attributed to one of them. */
+    if (body) copy_text(q[NOTE_SLOTS - 1].body, body);
+    else      q[NOTE_SLOTS - 1].body[0] = 0;
     q[NOTE_SLOTS - 1].ticks = ticks;
     return 0;
 }
@@ -108,6 +136,7 @@ static void retire(void)
 {
     for (int i = 0; i < NOTE_SLOTS - 1; i++) q[i] = q[i + 1];
     q[NOTE_SLOTS - 1].text[0] = 0;
+    q[NOTE_SLOTS - 1].body[0] = 0;   /* same reason as the drop path above */
     if (qn > 0) qn--;
     showing = 0;
 }
@@ -145,6 +174,14 @@ int notify_dismiss(void)
 
 int         notify_active(void)  { return showing; }
 const char *notify_text(void)    { return showing ? q[0].text : 0; }
+
+/* THE SECOND LINE. The prototype's toast is a TITLE and a BODY - the title is
+ * what happened, the body is the measurement or the reason - and every one of
+ * the sixteen it can raise uses both. This file had one 64-character line, so
+ * a toast could say "knockout on" or it could say what that means, and never
+ * both. Empty when a caller posted only a title, and the compositor then draws
+ * the title centred exactly as before. */
+const char *notify_body(void)    { return showing && q[0].body[0] ? q[0].body : 0; }
 int         notify_queued(void)  { return qn; }
 int         notify_waiting(void) { return qn > 0 ? qn - (showing ? 1 : 0) : 0; }
 u32         notify_dropped(void) { return dropped; }
@@ -163,9 +200,9 @@ int notify_byte(int i)
  * app_draw in this system: derived entirely from the screen size handed in,
  * nothing baked in, so it lands correctly at 800x600 and at 2560x1440.
  */
-#define NOTE_W      280
+#define NOTE_W      ZD_TOAST_W
 #define NOTE_H      56
-#define NOTE_MARGIN 16
+#define NOTE_MARGIN 14          /* #toasts { right/bottom: calc(14px * var(--ui)) } */
 
 void notify_rect(int sw, int sh, int reserve_bot, int scale,
                  int *x, int *y, int *w, int *h)

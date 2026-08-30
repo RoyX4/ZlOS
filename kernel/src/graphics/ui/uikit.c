@@ -413,6 +413,13 @@ static int text_run(int x, int y, const char *s, unsigned rgb,
 
 int ui_text_tracked_w(const char *s, int size, int flags, int track_x10)
 {
+    /* THE MEASURE MUST FOLLOW THE SWITCH TOO. If the draw zeroes the tracking
+     * and the measure does not, every right-flushed run in the system is placed
+     * for a width the glyphs no longer have - which is the same
+     * measure-one-thing-draw-another fault this file's own header warns about
+     * for UI_F_CAPS. */
+    if (!ui_track_get()) track_x10 = 0;
+
     /* the mono path has a fixed cell and fb.c ignores a size for it, so a
      * track would be the only thing making a mono run stop lining up with the
      * column beside it. Refused rather than silently applied. */
@@ -423,6 +430,11 @@ int ui_text_tracked_w(const char *s, int size, int flags, int track_x10)
 void ui_text_tracked(int x, int y, const char *s, unsigned rgb,
                      int size, int flags, int track_x10)
 {
+    /* `body.notrack .t-big { letter-spacing: 0 }` is the reference's own switch
+     * for this, and it zeroes the SPACING while keeping the face - which is
+     * what passing 0 here does. */
+    if (!ui_track_get()) track_x10 = 0;
+
     /* UNGATED, deliberately. ui_text() checks ui_mode_get() because ui.c's
      * cursor runs the same widget code twice, once to hit-test and once to
      * draw, and a hit-test pass must record no ink. This pair is a PRIMITIVE
@@ -444,11 +456,21 @@ int  ui_caps_w(const char *s, int size)
 void ui_caps(int x, int y, const char *s, unsigned rgb, int size)
 { ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_LAB); }
 
+/* THE WIDTH MUST CARRY THE SAME FLAGS AS THE DRAW. Uppercase changes advances -
+ * a capital is not the same width as its lower-case twin in a proportional
+ * face - so a measure without UI_F_CAPS beside a draw with it puts every
+ * right-flushed thing on that row in the wrong place. Measuring one string and
+ * drawing another is how a layout goes subtly wrong everywhere at once. */
 int  ui_display_w(const char *s, int size)
-{ return ui_text_tracked_w(s, size, UI_F_BOLD, ZD_TR_BIG); }
+{ return ui_text_tracked_w(s, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_BIG); }
 
+/* UI_F_CAPS, because .t-big carries `text-transform: uppercase` and this is the
+ * style that renders it. The rail's identity word is written "zlos" in the
+ * source - as the prototype writes it - and drew lowercase, while the comment
+ * at its call site said "LG, bold, UPPERCASE, tracked by ZD_TR_BIG". The
+ * transform was named in two places and applied in neither. */
 void ui_display(int x, int y, const char *s, unsigned rgb, int size)
-{ ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD, ZD_TR_BIG); }
+{ ui_text_tracked(x, y, s, rgb, size, UI_F_BOLD | UI_F_CAPS, ZD_TR_BIG); }
 
 /* the widget-side pair: the LABEL style at SM, gated for the hit-test pass */
 static int lab_w(const char *s) { return ui_caps_w(s, UI_SM); }
@@ -524,21 +546,27 @@ static void seat_sunken(int x, int y, int w, int h, int r, unsigned face)
  * what makes it read as a blur rather than as a stack of borders: a linear
  * ramp puts equal ink in every band and the outermost band is the widest, so
  * linear reads as a halo. ZD_LIFT_A is the alpha at the object's own edge,
- * ZD_LIFT_BLUR is how far it reaches, ZD_LIFT_DY is how far the lamp pushes
- * it down.
+ * ZD_OFFPLANE_BLUR is how far it reaches, ZD_OFFPLANE_DY is how far the
+ * lamp pushes it down.
  *
  * BANDS, NOT PIXELS, AND THE REASON IS THE MACHINE. One band per pixel of
- * blur would be ZD_LIFT_BLUR full-area blends per overlay per frame - 26 of
- * them at ui scale 2 - on a CPU that draws every pixel itself with no GPU
+ * blur would be ZD_OFFPLANE_BLUR full-area blends per overlay per frame - 28
+ * of them at ui scale 2 - on a CPU that draws every pixel itself with no GPU
  * behind it. LIFT_BANDS is fixed, so the cost of a menu's shadow does not
  * change when the user changes the UI scale; only the spacing of the bands
  * does. Eight is where the banding stops being visible against a 55% alpha at
  * this radius, and it is the whole knob if it ever needs to move. */
 #define LIFT_BANDS 8
 
+/* ITS THREE CALLERS ARE THE THREE OFF-PLANE OBJECTS AND NOTHING ELSE -
+ * ui_popover (the menu, proto:942), ui_modal (the palette sheet, proto:897)
+ * and ui_toast_draw (proto:965). All three carry 6dp/14dp in the authority.
+ * This read ZD_LIFT_DY/ZD_LIFT_BLUR, which is the DRAGGED PLATE's 5dp/13dp
+ * from proto:643 - a rule for an object none of these three is. The name is
+ * kept because the mechanism below is the lift's; only the figures move. */
 static void lift_shadow(int x, int y, int w, int h, int r)
 {
-    int blur = DP(ZD_LIFT_BLUR), dy = DP(ZD_LIFT_DY);
+    int blur = DP(ZD_OFFPLANE_BLUR), dy = DP(ZD_OFFPLANE_DY);
     if (ui_mode_get() != UI_DRAW || blur < 1) return;
     for (int b = LIFT_BANDS; b >= 1; b--) {
         int i = blur * b / LIFT_BANDS;          /* how far out this band is */

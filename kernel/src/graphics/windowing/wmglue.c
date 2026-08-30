@@ -51,6 +51,8 @@ extern Value zl_fn_desk_draw(Value, Value, Value, Value) __attribute__((weak));
  * Weak like the rest: a tree whose kernel.zl has not grown it simply does not
  * register the layer, and the compositor never calls it. */
 extern Value zl_fn_overlay_draw(Value, Value, Value, Value) __attribute__((weak));
+/* fn win_menu_at(win, x, y) - the window's own menu, on a right-press */
+extern Value zl_fn_win_menu_at(Value, Value, Value) __attribute__((weak));
 
 /* fn desk_click(x, y, btn) - a pointer event on the dock, the start button or
  * the tray. Every event, not just presses: a dock with no hover state reads as
@@ -59,6 +61,12 @@ extern Value zl_fn_desk_click(Value, Value, Value) __attribute__((weak));
 
 /* fn desk_key(code, mods) - a system key: Super, today */
 extern Value zl_fn_desk_key(Value, Value) __attribute__((weak));
+
+/* fn app_can_close(win) - 0 refuses the close box and Ctrl+W */
+extern Value zl_fn_app_can_close(Value) __attribute__((weak));
+
+/* fn ov_click(x, y, down) - non-zero when an overlay consumed the pointer */
+extern Value zl_fn_ov_click(Value, Value, Value) __attribute__((weak));
 /* ---- apps that live in C --------------------------------------------------
  * THERE ARE NONE LEFT, AND THIS BLOCK IS THE RECORD OF WHY.
  *
@@ -122,10 +130,25 @@ static void glue_desk_click(int x, int y, int btn)
     zl_fn_desk_click(zl_num(x), zl_num(y), zl_num(btn));
 }
 
-static void glue_desk_key(int code, int mods)
+static int glue_overlay_click(int x, int y, int down)
 {
-    if (!zl_fn_desk_key) return;
-    zl_fn_desk_key(zl_num(code), zl_num(mods));
+    if (!zl_fn_ov_click) return 0;
+    Value r = zl_fn_ov_click(zl_num(x), zl_num(y), zl_num(down));
+    return (int)r.num;
+}
+
+static int glue_can_close(int win)
+{
+    if (!zl_fn_app_can_close) return 1;      /* no arm defined: always closes */
+    Value r = zl_fn_app_can_close(zl_num(win));
+    return (int)r.num != 0;
+}
+
+static int glue_desk_key(int code, int mods)
+{
+    if (!zl_fn_desk_key) return 0;
+    Value r = zl_fn_desk_key(zl_num(code), zl_num(mods));
+    return (int)r.num;
 }
 
 static void glue_desk(int x, int y, int w, int h)
@@ -142,6 +165,12 @@ static void glue_overlay(int x0, int y0, int x1, int y1)
 {
     if (!zl_fn_overlay_draw) return;
     zl_fn_overlay_draw(zl_num(x0), zl_num(y0), zl_num(x1), zl_num(y1));
+}
+
+static void glue_win_menu(int win, int x, int y)
+{
+    if (!zl_fn_win_menu_at) return;
+    zl_fn_win_menu_at(zl_num(win), zl_num(x), zl_num(y));
 }
 
 /* ---- binding ---------------------------------------------------------------
@@ -164,8 +193,11 @@ int wm_bind_zl(void)
              zl_fn_app_tick  ? glue_tick  : 0,
              zl_fn_desk_draw ? glue_desk  : 0);
     if (zl_fn_overlay_draw) wm_overlay(glue_overlay);
+    if (zl_fn_win_menu_at) wm_win_menu(glue_win_menu);
     if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
     if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
+    if (zl_fn_app_can_close) wm_can_close(glue_can_close);
+    if (zl_fn_ov_click) wm_overlay_click(glue_overlay_click);
     return 1;
 }
 

@@ -287,6 +287,51 @@ else
     skip "check-memmap-mirror.py not present"
 fi
 
+# The same, for the guard that covers EVERY header a .zl mirrors - not just
+# memmap.h. It was written, it passed, and NOTHING RAN IT: a complete guard with
+# no caller is the failure it exists to catch, and it had it.
+if [ -f kernel/tools/checks/check-header-mirror.py ]; then
+    if out=$(python3 kernel/tools/checks/check-header-mirror.py 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -A3 FAIL | head -4)"
+    fi
+    if out=$(sh kernel/tools/checks/check-header-mirror-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -iE 'NOT CAUGHT|FAIL' | head -3)"
+    fi
+else
+    skip "check-header-mirror.py not present"
+fi
+
+# A zl CALL MUST SUPPLY EVERY SLOT ITS NATIVE READS. The builtin dispatcher
+# collects arguments into a fixed array and each native reads a fixed number of
+# slots; nothing checks the caller supplied them. br_click(ex, ey) passed two
+# where the native reads three, and until this week that array was
+# uninitialised - so a browser click was decided by stack garbage.
+if [ -f kernel/tools/checks/check-nativeargs.py ]; then
+    if out=$(python3 kernel/tools/checks/check-nativeargs.py 2>&1); then
+        ok "$(printf '%s' "$out" | tail -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -A2 FAIL | head -4)"
+    fi
+    if out=$(bash kernel/tools/checks/check-nativeargs-selftest.sh 2>&1); then
+        ok "$(printf '%s' "$out" | grep PASS | head -1)"
+    else
+        hit "$(printf '%s' "$out" | grep -iE 'FAIL' | head -3)"
+    fi
+else
+    skip "check-nativeargs.py not present"
+fi
+
+# A check-intdiv guard was here and is DELETED, not disabled. It enforced a bug
+# class that does not exist in the shipping kernel: the desktop's zl is COMPILED
+# and its `/` goes through freestanding/runtime_kernel.c's zl_binop, which casts
+# both operands to long long and truncates. The guard would have demanded a
+# rewrite of every honest division for ever. See the correction commit.
+
+
 echo
 [ "$fail" -ne 0 ] && { echo "hazard-scan: FAILED"; exit 1; }
 echo "hazard-scan: clean"

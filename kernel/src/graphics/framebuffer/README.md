@@ -27,6 +27,7 @@ Framebuffer primitives and presentation support.
 
 - `fb.c`
 - `fb3d.c`
+- `imgen.c`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../../docs/CODE-MAP.md)
 for repository-wide ownership.

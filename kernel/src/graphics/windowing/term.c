@@ -32,6 +32,22 @@ static char scroll[TERM_ROWS][TERM_COLS];
 static int  s_head;                 /* next row to write                  */
 static int  s_live;                 /* how many rows hold anything        */
 static int  s_col;                  /* chars in the row being built       */
+/* HOW MANY OF THE OLDEST LIVE ROWS THE TERMINAL DOES NOT SHOW.
+ *
+ * The compositor used to call term_clear() on the way up, so the visible
+ * terminal would be "a product surface instead of preserving bring-up noise as
+ * the first thing on screen" (kernel.zl:14350-14356). That is a good decision
+ * about the TERMINAL and it destroyed the ring, which the Kernel Log reads.
+ *
+ * So the boot transcript is now HIDDEN rather than deleted: the terminal walks
+ * back only as far as this floor, and term_ch / term_lines - the log's
+ * accessors - ignore it entirely. Nothing is lost and the terminal opens on the
+ * banner exactly as before.
+ *
+ * This is why the log can have a level column at all: ok_line, info_line and
+ * warn_line tag the BOOT lines, and until now those were the ones being
+ * thrown away. */
+static int  s_floor;
 
 static char input[TERM_COLS];       /* the line being typed               */
 static int  in_len;
@@ -105,9 +121,49 @@ void term_putc(char c)
     else commit_row();              /* wrap rather than truncate */
 }
 
+/* THE SCROLLBACK, READABLE.
+ *
+ * The Kernel Log app drew FOURTEEN FIXED ROWS with hand-written timestamps -
+ * kl_time() returned 2, 11, 17, 34, 48, 63, 95, 140 - and presented them as
+ * this machine's boot log. A whole pane of fiction shaped exactly like
+ * measurement, in a system whose argument is that its instruments are read.
+ *
+ * The real thing was already here. term_putc is tee'd from every kernel print,
+ * so this ring holds what the machine actually said, in the order it said it.
+ * zllog cannot serve: it is a telemetry emitter to a host - counters and events
+ * - with no stored text and no read-back at all.
+ *
+ * Line 0 is the OLDEST live row, which is the order a log is read in, and the
+ * reverse of term_draw's own walk (it counts back from s_head to bottom-anchor
+ * the newest against the prompt). Both are correct for their caller; they must
+ * not be confused, so the ring arithmetic lives here once. */
+int term_lines(void) { return s_live; }
+
+int term_ch(int line, int col)
+{
+    if (line < 0 || line >= s_live) return 0;
+    if (col < 0 || col >= TERM_COLS) return 0;
+    int first = s_head - s_live;
+    while (first < 0) first += TERM_ROWS;
+    return (unsigned char)scroll[(first + line) % TERM_ROWS][col];
+}
+
+/* THE TERMINAL STOPS LOOKING BELOW HERE, and the ring keeps everything.
+ * Called once, when the compositor comes up. */
+void term_hide_boot(void)
+{
+    s_floor = s_live;
+    s_col = 0;
+    in_len = 0;
+    in_cursor = 0;
+    history_view = -1;
+}
+
+/* The `clear` COMMAND still means clear - a person asking for an empty
+ * terminal gets one, and the floor goes with it. */
 void term_clear(void)
 {
-    s_head = 0; s_live = 0; s_col = 0; in_len = 0; in_cursor = 0;
+    s_head = 0; s_live = 0; s_col = 0; s_floor = 0; in_len = 0; in_cursor = 0;
     history_view = -1;
     for (int i = 0; i < TERM_ROWS; i++) scroll[i][0] = 0;
 }
@@ -346,6 +402,38 @@ static const struct cmd table[] = {
      * use; this exists so a probe that can only type can still render it - the
      * same reason `windows` exists beside the compositor itself. */
     { "ctxmenu", 204 }, { "menu2",   204 },
+    { "activities", 205 }, { "overview", 205 },
+    { "lock",     206 }, { "locksession", 206 },
+    /* THE REGISTER'S APPS, one word each. The rail opens them with a click and
+     * the palette names them, but a probe can only type - and an app whose body
+     * has been rebuilt to the reference cannot be checked against the reference
+     * without a way to put it on screen. */
+    { "klog",     210 }, { "dmesg",    210 },
+    { "hexv",     211 }, { "calcapp",  212 },
+    { "netapp",   213 }, { "clocks",   214 },
+    { "disku",    215 }, { "sysinfo",  216 },
+    { "typepane", 217 }, { "specimen", 217 },
+    { "syspane",  218 },
+    /* THE FONT ATLAS HAD NO WORD AT ALL - reachable only by opening the
+     * catalogue and finding its tile. Every other pane in this block got one
+     * for the reason the comment above gives: a pane that cannot be put on
+     * screen cannot be checked against the reference. This one was missed. */
+    { "font",     221 }, { "atlas",    221 },
+    /* AND NEITHER DID THE RENDERER. Same gap, same reason it went unnoticed:
+     * `cube` and `3d` at :352 open the CUBE APP, which is a different window,
+     * so a grep for a 3D word found one and stopped. The Renderer's canvas was
+     * a flat fill for as long as nothing could type its way to it. */
+    { "render",   222 }, { "mesh",     222 },
+    /* AND NEITHER DID THE IMAGE VIEWER. Three of this register's panes had no
+     * word between them; each was found only when something needed to be
+     * checked against the reference and there was no way to put it on screen.
+     * That is the cost of the gap, and it is why they are being closed as they
+     * are found rather than "later". */
+    { "image",    223 }, { "img",      223 },
+    /* The Archive Manager, the fourth. */
+    { "archive",  224 }, { "tar",      224 },
+    { "sysmon",   219 }, { "monitor",  219 },
+    { "settings", 220 }, { "prefs",    220 },
     { "mouse",   120 }, { "snake",   103 },
     { "paint",   100 }, { "edit",    105 },
     { "anim",     97 }, { "demo",     97 },
@@ -638,7 +726,9 @@ void term_draw(int x, int y, int w, int h, unsigned int fg, unsigned int dim,
      * `first = s_head - show` arithmetic would scroll the newest line off the
      * bottom by however many lines happened to wrap. */
     int nlines = 0, drows = 0;
-    while (nlines < s_live && drows < show) {
+    int reach = s_live - s_floor;       /* the terminal's own scrollback depth */
+    if (reach < 0) reach = 0;
+    while (nlines < reach && drows < show) {
         int idx = s_head - 1 - nlines;
         while (idx < 0) idx += TERM_ROWS;
         drows += wrapped_rows(scroll[idx], cols);

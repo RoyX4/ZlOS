@@ -144,10 +144,26 @@ def main():
         ser.drain(1.2); log += ser.buf; ser.buf = ""
         base_n = len(re.findall(r"wm: win \d+ title", log))
 
+        # FILES IS OPEN AT BOOT NOW, so `filemgr` RAISES it rather than opening a
+        # second one - and this asserted the opposite.
+        #
+        # The assertion was written when the desktop booted to a shell alone.
+        # The boot composition since became the prototype's, which opens the
+        # terminal, Files and the System Monitor, and reg_open's first act is to
+        # look for an existing window of that id and raise it. A second Files
+        # window would be the defect.
+        #
+        # So the check is: the command produces a Files WINDOW that exists, and
+        # does NOT add another. Both halves matter - dropping the second would
+        # pass on a build where `filemgr` did nothing at all.
+        wins_before = re.findall(r"wm: win (\d+) title \d+,\d+ \d+x\d+ client (\d+),(\d+) (\d+)x(\d+)", log)
         qtype(qmp, "filemgr\n"); time.sleep(0.8)
         ser.drain(0.8); log += ser.buf; ser.buf = ""
         wins = re.findall(r"wm: win (\d+) title \d+,\d+ \d+x\d+ client (\d+),(\d+) (\d+)x(\d+)", log)
-        check("the Files app opened a window", len(wins) > base_n, f"{len(wins)-base_n} new")
+        check("Files is open, from the boot composition", len(wins_before) > 0,
+              f"{len(wins_before)} at boot")
+        check("`filemgr` raises it rather than opening a second",
+              len(wins) == len(wins_before), f"{len(wins)-len(wins_before)} new")
         if len(wins) <= base_n:
             print("\n--- serial ---\n"+log[-1500:]); proc1.kill(); proc1.wait()
             return report(fails, tmp)

@@ -33,6 +33,7 @@ src/core/crash.c
 src/drivers/display/vga.c
 src/graphics/framebuffer/fb.c
 src/graphics/framebuffer/fb3d.c
+src/graphics/framebuffer/imgen.c
 src/graphics/fonts/font8x16.c
 src/graphics/fonts/font_aa.c
 src/graphics/fonts/font_sub.c
@@ -68,6 +69,7 @@ src/graphics/windowing/wmglue.c
 
 # desktop/system-track (arrived inside desktop/exec-track)
 src/fs/fs.c
+src/fs/tar.c
 src/graphics/windowing/clip.c
 src/graphics/ui/snap.c
 src/graphics/ui/notify.c

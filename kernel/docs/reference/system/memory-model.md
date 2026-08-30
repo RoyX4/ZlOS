@@ -29,6 +29,8 @@ in the same session, not from arithmetic.
 | `0x01E00000` | 30 MiB | arena end | | |
 | `0x02000000` | 32 MiB | `SNAKE_X`, `FS_*`, `LINE_BUF`, `HIST_BUF` … | `kernel.zl` | `check-memmap.sh` |
 | `0x04000000` | 64 MiB | virtio-net rings and frame buffers | `virtio_net.c` | 4 `_Static_assert`s |
+| `0x05000000` | 80 MiB | browser document, tree, CSS, runs | `browser.c` | `memmap.h` chain |
+| `0x06000000` | 96 MiB | the ustar staging buffer, 4 MiB | `tar.c` | `memmap.h` chain |
 | `0x08000000` | 128 MiB | `back`, the back buffer | `fb.c` | `memmap.h` chain |
 | `0x0A800000` | 168 MiB | the AP stacks | `smp_trampoline{,64}.S` | `memmap.h` chain |
 | `0x0B000000` | 176 MiB | task stacks + demo counters | `sched.c` | `memmap.h` chain |

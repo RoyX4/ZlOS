@@ -219,6 +219,7 @@ void ui_theme_init_q8(int scale_q8)
     theme.steel      = ZD_STEEL;      /* 39  instruments only               */
     theme.steel_br   = ZD_STEEL_BR;   /* 40 */
     theme.ink_on     = ZD_INK_ON;     /* 41  6.1400:1 on ZD_VERM            */
+    theme.bad_ink    = ZD_BAD_INK;    /* 42  failure TEXT, 5.9093:1         */
 
     /* ---- metrics ------------------------------------------------------------
      * Read off the prototype's stylesheet, not picked by eye and not snapped:
@@ -451,6 +452,31 @@ int ui_ref_num(int which)
  * after. Doing it here would make ui.c depend on the compositor and break the
  * layering ui.h states.
  */
+/* THREE MORE SWITCHES THE PROTOTYPE HAS AND THIS PANE DID NOT.
+ *
+ * Each gates behaviour that already exists rather than adding any - which is
+ * the only kind of control worth drawing. A switch wired to nothing is the
+ * dead-control fault with a nicer surface.
+ *
+ *   over    the occlusion edge. `.win.over` in the reference; the chrome
+ *           already computes it, and off falls back to the plain ring.
+ *   motion  the animation timings. Off means every transition completes on the
+ *           frame it starts, which is what a machine with no motion does.
+ *   track   letter-spacing on the tracked faces. `body.notrack .t-big
+ *           { letter-spacing: 0 }` is the reference's own switch for it.
+ *
+ * Like the knockout above, NONE of these repaints: the caller damages. */
+static int over_off;
+static int motion_off;
+static int track_off;
+
+int ui_over_get(void)     { return !over_off; }
+int ui_over_set(int on)   { over_off   = on ? 0 : 1; return !over_off; }
+int ui_motion_get(void)   { return !motion_off; }
+int ui_motion_set(int on) { motion_off = on ? 0 : 1; return !motion_off; }
+int ui_track_get(void)    { return !track_off; }
+int ui_track_set(int on)  { track_off  = on ? 0 : 1; return !track_off; }
+
 int ui_knockout_get(void) { return !knock_off; }
 int ui_knockout_set(int on)
 {
@@ -1281,14 +1307,53 @@ void ui_scroll_end(int *off)
          * is always there but sometimes full-height is a bar that means
          * nothing. */
         if (S.content > S.h) {
-            int bw = UI_S1(&theme);
+            /* THE LADDER WAS INVERTED, AND THE TWO INERT DECISIONS SWAPPED.
+             *
+             * The prototype:
+             *   ::-webkit-scrollbar       { width: calc(9px * var(--ui)); }
+             *   ::-webkit-scrollbar-track { background: var(--zd-well); }
+             *   ::-webkit-scrollbar-thumb { background: var(--zd-text-inert);
+             *                               border-radius: var(--zd-r-chip); }
+             *
+             * The track is ZD_WELL, a SUNKEN rung - a groove the thumb runs in.
+             * This drew theme.panel_hi, which is ZD_FLOAT, a RAISED one: the
+             * track stood proud of the surface it was cut into. And the thumb
+             * was theme.text_dim (ZD_TEXT_3, a TEXT rung) where the prototype
+             * uses ZD_TEXT_INERT - which is one of the exactly four uses that
+             * token is sanctioned for, the scrollbar thumb being the first
+             * named. Taken with the rail's readouts, which drew glyphs with
+             * ZD_TEXT_INERT against its own "never a glyph" rule, the two
+             * decisions about that token were precisely swapped: used where
+             * forbidden, unused where licensed.
+             *
+             * Width 9dp, not UI_S1's 4. Ends are ZD_R_CHIP, not a capsule -
+             * bw/2 rounds a 9px bar into a lozenge. */
+            int bw = UI_DP(&theme, 9);
             int bx = S.x + S.w - bw;
             int th2 = S.h * S.h / S.content;
             if (th2 < UI_S6(&theme)) th2 = UI_S6(&theme);
             int ty = S.y + (S.h - th2) * S.off / (S.content - S.h);
-            fb_rrect(bx, S.y, bw, S.h, bw / 2, theme.panel_hi);
-            fb_rrect(bx, ty, bw, th2, bw / 2, theme.text_dim);
+            int rc = UI_DP(&theme, ZD_R_CHIP);
+            fb_rrect(bx, S.y, bw, S.h, 0, theme.surf_well);
+            fb_rrect(bx, ty, bw, th2, rc, theme.surf_7);
         }
+        /* THE TRIM RULE, WHICH NOTHING DREW.
+         *
+         *   .scroll::after { position: sticky; bottom: 0;
+         *                    height: calc(2px * var(--ui));
+         *                    background: var(--zd-lit); }
+         *
+         * The prototype states its purpose where it defines it: without a
+         * struck line closing the viewport, a row cut off at the bottom "read
+         * as a rendering fault rather than as more-below". Every scrolling
+         * pane in this OS chopped its last row against bare ground, so the one
+         * cue that says the list continues was the one thing missing.
+         *
+         * Drawn after the bar so the two agree at the corner, and drawn
+         * whether or not the content overflows - it is the viewport's edge,
+         * not an overflow indicator. */
+        fb_fill_px(S.x, S.y + S.h - UI_DP(&theme, ZD_RULE_H), S.w,
+                   UI_DP(&theme, ZD_RULE_H), theme.lit);
     }
     /* clamp the app's scroll position to what the content turned out to be -
      * it cannot know that before the loop it just ran */

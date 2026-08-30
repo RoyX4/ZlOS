@@ -97,6 +97,7 @@ extern void console_gradient_rgb(int x, int y, int w, int h, unsigned int top, u
 extern void console_text_rgb(int px, int py, const char *s, unsigned int rgb);
 extern int  console_get_px(int x, int y);
 extern void console_shade(int x, int y, int w, int h, int num, int den);
+extern void console_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den);
 extern void console_shadow(int x, int y, int w, int h, int off, int soft);
 extern void console_rrect(int x, int y, int w, int h, int r, unsigned int rgb);
 extern void console_text_aa(int px, int py, const char *s, unsigned int rgb);
@@ -112,6 +113,19 @@ extern void console_present(void);
 extern void console_icon(int px, int py, int n, unsigned int rgb);
 extern void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb);
 extern void console_cube_clip(int x0, int y0, int x1, int y1);
+extern void console_mesh_filled(int kind, int cx, int cy, int size, int angle, unsigned int rgb);
+extern int  console_mesh_verts(int kind);
+extern int  console_mesh_tris(int kind);
+extern void console_img_draw(int kind, int x, int y, int w, int h, int px, unsigned int rgb);
+extern int  console_img_w(int w, int px);
+extern int  console_img_h(int h, int px);
+extern unsigned console_tar_size(void);
+extern unsigned console_tar_cap(void);
+extern unsigned console_tar_commit(void);
+extern int      console_tar_slot(void);
+extern int      console_tar_self_byte(int i);
+extern int      console_tar_members(void);
+extern unsigned console_tar_payload(void);
 extern int  cpu_brand_byte(int i);
 extern void speaker_on(unsigned freq);
 extern void speaker_off(void);
@@ -243,8 +257,20 @@ extern void console_blur_free(void);
 extern void ser_puts(const char *s);
 extern unsigned long long console_vram(void);
 extern int  console_cols(void);
+extern int  wm_thumb(int, int, int, int, int);
 extern int  console_cell_w(void);
 extern int  console_ui_scale(void);
+/* uikit's table widgets. They have existed since the widget set was written and
+ * nothing outside C could reach them, so every table-shaped app in the prototype
+ * - the kernel log, hex, network, disk usage, registers - would have had to
+ * hand-draw its own header and rows. */
+extern int  ui_colhead(int, int, int, const char *, int, int);
+extern void ui_grid(const char *);
+extern void ui_grid_span(int, int, int, int *, int *);
+extern void ui_grid_cell(int, int, int, int, int, const char *, int, unsigned, int, int);
+extern int  ui_colhead_h(void);
+extern int  ui_grid_row(int, int, int, int, int);
+extern int  ui_grid_row_h(void);
 extern int  console_ui_scale_q8(void);
 extern int  console_cell_h(void);
 extern void fb_set_subpixel(int on);
@@ -556,6 +582,12 @@ extern int  wm_win_app(int win);
 extern int  wm_ws(void);
 extern int  wm_set_ws(int n);
 extern int  wm_win_ws(int win);
+extern int  fs_why(void);
+extern unsigned fs_generation(void);
+extern int  smp_ready(void);
+extern int  term_lines(void);
+extern int  term_ch(int line, int col);
+extern int  wm_win_us(int win);   /* per-window app time; wm_frame_us is the whole frame */
 extern int  wm_set_win_ws(int win, int n);
 extern int  wm_set_ws_n(int n);
 extern int  wm_add_tab(int win, int app, const char *title);
@@ -577,6 +609,12 @@ extern unsigned ui_ceil_dn_q4(unsigned rgb);
 extern unsigned ui_ceil_up_q4(unsigned rgb);
 extern int ui_knockout_get(void);
 extern int ui_knockout_set(int on);
+extern int  ui_over_get(void);
+extern int  ui_over_set(int on);
+extern int  ui_motion_get(void);
+extern int  ui_motion_set(int on);
+extern int  ui_track_get(void);
+extern int  ui_track_set(int on);
 extern int ui_focus_bar_dp(void);
 extern int ui_focus_bar_set(int n);
 extern unsigned ui_ref_color(int which);
@@ -803,6 +841,7 @@ extern int  netdev_poll(unsigned char *, int);
 extern int  netdev_mac(int);
 extern int  netdev_link_up(void);
 extern int  netdev_kind(void);
+extern int  netdev_mtu(void);
 extern int  netdev_device(void);
 extern int  netdev_tx_count(void);
 extern int  netdev_rx_count(void);
@@ -929,6 +968,19 @@ extern int  browser_lines(void);
 extern int  browser_runs(void);
 extern int  browser_status(void);
 extern void wm_resize(int win, int w, int h);
+/* The three the overlay menus need. This file declares what it binds rather
+ * than including ui.h, so a new binding needs its extern here too - the build
+ * catches the omission as an implicit declaration, which is what -Werror is
+ * for on a freestanding target where an implicit int return is a real bug. */
+extern unsigned int fb_bits_per_pixel(void);
+extern unsigned int fb_pitch_bytes(void);
+extern void fb_glyph_scaled(int px, int py, char c, int scale, unsigned int fg);
+extern unsigned int intel_refresh_mhz_derived(void);
+extern void wm_move(int win, int x, int y);
+extern void wm_minimize(int win);
+extern int  wm_is_minimized(int win);
+extern int  wm_over_below(int win);
+extern void wm_max_toggle(int win);
 extern void wm_geometry(int win, int *x, int *y, int *w, int *h);
 
 extern void input_poll(void);
@@ -1112,11 +1164,13 @@ extern int  clip_commit(int type);
 extern void clip_clear(void);
 
 extern int  notify_post(const char *text, unsigned ticks);
+extern int  notify_post2(const char *text, const char *body, unsigned ticks);
 extern int  notify_tick(unsigned now);
 extern int  notify_active(void);
 extern int  notify_byte(int i);
 extern int  notify_dismiss(void);
 extern int  notify_queued(void);
+extern void term_hide_boot(void);
 
 static void zl_putc(char c)
 {
@@ -1302,7 +1356,16 @@ static int streq(const char *a, const char *b)
 Value zl_calln(const char *name, int n, ...)
 {
     __builtin_va_list ap;
-    Value a[8];
+    /* ZEROED, because an under-supplied argument used to be STACK GARBAGE.
+     *
+     * Each builtin reads a fixed number of slots - br_click reads a[0..2] - and
+     * nothing checks that the caller supplied them. `br_click(ex, ey)` passed
+     * two and the third came from whatever was left on the stack, so a browser
+     * click was decided by a value that changed with the call path that reached
+     * it. Zeroing does not make a wrong call right, but it makes it the SAME
+     * wrong every time, which is the difference between a bug you can reproduce
+     * and one you cannot. */
+    Value a[8] = { 0 };
     int i;
     __builtin_va_start(ap, n);
     for (i = 0; i < n && i < 8; i++) a[i] = __builtin_va_arg(ap, Value);
@@ -1578,7 +1641,19 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "gpu_ha"))     return zl_num((double)intel_hactive());
     if (streq(name, "gpu_vt"))     return zl_num((double)intel_vtotal());
     if (streq(name, "gpu_va"))     return zl_num((double)intel_vactive());
-    if (streq(name, "gpu_hz"))     return zl_num((double)intel_refresh_mhz());
+    /* THE COUNTED PROBE IS ZERO ON THE MACHINE THIS PROJECT TARGETS.
+     * intel_refresh_mhz() counts frames off intel_frame_count(), and intel.c
+     * states in its own words that firmware leaves PSR enabled on the test
+     * laptop (EDP_PSR_CTL = 0x81F00406) - with self-refresh on the pipe is not
+     * fetching, the counter does not advance, and the function returns 0.
+     * intel_refresh_mhz_derived() computes it from the pixel clock and the
+     * timings instead, which is immune to that and is why it was written.
+     * It was never bound, so the pane went on asking the probe that cannot
+     * answer. Falls back to the counted one if the derivation has no clock. */
+    if (streq(name, "gpu_hz")) {
+        unsigned int d_ = intel_refresh_mhz_derived();
+        return zl_num((double)(d_ ? d_ : intel_refresh_mhz()));
+    }
     if (streq(name, "gpu_clk"))    return zl_num((double)intel_pixel_clock_khz());
     if (streq(name, "edid_read"))  return zl_num((double)intel_read_edid());
     if (streq(name, "edid_pin"))   return zl_num((double)intel_edid_pin());
@@ -1639,7 +1714,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "term_complete")) {
         term_complete((int)a[0].num, (int)a[1].num); return zl_nil();
     }
+    if (streq(name, "term_hide_boot")) { term_hide_boot(); return zl_nil(); }
     if (streq(name, "term_clear")) { term_clear(); return zl_nil(); }
+    if (streq(name, "term_lines")) return zl_num((double)term_lines());
+    if (streq(name, "term_ch"))    return zl_num((double)term_ch((int)a[0].num, (int)a[1].num));
     if (streq(name, "term_draw"))  { term_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,
                                                (unsigned int)(unsigned long long)a[4].num,
                                                (unsigned int)(unsigned long long)a[5].num,
@@ -1713,6 +1791,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_cy"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)y); }
     if (streq(name, "wm_raise"))   { wm_raise((int)a[0].num); return zl_nil(); }
     if (streq(name, "wm_n"))       return zl_num((double)wm_count());
+    if (streq(name, "wm_appus"))   return zl_num((double)wm_win_us((int)a[0].num));
     /* the window list, for a taskbar: which window is i-th from the back, and
      * which app is in it. A taskbar cannot exist without these. */
     if (streq(name, "wm_zat"))     return zl_num((double)wm_zorder_at((int)a[0].num));
@@ -1739,6 +1818,9 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "wm_cw"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)w); }
     if (streq(name, "wm_ch"))      { int x,y,w,h; wm_client((int)a[0].num,&x,&y,&w,&h); return zl_num((double)h); }
     if (streq(name, "wm_dmg"))     { wm_invalidate_client((int)a[0].num); return zl_nil(); }
+    if (streq(name, "wm_thumb"))   { return zl_num((double)wm_thumb((int)a[0].num,
+                                        (int)a[1].num, (int)a[2].num,
+                                        (int)a[3].num, (int)a[4].num)); }
     if (streq(name, "wm_cdmg"))    { wm_invalidate_client_rect((int)a[0].num,
                                             (int)a[1].num,(int)a[2].num,
                                             (int)a[3].num,(int)a[4].num); return zl_nil(); }
@@ -1758,6 +1840,12 @@ Value zl_calln(const char *name, int n, ...)
      * state asked for, because ui_focus_bar_set clamps - a caller that echoed
      * its own argument back into its slider would draw a thumb past the end. */
     if (streq(name, "ui_knock"))   return zl_num((double)ui_knockout_set((int)a[0].num));
+    if (streq(name, "ui_over"))    return zl_num((double)ui_over_set((int)a[0].num));
+    if (streq(name, "ui_over_on")) return zl_num((double)ui_over_get());
+    if (streq(name, "ui_motion"))  return zl_num((double)ui_motion_set((int)a[0].num));
+    if (streq(name, "ui_motion_on")) return zl_num((double)ui_motion_get());
+    if (streq(name, "ui_track"))   return zl_num((double)ui_track_set((int)a[0].num));
+    if (streq(name, "ui_track_on")) return zl_num((double)ui_track_get());
     if (streq(name, "ui_knock_on"))return zl_num((double)ui_knockout_get());
     if (streq(name, "ui_fbar"))    return zl_num((double)ui_focus_bar_set((int)a[0].num));
     if (streq(name, "ui_fbar_dp")) return zl_num((double)ui_focus_bar_dp());
@@ -1791,8 +1879,116 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "ui_ink"))     return zl_num((double)zl_design_ink((int)a[0].num));
     if (streq(name, "ui_ink_on"))  return zl_num((double)ui_ink_on((unsigned)(unsigned long long)a[0].num));
     if (streq(name, "ui_items"))   { if (a[0].type==V_STR) return zl_num((double)ui_items_count(a[0].str)); return zl_num(0.0); }
+    /* SUBSTRING, CASE-INSENSITIVE, against a byte buffer in RAM.
+     *
+     * The command palette needs to filter its rows by what the user has typed,
+     * and zl has string LITERALS but no string VALUES - it can pass a label to
+     * a native and it cannot look inside one. So the comparison happens here:
+     * the haystack is the label, the needle is `len` bytes at `addr`, which is
+     * where the palette accumulates keystrokes.
+     *
+     * An empty needle matches everything, which is what an empty query means. */
+    if (streq(name, "str_has")) {
+        if (a[0].type != V_STR || !a[0].str) return zl_num(0);
+        const char *h = a[0].str;
+        /* zl_uptr, NOT `unsigned long`. The EFI target is
+         * x86_64-unknown-windows, which is LLP64: `unsigned long` is 4 bytes
+         * there and the cast is a hard -Werror=int-to-pointer-cast failure, so
+         * buildefi.sh - zlOS as its own UEFI application, the ThinkPad's boot
+         * route - could not produce an object at all. Every other raw-address
+         * builtin in this file already uses zl_uptr and the typedef's own
+         * comment says why. This one reached for `unsigned long` and my build
+         * loop only ran the 32-bit build.sh, where it is 8 bytes and harmless. */
+        const unsigned char *n = (const unsigned char *)(zl_uptr)a[1].num;
+        int nl = (int)a[2].num;
+        if (nl <= 0) return zl_num(1);
+        for (int i = 0; h[i]; i++) {
+            int k = 0;
+            while (k < nl) {
+                char hc = h[i + k];
+                if (!hc) break;
+                char lc = (hc >= 'A' && hc <= 'Z') ? (char)(hc + 32) : hc;
+                char nc = (char)n[k];
+                if (nc >= 'A' && nc <= 'Z') nc = (char)(nc + 32);
+                if (lc != nc) break;
+                k++;
+            }
+            if (k == nl) return zl_num(1);
+        }
+        return zl_num(0);
+    }
     if (streq(name, "ui_tw"))      { if (a[0].type==V_STR) return zl_num((double)ui_text_w(a[0].str,(int)a[1].num,(int)a[2].num)); return zl_num(0.0); }
     if (streq(name, "ui_th"))      return zl_num((double)ui_text_h((int)a[0].num));
+    /* THE TABLE WIDGETS, which uikit has had all along and zl could not reach.
+     * R.log, R.hex, R.net, R.disk and R.regs in the prototype are all TBL() -
+     * a column header over grid rows - so every one of them needed these, and
+     * without them each app would have hand-drawn its own header and rows. */
+    if (streq(name, "ui_colhead")) { if (a[0].type == V_STR) return zl_num(0.0);
+                                     if (a[3].type == V_STR)
+                                         return zl_num((double)ui_colhead((int)a[0].num,
+                                             (int)a[1].num, (int)a[2].num, a[3].str,
+                                             (int)a[4].num, (int)a[5].num));
+                                     return zl_num(0.0); }
+    if (streq(name, "ui_colhead_h")) return zl_num((double)ui_colhead_h());
+    /* THE COLUMN TRACKS, which ui_colhead and ui_grid_cell both read. Without
+     * this ui_colhead iterates a column count of zero and draws no labels at
+     * all - the header band appears and its text does not, which is exactly
+     * what the kernel log did on its first render. */
+    /* WHERE A COLUMN STARTS AND HOW WIDE IT IS. ui_grid_cell places text inside
+     * a track, but the reference's level column is a DOT and then a word, and a
+     * dot is not text - it needs the track's own left edge. Without these the
+     * only way to place one is to re-derive the track arithmetic in zl, which
+     * would be a second copy of ui_grid_span. */
+    if (streq(name, "ui_gspanx"))  { int cx = 0, cw = 0;
+                                     ui_grid_span((int)a[0].num, (int)a[1].num,
+                                                  (int)a[2].num, &cx, &cw);
+                                     return zl_num((double)cx); }
+    if (streq(name, "ui_gspanw"))  { int cx = 0, cw = 0;
+                                     ui_grid_span((int)a[0].num, (int)a[1].num,
+                                                  (int)a[2].num, &cx, &cw);
+                                     return zl_num((double)cw); }
+    if (streq(name, "ui_grid"))    { if (a[0].type == V_STR) ui_grid(a[0].str);
+                                     return zl_nil(); }
+    /* THE CELL, IN EIGHT ARGUMENTS. A zl native gets Value[8] and
+     * ui_grid_cell takes ten, so align, size and the mono flag are packed into
+     * one `mode`: size in the low byte, bit 8 right-aligns, bit 9 selects the
+     * mono face. That is not a shortcut around the limit - a table cell only
+     * ever varies in those three ways, and passing them separately spent three
+     * of the eight slots on booleans.
+     *
+     * zl has no way to turn a number into a string, so the numeric variant
+     * carries the same zl_itoa bridge ui_txtn uses - and a table of figures is
+     * most of what these apps are. */
+#define ZL_CELL_ALIGN_R  0x100
+#define ZL_CELL_MONO     0x200
+    if (streq(name, "ui_gcelln"))  { int mode = (int)a[7].num;
+                                     ui_grid_cell((int)a[0].num, (int)a[1].num,
+                                         (int)a[2].num, (int)a[3].num, (int)a[4].num,
+                                         zl_itoa((int)a[5].num),
+                                         (mode & ZL_CELL_ALIGN_R) ? 1 : 0,
+                                         (unsigned)(unsigned long long)a[6].num,
+                                         mode & 0xFF,
+                                         (mode & ZL_CELL_MONO) ? 1 : 0);
+                                     return zl_nil(); }
+    if (streq(name, "ui_gcell"))   { int mode = (int)a[7].num;
+                                     if (a[5].type == V_STR)
+                                         ui_grid_cell((int)a[0].num, (int)a[1].num,
+                                             (int)a[2].num, (int)a[3].num, (int)a[4].num,
+                                             a[5].str,
+                                             (mode & ZL_CELL_ALIGN_R) ? 1 : 0,
+                                             (unsigned)(unsigned long long)a[6].num,
+                                             mode & 0xFF,
+                                             (mode & ZL_CELL_MONO) ? 1 : 0);
+                                     return zl_nil(); }
+    if (streq(name, "ui_grid"))    { if (a[0].type == V_STR) ui_grid(a[0].str);
+                                     return zl_nil(); }
+    /* The numeric cell. zl has no way to turn a number into a string, so the
+     * same zl_itoa bridge ui_txtn uses serves here - and a table of figures is
+     * most of what these apps are. */
+    if (streq(name, "ui_growh"))   return zl_num((double)ui_grid_row_h());
+    if (streq(name, "ui_grow"))    return zl_num((double)ui_grid_row((int)a[0].num,
+                                       (int)a[1].num, (int)a[2].num,
+                                       (int)a[3].num, (int)a[4].num));
     if (streq(name, "ui_txt"))     { if (a[2].type==V_STR) ui_text((int)a[0].num,(int)a[1].num,a[2].str,(unsigned)(unsigned long long)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
     /* The number forms of ui_text/ui_text_w. zl cannot build "412" - there are
      * no runtime strings - and label_num/num_aa draw unconditionally, which is
@@ -1995,6 +2191,10 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "net_mac"))    return zl_num((double)netdev_mac((int)a[0].num));
     if (streq(name, "net_link"))   return zl_num((double)netdev_link_up());
     if (streq(name, "net_kind"))   return zl_num((double)netdev_kind());
+    /* THE FRAME CEILING, READ. s3nw_mtu returned the literal 1500 for all three
+     * drivers; virtio's is 2036 (BUF_SZ - HDR_LEN) and e1000's is its 2048
+     * descriptor buffer. 0 means the selected driver does not report one. */
+    if (streq(name, "net_mtu"))    return zl_num((double)netdev_mtu());
     if (streq(name, "net_devid"))  return zl_num((double)netdev_device());
     if (streq(name, "net_tx"))     return zl_num((double)netdev_tx_count());
     if (streq(name, "net_rx"))     return zl_num((double)netdev_rx_count());
@@ -2048,6 +2248,21 @@ Value zl_calln(const char *name, int n, ...)
      * is the first thing that needs it: reflow is only observable if the
      * window can change width while the machine is running. */
     if (streq(name, "wm_size"))    { wm_resize((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    /* THE OVERLAY MENUS NEEDED THESE THREE. wm_move, wm_minimize and the
+     * maximise toggle all existed in wm.c and none was reachable from zl, so
+     * the window menu's "minimise", "maximise" and "tile onto the module" rows
+     * had nothing to call even once the pointer could reach them. wm_max goes
+     * through wm.c's own wrapper rather than reconstructing its test here:
+     * SK_UP, SK_DOWN and SNAP_NONE are private to that file, and copying them
+     * across the boundary is how the two paths would come to disagree. */
+    if (streq(name, "wm_move"))    { wm_move((int)a[0].num,(int)a[1].num,(int)a[2].num); return zl_nil(); }
+    /* desk_tile's comment promised to leave minimised windows alone and had no
+     * way to ask: wm_is_minimized existed in wm.c and was declared in ui.h, but
+     * was never bound, so the zl side could not tell one from an open window. */
+    if (streq(name, "wm_min_p"))   return zl_num((double)wm_is_minimized((int)a[0].num));
+    if (streq(name, "wm_over_p"))  return zl_num((double)wm_over_below((int)a[0].num));
+    if (streq(name, "wm_min"))     { wm_minimize((int)a[0].num); return zl_num(1); }
+    if (streq(name, "wm_max"))     { wm_max_toggle((int)a[0].num); return zl_num(1); }
     if (streq(name, "wm_w"))       { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gw); }
     if (streq(name, "wm_hh"))      { int gx,gy,gw,gh; wm_geometry((int)a[0].num,&gx,&gy,&gw,&gh); return zl_num((double)gh); }
     if (streq(name, "in_poll"))    { input_poll(); return zl_nil(); }
@@ -2115,6 +2330,7 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "diag_drop"))  return zl_num((double)zllog_dropped());
     if (streq(name, "diag_err"))   return zl_num((double)zllog_last_error());
     if (streq(name, "smp_go"))     return zl_num((double)smp_start());
+    if (streq(name, "smp_ready"))  return zl_num((double)smp_ready());
     if (streq(name, "smp_n"))      return zl_num((double)smp_online());
     if (streq(name, "smp_total"))  return zl_num((double)smp_cpu_count());
     if (streq(name, "smp_last"))   return zl_num((double)smp_last_id());
@@ -2205,6 +2421,21 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "intel_pipe"))  return zl_num((double)intel_pipe_enabled());
     if (streq(name, "intel_surf"))  return zl_num((double)intel_surface());
     if (streq(name, "loader"))     return zl_num((double)console_loader());
+    /* THE MODE'S REAL DEPTH. Two panes printed the literal "32" beside px_w
+     * and px_h, which ARE read - so a machine the firmware handed 24-bpp packed
+     * or 16-bpp 565 would have shown two measured numbers and one invented one
+     * in the same sentence, and the invented one is the one that would have
+     * mattered. fb_bpp is assigned in fb_setup from whatever the bootloader
+     * reported; all three entry points (multiboot, UEFI GOP, raw_boot VBE)
+     * pass the firmware's own value through. */
+    if (streq(name, "fb_bpp"))     return zl_num((double)fb_bits_per_pixel());
+    /* STRIDE IS NOT WIDTH TIMES BYTES-PER-PIXEL. fb.c keeps fb_pitch as its own
+     * field - bytes per scanline, not pixels - taken from a separate argument
+     * to fb_setup, because firmware routinely pads scanlines for alignment.
+     * Every pixel write in fb.c addresses through fb_base + y * fb_pitch, so a
+     * pane that computed it as w * 4 was printing a number the driver itself
+     * does not use. */
+    if (streq(name, "fb_pitch"))   return zl_num((double)fb_pitch_bytes());
     if (streq(name, "px_w"))       return zl_num((double)console_pxw());
     if (streq(name, "px_h"))       return zl_num((double)console_pxh());
     if (streq(name, "fill_rect")) { console_fill((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned char)(unsigned long long)a[4].num); return zl_nil(); }
@@ -2222,12 +2453,20 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "text_rgb"))  { if (a[2].type==V_STR) console_text_rgb((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "get_px"))    return zl_num((double)console_get_px((int)a[0].num,(int)a[1].num));
     if (streq(name, "shade"))     { console_shade((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
+    if (streq(name, "mix"))       { console_mix((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned)a[4].num,(int)a[5].num,(int)a[6].num); return zl_nil(); }
     if (streq(name, "shadow"))    { console_shadow((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num); return zl_nil(); }
     if (streq(name, "rrect"))     { console_rrect((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num); return zl_nil(); }
     if (streq(name, "text_aa"))   { if (a[2].type==V_STR) console_text_aa((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "text_big"))  { if (a[2].type==V_STR) console_text_aa2x((int)a[0].num,(int)a[1].num,a[2].str,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "num_aa"))    { console_num_aa((int)a[0].num,(int)a[1].num,(long)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
     if (streq(name, "char_aa"))   { console_char_aa((int)a[0].num,(int)a[1].num,(int)a[2].num,(unsigned int)(unsigned long long)a[3].num); return zl_nil(); }
+    /* ONE GLYPH AT A CHOSEN SCALE. char_aa draws at the console cell and
+     * nothing else, and ui_txt needs a STRING - which zl cannot build from a
+     * byte value, having string literals and no string values. So the Font
+     * Atlas pane had no way to draw its own atlas, and its canvas was a flat
+     * fill with a zoom picker over it that scaled nothing. This is the missing
+     * primitive; fb_glyph_scaled has existed in fb.c all along. */
+    if (streq(name, "char_sc"))   { fb_glyph_scaled((int)a[0].num,(int)a[1].num,(char)(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "text_box"))  { console_set_text_box((int)a[0].num,(int)a[1].num); return zl_nil(); }
     if (streq(name, "cube"))      { console_cube((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "mpoint"))    { console_pointer_show((int)a[0].num,(int)a[1].num); return zl_nil(); }
@@ -2239,6 +2478,29 @@ Value zl_calln(const char *name, int n, ...)
      * no snapshot. See the note where they lived in fb.c. */
     if (streq(name, "cube3d"))    { console_cube_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "cube_clip")) { console_cube_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    /* mesh3d shares cube_clip - one clip box, one rasteriser. mesh_verts and
+     * mesh_tris are what turn the Renderer's caption from a written figure into
+     * a read one; they walk the same table mesh3d draws from. */
+    if (streq(name, "mesh3d"))    { console_mesh_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num); return zl_nil(); }
+    if (streq(name, "mesh_verts")) return zl_num((double)console_mesh_verts((int)a[0].num));
+    if (streq(name, "mesh_tris"))  return zl_num((double)console_mesh_tris((int)a[0].num));
+    /* the Image Viewer's three computed pictures, and the source grid it
+     * reports - img_w/img_h are the two figures the stat strip prints, so the
+     * caption is a reading of the same divide the draw used. */
+    if (streq(name, "img_draw"))   { console_img_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num,(unsigned int)(unsigned long long)a[6].num); return zl_nil(); }
+    if (streq(name, "img_w"))      return zl_num((double)console_img_w((int)a[0].num,(int)a[1].num));
+    if (streq(name, "img_h"))      return zl_num((double)console_img_h((int)a[0].num,(int)a[1].num));
+    /* THE ARCHIVE. tar_need is what the volume would take, tar_cap the ceiling
+     * the staging buffer imposes - the pane asks both BEFORE it commits, so a
+     * refusal can print the two figures instead of the word "failed".
+     * tar_make returns the bytes actually staged, 0 on refusal. */
+    if (streq(name, "tar_need"))   return zl_num((double)console_tar_size());
+    if (streq(name, "tar_cap"))    return zl_num((double)console_tar_cap());
+    if (streq(name, "tar_make"))   return zl_num((double)console_tar_commit());
+    if (streq(name, "tar_slot"))   return zl_num((double)console_tar_slot());
+    if (streq(name, "tar_self_ch"))return zl_num((double)console_tar_self_byte((int)a[0].num));
+    if (streq(name, "tar_members"))return zl_num((double)console_tar_members());
+    if (streq(name, "tar_pay"))    return zl_num((double)console_tar_payload());
     if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));
     if (streq(name, "emit"))      { zl_putc((char)(int)a[0].num); return zl_nil(); }
     if (streq(name, "sc"))        { console_putc((char)(int)a[0].num); return zl_nil(); }
@@ -2373,6 +2635,8 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "fs_format"))  return zl_num((double)fs_mkfs());
     if (streq(name, "fs_mount"))   return zl_num((double)fs_mount());
     if (streq(name, "fs_ok"))      return zl_num((double)fs_mounted());
+    if (streq(name, "fs_why"))    return zl_num((double)fs_why());
+    if (streq(name, "fs_gen"))    return zl_num((double)fs_generation());
     if (streq(name, "fs_n"))       return zl_num((double)fs_count());
     if (streq(name, "fs_max"))     return zl_num((double)fs_maxfiles());
     if (streq(name, "fs_inuse"))   return zl_num((double)fs_used((int)a[0].num));
@@ -2444,6 +2708,15 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "note_say")) {
         if (a[0].type != V_STR) return zl_num(0);
         return zl_num((double)notify_post(a[0].str, (unsigned)(n > 1 ? a[1].num : 0)));
+    }
+    /* TITLE AND BODY. Every one of the sixteen toasts the prototype raises has
+     * both - the title says what happened, the body says the measurement or
+     * the reason - and note_say could only ever carry the first. Two literals,
+     * same rule as above: check the type, take the pointer, never store it. */
+    if (streq(name, "note_say2")) {
+        if (a[0].type != V_STR || a[1].type != V_STR) return zl_num(0);
+        return zl_num((double)notify_post2(a[0].str, a[1].str,
+                                           (unsigned)(n > 2 ? a[2].num : 0)));
     }
 #endif
 

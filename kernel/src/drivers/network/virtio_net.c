@@ -129,6 +129,13 @@ static void mmio_w8(uptr a, u8 v)   { *(volatile u8 *)a = v; }
 #define HDR_LEN    12               /* virtio_net_hdr_v1. NOT 10 - see above */
 #define FRAME_MAX  (BUF_SZ - HDR_LEN)
 
+/* THE CEILING, READABLE. The Network pane printed the literal 1500 for every
+ * driver under a comment calling it "virtio-net's own frame ceiling". It is
+ * 2036 here - BUF_SZ less the 12-byte header - and :488 rejects exactly
+ * `len > FRAME_MAX`. A figure the pane could not have disagreed with, and
+ * wrong as well. */
+int virtio_net_mtu(void) { return FRAME_MAX; }
+
 #define RX_DESC    (NET_BASE + 0x00000u)
 #define RX_AVAIL   (NET_BASE + 0x01000u)
 #define RX_USED    (NET_BASE + 0x02000u)

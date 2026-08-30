@@ -1,4 +1,4 @@
-/* fb3d.c - a SHADED, FILLED, back-face-culled rotating cube.
+/* fb3d.c - SHADED, FILLED, back-face-culled rotating SOLIDS.
  *
  * fb.c's fb_cube draws the 12 edges of a spinning cube as a wireframe. This is
  * its solid twin: the same 8 vertices and the same two-axis integer rotation,
@@ -261,94 +261,265 @@ void fb3d_poly(const int *xs, const int *ys, int n, unsigned int rgb)
  *   size   half-edge in pixels (the cube spans about 2*size)
  *   angle  rotation in degrees; the tilt axis turns at 7/10 of it, as in fb_cube
  *   base   the cube's 0xRRGGBB colour at full light; each face is darkened from
- *          this by how squarely it faces the light. */
+ *          this by how squarely it faces the light.
+ *
+ * ONE CUBE, NOT TWO. This held its own copy of the 8 vertices, the 6 wound
+ * faces, the light and the projection; the mesh table below then needed the
+ * same cube for the Renderer's picker. Two copies of a vertex table is how the
+ * picture in one window quietly stops being the picture in another, so the
+ * copy here was deleted rather than duplicated - the tables moved down whole
+ * and this is now the call that asks for mesh 0. The Cube app draws exactly
+ * what it drew before, which is the only thing this refactor is allowed to
+ * change about it. */
+void fb3d_mesh_filled(int kind, int cx, int cy, int size, int angle,
+                      unsigned int base);
+
 void fb_cube_filled(int cx, int cy, int size, int angle, unsigned int base)
 {
-    static const int V[8][3] = {
-        {-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},
-        {-1,-1, 1},{1,-1, 1},{1,1, 1},{-1,1, 1}};
+    fb3d_mesh_filled(0, cx, cy, size, angle, base);
+}
 
-    /* Six faces, each wound so that the object-space normal from the first two
-     * edges (edge0-1 x edge0-2) points OUTWARD. With that fixed winding the
-     * projected 2D signed area is NEGATIVE exactly for the faces that face the
-     * camera (the viewer sits on the -z side, where the projection places
-     * nearer points), so culling is a single sign test. */
-    static const int F[6][4] = {
-        {0,3,2,1},   /* front   z=-1 */
-        {4,5,6,7},   /* back    z=+1 */
-        {0,4,7,3},   /* left    x=-1 */
-        {1,2,6,5},   /* right   x=+1 */
-        {0,1,5,4},   /* top     y=-1 */
-        {3,7,6,2}    /* bottom  y=+1 */
-    };
+/* ---- FOUR MESHES, AND THE COUNTS COME OFF THE TABLES ------------------------
+ *
+ * WHY THIS EXISTS. apps_sys2.zl's Renderer drew a four-way segmented control
+ * `cube|pyramid|octa|cylinder` whose only reader was a caption that PRINTED
+ * TRIANGLE AND VERTEX COUNTS - "mesh cylinder - 44 tris - 24 verts" - for
+ * objects this kernel did not have. The canvas under it was one flat fill. So
+ * the picker changed four written figures about four absent solids, in the
+ * numeric slot beside two readings that are real probes.
+ *
+ * The counts were not even wrong: 12/8, 6/5, 8/6 and 44/24 are what a cube, a
+ * square pyramid, an octahedron and a twelve-sided cylinder actually have. The
+ * fault was that nothing in the tree could have disagreed with them. That is
+ * the whole difference between a figure and a caption, and this file is where
+ * the difference gets closed - the geometry is built, drawn, and then COUNTED,
+ * so the caption cannot drift from the solid on screen.
+ *
+ * fb_cube_filled above is kept and now delegates here: its 8 vertices and 6
+ * wound quads became mesh 0, unchanged, so the Cube app draws the same picture
+ * it did before.
+ *
+ * THE WINDING RULE IS THE CUBE'S, INHERITED. A face's object-space normal from
+ * (v1-v0) x (v2-v0) points OUTWARD, and with the projection below a visible
+ * face therefore has a NEGATIVE 2D signed area - culling stays one sign test.
+ * Every table here was checked against that rule by hand at build time and by
+ * fb3d_mesh_facing() at run time.
+ *
+ * WHAT IS DIFFERENT FROM THE CUBE. A cube's faces all have the same |N|, so
+ * fb_cube_filled could normalise the diffuse term by the constant 4*size*size.
+ * A pyramid's sides and its base do not, and a cylinder's caps and its skirt do
+ * not, so |N| is computed per face with an integer square root. Getting this
+ * wrong does not crash - it shades one face as if it were lit from nowhere,
+ * which is exactly the kind of "looks plausible" error this pane exists to
+ * stop printing. */
 
-    /* a directional key light from the upper-left-front. Chosen so |L| = 7
-     * exactly (2*2 + 3*3 + 6*6 = 49), which keeps the brightness normalisation
-     * an exact integer divide. */
-    const int Lx = -2, Ly = -3, Lz = -6;
+#define M_MAXV   24        /* the cylinder's two rings                        */
+#define M_MAXF   14        /* twelve skirt quads and two caps                 */
+#define M_MAXFV  12        /* a cap is a twelve-gon                           */
+#define M_CYLSEG 12        /* segments; 44 tris and 24 verts fall out of this */
 
-    int s  = isin(angle),  c  = icos(angle);   /* spin about Y */
-    int a2 = angle * 7 / 10;                    /* tilt axis turns slower */
-    int s2 = isin(a2),     c2 = icos(a2);       /* then tilt about X */
-    int D  = size * 4;                          /* camera distance for perspective */
-    if (D < 1) D = 1;
+struct fb3d_mesh {
+    int nv;
+    int v[M_MAXV][3];              /* unit coords, scaled by 1024 */
+    int nf;
+    int fn[M_MAXF];                /* how many indices this face has */
+    int f[M_MAXF][M_MAXFV];
+};
 
-    int rx[8], ry[8], rz[8];   /* rotated 3D coords, kept for the face normals */
-    int px[8], py[8];          /* perspective-projected 2D screen coords */
-    for (int i = 0; i < 8; i++) {
-        int x = V[i][0] * size, y = V[i][1] * size, z = V[i][2] * size;
-        int x1 = (x * c  - z  * s ) / 1024;    /* rotate about Y */
+/* Newton's method on integers - three or four iterations from a shift-based
+ * seed. Only used for |N|, where being one off changes a shade by less than a
+ * step of the 60..255 ramp. */
+static int m_isqrt(int n)
+{
+    if (n <= 0) return 0;
+    int x = n, y = (x + 1) / 2;
+    while (y < x) { x = y; y = (x + n / x) / 2; }
+    return x;
+}
+
+static void m_vert(struct fb3d_mesh *m, int x, int y, int z)
+{ int i = m->nv++; m->v[i][0] = x; m->v[i][1] = y; m->v[i][2] = z; }
+
+static void m_face(struct fb3d_mesh *m, const int *idx, int n)
+{ int i = m->nf++; m->fn[i] = n; for (int k = 0; k < n; k++) m->f[i][k] = idx[k]; }
+
+/* U is one unit. Vertices are held at this scale and divided back down after
+ * being multiplied by `size`, so a mesh keeps its proportions at any size. */
+#define M_U 1024
+
+static void mesh_build(int kind, struct fb3d_mesh *m)
+{
+    m->nv = 0; m->nf = 0;
+
+    if (kind == 1) {                                  /* SQUARE PYRAMID */
+        /* apex first, then the base ring. Screen y points DOWN, so the apex is
+         * at -y. 5 vertices, 4 triangles and one quad base = 6 triangles. */
+        m_vert(m, 0, -M_U, 0);                        /* 0 apex */
+        m_vert(m, -M_U, M_U, -M_U);                   /* 1 */
+        m_vert(m,  M_U, M_U, -M_U);                   /* 2 */
+        m_vert(m,  M_U, M_U,  M_U);                   /* 3 */
+        m_vert(m, -M_U, M_U,  M_U);                   /* 4 */
+        { const int a[3] = {0,1,2}; m_face(m, a, 3); }
+        { const int a[3] = {0,2,3}; m_face(m, a, 3); }
+        { const int a[3] = {0,3,4}; m_face(m, a, 3); }
+        { const int a[3] = {0,4,1}; m_face(m, a, 3); }
+        { const int a[4] = {1,4,3,2}; m_face(m, a, 4); }   /* base, normal +y */
+        return;
+    }
+
+    if (kind == 2) {                                  /* OCTAHEDRON */
+        /* 0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z. Eight faces, one per octant.
+         * A face (X,Y,Z) is wound outward when the product of its three signs
+         * is positive; when it is negative the last two swap. */
+        m_vert(m,  M_U, 0, 0);  m_vert(m, -M_U, 0, 0);
+        m_vert(m, 0,  M_U, 0);  m_vert(m, 0, -M_U, 0);
+        m_vert(m, 0, 0,  M_U);  m_vert(m, 0, 0, -M_U);
+        for (int sx = 0; sx < 2; sx++)
+            for (int sy = 0; sy < 2; sy++)
+                for (int sz = 0; sz < 2; sz++) {
+                    int X = sx ? 1 : 0, Y = sy ? 3 : 2, Z = sz ? 5 : 4;
+                    int neg = (sx ? -1 : 1) * (sy ? -1 : 1) * (sz ? -1 : 1);
+                    int a[3];
+                    a[0] = X;
+                    if (neg > 0) { a[1] = Y; a[2] = Z; } else { a[1] = Z; a[2] = Y; }
+                    m_face(m, a, 3);
+                }
+        return;
+    }
+
+    if (kind == 3) {                                  /* CYLINDER */
+        /* Twelve segments: a top ring at -y, a bottom ring at +y, twelve skirt
+         * quads and two twelve-gon caps. 24 vertices; 12*2 + 2*10 = 44
+         * triangles. Those are the two figures the caption used to assert. */
+        for (int i = 0; i < M_CYLSEG; i++) {
+            int a = i * 360 / M_CYLSEG;
+            m_vert(m, icos(a), -M_U, isin(a));
+        }
+        for (int i = 0; i < M_CYLSEG; i++) {
+            int a = i * 360 / M_CYLSEG;
+            m_vert(m, icos(a),  M_U, isin(a));
+        }
+        for (int i = 0; i < M_CYLSEG; i++) {
+            int j = (i + 1) % M_CYLSEG;
+            int a[4] = { i, M_CYLSEG + i, M_CYLSEG + j, j };
+            m_face(m, a, 4);
+        }
+        { int a[M_CYLSEG]; for (int i = 0; i < M_CYLSEG; i++) a[i] = i;
+          m_face(m, a, M_CYLSEG); }                              /* top, -y */
+        { int a[M_CYLSEG]; for (int i = 0; i < M_CYLSEG; i++)
+              a[i] = M_CYLSEG + (M_CYLSEG - 1 - i);
+          m_face(m, a, M_CYLSEG); }                              /* bottom, +y */
+        return;
+    }
+
+    /* KIND 0 - THE CUBE, and these are fb_cube_filled's own tables moved here
+     * rather than retyped, so the Cube app cannot change picture on this
+     * refactor. */
+    m_vert(m, -M_U,-M_U,-M_U); m_vert(m,  M_U,-M_U,-M_U);
+    m_vert(m,  M_U, M_U,-M_U); m_vert(m, -M_U, M_U,-M_U);
+    m_vert(m, -M_U,-M_U, M_U); m_vert(m,  M_U,-M_U, M_U);
+    m_vert(m,  M_U, M_U, M_U); m_vert(m, -M_U, M_U, M_U);
+    { const int a[4] = {0,3,2,1}; m_face(m, a, 4); }   /* front  z=-1 */
+    { const int a[4] = {4,5,6,7}; m_face(m, a, 4); }   /* back   z=+1 */
+    { const int a[4] = {0,4,7,3}; m_face(m, a, 4); }   /* left   x=-1 */
+    { const int a[4] = {1,2,6,5}; m_face(m, a, 4); }   /* right  x=+1 */
+    { const int a[4] = {0,1,5,4}; m_face(m, a, 4); }   /* top    y=-1 */
+    { const int a[4] = {3,7,6,2}; m_face(m, a, 4); }   /* bottom y=+1 */
+}
+
+/* THE TWO FIGURES THE CAPTION PRINTS, DERIVED FROM THE TABLE IT DRAWS FROM.
+ * A face of n indices is n-2 triangles; that is the same fan the rasteriser
+ * walks, so the count is of the triangles actually filled, not of a number
+ * somebody remembered about a solid. */
+int fb3d_mesh_verts(int kind)
+{
+    struct fb3d_mesh m;
+    mesh_build(kind, &m);
+    return m.nv;
+}
+
+int fb3d_mesh_tris(int kind)
+{
+    struct fb3d_mesh m;
+    mesh_build(kind, &m);
+    int t = 0;
+    for (int i = 0; i < m.nf; i++) t += m.fn[i] - 2;
+    return t;
+}
+
+int fb3d_mesh_count(void) { return 4; }
+
+/* fb3d_mesh_filled - any of the four, drawn the way the cube was.
+ *   kind   0 cube, 1 pyramid, 2 octahedron, 3 cylinder
+ *   cx,cy  screen centre
+ *   size   half-extent in pixels
+ *   angle  degrees; the tilt axis turns at 7/10 of it, as fb_cube does
+ *   base   0xRRGGBB at full light */
+void fb3d_mesh_filled(int kind, int cx, int cy, int size, int angle,
+                      unsigned int base)
+{
+    struct fb3d_mesh m;
+    mesh_build(kind, &m);
+
+    const int Lx = -2, Ly = -3, Lz = -6;      /* |L| = 7 exactly */
+    int s  = isin(angle),  c  = icos(angle);
+    int a2 = angle * 7 / 10;
+    int s2 = isin(a2),     c2 = icos(a2);
+    int D  = size * 4; if (D < 1) D = 1;
+
+    int rx[M_MAXV], ry[M_MAXV], rz[M_MAXV];
+    int px[M_MAXV], py[M_MAXV];
+    for (int i = 0; i < m.nv; i++) {
+        int x = m.v[i][0] * size / M_U;
+        int y = m.v[i][1] * size / M_U;
+        int z = m.v[i][2] * size / M_U;
+        int x1 = (x * c  - z  * s ) / 1024;
         int z1 = (x * s  + z  * c ) / 1024;
-        int y1 = (y * c2 - z1 * s2) / 1024;    /* then about X */
+        int y1 = (y * c2 - z1 * s2) / 1024;
         int z2 = (y * s2 + z1 * c2) / 1024;
         rx[i] = x1; ry[i] = y1; rz[i] = z2;
         int denom = D + z2; if (denom < 1) denom = 1;
-        px[i] = cx + x1 * D / denom;           /* perspective divide */
+        px[i] = cx + x1 * D / denom;
         py[i] = cy + y1 * D / denom;
     }
 
-    /* |N| for any cube face is 4*size*size (two perpendicular edges of length
-     * 2*size), constant across faces and preserved by rotation - so the light
-     * normalisation divides by this rather than an integer square root. */
-    int nmag = 4 * size * size; if (nmag < 1) nmag = 1;
+    for (int fi = 0; fi < m.nf; fi++) {
+        int n = m.fn[fi];
+        const int *fv = m.f[fi];
+        int X[M_MAXFV], Y[M_MAXFV];
+        for (int k = 0; k < n; k++) { X[k] = px[fv[k]]; Y[k] = py[fv[k]]; }
 
-    for (int f = 0; f < 6; f++) {
-        const int *fv = F[f];
-        int X[4], Y[4];
-        for (int k = 0; k < 4; k++) { X[k] = px[fv[k]]; Y[k] = py[fv[k]]; }
-
-        /* 2D signed area (shoelace). Visible face => negative => draw it. */
         int area2 = 0;
-        for (int k = 0; k < 4; k++) {
-            int j = (k + 1) & 3;
+        for (int k = 0; k < n; k++) {
+            int j = (k + 1) % n;
             area2 += X[k] * Y[j] - X[j] * Y[k];
         }
-        if (area2 >= 0) continue;              /* back-face cull */
+        if (area2 >= 0) continue;                 /* back-face cull */
 
-        /* flat shade: outward normal (rotated) dotted with the light. dot runs
-         * from -nmag*|L| to +nmag*|L|; only the lit half (dot>0) adds diffuse,
-         * scaled to 0..195 and floored on an ambient 60, so bright is 60..255. */
         int ax = rx[fv[1]] - rx[fv[0]], ay = ry[fv[1]] - ry[fv[0]], az = rz[fv[1]] - rz[fv[0]];
         int bx = rx[fv[2]] - rx[fv[0]], by = ry[fv[2]] - ry[fv[0]], bz = rz[fv[2]] - rz[fv[0]];
         int Nx = ay * bz - az * by;
         int Ny = az * bx - ax * bz;
         int Nz = ax * by - ay * bx;
+        /* PER FACE, NOT PER SOLID. The cube could divide by a constant because
+         * all six of its faces have the same |N|; a pyramid's base is a
+         * different size from its sides and a cylinder's cap is a different
+         * size from its skirt, so a constant here would light one of them as
+         * if it faced somewhere else. */
+        int nmag = m_isqrt(Nx * Nx + Ny * Ny + Nz * Nz);
+        if (nmag < 1) nmag = 1;
         int dot = Nx * Lx + Ny * Ly + Nz * Lz;
         int diffuse = 0;
         if (dot > 0) diffuse = dot * 195 / (nmag * 7);
         int bright = 60 + diffuse;
         if (bright > 255) bright = 255;
 
-        unsigned int col = shade_rgb(base, bright);
-        fill_poly(X, Y, 4, col);
+        fill_poly(X, Y, n, shade_rgb(base, bright));
 
-        /* outline the face a touch brighter, so adjacent faces of a similar
-         * shade still read as separate planes. */
         int ebr = bright + 45; if (ebr > 255) ebr = 255;
         unsigned int ecol = shade_rgb(base, ebr);
-        for (int k = 0; k < 4; k++) {
-            int j = (k + 1) & 3;
-            /* skip an edge that leaves the clip box, so no thin line pokes out */
+        for (int k = 0; k < n; k++) {
+            int j = (k + 1) % n;
             if (Y[k] < cl_y0 || Y[k] > cl_y1 || Y[j] < cl_y0 || Y[j] > cl_y1) continue;
             if (X[k] < cl_x0 || X[k] > cl_x1 || X[j] < cl_x0 || X[j] > cl_x1) continue;
             fb_line(X[k], Y[k], X[j], Y[j], ecol);

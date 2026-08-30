@@ -362,6 +362,26 @@
 #define ZD_TITLE_INK_KO    ZD_KNOCK_INK /* reversed out of the knockout     */
 #define ZD_TITLE_INK_OFF   ZD_TEXT_3    /* unfocused                        */
 #define ZD_WINCTL          22      /* the control's width; it is full-height */
+/* .cbtn's glyph is `<svg width="11" height="11" ...>` (proto:2282-2284) - HALF
+ * the cell. The controls were drawn at 24dp, so the glyph box was wider than
+ * the 22dp cell holding it and the centring arithmetic went negative. */
+#define ZD_WINCTL_GLYPH    11
+/* THE HEADER'S TWO MARGINS, from .hdr's own padding in the prototype:
+ *   .hdr { padding: 0 calc(6px * var(--ui)) 0 calc(11px * var(--ui)) }
+ * The left one was already being drawn (as an uncited UI_S3, the same number by
+ * coincidence); the right one was never spelled at all, so the control cluster
+ * sat flush against the inside face of the ring while the title kept its
+ * margin - an asymmetry the header is not supposed to have. */
+/* .wbody's OWN box, from `padding: 6px 9px 6px; gap: 5px` (proto:711-712).
+ * The foot band and the client area both inherit their horizontal extent from
+ * it, and both were reaching for ZD_PAD - the generic 10dp spacing step, which
+ * belongs to no .wbody or .sband rule. One dp per side, everywhere the body
+ * meets the plate. */
+#define ZD_BODY_PX          9      /* .wbody padding-left / padding-right */
+#define ZD_BODY_PY          6      /* .wbody padding-top / padding-bottom */
+#define ZD_BODY_GAP         5      /* .wbody row gap                      */
+#define ZD_HDR_PL          11      /* .hdr padding-left  */
+#define ZD_HDR_PR           6      /* .hdr padding-right */
 #define ZD_WINCTL_INK      ZD_TEXT_3
 #define ZD_WINCTL_RULE     ZD_CUT  /* the 1px rule to its left               */
 #define ZD_CLOSE_HOVER_BG  ZD_VERM
@@ -388,6 +408,13 @@
 #define ZD_R_BOLT    0
 #define ZD_R_CHIP    2
 #define ZD_R_INSET   4
+/* THE RESIZE GRIP'S BOX. `.grip { width: calc(15px * var(--ui)); height:
+ * calc(15px * var(--ui)) }` at proto:726-727. wm.c used UI_S3 - 12dp, a
+ * spacing step with no citation behind it - because this token did not exist.
+ * A grip drawn three design pixels small is not a disaster; a grip whose size
+ * is a spacing step is a size nobody can check. */
+#define ZD_GRIP     15
+
 #define ZD_R_PLATE   9
 
 /* the vermilion focus bar. 3dp is the shipped value and it is a slider. */
@@ -722,14 +749,14 @@
 #define ZD_MODAL_R      ZD_R_PLATE
 #define ZD_MODAL_HEAD_H 28      /* == ZD_TITLE_H - a modal has a header too */
 #define ZD_MODAL_FOOT_H 40
-#define ZD_TOAST_W     300
+#define ZD_TOAST_W     340      /* .toast { width: calc(340px * var(--ui)) } */
 #define ZD_TOAST_R      ZD_R_INSET
 #define ZD_TOAST_PY     10
 #define ZD_TOAST_PX     10
-#define ZD_TOAST_GAP     8
+#define ZD_TOAST_GAP     8      /* #toasts { gap: var(--zd-gap) } */
 #define ZD_TOAST_ICON   20
 #define ZD_TOAST_ICON_R ZD_R_CHIP
-#define ZD_TOAST_MS   4200      /* auto-dismiss */
+#define ZD_TOAST_MS   8000      /* auto-dismiss - toast() setTimeout 8000 */
 #define ZD_TOAST_MAX     3
 
 /* chart. An instrument: ZD_STEEL, square ends, ruled grid in ZD_TEXT_INERT. */
@@ -841,9 +868,30 @@
 #define ZD_BLUR_GLOW_A  0
 #define ZD_BLUR_GLOW_B  0
 
-/* The one shadow, in the shape wm.c already asks for. */
-#define ZD_SHADOW_DY    ZD_LIFT_DY
-#define ZD_SHADOW_BLUR  ZD_LIFT_BLUR
+/* THERE ARE TWO SHADOWS IN THE AUTHORITY, NOT ONE.
+ *
+ * ZD_LIFT_DY/ZD_LIFT_BLUR above (5/13) belong to the DRAGGED PLATE and to
+ * nothing else - `.win.drag { box-shadow: 0 calc(5px * var(--ui))
+ * calc(13px * var(--ui)) var(--zd-lift) }` at proto:643, one selector, one
+ * rule.
+ *
+ * The three OFF-PLANE objects carry a different pair, and all three carry the
+ * same one: `box-shadow: 0 calc(6px * var(--ui)) calc(14px * var(--ui))
+ * var(--zd-lift)` - the palette sheet (proto:897), the menu (proto:942) and
+ * the toast (proto:965). Six and fourteen, written three times.
+ *
+ * This block used to alias ZD_SHADOW_* to the dragged pair and export nothing
+ * for the off-plane one, so every off-plane site in the tree either used the
+ * plate's 5/13 (uikit.c's popover, modal and toast; wm.c's notify toast) or
+ * invented a multiplier to get away from it - wm.c's chrome_shadow scaled the
+ * plate pair by 3/2 and drew a modal at 7/19. Seven and nineteen appear
+ * NOWHERE in the authority. The aliases had no readers at all, so a name that
+ * would have been read was never offered.
+ *
+ * Both pairs are now named after what wears them, which is the only way a
+ * reader can tell they were meant to differ. */
+#define ZD_OFFPLANE_DY    6   /* design px - proto:897, :942, :965 */
+#define ZD_OFFPLANE_BLUR 14   /* design px - the same three */
 #define ZD_SHADOW_ALPHA 55      /* percent - ZD_LIFT_A as a percentage */
 
 #endif /* ZL_DESIGN_H */

@@ -193,6 +193,29 @@ fn reg_cat(id) {
 
 # id -> default window size, in DESIGN UNITS (still needs * ui()).
 fn reg_w(id) {
+    # ---- THE FOURTEEN REGISTER APPS TAKE THE PROTOTYPE'S OWN RECTS ----------
+    # The comment below says every size is "the reference's own, from
+    # ds-reference.html's APPS" - and ds-reference.html is the PREDECESSOR
+    # document. design.h settles which one wins: "THE SOURCE IS
+    # docs/design/presswork-prototype.html ... If this header and the prototype
+    # disagree, THE PROTOTYPE WINS." It justifies itself with "the oracle
+    # compares by REGION", and that oracle is generated from ds.html, records
+    # ds.html's sha, targets a 1280-wide screen, lives outside the repo in
+    # ~/Downloads and is wired into no gate - so it has never compared anything.
+    #
+    # These fourteen are the prototype's APPS table, p[2] and p[3]. The games
+    # and utilities below keep their existing sizes: the prototype has no
+    # counterpart for them, so there is nothing to take.
+    # KLOG, HEXV, DISK and NET ARE NOT ANSWERED HERE. reg_w/reg_h are consulted
+    # only by reg_new's four generic wm_open lines, and those id bands stop short
+    # of the sys2 and sys3 ranges - those four apps open through sys2_new and
+    # sys3_new instead. Arms for them were added here and were unreachable from
+    # the day they were written, while the tables that DO answer kept the older
+    # sizes: one id, two disagreeing numbers, and the wrong one was the readable
+    # one. Their prototype rects now live in sys2_w/sys2_h and sys3_w/sys3_h.
+    if id == APP_CALC       { return 360 }
+    if id == APP_CLOCK      { return 540 }
+    if id == APP_SYSINFO    { return 600 }
     # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
     # UTILS and GAME_APPS arrays. They were not before: twenty of these
     # apps carried a size picked when the app was written, and the errors
@@ -217,9 +240,6 @@ fn reg_w(id) {
     if id == APP_LIGHTS     { return 360 }
     if id == APP_CONNECT4   { return 430 }
     if id == APP_MAZE       { return 500 }
-    if id == APP_CLOCK      { return 520 }
-    if id == APP_SYSINFO    { return 544 }
-    if id == APP_CALC       { return 300 }
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_w(id) }
@@ -229,6 +249,22 @@ fn reg_w(id) {
     return 300
 }
 fn reg_h(id) {
+    # ---- THE FOURTEEN REGISTER APPS TAKE THE PROTOTYPE'S OWN RECTS ----------
+    # The comment below says every size is "the reference's own, from
+    # ds-reference.html's APPS" - and ds-reference.html is the PREDECESSOR
+    # document. design.h settles which one wins: "THE SOURCE IS
+    # docs/design/presswork-prototype.html ... If this header and the prototype
+    # disagree, THE PROTOTYPE WINS." It justifies itself with "the oracle
+    # compares by REGION", and that oracle is generated from ds.html, records
+    # ds.html's sha, targets a 1280-wide screen, lives outside the repo in
+    # ~/Downloads and is wired into no gate - so it has never compared anything.
+    #
+    # These fourteen are the prototype's APPS table, p[2] and p[3]. The games
+    # and utilities below keep their existing sizes: the prototype has no
+    # counterpart for them, so there is nothing to take.
+    if id == APP_CALC       { return 430 }
+    if id == APP_CLOCK      { return 400 }
+    if id == APP_SYSINFO    { return 470 }
     # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
     # UTILS and GAME_APPS arrays. They were not before: twenty of these
     # apps carried a size picked when the app was written, and the errors
@@ -253,9 +289,6 @@ fn reg_h(id) {
     if id == APP_LIGHTS     { return 390 }
     if id == APP_CONNECT4   { return 400 }
     if id == APP_MAZE       { return 390 }
-    if id == APP_CLOCK      { return 352 }
-    if id == APP_SYSINFO    { return 398 }
-    if id == APP_CALC       { return 404 }
     # ---- the per-slice tables. Each file owns a disjoint id range and answers
     # ---- only for its own; see apps_sys2.zl for why they are separate files.
     if sys2_has(id) == 1 { return sys2_h(id) }
@@ -413,8 +446,36 @@ fn reg_find_win(id) {
 # for anything that needs a fresh start each time it is opened - the same
 # rule open_app() already follows for Snake). Returns the new window, or -1.
 fn reg_new(id, u) {
-    if id == APP_SETTINGS { return wm_open(id, "Settings", 388 * u, 190 * u, 486 * u, 332 * u) }
-    if id == APP_CATALOG  { return wm_open(id, "All Applications", 120 * u, 40 * u, CAT_W * u, CAT_H * u) }
+    # THE PROTOTYPE'S COORDINATES ARE FIELD-RELATIVE, NOT SCREEN-RELATIVE.
+    #
+    # `p[14, 12, 720, 720]` was transcribed as raw screen pixels, so Settings
+    # opened at absolute (14, 12) - underneath the register rail and underneath
+    # the raster strip, both of which the field begins after. The rail is stated
+    # to be the only route to every system function, and a 720-square plate
+    # parked on top of it covers that route from the first frame.
+    #
+    # clamp_to_field cannot recover it either: that clamp runs on GRAB_MOVE and
+    # lower-bounds at the window's CURRENT position precisely so a programmatic
+    # placement is never yanked, which means a window opened out of bounds stays
+    # out of bounds until the user drags it. Placement is the only chance.
+    #
+    # desk_x/desk_y are what the boot composition already uses for the same
+    # numbers out of the same file.
+    # settings_win IS RECORDED HERE TOO. There are two ways to open Settings and
+    # only one of them was recording the window: reopen_settings assigns
+    # settings_win, and this path - taken by the shell command, the command
+    # palette row and the catalogue tile - returned the index without touching
+    # it. So the pane's own "THIS PANE, LAST DRAW" figure read wm_appus(-1) and
+    # printed 0, and reopen_settings would open a SECOND Settings window over
+    # the first.
+    #
+    # zl globals are one namespace across the whole program, so this file can
+    # assign kernel.zl's global directly - which is the smallest correct fix.
+    if id == APP_SETTINGS {
+        settings_win = wm_open(id, "Settings", desk_x(14), desk_y(12), 720 * u, 720 * u)
+        return settings_win
+    }
+    if id == APP_CATALOG  { return wm_open(id, "All Applications", desk_x(120), desk_y(40), CAT_W * u, CAT_H * u) }
     if id == APP_REGEX     { pt_reset() }
     if id == APP_WORDLE    { wg_reset() }
     if id == APP_TICTACTOE { tt_reset() }
@@ -563,7 +624,7 @@ cat_scroll = 0
 cat_hover  = 0 - 1
 
 fn cat_cols(win) {
-    cc = wm_cw(win) / (CAT_TILE_W * ui())
+    cc = idiv(wm_cw(win), CAT_TILE_W * ui())      # idiv: a column COUNT
     if cc < 1 { cc = 1 }
     return cc
 }
@@ -584,9 +645,9 @@ fn cat_hit(win, ex, ey) {
     if cx < 0 { return 0 - 1 }
     if cy < 0 { return 0 - 1 }
     cols = cat_cols(win)
-    col = cx / (CAT_TILE_W * u)
+    col = idiv(cx, CAT_TILE_W * u)           # idiv: a tile INDEX, see ac_grid_hit
     if col >= cols { return 0 - 1 }
-    row = cy / (CAT_TILE_H * u) + cat_scroll
+    row = idiv(cy, CAT_TILE_H * u) + cat_scroll   # idiv: a tile INDEX
     idx = row * cols + col
     if idx < 0 { return 0 - 1 }
     if idx >= reg_count() { return 0 - 1 }
@@ -595,7 +656,7 @@ fn cat_hit(win, ex, ey) {
 
 fn cat_max_scroll(win) {
     cols = cat_cols(win)
-    rows = (reg_count() + cols - 1) / cols
+    rows = idiv(reg_count() + cols - 1, cols)     # idiv: a row COUNT
     vis  = (wm_ch(win) - CAT_HEADER * ui()) / (CAT_TILE_H * ui())
     if vis < 1 { vis = 1 }
     ms = rows - vis
@@ -623,26 +684,48 @@ fn cat_draw(ax, ay, aw, ah) {
     }
 
     cols = 1
-    cc = aw / (CAT_TILE_W * u)
+    cc = idiv(aw, CAT_TILE_W * u)                 # idiv: a column COUNT
     if cc >= 1 { cols = cc }
     gy = ay + CAT_HEADER * u
 
     i = 0
     while i < reg_count() {
         id = reg_id_at(i)
-        crow = i / cols - cat_scroll
+        crow = idiv(i, cols) - cat_scroll         # idiv: a row number
         ccol = i % cols
         ty = gy + crow * CAT_TILE_H * u
         # only the rough vertical band, to skip work for rows scrolled off -
         # fb_clip (set to the client rect before app_draw runs) is what makes
         # this an optimisation rather than a correctness requirement.
-        if ty + CAT_TILE_H * u >= ay {
+        # CULL AGAINST THE BODY, NOT THE CLIENT. This admitted a row as soon as
+        # any part of it reached the top of the CLIENT rect - but the legend
+        # occupies the top CAT_HEADER units and is drawn first, so with the list
+        # scrolled the row above the viewport had fourteen units of tile drawn
+        # straight over the three legend swatches and their labels. fb_clip is
+        # set to the client, not the body, so nothing stopped it.
+        #
+        # cat_scroll steps in whole rows, so the first visible row has ty == gy
+        # exactly and this loses nothing.
+        if ty >= gy {
             if ty < ay + ah {
                 tx = ax + ccol * CAT_TILE_W * u
                 hv = 0
                 if cat_hover == i { hv = 1 }
-                bgc = rgb(26, 32, 48)
-                if hv == 1 { bgc = rgb(46, 58, 84) }
+                # THE TILE FACE COMES FROM THE THEME, NOT FROM THE OLD PALETTE.
+                # These were rgb(26,32,48) and rgb(46,58,84) - #1A2030 and
+                # #2E3A54, cold blue-slate values from the SUPERSEDED document.
+                # PRESSWORK's plate is ZD_BASE #322B27 and its accent is
+                # ZD_VERM #E8734F; neither literal exists anywhere in this
+                # ladder. All Applications was the one window on the desktop
+                # still wearing the predecessor's design, and the one window
+                # that did not answer a theme change at all.
+                #
+                # design.h is explicit that it is the only place a colour
+                # literal may appear. A raw rgb() in an app is that rule being
+                # broken, and here it was broken in the direction of a palette
+                # the project has replaced.
+                bgc = theme(TH_PANEL_HI)
+                if hv == 1 { bgc = theme(TH_SURF_5) }
                 rrect(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, CAT_TILE_H * u - 16 * u, 10 * u, bgc)
                 fill_rgb(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, 3 * u, ac_cat_color(reg_cat(id)))
                 ic = reg_icon(id)
