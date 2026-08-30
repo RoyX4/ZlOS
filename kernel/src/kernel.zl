@@ -11880,6 +11880,19 @@ fn ov_click(cx, cy, down) {
         ov_sel = ovr
         return ov_menu_run(ovr)
     }
+    # AN ACTIVITIES TILE PICKS ITS WINDOW, which is the entire point of an
+    # overview. Every tile drew as a control and none was one: the click fell
+    # through to the dismiss below and the overview closed having done nothing.
+    # A click on the ground between tiles still dismisses, which is what
+    # clicking away from a picker means.
+    if ov_mode == OV_ACTIVITIES {
+        ovw = ov_act_tile_at(cx, cy)
+        if ovw < 0 { return ov_close_overlay() }
+        ov_close_overlay()
+        wm_setfocus(ovw)
+        wm_raise(ovw)
+        return 1
+    }
     if ov_mode == OV_PALETTE {
         if ov_pal_in_sheet(cx, cy) == 0 { return ov_close_overlay() }
         ovp = ov_pal_row_at(cx, cy)
@@ -12040,6 +12053,75 @@ fn ov_act_win(idx) {
     return 0 - 1
 }
 
+# WHICH TILE IS UNDER THE POINTER, OR -1.
+#
+# Every tile in the overview draws as a control - a plate with a struck edge, a
+# header carrying the register number and name, the window's real size, a live
+# preview, and a knocked-out header on the focused one - and not one of them was
+# one. ov_click had no OV_ACTIVITIES arm, so a click anywhere dismissed the
+# overview and did nothing else. An overview whose whole purpose is picking a
+# window could not pick one.
+#
+# THE ACCUMULATION IS REPEATED IN THE SAME ORDER as the draw's, term for term,
+# because the alternative is a second layout that diverges the first time one is
+# edited - the fault this file has now found in Settings, the browser, the
+# catalogue and the Files list. Same gx0, same gy0, same cols, same sc.
+fn ov_act_scale(gw, gh, cols, rows, n) {
+    oas_maxw = 1
+    oas_maxh = 1
+    oas_i = 0
+    while oas_i < n {
+        oas_w = wm_w(ov_act_win(oas_i))
+        oas_h = wm_hh(ov_act_win(oas_i))
+        if oas_w > oas_maxw { oas_maxw = oas_w }
+        if oas_h > oas_maxh { oas_maxh = oas_h }
+        oas_i = oas_i + 1
+    }
+    oas_cw = idiv(gw - (cols - 1) * OV_ACT_GAP * ui(), cols)
+    oas_ch = idiv(gh - (rows - 1) * OV_ACT_GAP * ui(), rows)
+    oas_scx = idiv(oas_cw * 256, oas_maxw)
+    oas_scy = idiv((oas_ch - OV_ACT_TH * ui()) * 256, oas_maxh)
+    oas_sc = oas_scx
+    if oas_scy < oas_sc { oas_sc = oas_scy }
+    if oas_sc < 16 { oas_sc = 16 }
+    return oas_sc
+}
+
+fn ov_act_tile_at(cx, cy) {
+    oat_n = ov_act_n()
+    if oat_n < 1 { return 0 - 1 }
+    oat_u = ui()
+    oat_gx0 = rail_w() + OV_ACT_PAD * oat_u
+    oat_gy0 = strip_h() + OV_ACT_PAD * oat_u + OV_ACT_HEAD * oat_u
+    oat_gw = px_w() - oat_gx0 - OV_ACT_PAD * oat_u
+    oat_gh = px_h() - oat_gy0 - OV_ACT_PAD * oat_u - foot_h()
+    oat_cols = oat_n
+    if oat_cols > OV_ACT_COLS { oat_cols = OV_ACT_COLS }
+    oat_rows = idiv(oat_n + oat_cols - 1, oat_cols)
+    oat_cw = idiv(oat_gw - (oat_cols - 1) * OV_ACT_GAP * oat_u, oat_cols)
+    oat_ch = idiv(oat_gh - (oat_rows - 1) * OV_ACT_GAP * oat_u, oat_rows)
+    oat_sc = ov_act_scale(oat_gw, oat_gh, oat_cols, oat_rows, oat_n)
+    oat_i = 0
+    while oat_i < oat_n {
+        oat_w2 = ov_act_win(oat_i)
+        oat_c = oat_i - idiv(oat_i, oat_cols) * oat_cols
+        oat_r = idiv(oat_i, oat_cols)
+        oat_tw = idiv(wm_w(oat_w2) * oat_sc, 256)
+        oat_th = idiv(wm_hh(oat_w2) * oat_sc, 256) + OV_ACT_TH * oat_u
+        oat_tx = oat_gx0 + oat_c * (oat_cw + OV_ACT_GAP * oat_u) + idiv(oat_cw - oat_tw, 2)
+        oat_ty = oat_gy0 + oat_r * (oat_ch + OV_ACT_GAP * oat_u)
+        if cx >= oat_tx {
+            if cx < oat_tx + oat_tw {
+                if cy >= oat_ty {
+                    if cy < oat_ty + oat_th { return oat_w2 }
+                }
+            }
+        }
+        oat_i = oat_i + 1
+    }
+    return 0 - 1
+}
+
 fn ov_draw_activities(u) {
     n = ov_act_n()
     gx0 = rail_w() + OV_ACT_PAD * u
@@ -12061,6 +12143,8 @@ fn ov_draw_activities(u) {
     # tiles keep their sizes relative to each other. Per-tile scaling would make
     # a 320-wide window and a 1200-wide one the same size on screen, which is
     # the one thing this grid is meant to show.
+    # THE SCALE COMES FROM THE SHARED HELPER, so the hit test cannot compute a
+    # different one. The loop below still finds maxw/maxh for its own reasons.
     maxw = 1
     maxh = 1
     oi = 0
