@@ -494,9 +494,28 @@ fn focus_bar() { cm = ui_metric(UM_FOCUS_BAR) if cm > 0 { return cm } return FOC
 # grid, the legend, the crop marks, the boot composition, the menu and the
 # window layout, which is six chances to get it wrong instead of one.
 fn field_x() { return rail_w() }
-fn field_y() { return strip_h() + RULE_H * ui() }
+# BORDER-BOX, LIKE EVERYTHING ELSE THE PROTOTYPE DECLARES.
+#
+# `* { box-sizing: border-box }` (proto:325), so `#raster { height:
+# var(--zd-strip-h); border-bottom: calc(2px * var(--ui)) solid var(--zd-lit) }`
+# (proto:486-487) is 30dp TOTAL - 28 of ZD_CUT with the 2dp rule INSIDE it -
+# and `#foot` (proto:560-562) is 46dp total the same way.
+#
+# This added the rule ON TOP of each declared height. Measured: at ui 1 the
+# strip occupied 32dp against 30 and the foot 48 against 46, and the field was
+# `h - 80` against the authority's `h - 76`; at ui 2, 64/60, 96/92 and `h - 160`
+# against `h - 152`.
+#
+# IT WAS NOT ONLY COSMETIC. wm.c reserves the border-box figure -
+# `#define RESERVE_TOP(t) ((t)->strip_h)` (wm.c:338) - so the compositor's
+# clamp_to_field and this file's field disagreed by RULE_H at both ends, and
+# every window placed or clamped against one was off against the other.
+#
+# This is the identical fault already fixed for `.hdr` (wm.c:2879-2890) and
+# `.sband` (wm.c:1763-1769) - the two elements at the other end of the screen.
+fn field_y() { return strip_h() }
 fn field_w() { return px_w() - rail_w() }
-fn field_h() { return px_h() - field_y() - foot_h() - RULE_H * ui() }
+fn field_h() { return px_h() - field_y() - foot_h() }
 # The old names, kept because forty call sites in this file and its app modules
 # ask "where does the desktop start". They are the field's top-left now.
 # TOPBAR_H and DESK_TOP ARE GONE. Every caller of either was asking "where does
@@ -2231,8 +2250,11 @@ fn draw_strip() {
         sx = rail_w()
         sw = px_w() - sx
         sh = strip_h()
-        fill_rgb(sx, 0, sw, sh, theme(TH_CUT))
-        fill_rgb(sx, sh, sw, RULE_H * u, theme(TH_LIT))
+        # THE RULE IS THE BAND'S LAST TWO ROWS, not two rows after it. Under
+        # border-box `#raster`'s 30dp includes its own border-bottom, so the
+        # ZD_CUT ground is 28 and the ZD_LIT rule finishes the band.
+        fill_rgb(sx, 0, sw, sh - RULE_H * u, theme(TH_CUT))
+        fill_rgb(sx, sh - RULE_H * u, sw, RULE_H * u, theme(TH_LIT))
         # THE PLOT IS BOUNDED BY ITS OWN GUTTERS NOW. It used to run from the
         # right-hand pad all the way to the left-hand pad, which meant the
         # columns ran UNDER the label at one end and under nothing at all at the
@@ -2282,7 +2304,16 @@ fn draw_strip() {
         # ground, because a legend that the data can draw through is not a
         # legend. Same move the desk's grid legend makes.
         lw = ui_capsw("RASTER", T_CAPTION) + 2 * pad_d()
-        fill_rgb(sx + 1, 1, lw, sh - 2, theme(TH_CUT))
+        # ...AND IT STOPS AT THE RULE. `sh - 2` was the band's height less one
+        # row top and bottom, which was right while the ZD_LIT rule lived
+        # OUTSIDE the band. Now that the rule is the band's last RULE_H rows,
+        # a backdrop of that height paints over its first row - so the rule was
+        # 2dp everywhere except under this label, where it was 1.
+        #
+        # Two pixels under one word: invisible, and found by probe-field
+        # reading the column just right of the rail, which is exactly where
+        # this backdrop is.
+        fill_rgb(sx + 1, 1, lw, sh - RULE_H * u - 1, theme(TH_CUT))
         ui_caps(sx + pad_d(), (sh - label_h(T_CAPTION)) / 2, "RASTER", theme(TH_TEXT_2), T_CAPTION)
         if strip_rd_on() == 1 {
             draw_strip_rd(px_w() - pad_d() - strip_rd_w(), sh)
@@ -2783,8 +2814,17 @@ fn draw_foot() {
     fw = px_w() - fx
     fy = foot_y()
     fh = foot_h()
-    fill_rgb(fx, fy - RULE_H * u, fw, RULE_H * u, theme(TH_LIT))
+    # THE FOOT'S RULE IS ITS FIRST TWO ROWS, not two rows above it - the same
+    # border-box reading as the strip's, at the other end of the screen.
+    #
+    # GROUND FIRST, THEN THE RULE. Moving the rule inside the band put it under
+    # the band's own fill: `fill_rgb(fx, fy, fw, fh, PANEL_HI)` starts at the
+    # same y and covers it completely, so the foot lost its rule entirely for
+    # one build. It survived before only because it was drawn ABOVE the fill's
+    # first row. probe-field caught it by scanning up from the bottom and
+    # finding no ZD_LIT anywhere in the foot.
     fill_rgb(fx, fy, fw, fh, theme(TH_PANEL_HI))
+    fill_rgb(fx, fy, fw, RULE_H * u, theme(TH_LIT))
     if desk_ruler_on == 1 { draw_foot_ruler() }
     # ---- row 2: the printer's slug
     sy = fy + fh - band_h()
@@ -2817,8 +2857,19 @@ fn draw_foot_ruler() {
     fx = rail_w()
     fw = px_w() - fx
     fy = foot_y()
-    ry = fy + 3 * u
-    fill_rgb(fx + 1, ry - 3 * u, fw - 2, foot_h() - band_h() - 3 * u, theme(TH_PANEL_HI))
+    # THE RULER'S BAND STARTS AFTER THE FOOT'S BORDER, not at its top edge.
+    #
+    # `ry - 3 * u` is `fy`, so this clear began on the foot's first row - and
+    # once the ZD_LIT rule moved INSIDE the band (border-box, proto:560-562) it
+    # wiped that rule out on every once-a-second redraw. draw_foot got the rule
+    # right and this function took it away again, which is why probe-field
+    # scanning up from the bottom found no ZD_LIT anywhere in the foot.
+    #
+    # Under border-box the content belongs inside the border, so the band and
+    # its label both move down by RULE_H and the band loses that much height -
+    # the foot's total is unchanged, which is the whole point of border-box.
+    ry = fy + RULE_H * u + 3 * u
+    fill_rgb(fx + 1, fy + RULE_H * u, fw - 2, foot_h() - band_h() - 3 * u - RULE_H * u, theme(TH_PANEL_HI))
     ui_caps(fx + pad_d(), ry + 2 * u, "MEMORY", theme(TH_TEXT_DIM), T_CAPTION)
     bx = fx + pad_d() + ui_capsw("MEMORY", T_CAPTION) + 9 * u
     # the readout is right-aligned and fixed-width, so the bar's right edge does
@@ -9296,62 +9347,167 @@ fn set_tabname(i) {
     if i == SET_BOUNDARY { return "BOUNDARY" }
     return "PRESS"
 }
-fn set_tabw(i) { return label_w(set_tabname(i), T_CAPTION, W_BOLD) + 2 * SET_SEGPX * ui() }
-fn set_tabx(x, i) {
+# ---- A SEGMENTED CONTROL, FOR ANY LIST ---------------------------------------
+#
+# set_press_ctl's own comment said it: "`raster clock` and `per window timing`
+# are segmented controls this pane has no widget for". Add the LADDER tab's
+# 'surface ladder' and that was THREE of the authority's twelve controls with
+# no drawable form.
+#
+# The drawing code existed and was hardwired. set_segbar looped SET_TABS,
+# called set_tabname(i) and compared against the global set_tab, so the only
+# thing it could ever draw was the tab strip - a widget that is a widget for
+# exactly one caller is a layout, not a widget.
+#
+# There are no arrays or string lists in this kernel subset, so a list is a
+# KIND plus a name function, which is the idiom the rest of this file uses for
+# the same reason. Kind 0 is the tab strip and its behaviour is unchanged: the
+# old names below are wrappers on it, so nothing that drew a tab strip had to
+# move.
+SEG_TABS   = 0                     # the Settings tab strip
+SEG_LADDER = 1                     # LADDER: surface ladder - proto:2036
+SEG_US     = 2                     # PRESS:  per window timing - proto:2188
+
+# THE LADDER SEGMENT SELECTS SOMETHING THIS MACHINE DOES NOT HAVE, and says so
+# rather than pretending. design.h:54-59 puts a second light/raking ladder
+# deliberately out of scope, and the only raking values in the tree are four
+# REFERENCE constants. So the control is drawn, it is live, and picking the
+# second rung reports that the rung is not built - which is the same answer the
+# Renderer's wireframe toggle gives, for the same reason.
+set_ladder = 0                     # 0 presswork, 1 raking
+# PER WINDOW TIMING HAS TWO REAL READINGS AND AN OFF. usOf at proto:1606-1610
+# switches between `w.us + ' us'` and `(w.px / 1000) + ' kpx'`; the System
+# Monitor's window table already draws both columns, and this is what chooses
+# between them.
+set_us = 0                         # 0 measured, 1 repaint, 2 off
+
+fn seg_n(k) {
+    if k == SEG_TABS { return SET_TABS }
+    if k == SEG_LADDER { return 2 }
+    return 3
+}
+fn seg_name(k, i) {
+    if k == SEG_TABS { return set_tabname(i) }
+    if k == SEG_LADDER {
+        if i == 0 { return "presswork" }
+        return "raking"
+    }
+    if i == 0 { return "measured" }
+    if i == 1 { return "repaint" }
+    return "off"
+}
+fn seg_sel(k) {
+    if k == SEG_TABS { return set_tab }
+    if k == SEG_LADDER { return set_ladder }
+    return set_us
+}
+
+fn set_tabw(i) { return seg_w(SEG_TABS, i) }
+fn seg_w(k, i) { return label_w(seg_name(k, i), T_CAPTION, W_BOLD) + 2 * SET_SEGPX * ui() }
+fn seg_x(k, x, i) {
     settx_x = x + 1
     settx_j = 0
     while settx_j < i {
-        settx_x = settx_x + set_tabw(settx_j) + 1
+        settx_x = settx_x + seg_w(k, settx_j) + 1
         settx_j = settx_j + 1
     }
     return settx_x
 }
-fn set_segw() {
+fn set_tabx(x, i) { return seg_x(SEG_TABS, x, i) }
+fn seg_barw(k) {
     setsw_w = 2
     setsw_i = 0
-    while setsw_i < SET_TABS {
-        setsw_w = setsw_w + set_tabw(setsw_i) + 1
+    while setsw_i < seg_n(k) {
+        setsw_w = setsw_w + seg_w(k, setsw_i) + 1
         setsw_i = setsw_i + 1
     }
     return setsw_w - 1
 }
+fn set_segw() { return seg_barw(SEG_TABS) }
 fn set_segh() { return SET_SEGH * ui() }
-fn set_segbar(x, y) {
+fn seg_draw(k, x, y) {
     # the 1px ZD_CUT ring and the separators between segments are ONE fill with
     # the segments punched out of it. A border drawn as four fills per segment
     # would double every internal rule and land 2px where the recipe says 1.
-    fill_rgb(x, y, set_segw(), set_segh(), theme(TH_CUT))
+    fill_rgb(x, y, seg_barw(k), set_segh(), theme(TH_CUT))
     setsg_i = 0
-    while setsg_i < SET_TABS {
-        setsg_x = set_tabx(x, setsg_i)
-        setsg_w = set_tabw(setsg_i)
+    while setsg_i < seg_n(k) {
+        setsg_x = seg_x(k, x, setsg_i)
+        setsg_w = seg_w(k, setsg_i)
         setsg_bg = theme(TH_PANEL_HI)
         setsg_ink = theme(TH_TEXT_DIM)
-        if setsg_i == set_tab {
+        if setsg_i == seg_sel(k) {
             setsg_bg = theme(TH_KNOCK)
             setsg_ink = theme(TH_KNOCK_INK)
         }
         fill_rgb(setsg_x, y + 1, setsg_w, set_segh() - 2, setsg_bg)
-        label(setsg_x + SET_SEGPX * ui(), y + (set_segh() - label_h(T_CAPTION)) / 2, set_tabname(setsg_i), setsg_ink, T_CAPTION, W_BOLD)
+        label(setsg_x + SET_SEGPX * ui(), y + (set_segh() - label_h(T_CAPTION)) / 2, seg_name(k, setsg_i), setsg_ink, T_CAPTION, W_BOLD)
         setsg_i = setsg_i + 1
     }
     return 0
+}
+fn set_segbar(x, y) { return seg_draw(SEG_TABS, x, y) }
+
+# ONE ROW: a label on the left and the control right-flushed, the same shape
+# set_tog_row draws. The authority's `seg()` is a labelled row exactly like its
+# `tog()`, so the two read as one family rather than two.
+fn set_seg_row(x, y, w, n, k, nm, note) {
+    ssr_y = set_rowN_y(y, n)
+    if set_vis(ssr_y, set_rowh()) == 0 { return 0 }
+    label(x, ssr_y + (set_rowh() - label_h(T_BODY)) / 2, nm, theme(TH_TEXT), T_BODY, W_REG)
+    ssr_bx = x + w - seg_barw(k)
+    seg_draw(k, ssr_bx, ssr_y + (set_rowh() - set_segh()) / 2)
+    ssr_nx = ssr_bx - ui_tw(note, PW_SM, PW_MONO) - SET_GAP * ui()
+    text_aa(ssr_nx, ssr_y + (set_rowh() - cell_h()) / 2, note, theme(TH_TEXT_DIM))
+    return 0
+}
+# ...and its hit test, from the same two functions.
+fn set_seg_row_at(x, y, w, n, k, ex, ey) {
+    ssa_y = set_rowN_y(y, n)
+    return seg_at(k, x + w - seg_barw(k), ssa_y + (set_rowh() - set_segh()) / 2, ex, ey)
 }
 # Which segment a pointer landed on, from the same two functions that drew it.
 # -1 for a miss, and a miss is not "the nearest one" - a settings pane that
 # switches tabs when you click beside the bar is a settings pane you cannot
 # scroll without changing what you are reading.
-fn set_tab_at(x, y, ex, ey) {
+fn seg_at(k, x, y, ex, ey) {
     if ey < y { return 0 - 1 }
     if ey >= y + set_segh() { return 0 - 1 }
     setta_i = 0
-    while setta_i < SET_TABS {
-        if ex >= set_tabx(x, setta_i) {
-            if ex < set_tabx(x, setta_i) + set_tabw(setta_i) { return setta_i }
+    while setta_i < seg_n(k) {
+        if ex >= seg_x(k, x, setta_i) {
+            if ex < seg_x(k, x, setta_i) + seg_w(k, setta_i) { return setta_i }
         }
         setta_i = setta_i + 1
     }
     return 0 - 1
+}
+fn set_tab_at(x, y, ex, ey) { return seg_at(SEG_TABS, x, y, ex, ey) }
+
+# WHAT PICKING A SEGMENT DOES. Every arm either changes something a reader can
+# see or says why it cannot - a segmented control whose second rung is silent
+# is the dead-control fault with three states instead of two.
+fn seg_pick(k, i) {
+    if k == SEG_LADDER {
+        if i == 1 {
+            # design.h:54-59 puts a second light/raking ladder deliberately out
+            # of scope, and the only raking values in this tree are four
+            # REFERENCE constants - not six switchable surface rungs. Saying so
+            # is the whole of what this rung can honestly do.
+            note_say2("there is no raking ladder to switch to", "design.h states the second ladder is out of scope - the four raking figures here are reference constants, not rungs", 1400)
+            return 1
+        }
+        set_ladder = 0
+        return 1
+    }
+    if k == SEG_US {
+        set_us = i
+        if i == 0 { note_say2("per window timing: measured", "the monitor's window table prints wm_appus - microseconds this window spent drawing", 900) }
+        if i == 1 { note_say2("per window timing: repaint", "the same table prints kilopixels - the client area it repaints", 900) }
+        if i == 2 { note_say2("per window timing: off", "the column is not drawn", 900) }
+        return 1
+    }
+    return 0
 }
 
 # ---- the toggle --------------------------------------------------------------
@@ -11272,7 +11428,9 @@ fn app_tick(id, win) {
             # is 46 dp of a 2560-wide screen and the rail's bottom block is 170
             # wide; between them that is about a twelfth of what the old dock
             # strip cost, so there is nothing to buy back by being clever.
-            wm_damage(rail_w(), foot_y() - RULE_H * ui(), px_w() - rail_w(), foot_h() + RULE_H * ui())
+            # THE RULE IS INSIDE THE FOOT NOW, so the damage band is the foot
+            # and nothing above it - see field_y's border-box note.
+            wm_damage(rail_w(), foot_y(), px_w() - rail_w(), foot_h())
             wm_damage(0, px_h() - rail_bot_h(), rail_w(), rail_bot_h())
             return 1
         }
@@ -12560,8 +12718,9 @@ fn desk_draw(dx, dy, dw, dh) {
         draw_rail_stat()
         draw_rail_clock()
     }
-    if dy < strip_h() + RULE_H * ui() { draw_strip() }
-    if dy + dh > foot_y() - RULE_H * ui() { draw_foot() }
+    # Both bands own their own rule, so the tests are the bands' own extents.
+    if dy < strip_h() { draw_strip() }
+    if dy + dh > foot_y() { draw_foot() }
     return 0
 }
 

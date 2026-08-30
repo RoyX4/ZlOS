@@ -7,6 +7,35 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: five more of round eleven - the grip, the curve, the snap, the trace, the meters (b555564)
+
+`design/presswork` · 15 files changed, 309 insertions(+), 82 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>15 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `docs/design/PRESSWORK-BACKLOG.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/fs/README.md`
+- `kernel/src/graphics/framebuffer/README.md`
+- `kernel/src/graphics/ui/ease.h`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/tests/host/README.md`
+- _…and 3 more_
+
+</details>
+
 ## 2026-08-30 — feat: fourteen of round eleven's findings, and four gates that catch them (35d5b30)
 
 `design/presswork` · 27 files changed, 2486 insertions(+), 210 deletions(-)
