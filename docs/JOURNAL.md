@@ -7,6 +7,75 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — chore: journal ride-along for 1134543 (86c2d4b)
+
+`design/presswork` · 1 file changed, 27 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>1 file(s)</summary>
+
+- `docs/JOURNAL.md`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, section E - eleven measurements that disagreed with the authority (1134543)
+
+`design/presswork` · 11 files changed, 134 insertions(+), 33 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>11 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/apps/apps_system.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/ui/design.h`
+- `kernel/src/graphics/ui/uikit.c`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
+## 2026-08-30 — fix: round twelve, section D - seven places colour said the wrong thing (4403fa7)
+
+`design/presswork` · 9 files changed, 100 insertions(+), 24 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>9 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/apps/apps_registry.zl`
+- `kernel/apps/apps_sys2.zl`
+- `kernel/apps/apps_sys3.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/graphics/windowing/wm.c`
+- `kernel/src/kernel.zl`
+
+</details>
+
 ## 2026-08-30 — fix: round twelve, the compositor three - resize, the band, and one mode in two places (1bc3645)
 
 `design/presswork` · 10 files changed, 116 insertions(+), 29 deletions(-)

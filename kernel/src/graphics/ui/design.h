@@ -629,7 +629,13 @@
 #define ZD_TOOLBAR_GAP   8      /* == ZD_GAP     */
 #define ZD_STATUS_H     20      /* == ZD_BAND_H  */
 #define ZD_STATUS_PX    10
-#define ZD_STATUS_GAP   12
+/* proto:721 is `gap: calc(10px * var(--ui))`. grep for 'gap: calc(12px' over
+ * the authority hits once, on #overview .ohead, which is not this. Its
+ * neighbours here carry citations - `== ZD_BAND_H`, `== ZD_GAP` - and this one
+ * did not, which is the class wm.c names at its own :3106: "An uncited
+ * constant that is nearly right is the hardest kind to notice." Three gutters
+ * cost 6 dp a band at ui 1, all taken off the run before `ws NN`. */
+#define ZD_STATUS_GAP   10      /* proto:721 */
 
 /* column header + list row.
  *
@@ -737,12 +743,22 @@
 
 /* overlays. The menu, the modal and the toast are the three things genuinely
  * off the plane, so these are the only widgets that carry ZD_LIFT. */
-#define ZD_MENU_W      220
-#define ZD_MENU_PAD      4
+/* proto:939 is `min-width: calc(214px * var(--ui))`. grep for '220px' over
+ * the authority returns nothing, and uikit.c's sole reader then HALVED it -
+ * `imax(w, DP(ZD_MENU_W) / 2)` - so the real floor was 110, about half the
+ * stated minimum, from an uncited divide under an uncited constant. */
+#define ZD_MENU_W      214
+/* proto:939-942 is the complete .menu rule and declares NO padding. What
+ * makes its rows sit flush is `overflow: hidden` against the 1 px border,
+ * and proto:950's `.mi:last-child { border-bottom: 0 }` only makes sense on
+ * a flush list. The tree painted a 4 dp frame of bare ZD_FLOAT and inset
+ * every row by it. */
+#define ZD_MENU_PAD      0
 #define ZD_MENU_R       ZD_R_INSET
 #define ZD_MENU_ITEM_H  26      /* == ZD_ROW_H */
 #define ZD_MENU_ITEM_PY  7
-#define ZD_MENU_ITEM_PX 10
+/* proto:948. With the 4 dp frame above this compounded to a 14 dp indent. */
+#define ZD_MENU_ITEM_PX 11
 #define ZD_MENU_ITEM_R  ZD_R_BOLT
 #define ZD_MENU_GAP     14
 #define ZD_MODAL_W     334

@@ -215,7 +215,11 @@ fn reg_w(id) {
     # one. Their prototype rects now live in sys2_w/sys2_h and sys3_w/sys3_h.
     if id == APP_CALC       { return 360 }
     if id == APP_CLOCK      { return 540 }
-    if id == APP_SYSINFO    { return 600 }
+    # 620, not 600. Register 13 routes to APP_SYSINFO, and proto:1558 gives
+    # `regs` p[260, 60, 620, 470] - this was the SYSTEM app's 600, taken before
+    # the register table was re-pointed at this app and never re-read against
+    # the row it now serves.
+    if id == APP_SYSINFO    { return 620 }
     # EVERY SIZE IS THE REFERENCE'S OWN, from ds-reference.html's APPS,
     # UTILS and GAME_APPS arrays. They were not before: twenty of these
     # apps carried a size picked when the app was written, and the errors
@@ -673,7 +677,11 @@ fn cat_draw(ax, ay, aw, ah) {
     lx = ax + 8 * u
     li = 0
     while li < 3 {
-        fill_rgb(lx, ay + 9 * u, 8 * u, 8 * u, ac_cat_color(li))
+        # THE LEGEND'S SWATCH IS THE SAME MARK THE TILES CARRY, so the key
+        # and the thing it keys look alike. An 8x8 vermilion square is also
+        # wider than the focus bar, which is the rule the tiles were just
+        # corrected against.
+        fill_rgb(lx, ay + 5 * u, focus_bar(), 16 * u, ac_cat_color(li))
         label(lx + 12 * u, ay + 6 * u, reg_cat_label(li), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         lx = lx + label_w(reg_cat_label(li), T_CAPTION, W_REG) + 32 * u
         li = li + 1
@@ -727,7 +735,22 @@ fn cat_draw(ax, ay, aw, ah) {
                 bgc = theme(TH_PANEL_HI)
                 if hv == 1 { bgc = theme(TH_SURF_5) }
                 rrect(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, CAT_TILE_H * u - 16 * u, 10 * u, bgc)
-                fill_rgb(tx + 6 * u, ty + 4 * u, CAT_TILE_W * u - 12 * u, 3 * u, ac_cat_color(reg_cat(id)))
+                # A MARK, NOT A FILL - and the width is the one vermilion is
+                # allowed.
+                #
+                # This drew a stripe the full width of the tile in
+                # ac_cat_color, which resolves to TH_ACCENT for the game
+                # category: 23 of the 37 tiles, plus the legend swatch, each
+                # spending the overprint on an area more than a hundred units
+                # wide. proto:129-131 - "vermilion never fills an area wider
+                # than the focus bar except one button per view" - is cited by
+                # line in apps_sys3.zl and PRINTED ON SCREEN by the Settings
+                # PRESS tab, two windows from this one.
+                #
+                # The register rail already solves exactly this: a category is
+                # a mark down the left edge at focus_bar() width, which is the
+                # same signal at a width the budget permits.
+                fill_rgb(tx + 6 * u, ty + 4 * u, focus_bar(), CAT_TILE_H * u - 16 * u, ac_cat_color(reg_cat(id)))
                 ic = reg_icon(id)
                 if ic >= 0 {
                     icon(tx + CAT_TILE_W * u / 2 - 12 * u, ty + 16 * u, ic, theme(TH_TEXT_HI))

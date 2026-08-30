@@ -753,7 +753,17 @@ fn hx_ui(ax, ay, aw, ah, dm) {
     # showed 128, so "+256" skipped a page. The chips are a PAGE CURSOR now -
     # back, forward, and the current offset - so the whole image is walkable
     # instead of the first three pages of it.
-    if ui_chip(cx0, chy, "<", hx_page > 0) == 1 { hit = 0 }
+    # THE PAGE TEST DISABLES, IT DOES NOT ACTIVATE.
+    #
+    # This passed `hx_page > 0` as ui_chip's ACTIVE argument, which uikit.c
+    # forwards to ctl_state - and ctl_state returns UI_ST_ON before it tests
+    # hover or press, so pill_face paints the chip with UI_COLOR_KNOCK, the KO
+    # edge and reversed-out ink. Off page 0 the back chip therefore latched
+    # into the SELECTION face, read as a toggle, and stopped responding to the
+    # pointer; the forward chip on the next line passes a literal 0 and renders
+    # correctly, which is why the pair looked like two different controls.
+    # proto:1783-1784 draws both as plain buttons.
+    if ui_chip(cx0, chy, "<", 0) == 1 { hit = 0 }
     if ui_chip(cx1, chy, ">", 0) == 1 { hit = 1 }
     ui_txtn(cx2, chy + 4 * u, hx_page * hx_pagesz(ah), ui_ink(S2_IK_T5), S2_MD, S2_MONO)
 
