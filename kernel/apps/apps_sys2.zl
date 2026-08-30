@@ -941,6 +941,21 @@ fn cn_tick(win) {
 # ==============================================================================
 ft_zoom = 1                         # index into 2x|3x|4x|6x
 
+# WHICH ATLAS IS THE CONSOLE'S CELL. Not a constant: index 0 is the 8x16 cell
+# and index 1 is 16x32, so the answer moves with the ui scale. Matching on the
+# cell's own dimensions asks the question the caption is asking - "the atlas
+# these glyphs come from" - rather than assuming which one that is today.
+fn fa_atlas_here() {
+    fah_i = 0
+    while fah_i < atlas_n() {
+        if atlas_w(fah_i) == cell_w() {
+            if atlas_h(fah_i) == cell_h() { return fah_i }
+        }
+        fah_i = fah_i + 1
+    }
+    return 0
+}
+
 fn ft_ui(ax, ay, aw, ah, dm) {
     u = ui()
     tbh = ui_tb_h()
@@ -960,12 +975,24 @@ fn ft_ui(ax, ay, aw, ah, dm) {
     gg = ui_seg(lx, ty + (tbh - gh) / 2, gw, gh, "2x|3x|4x|6x", ft_zoom, S2_SM)
     if gg >= 0 { hit = gg }
 
-    nw = ui_tw("95 glyphs - ", S2_SM, S2_MONO) + ui_tnw(cell_w(), S2_SM, S2_MONO) + ui_tw("x", S2_SM, S2_MONO) + ui_tnw(cell_h(), S2_SM, S2_MONO) + ui_tw(" cell - bitmap atlas", S2_SM, S2_MONO)
+    # 95 WAS A LITERAL between two measured numbers - cell_w() and cell_h() are
+    # read, and the glyph count sat between them looking exactly as measured as
+    # they are.
+    #
+    # And atlas_g takes an INDEX. My first attempt called it with none, which
+    # the new check-nativeargs guard rejected on the very next build - the
+    # native reads a[0] and would have got a zero the caller never supplied.
+    #
+    # WHICH atlas is not a constant either: 0 is the 8x16 cell and 1 is 16x32,
+    # so it depends on the ui scale. fa_atlas_here finds the one whose cell
+    # matches the console's, which is the atlas this line is describing.
+    nw = ui_tnw(atlas_g(fa_atlas_here()), S2_SM, S2_MONO) + ui_tw(" glyphs - ", S2_SM, S2_MONO) + ui_tnw(cell_w(), S2_SM, S2_MONO) + ui_tw("x", S2_SM, S2_MONO) + ui_tnw(cell_h(), S2_SM, S2_MONO) + ui_tw(" cell - bitmap atlas", S2_SM, S2_MONO)
     nx = ax + aw - 11 * u - nw
     if nx > lx + gw + 8 * u {
         ny = s2_mcy(ty, tbh)
-        ui_txt(nx, ny, "95 glyphs - ", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
-        nx = nx + ui_tw("95 glyphs - ", S2_SM, S2_MONO)
+        ui_txtn(nx, ny, atlas_g(fa_atlas_here()), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        nx = nx + ui_tnw(atlas_g(fa_atlas_here()), S2_SM, S2_MONO)
+        ui_txt(nx, ny, " glyphs - ", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
         ui_txtn(nx, ny, cell_w(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
         nx = nx + ui_tnw(cell_w(), S2_SM, S2_MONO)
         ui_txt(nx, ny, "x", ui_ink(S2_IK_T6), S2_SM, S2_MONO)

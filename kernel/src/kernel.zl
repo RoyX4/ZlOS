@@ -1019,7 +1019,8 @@ fn app_icon(app) {
 #
 # THIS KERNEL CAN ONLY HONESTLY DRAW THE SECOND, and the prototype's own cost
 # sheet says so before this file does: "PER WINDOW MICROSECONDS. wm.c measures
-# app_us in AGGREGATE only, so per window attribution is new work. the fallback
+# app_us per window now - wm_win_us. This note predates that and said the
+# opposite; the fallback
 # is the window's repaint_pixels in the same slot, same face." Verified against
 # wm.c rather than taken on trust - frame_us and frame_peak_us are file-static
 # singletons and paint_repaint_pixels is reset once per COMPOSITE, not per
@@ -10082,7 +10083,7 @@ fn set_press_body(x, y, w) {
         set_wlc(setfb_x, setfb_y, 8, 0, "  the existing flag word, and measure and draw must share the")
         set_wlc(setfb_x, setfb_y, 9, 0, "  helper or a label clips. EVERY LABEL IN THIS PANE IS UNTRACKED")
         set_wlc(setfb_x, setfb_y, 10, 0, "  and reads flatter for it. the prototype gets it free from CSS.")
-        set_wlc(setfb_x, setfb_y, 11, 0, "  PER WINDOW MICROSECONDS. wm.c measures app_us in AGGREGATE only.")
+        set_wlc(setfb_x, setfb_y, 11, 0, "  PER WINDOW MICROSECONDS ARE MEASURED - wm_win_us, per plate.")
     }
     setpb_y = setpb_y + set_wellh(12) + SET_STACK * setpb_u
 

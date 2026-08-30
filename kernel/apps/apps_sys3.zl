@@ -1097,9 +1097,15 @@ fn s3ar_rows(ax, ay, aw, ah) {
                 }
             }
             s3_num_r(s3ar_col_x(ax, aw, 1) + 56 * u, ty, fs_bytes(slot), dc)
-            s3_mono(s3ar_col_x(ax, aw, 2) + 8 * u, ty, "0644", dc)
-            s3_mono(s3ar_col_x(ax, aw, 3) + 8 * u, ty, "root/root", dc)
-            s3_mono(s3ar_col_x(ax, aw, 4) + 8 * u, ty, "ustar", dc)
+            # THREE FABRICATED COLUMNS. zlfs has no mode field, no uid, no gid
+            # and no ustar header - this pane's own comment says the archive is
+            # a PROJECTION of the directory. "0644" and "root/root" invent a
+            # permission model and an owner; "ustar" names a format that is not
+            # on the disk. All three read as facts about the file because they
+            # sit in a table of facts about the file.
+            s3_mono(s3ar_col_x(ax, aw, 2) + 8 * u, ty, "-", theme(TH_TEXT_DIM))
+            s3_mono(s3ar_col_x(ax, aw, 3) + 8 * u, ty, "-", theme(TH_TEXT_DIM))
+            s3_mono(s3ar_col_x(ax, aw, 4) + 8 * u, ty, "-", theme(TH_TEXT_DIM))
             # "valid" WAS A FLAG, NOT A CHECK. The Verify pill's whole handler
             # was `s3ar_verified = 1` - no byte was read, nothing was summed -
             # and this column keyed off that flag, so pressing Verify printed
