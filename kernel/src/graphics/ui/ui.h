@@ -230,6 +230,8 @@ int ui_atlas_for_role(int role, int weight); /* which one, at this scale, now */
 unsigned ui_ratio_q4(unsigned a, unsigned b);
 unsigned ui_ceil_dn_q4(unsigned rgb);   /* room downward: ratio to black    */
 unsigned ui_ceil_up_q4(unsigned rgb);   /* room upward:   ratio to white    */
+int ui_us_get(void);                    /* 0 measured, 1 repaint, 2 off     */
+int ui_us_set(int m);
 int ui_knockout_get(void);              /* 1 == the knockout is on          */
 int ui_knockout_set(int on);            /* returns the state it settled on  */
 int ui_over_get(void);                  /* the occlusion edge               */

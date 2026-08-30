@@ -477,6 +477,19 @@ int ui_motion_set(int on) { motion_off = on ? 0 : 1; return !motion_off; }
 int ui_track_get(void)    { return !track_off; }
 int ui_track_set(int on)  { track_off  = on ? 0 : 1; return !track_off; }
 
+/* PER WINDOW TIMING, which wm.c could not see.
+ *
+ * proto:717-719 and proto:724 attach this to the status band -
+ * `body.nous .sband .us { display: none }` - and the band is drawn in wm.c,
+ * which had no way to read the mode at all: ui.c exported the knockout, the
+ * occlusion edge, motion and tracking, and not this one. So two of the three
+ * rungs were silent on the surface the authority attaches them to.
+ *
+ * 0 measured, 1 repaint, 2 off - the same three the Settings segment sets. */
+static int us_mode;
+int ui_us_get(void)       { return us_mode; }
+int ui_us_set(int m)      { us_mode = (m < 0 || m > 2) ? 0 : m; return us_mode; }
+
 int ui_knockout_get(void) { return !knock_off; }
 int ui_knockout_set(int on)
 {

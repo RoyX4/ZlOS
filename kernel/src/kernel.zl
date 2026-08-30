@@ -1231,7 +1231,7 @@ fn draw_rail_row(ry, num, nm, ico, us, running, focused, hovered) {
         # same `per window timing` control the System Monitor's column already
         # follows. set_us's readers were the monitor and nothing else, so `off`
         # silenced one surface and left this one printing.
-        if set_us != 2 {
+        if ui_us() != 2 {
             num_aa(rw - RAIL_SLOT_PR * u - s3_numw(us), ny, us, theme(TH_TEXT_DIM))
         }
     }
@@ -1317,7 +1317,7 @@ fn draw_rail_win(ry, num, win, hovered) {
     tus = rail_slot_us(win)
     # the same switch as the fixed register's row above - proto:446 is scoped to
     # `.slot .us`, and a catalogue window's row is a .slot like any other
-    if set_us != 2 {
+    if ui_us() != 2 {
         num_aa(rw - RAIL_SLOT_PR * u - s3_numw(tus), ny, tus, theme(TH_TEXT_DIM))
     }
     return 0
@@ -6447,10 +6447,10 @@ fn sm_win_head(hx, hy, hw) {
     # readings were already drawn here side by side with no way to choose. The
     # head follows the choice so a column cannot be headed one thing and filled
     # with another.
-    if set_us == 0 {
+    if ui_us() == 0 {
         ui_caps(pw_right(pw_colx(hx, hw, 78), pw_colw(hw, 22), ui_capsw("app us", PW_SM)), hy2, "app us", theme(TH_TEXT_DIM), PW_SM)
     }
-    if set_us == 1 {
+    if ui_us() == 1 {
         ui_caps(pw_right(pw_colx(hx, hw, 78), pw_colw(hw, 22), ui_capsw("kpx", PW_SM)), hy2, "kpx", theme(TH_TEXT_DIM), PW_SM)
     }
     fill_rgb(hx, hy + pw_headh() - 1, hw, 1, theme(TH_LIT))
@@ -6466,10 +6466,10 @@ fn sm_win_row(rx, ry, rw, zi) {
     cy = pw_celly(ry)
     num_aa(pw_colx(rx, rw, 0) + pw_cellpx(), cy, zi, theme(TH_TEXT_DIM))
     ui_txt(pw_colx(rx, rw, 12) + pw_cellpx(), cy, app_name(wm_app(w)), theme(TH_TEXT_2), PW_SM, 0)
-    if set_us == 0 {
+    if ui_us() == 0 {
         num_aa(pw_right(pw_colx(rx, rw, 78), pw_colw(rw, 22), s3_numw(wm_appus(w))), cy, wm_appus(w), theme(TH_TEXT_2))
     }
-    if set_us == 1 {
+    if ui_us() == 1 {
         kpx = wm_cw(w) * wm_ch(w) / 1000
         num_aa(pw_right(pw_colx(rx, rw, 78), pw_colw(rw, 22), s3_numw(kpx)), cy, kpx, theme(TH_TEXT_2))
     }
@@ -9465,7 +9465,11 @@ set_ladder = 0                     # 0 presswork, 1 raking
 # switches between `w.us + ' us'` and `(w.px / 1000) + ' kpx'`; the System
 # Monitor's window table already draws both columns, and this is what chooses
 # between them.
-set_us = 0                         # 0 measured, 1 repaint, 2 off
+# THE MODE LIVES IN ui.c NOW, because wm.c draws the status band and could not
+# see a zl global. proto:717-724 attaches this control to that band, so the two
+# surfaces have to read one value; set_us is kept as the name this file already
+# used and every read goes through ui_us().
+fn set_us_get() { return ui_us() }
 
 fn seg_n(k) {
     if k == SEG_TABS { return SET_TABS }
@@ -9485,7 +9489,7 @@ fn seg_name(k, i) {
 fn seg_sel(k) {
     if k == SEG_TABS { return set_tab }
     if k == SEG_LADDER { return set_ladder }
-    return set_us
+    return ui_us()
 }
 
 fn set_tabw(i) { return seg_w(SEG_TABS, i) }
@@ -9587,7 +9591,7 @@ fn seg_pick(k, i) {
         return 1
     }
     if k == SEG_US {
-        set_us = i
+        ui_us_set(i)
         if i == 0 { note_say2("per window timing: measured", "the monitor's window table prints wm_appus - microseconds this window spent drawing", 900) }
         if i == 1 { note_say2("per window timing: repaint", "the same table prints kilopixels - the client area it repaints", 900) }
         if i == 2 { note_say2("per window timing: off", "the column is not drawn", 900) }

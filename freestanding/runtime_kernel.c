@@ -608,6 +608,8 @@ extern unsigned ui_ratio_q4(unsigned a, unsigned b);
 extern unsigned ui_ceil_dn_q4(unsigned rgb);
 extern unsigned ui_ceil_up_q4(unsigned rgb);
 extern int ui_knockout_get(void);
+int  ui_us_get(void);
+int  ui_us_set(int m);
 extern int ui_knockout_set(int on);
 extern int  ui_over_get(void);
 extern int  ui_over_set(int on);
@@ -1876,6 +1878,8 @@ Value zl_calln(const char *name, int n, ...)
      * the SAME sequence twice: once under ui_begin(..., 0, ...) to draw and
      * once under ui_begin(..., 1, ex, ey, 1) to find out what was clicked.
      * That is the idiom menu_draw/menu_event in kernel.zl already use. */
+    if (streq(name, "ui_us"))      return zl_num((double)ui_us_get());
+    if (streq(name, "ui_us_set"))  return zl_num((double)ui_us_set((int)a[0].num));
     if (streq(name, "ui_ink"))     return zl_num((double)zl_design_ink((int)a[0].num));
     if (streq(name, "ui_ink_on"))  return zl_num((double)ui_ink_on((unsigned)(unsigned long long)a[0].num));
     if (streq(name, "ui_items"))   { if (a[0].type==V_STR) return zl_num((double)ui_items_count(a[0].str)); return zl_num(0.0); }

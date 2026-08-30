@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — fix: round twelve, first eleven - and the audit caught a rescaled instrument (3eb0224)
+
+`design/presswork` · 6 files changed, 23 insertions(+), 9 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `kernel/app_manifest_embed.zl`
+- `kernel/build_identity_embed.zl`
+- `kernel/metadata/app-manifest.json`
+- `kernel/metadata/build-identity.json`
+- `kernel/src/kernel.zl`
+- `kernel/tools/probes/README.md`
+
+</details>
+
 ## 2026-08-30 — fix: I wired a palette row into a dead island, and the island was nine functions (a1bb161)
 
 `design/presswork` · 12 files changed, 135 insertions(+), 154 deletions(-)
