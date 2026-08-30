@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            gcc gcc-multilib clang nasm llvm lld \
+            curl gcc gcc-multilib clang nasm llvm lld \
             qemu-system-x86 ovmf \
             mtools dosfstools gdisk parted \
             xorriso grub-pc-bin grub-efi-amd64-bin
@@ -68,6 +68,14 @@ jobs:
       - name: build current-runner host evidence required by EFI receipts
         if: matrix.script == 'kernel/tools/checks/verify-efi.sh'
         run: |
+          ax201_fixture="$RUNNER_TEMP/iwlwifi-QuZ-a0-hr-b0-77.ucode"
+          curl -fsSL \
+            'https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20260519/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode' \
+            -o "$ax201_fixture"
+          echo '69ca0913ccca609dedff5e30b1d478482487fa14ad6b7be079f8cc856ac26cac  '"$ax201_fixture" \
+            | sha256sum -c -
+          sudo install -Dm0644 "$ax201_fixture" \
+            /lib/firmware/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode
           python3 kernel/tools/generators/gen-build-identity.py --write --selftest
           kernel/tests/host/build.sh
           python3 kernel/tools/generators/gen-test-inventory.py --write --selftest

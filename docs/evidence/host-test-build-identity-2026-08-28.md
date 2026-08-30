@@ -110,6 +110,13 @@ receipt remains the durable evidence from its named host and toolchain.
 The Ubuntu job installs `gcc-multilib` explicitly because `HT-042 jmptest32`
 must compile and run; omitting the 32-bit libc headers is a failed host evidence
 build, not an allowed unavailable target.
+`HT-040 iwlwifitest` also validates the exact AX201 API-77 image used by the
+target. Minimal Ubuntu runners do not ship that artifact, so the workflow
+downloads it from the authoritative `linux-firmware` tag `20260519`, verifies
+the driver allowlist SHA-256
+`69ca0913ccca609dedff5e30b1d478482487fa14ad6b7be079f8cc856ac26cac`,
+and only then installs it as the host-test fixture. A moving firmware package or
+an unverified download cannot satisfy the join.
 
 ## Commands
 
