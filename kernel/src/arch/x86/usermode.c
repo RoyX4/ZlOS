@@ -443,27 +443,8 @@ typedef unsigned char u8_64;
 #define U64_ADDR 0x000ffffffffff000ULL
 #define U64_CODE_SEL 0x23
 #define U64_DATA_SEL 0x1b
-#define U64_SYS_WRITE  1
-#define U64_SYS_GETPID 2
-#define U64_SYS_EXIT   3
-#define U64_SYS_COPY   4
-#define U64_SYS_TIME   5
-#define U64_SYS_YIELD  6
-#define U64_SYS_OPEN   7
-#define U64_SYS_READ   8
-#define U64_SYS_WRITEF 9
-#define U64_SYS_CLOSE  10
-#define U64_SYS_INFO   11
-#define U64_SYS_REMOVE 12
-#define U64_SYS_RENAME 13
-#define U64_SYS_SYNC   14
-#define U64_SYS_SEND   15
-#define U64_SYS_RECV   16
-#define U64_SYS_FROM   17
-#define U64_SYS_WIN_OPEN    18
-#define U64_SYS_WIN_PRESENT 19
-#define U64_SYS_WIN_POLL    20
-#define U64_SYS_WIN_CLOSE   21
+
+#include "user_syscalls_generated.h"
 
 #define U64_HANDLES 8
 #define U64_PROCS 2
@@ -472,12 +453,30 @@ typedef unsigned char u8_64;
 #define U64_IPC_BYTES 64
 #define U64_IO_MAX 4096
 #define U64_NAME_MAX 24
+#define U64_KSTACK_PAGES 2
+#define U64_KSTACK_BYTES (U64_KSTACK_PAGES * 4096)
+#define U64_KSTACK_FILL 0xa5u
+#define U64_ANON_PTE_FIRST 6U
+#define U64_PAGE_BYTES 4096ULL
 #define U64_EINVAL ((u64)-22)
 #define U64_ENOENT ((u64)-2)
+#define U64_ENOMEM ((u64)-12)
 #define U64_ENOSPC ((u64)-28)
 #define U64_EBADF  ((u64)-9)
 #define U64_EAGAIN ((u64)-11)
 #define U64_EIO    ((u64)-5)
+#define U64_ENOSYS ((u64)-38)
+
+#include "core/process_memory.h"
+#include "core/anon_memory.h"
+
+#define U64_PROCESS_FRAME_LIMIT (2U * PROCESS_MEMORY_PAGE_COUNT)
+#define U64_ANON_FRAME_LIMIT ANON_MEMORY_PAGE_COUNT
+
+_Static_assert(U64_ANON_PTE_FIRST == 6U,
+               "anonymous window must follow the guarded kernel stack");
+_Static_assert(U64_ANON_PTE_FIRST + ANON_MEMORY_PAGE_COUNT <= 512U,
+               "anonymous window must fit one process page table");
 
 struct ipc64_message {
     u32 from, bytes;
@@ -487,27 +486,26 @@ struct ipc64_message {
 struct process64 {
     u32 pid;
     u32 state;                 /* 0 empty, 1 runnable/running, 2 exited, 3 fault */
-    u64 cr3, user_base, user_stack_top;
+    u64 cr3, user_base, user_stack_top, kernel_stack_top;
     u32 calls, fault_vector;
+    u32 fault_error;
     u32 bad_pointer_refused;
+    u64 fault_address;
     u32 started, has_frame;
     u64 saved_frame[U64_SAVED_QWORDS];
     int handles[U64_HANDLES];       /* zlfs index + 1; zero means closed */
     struct ipc64_message inbox[U64_IPC_SLOTS];
     u32 inbox_head, inbox_tail, inbox_count, ipc_last_from;
+    struct process_memory memory;
+    struct anon_memory anonymous;
 };
 
 static struct process64 procs64[U64_PROCS];
 static struct process64 *proc64;
 static int proc64_index;
-static u64 proc_pml4[U64_PROCS][512] __attribute__((aligned(4096)));
-static u64 proc_pdpt[U64_PROCS][512] __attribute__((aligned(4096)));
-static u64 proc_pd[U64_PROCS][512]   __attribute__((aligned(4096)));
-static u64 proc_pt[U64_PROCS][512]   __attribute__((aligned(4096)));
-static u8_64 proc_code[U64_PROCS][4096]  __attribute__((aligned(4096)));
-static u8_64 proc_stack[U64_PROCS][4096] __attribute__((aligned(4096)));
-static u8_64 proc_kstack[U64_PROCS][8192] __attribute__((aligned(16)));
 static u8_64 proc_io[U64_PROCS][U64_IO_MAX];
+static u32 proc_kstack_last_used[U64_PROCS];
+static u32 proc_kstack_high_water[U64_PROCS];
 
 u64 user64_kernel_cr3, user64_process_cr3;
 u64 user64_return_rsp, user64_return_rip, user64_return_rflags;
@@ -518,10 +516,14 @@ static char user64_sched_trace[8];
 static int user64_sched_trace_n, user64_sched_trace_on;
 
 extern unsigned char user64_blob[], user64_blob_end[];
+extern unsigned char user64_anon_probe[], user64_anon_probe_end[];
+extern unsigned char user64_anon_reserved_fault[], user64_anon_reserved_fault_end[];
+extern unsigned char user64_anon_released_fault[], user64_anon_released_fault_end[];
 void __attribute__((sysv_abi)) user64_enter_asm(u64 rip, u64 rsp);
 void __attribute__((sysv_abi)) user64_resume_asm(u64 *frame);
 void user64_abort(void) __attribute__((noreturn));
 extern void gdt64_set_kernel_stack(u64 top);
+extern u64 gdt64_active_kernel_stack_top(void);
 extern u32 idt_ticks(void);
 extern void idt_timer_tick(void);
 extern void yield(void);
@@ -553,42 +555,171 @@ static u64 cr3_read64(void)
     u64 v; __asm__ volatile("mov %%cr3,%0" : "=r"(v)); return v;
 }
 
+static int process64_flush_anonymous(void *context)
+{
+    if (!context) return 0;
+    u64 target = *(u64 *)context & U64_ADDR;
+    if (!target) return 0;
+    u64 current = cr3_read64();
+    /* PCID is not enabled. An inactive process is flushed by its next CR3
+     * load; the active process must discard translations before returning. */
+    if ((current & U64_ADDR) == target)
+        __asm__ volatile("mov %0,%%cr3" :: "r"(current) : "memory");
+    return 1;
+}
+
 static void zero_page(u64 *p) { for (int i = 0; i < 512; i++) p[i] = 0; }
+
+static void *process64_memory_pointer(const struct process_memory *memory,
+                                      enum process_memory_page page)
+{
+    return (void *)(__UINTPTR_TYPE__)process_memory_page(memory, page);
+}
+
+static void *process64_page_pointer(int index, enum process_memory_page page)
+{
+    if (index < 0 || index >= U64_PROCS) return 0;
+    return process64_memory_pointer(&procs64[index].memory, page);
+}
+
+static u8_64 *process64_kstack_byte(int index, u32 offset)
+{
+    enum process_memory_page page = offset < 4096U
+        ? PROCESS_MEMORY_KERNEL_STACK_LOW
+        : PROCESS_MEMORY_KERNEL_STACK_HIGH;
+    u8_64 *base = (u8_64 *)process64_page_pointer(index, page);
+    return base ? base + (offset & 4095U) : 0;
+}
+
+static int process64_anonymous_uninitialized(const struct anon_memory *memory)
+{
+    if (!memory || memory->entries || memory->pte_flags || memory->owner ||
+        memory->reserved_count || memory->committed_count ||
+        memory->broken_count || memory->fail_after_write || memory->flush ||
+        memory->flush_context)
+        return 0;
+    for (unsigned int i = 0; i < ANON_MEMORY_PAGE_COUNT; i++)
+        if (memory->pages[i] || memory->states[i]) return 0;
+    return 1;
+}
+
+static int process64_release_anonymous(struct process64 *process)
+{
+    if (process64_anonymous_uninitialized(&process->anonymous)) return 1;
+    return anon_memory_destroy(&process->anonymous) == ANON_MEMORY_OK;
+}
+
+static int process64_release_slot(int index)
+{
+    if (index < 0 || index >= U64_PROCS) return 0;
+    struct process64 *process = &procs64[index];
+    if (!process_memory_ready(&process->memory))
+        return process->memory.acquired == 0 &&
+               process64_anonymous_uninitialized(&process->anonymous);
+    if (!process64_release_anonymous(process)) return 0;
+    userwin_close_owner((int)process->pid);
+    if (process_memory_release(&process->memory) != PROCESS_MEMORY_OK) return 0;
+    process->pid = 0;
+    process->state = 0;
+    process->cr3 = 0;
+    process->user_base = 0;
+    process->user_stack_top = 0;
+    process->kernel_stack_top = 0;
+    return 1;
+}
 
 static int process64_prepare(int index, u32 pid)
 {
     if (index < 0 || index >= U64_PROCS) return 0;
-    if (procs64[index].state && procs64[index].pid)
-        userwin_close_owner((int)procs64[index].pid);
+    u64 blob_bytes = (u64)(user64_blob_end - user64_blob);
+    if (!blob_bytes || blob_bytes > PMM_PAGE_BYTES) return 0;
     u64 old = cr3_read64();
     u64 *live = (u64 *)(old & U64_ADDR);
     if (!live) return 0;
     int slot = -1;
     for (int i = 1; i < 255; i++) if (!(live[i] & U64_P)) { slot = i; break; }
     if (slot < 0) return 0;
-    for (int i = 0; i < 512; i++) proc_pml4[index][i] = live[i];
-    zero_page(proc_pdpt[index]); zero_page(proc_pd[index]); zero_page(proc_pt[index]);
-    u64 base = (u64)(unsigned)slot << 39;
-    proc_pml4[index][slot] = ((u64)proc_pdpt[index] & U64_ADDR) | U64_P | U64_W | U64_U;
-    proc_pdpt[index][0] = ((u64)proc_pd[index] & U64_ADDR) | U64_P | U64_W | U64_U;
-    proc_pd[index][0] = ((u64)proc_pt[index] & U64_ADDR) | U64_P | U64_W | U64_U;
-    proc_pt[index][0] = ((u64)proc_code[index] & U64_ADDR) | U64_P | U64_U;
-    /* PTE 1 is intentionally absent: the stack's lower guard page. */
-    proc_pt[index][2] = ((u64)proc_stack[index] & U64_ADDR) | U64_P | U64_W | U64_U | U64_NX;
 
-    u64 bytes = (u64)(user64_blob_end - user64_blob);
-    if (!bytes || bytes > sizeof proc_code[index]) return 0;
-    for (u64 i = 0; i < bytes; i++) proc_code[index][i] = user64_blob[i];
-    for (u64 i = bytes; i < sizeof proc_code[index]; i++) proc_code[index][i] = 0xcc;
-    for (int i = 0; i < (int)sizeof proc_stack[index]; i++) proc_stack[index][i] = 0;
+    unsigned int process_owner = PROCESS_MEMORY_OWNER_BASE + (unsigned)index;
+    unsigned int anonymous_owner = ANON_MEMORY_OWNER_BASE + (unsigned)index;
+    /* Image replacement acquires the complete successor before releasing the
+     * predecessor, so the fixed-frame account admits exactly two images. The
+     * anonymous account is bounded to the one typed window it can publish. */
+    if (pmm_set_owner_limit(process_owner, U64_PROCESS_FRAME_LIMIT) != PMM_OK ||
+        pmm_set_owner_limit(anonymous_owner, U64_ANON_FRAME_LIMIT) != PMM_OK)
+        return 0;
+
+    struct process_memory next = {0};
+    struct anon_memory next_anonymous = {0};
+    if (process_memory_acquire(&next, process_owner) != PROCESS_MEMORY_OK)
+        return 0;
+    u64 *pml4 = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PML4);
+    u64 *pdpt = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PDPT);
+    u64 *pd = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PD);
+    u64 *pt = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PT);
+    u8_64 *code = (u8_64 *)process64_memory_pointer(&next, PROCESS_MEMORY_CODE);
+    u8_64 *stack = (u8_64 *)process64_memory_pointer(&next,
+                                                      PROCESS_MEMORY_USER_STACK);
+    u8_64 *kstack_low = (u8_64 *)process64_memory_pointer(
+        &next, PROCESS_MEMORY_KERNEL_STACK_LOW);
+    u8_64 *kstack_high = (u8_64 *)process64_memory_pointer(
+        &next, PROCESS_MEMORY_KERNEL_STACK_HIGH);
+    if (!pml4 || !pdpt || !pd || !pt || !code || !stack ||
+        !kstack_low || !kstack_high) {
+        process_memory_release(&next);
+        return 0;
+    }
+
+    for (int i = 0; i < 512; i++) pml4[i] = live[i];
+    zero_page(pdpt); zero_page(pd); zero_page(pt);
+    u64 base = (u64)(unsigned)slot << 39;
+    pml4[slot] = ((u64)pdpt & U64_ADDR) | U64_P | U64_W | U64_U;
+    pdpt[0] = ((u64)pd & U64_ADDR) | U64_P | U64_W | U64_U;
+    pd[0] = ((u64)pt & U64_ADDR) | U64_P | U64_W | U64_U;
+    pt[0] = ((u64)code & U64_ADDR) | U64_P | U64_U;
+    /* PTE 1 is intentionally absent: the stack's lower guard page. */
+    pt[2] = ((u64)stack & U64_ADDR) | U64_P | U64_W | U64_U | U64_NX;
+    /* PTE 3 is intentionally absent: the TSS kernel stack's lower guard. */
+    pt[4] = ((u64)kstack_low & U64_ADDR) | U64_P | U64_W | U64_NX;
+    pt[5] = ((u64)kstack_high & U64_ADDR) | U64_P | U64_W | U64_NX;
+
+    if (anon_memory_init(&next_anonymous, anonymous_owner,
+                         &pt[U64_ANON_PTE_FIRST], U64_P | U64_W | U64_U | U64_NX,
+                         process64_flush_anonymous, &procs64[index].cr3) !=
+        ANON_MEMORY_OK) {
+        process_memory_release(&next);
+        return 0;
+    }
+
+    for (u64 i = 0; i < blob_bytes; i++) code[i] = user64_blob[i];
+    for (u64 i = blob_bytes; i < PMM_PAGE_BYTES; i++) code[i] = 0xcc;
+    for (u32 i = 0; i < PMM_PAGE_BYTES; i++) stack[i] = 0;
+    for (u32 i = 0; i < PMM_PAGE_BYTES; i++) {
+        kstack_low[i] = U64_KSTACK_FILL;
+        kstack_high[i] = U64_KSTACK_FILL;
+    }
+
+    if (process_memory_ready(&procs64[index].memory) &&
+        (!process64_release_anonymous(&procs64[index]) ||
+         process_memory_release(&procs64[index].memory) != PROCESS_MEMORY_OK)) {
+        process_memory_release(&next);
+        return 0;
+    }
+    if (procs64[index].state && procs64[index].pid)
+        userwin_close_owner((int)procs64[index].pid);
+    proc_kstack_last_used[index] = 0;
 
     proc64_index = index;
     proc64 = &procs64[index];
+    proc64->memory = next;
+    proc64->anonymous = next_anonymous;
     proc64->pid = pid; proc64->state = 1;
-    proc64->cr3 = (u64)proc_pml4[index] & U64_ADDR;
+    proc64->cr3 = (u64)pml4 & U64_ADDR;
     proc64->user_base = base;
     proc64->user_stack_top = base + 3 * 4096ULL;
-    proc64->calls = 0; proc64->fault_vector = 0; proc64->bad_pointer_refused = 0;
+    proc64->kernel_stack_top = base + 6 * 4096ULL;
+    proc64->calls = 0; proc64->fault_vector = 0; proc64->fault_error = 0;
+    proc64->fault_address = 0; proc64->bad_pointer_refused = 0;
     proc64->started = proc64->has_frame = 0;
     for (int i = 0; i < U64_HANDLES; i++) proc64->handles[i] = 0;
     proc64->inbox_head = proc64->inbox_tail = proc64->inbox_count = 0;
@@ -603,7 +734,39 @@ static void process64_select(int index)
     proc64_index = index;
     proc64 = &procs64[index];
     user64_process_cr3 = proc64->cr3;
-    gdt64_set_kernel_stack((u64)(proc_kstack[index] + sizeof proc_kstack[index]));
+    gdt64_set_kernel_stack(proc64->kernel_stack_top);
+}
+
+static void process64_observe_kernel_stack(int index)
+{
+    u32 first_changed = U64_KSTACK_BYTES;
+    for (u32 i = 0; i < U64_KSTACK_BYTES; i++) {
+        u8_64 *byte = process64_kstack_byte(index, i);
+        if (!byte || *byte != U64_KSTACK_FILL) {
+            first_changed = i;
+            break;
+        }
+    }
+    proc_kstack_last_used[index] = first_changed == U64_KSTACK_BYTES
+        ? 0 : U64_KSTACK_BYTES - first_changed;
+    if (proc_kstack_last_used[index] > proc_kstack_high_water[index])
+        proc_kstack_high_water[index] = proc_kstack_last_used[index];
+}
+
+static int process64_kernel_stack_contract(int index)
+{
+    const u64 mask = U64_ADDR | U64_P | U64_W | U64_U | U64_NX;
+    u64 *pt = (u64 *)process64_page_pointer(index, PROCESS_MEMORY_PT);
+    const u64 first = ((u64)process64_page_pointer(
+                           index, PROCESS_MEMORY_KERNEL_STACK_LOW) & U64_ADDR) |
+                      U64_P | U64_W | U64_NX;
+    const u64 second = ((u64)process64_page_pointer(
+                            index, PROCESS_MEMORY_KERNEL_STACK_HIGH) & U64_ADDR) |
+                       U64_P | U64_W | U64_NX;
+    return pt && pt[3] == 0 &&
+           (pt[4] & mask) == first &&
+           (pt[5] & mask) == second &&
+           procs64[index].kernel_stack_top == procs64[index].user_base + 6 * 4096ULL;
 }
 
 /* Complete-range validation happens before the first byte is touched. */
@@ -613,6 +776,20 @@ static int user64_range(u64 addr, u64 bytes, int writing)
     u64 b = proc64->user_base;
     if (!writing && addr >= b && addr + bytes <= b + 4096) return 1;
     if (addr >= b + 8192 && addr + bytes <= b + 12288) return 1;
+    u64 anonymous_base = b + U64_ANON_PTE_FIRST * U64_PAGE_BYTES;
+    u64 anonymous_end = anonymous_base +
+                        ANON_MEMORY_PAGE_COUNT * U64_PAGE_BYTES;
+    if (addr >= anonymous_base && addr + bytes <= anonymous_end) {
+        unsigned int first = (unsigned int)((addr - anonymous_base) /
+                                             U64_PAGE_BYTES);
+        unsigned int last = (unsigned int)((addr + bytes - 1 - anonymous_base) /
+                                            U64_PAGE_BYTES);
+        for (unsigned int page = first; page <= last; page++)
+            if (anon_memory_state(&proc64->anonymous, page) !=
+                ANON_MEMORY_COMMITTED)
+                return 0;
+        return 1;
+    }
     return 0;
 }
 
@@ -676,6 +853,16 @@ static u64 user64_finish(u64 nr, unsigned operation_id, u64 value)
     return value;
 }
 
+static u64 user64_anonymous_status(int status)
+{
+    if (status == ANON_MEMORY_OK) return 0;
+    if (status == ANON_MEMORY_E_NOMEM) return U64_ENOMEM;
+    if (status == ANON_MEMORY_E_TRANSACTION ||
+        status == ANON_MEMORY_E_CORRUPT)
+        return U64_EIO;
+    return U64_EINVAL;
+}
+
 u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
                                               u64 arg2, u64 arg3)
 {
@@ -687,6 +874,7 @@ u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
         ZLLOG_SUB_SYSCALL, ZLLOG_OBJ_PROCESS, proc64->pid,
         ZLLOG_OP_SYSCALL_BASE + (u32)nr, (u32)nr);
 #define U64_RETURN(value) return user64_finish(nr, operation_id, (value))
+    if (!zlos_u64_syscall_known(nr)) U64_RETURN(U64_ENOSYS);
     if (nr == U64_SYS_WRITE) {
         char c = (char)(arg1 & 0x7f);
         if (user64_sched_trace_on && user64_sched_trace_n < (int)sizeof user64_sched_trace)
@@ -826,16 +1014,43 @@ u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
     }
     if (nr == U64_SYS_WIN_CLOSE)
         U64_RETURN(userwin_close((int)proc64->pid, (int)arg1) ? 0 : U64_EBADF);
-    U64_RETURN((u64)-1);
+    if (nr == U64_SYS_ANON_RESERVE) {
+        if (arg1 >= ANON_MEMORY_PAGE_COUNT || !arg2 ||
+            arg2 > ANON_MEMORY_PAGE_COUNT - arg1)
+            U64_RETURN(U64_EINVAL);
+        int status = anon_memory_reserve(&proc64->anonymous,
+                                         (unsigned int)arg1,
+                                         (unsigned int)arg2);
+        if (status != ANON_MEMORY_OK)
+            U64_RETURN(user64_anonymous_status(status));
+        U64_RETURN(proc64->user_base +
+                   (U64_ANON_PTE_FIRST + arg1) * U64_PAGE_BYTES);
+    }
+    if (nr == U64_SYS_ANON_COMMIT) {
+        if (arg1 >= ANON_MEMORY_PAGE_COUNT || !arg2 ||
+            arg2 > ANON_MEMORY_PAGE_COUNT - arg1)
+            U64_RETURN(U64_EINVAL);
+        U64_RETURN(user64_anonymous_status(anon_memory_commit(
+            &proc64->anonymous, (unsigned int)arg1, (unsigned int)arg2)));
+    }
+    if (nr == U64_SYS_ANON_RELEASE) {
+        if (arg1 >= ANON_MEMORY_PAGE_COUNT || !arg2 ||
+            arg2 > ANON_MEMORY_PAGE_COUNT - arg1)
+            U64_RETURN(U64_EINVAL);
+        U64_RETURN(user64_anonymous_status(anon_memory_release(
+            &proc64->anonymous, (unsigned int)arg1, (unsigned int)arg2)));
+    }
+    U64_RETURN(U64_ENOSYS);
 #undef U64_RETURN
 }
 
 int user64_is_running(void) { return user64_running; }
-void user64_mark_fault(u32 vector)
+void user64_mark_fault(u32 vector, u32 error, u64 address)
 {
     user64_faulted = 1; user64_running = 0;
     userwin_close_owner((int)proc64->pid);
     proc64->state = 3; proc64->fault_vector = vector;
+    proc64->fault_error = error; proc64->fault_address = address;
 }
 
 int user_has_exited(void) { return user64_exited; }
@@ -871,10 +1086,12 @@ int __attribute__((sysv_abi)) user64_timer_dispatch(u64 *frame)
 
 static int user64_load_process(int index, u32 pid, const u8_64 *code, u32 bytes)
 {
-    if (!process64_prepare(index, pid) || !code || !bytes ||
-        bytes > sizeof proc_code[index]) return 0;
-    for (u32 i = 0; i < bytes; i++) proc_code[index][i] = code[i];
-    for (u32 i = bytes; i < sizeof proc_code[index]; i++) proc_code[index][i] = 0xcc;
+    if (!code || !bytes || bytes > PMM_PAGE_BYTES ||
+        !process64_prepare(index, pid)) return 0;
+    u8_64 *page = (u8_64 *)process64_page_pointer(index, PROCESS_MEMORY_CODE);
+    if (!page) return 0;
+    for (u32 i = 0; i < bytes; i++) page[i] = code[i];
+    for (u32 i = bytes; i < PMM_PAGE_BYTES; i++) page[i] = 0xcc;
     zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, pid,
                   ZLLOG_LIFE_START, 0u, bytes);
     return 1;
@@ -898,6 +1115,7 @@ static int user64_step(int index)
         user64_resume_asm(proc64->saved_frame);
     }
     user64_running = 0;
+    process64_observe_kernel_stack(index);
     /* user64_mark_fault runs inside an exception and therefore may not append
      * to the normal recorder ring. user64_abort returns here in ordinary
      * kernel context; publish the typed lifecycle boundary only now. */
@@ -934,6 +1152,16 @@ int user64_run_default_file(void)
 
 void user_selftest(void)
 {
+    for (int i = 0; i < U64_PROCS; i++)
+        if (!process64_release_slot(i)) {
+            up("  process frame cleanup refused before selftest\n");
+            return;
+        }
+    unsigned long process_frame_baseline = pmm_used_pages();
+    for (int i = 0; i < U64_PROCS; i++) {
+        proc_kstack_last_used[i] = 0;
+        proc_kstack_high_water[i] = 0;
+    }
     up("  ring 3 64: ");
     u32 blob_bytes = (u32)(user64_blob_end - user64_blob);
     if (user64_run_probe(user64_blob, blob_bytes) < 0) {
@@ -945,6 +1173,91 @@ void user_selftest(void)
     }
     up(" <- iretq/int80/iretq, "); upu(proc64->calls);
     up(" syscalls, process exited, kernel alive\n");
+
+    /* Unknown syscall IDs must have one unsigned behavior. This Ring-3 image
+     * probes zero, the first gap, the sign bit and all bits set; each result
+     * is normalized by adding ENOSYS and ORed into RBX. A non-zero aggregate
+     * reaches UD2 instead of SYS_EXIT, making the target gate fail. */
+    static const u8_64 unknown_syscalls[] = {
+        0x31,0xdb,
+        0xb8,0,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+        0xb8,25,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+        0x48,0xb8, 0,0,0,0,0,0,0,0x80,
+        0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+        0x48,0xc7,0xc0, 0xff,0xff,0xff,0xff,
+        0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+        0x48,0x85,0xdb, 0x75,0x09,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b,
+        0x0f,0x0b
+    };
+    int unknown_result = user64_run_probe(unknown_syscalls, sizeof unknown_syscalls);
+    if (unknown_result == 0 && proc64->state == 2)
+        up("  syscall ABI: zero/gap/sign-bit/max refused with ENOSYS\n");
+    else
+        up("  syscall ABI: unknown-number ENOSYS gate FAILED\n");
+
+    /* Ring 3 reserves two pages without mappings, commits zero-filled PMM
+     * frames, crosses the page boundary through copy validation, releases
+     * each page, and confirms a released page is no longer a valid buffer. */
+    up("  anonymous memory: ");
+    int anonymous_result = user64_run_probe(
+        user64_anon_probe,
+        (u32)(user64_anon_probe_end - user64_anon_probe));
+    if (anonymous_result == 0 && proc64->state == 2 &&
+        anon_memory_ready(&proc64->anonymous) &&
+        proc64->anonymous.reserved_count == 0 &&
+        proc64->anonymous.committed_count == 0)
+        up(" <- reserve/commit zero-fill, cross-page copy and release passed\n");
+    else
+        up(" <- anonymous reserve/commit/release FAILED\n");
+
+    static const u8_64 anonymous_sibling_v[] = {
+        0xb8,1,0,0,0, 0xbb,'V',0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int arv = user64_load_process(
+        0, 7, user64_anon_reserved_fault,
+        (u32)(user64_anon_reserved_fault_end - user64_anon_reserved_fault));
+    int arv_sibling = user64_load_process(
+        1, 8, anonymous_sibling_v, sizeof anonymous_sibling_v);
+    u64 reserved_address = arv ? procs64[0].user_base +
+                               U64_ANON_PTE_FIRST * U64_PAGE_BYTES : 0;
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (arv && arv_sibling) { user64_step(0); user64_step(1); }
+    user64_sched_trace_on = 0;
+    if (arv && arv_sibling && procs64[0].state == 3 &&
+        procs64[0].fault_vector == 14 && procs64[0].fault_error == 0x4u &&
+        procs64[0].fault_address == reserved_address &&
+        anon_memory_state(&procs64[0].anonymous, 0) == ANON_MEMORY_RESERVED &&
+        procs64[1].state == 2 && user64_sched_trace_n == 1 &&
+        user64_sched_trace[0] == 'V')
+        up(" <- reserved anonymous page stayed absent; sibling V exited\n");
+    else
+        up(" <- reserved anonymous page fault containment FAILED\n");
+
+    static const u8_64 anonymous_sibling_r[] = {
+        0xb8,1,0,0,0, 0xbb,'R',0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int arr = user64_load_process(
+        0, 9, user64_anon_released_fault,
+        (u32)(user64_anon_released_fault_end - user64_anon_released_fault));
+    int arr_sibling = user64_load_process(
+        1, 10, anonymous_sibling_r, sizeof anonymous_sibling_r);
+    u64 released_address = arr ? procs64[0].user_base +
+                               U64_ANON_PTE_FIRST * U64_PAGE_BYTES : 0;
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (arr && arr_sibling) { user64_step(0); user64_step(1); }
+    user64_sched_trace_on = 0;
+    if (arr && arr_sibling && procs64[0].state == 3 &&
+        procs64[0].fault_vector == 14 && procs64[0].fault_error == 0x4u &&
+        procs64[0].fault_address == released_address &&
+        anon_memory_state(&procs64[0].anonymous, 0) == ANON_MEMORY_FREE &&
+        procs64[1].state == 2 && user64_sched_trace_n == 1 &&
+        user64_sched_trace[0] == 'R')
+        up(" <- released anonymous page faulted exactly; sibling R exited\n");
+    else
+        up(" <- released anonymous page fault containment FAILED\n");
 
     /* Two independent process objects alternate at cooperative yield
      * boundaries. Each owns its PML4, code, user/kernel stack, saved frame and
@@ -973,11 +1286,19 @@ void user_selftest(void)
     }
     user64_sched_trace_on = 0;
     int separate = procs64[0].cr3 != procs64[1].cr3 &&
-                   (u64)proc_code[0] != (u64)proc_code[1] &&
-                   (u64)proc_kstack[0] != (u64)proc_kstack[1];
+                   process_memory_page(&procs64[0].memory, PROCESS_MEMORY_CODE) !=
+                       process_memory_page(&procs64[1].memory, PROCESS_MEMORY_CODE) &&
+                   process_memory_page(&procs64[0].memory,
+                                       PROCESS_MEMORY_KERNEL_STACK_LOW) !=
+                       process_memory_page(&procs64[1].memory,
+                                           PROCESS_MEMORY_KERNEL_STACK_LOW);
     int interleaved = user64_sched_trace_n == 4 &&
                       user64_sched_trace[0] == 'A' && user64_sched_trace[1] == 'B' &&
                       user64_sched_trace[2] == '1' && user64_sched_trace[3] == '2';
+    int kstack_syscall_paths = proc_kstack_last_used[0] > 0 &&
+                               proc_kstack_last_used[0] < U64_KSTACK_BYTES &&
+                               proc_kstack_last_used[1] > 0 &&
+                               proc_kstack_last_used[1] < U64_KSTACK_BYTES;
     if (p1ok && p2ok && separate && interleaved &&
         procs64[0].state == 2 && procs64[1].state == 2)
         up(" <- two PML4 processes yielded/resumed AB12 and exited independently\n");
@@ -1001,6 +1322,10 @@ void user_selftest(void)
     user64_preempt_on = 0; user64_sched_trace_on = 0;
     int preempt_trace = user64_sched_trace_n == 2 &&
                         user64_sched_trace[0] == 'P' && user64_sched_trace[1] == 'Q';
+    int kstack_preempt_paths = proc_kstack_last_used[0] > 0 &&
+                               proc_kstack_last_used[0] < U64_KSTACK_BYTES &&
+                               proc_kstack_last_used[1] > 0 &&
+                               proc_kstack_last_used[1] < U64_KSTACK_BYTES;
     if (b1 && b2 && preempt_trace && user64_preemptions >= 2 &&
         procs64[0].has_frame && procs64[1].has_frame)
         up(" <- PIT preempted two non-yielding Ring-3 loops PQ\n");
@@ -1018,12 +1343,70 @@ void user_selftest(void)
     user64_sched_trace_n = 0; user64_sched_trace_on = 1;
     if (f_ok && s_ok) { user64_step(0); user64_step(1); }
     user64_sched_trace_on = 0;
+    int kstack_fault_paths = proc_kstack_last_used[0] > 0 &&
+                             proc_kstack_last_used[0] < U64_KSTACK_BYTES &&
+                             proc_kstack_last_used[1] > 0 &&
+                             proc_kstack_last_used[1] < U64_KSTACK_BYTES;
     if (f_ok && s_ok && procs64[0].state == 3 &&
         procs64[0].fault_vector == 13 && procs64[1].state == 2 &&
         user64_sched_trace_n == 1 && user64_sched_trace[0] == 'K')
         up(" <- one process GP-faulted; its sibling ran and exited\n");
     else
         up(" <- sibling fault isolation FAILED\n");
+
+    /* Write into the intentionally absent page directly below the user stack.
+     * A genuine guard hit is a non-present user write (#PF error 0x6), with CR2
+     * equal to that exact address. The sibling must still run and exit. */
+    u8_64 guard_fault[] = {
+        0x48,0xb8, 0,0,0,0,0,0,0,0, 0xc6,0x00,0x01, 0x0f,0x0b
+    };
+    static const u8_64 guard_sibling[] = {
+        0xb8,1,0,0,0, 0xbb,'G',0,0,0, 0xcd,0x80,
+        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int gf_ok = user64_load_process(0, 5, guard_fault, sizeof guard_fault);
+    int gs_ok = user64_load_process(1, 6, guard_sibling, sizeof guard_sibling);
+    u64 guard_address = gf_ok ? procs64[0].user_base + 4096u + 2048u : 0;
+    u8_64 *guard_code = (u8_64 *)process64_page_pointer(0, PROCESS_MEMORY_CODE);
+    if (gf_ok && guard_code)
+        for (int i = 0; i < 8; i++)
+            guard_code[2 + i] = (u8_64)(guard_address >> (i * 8));
+    user64_sched_trace_n = 0; user64_sched_trace_on = 1;
+    if (gf_ok && gs_ok) { user64_step(0); user64_step(1); }
+    user64_sched_trace_on = 0;
+    if (gf_ok && gs_ok && procs64[0].state == 3 &&
+        procs64[0].fault_vector == 14 && procs64[0].fault_error == 0x6u &&
+        procs64[0].fault_address == guard_address && procs64[1].state == 2 &&
+        user64_sched_trace_n == 1 && user64_sched_trace[0] == 'G')
+        up(" <- lower stack guard PF error 6 at exact address; sibling G exited\n");
+    else
+        up(" <- lower stack guard fault containment FAILED\n");
+
+    int kstack_guard_fault_paths = proc_kstack_last_used[0] > 0 &&
+                                   proc_kstack_last_used[0] < U64_KSTACK_BYTES &&
+                                   proc_kstack_last_used[1] > 0 &&
+                                   proc_kstack_last_used[1] < U64_KSTACK_BYTES;
+    process64_select(0);
+    int tss0 = gdt64_active_kernel_stack_top() == procs64[0].kernel_stack_top;
+    process64_select(1);
+    int tss1 = gdt64_active_kernel_stack_top() == procs64[1].kernel_stack_top;
+    if (kstack_syscall_paths && kstack_preempt_paths && kstack_fault_paths &&
+        kstack_guard_fault_paths && process64_kernel_stack_contract(0) &&
+        process64_kernel_stack_contract(1) && tss0 && tss1 &&
+        process_memory_page(&procs64[0].memory,
+                            PROCESS_MEMORY_KERNEL_STACK_LOW) !=
+            process_memory_page(&procs64[1].memory,
+                                PROCESS_MEMORY_KERNEL_STACK_LOW) &&
+        proc_kstack_high_water[0] > 0 &&
+        proc_kstack_high_water[0] < U64_KSTACK_BYTES &&
+        proc_kstack_high_water[1] > 0 &&
+        proc_kstack_high_water[1] < U64_KSTACK_BYTES) {
+        up("  kernel stacks high-water: P0 "); upu(proc_kstack_high_water[0]);
+        up(" P1 "); upu(proc_kstack_high_water[1]); up(" bytes\n");
+        up(" <- two guarded supervisor TSS stacks bounded through syscall/preempt/fault paths\n");
+    } else {
+        up(" <- guarded supervisor TSS stack proof FAILED\n");
+    }
 
     /* PID 1 sends "hi", yields, PID 2 receives it and reports sender 1, then
      * replies "ok". PID 1 resumes, receives it and reports sender 2. Buffers
@@ -1049,16 +1432,19 @@ void user_selftest(void)
     int i1 = user64_load_process(0, 1, ipc1, sizeof ipc1);
     int i2 = user64_load_process(1, 2, ipc2, sizeof ipc2);
     if (i1 && i2) {
+        u8_64 *code0 = (u8_64 *)process64_page_pointer(0, PROCESS_MEMORY_CODE);
+        u8_64 *code1 = (u8_64 *)process64_page_pointer(1, PROCESS_MEMORY_CODE);
         u64 p1data = procs64[0].user_base + 94u;
         u64 p1stack = procs64[0].user_stack_top - 8u;
         u64 p2stack = procs64[1].user_stack_top - 8u;
         u64 p2data = procs64[1].user_base + 87u;
-        for (int i = 0; i < 8; i++) {
-            proc_code[0][12 + i] = (u8_64)(p1data >> (i * 8));
-            proc_code[0][36 + i] = (u8_64)(p1stack >> (i * 8));
-            proc_code[1][2 + i] = (u8_64)(p2stack >> (i * 8));
-            proc_code[1][63 + i] = (u8_64)(p2data >> (i * 8));
-        }
+        if (code0 && code1)
+            for (int i = 0; i < 8; i++) {
+                code0[12 + i] = (u8_64)(p1data >> (i * 8));
+                code0[36 + i] = (u8_64)(p1stack >> (i * 8));
+                code1[2 + i] = (u8_64)(p2stack >> (i * 8));
+                code1[63 + i] = (u8_64)(p2data >> (i * 8));
+            }
     }
     user64_sched_trace_n = 0; user64_sched_trace_on = 1;
     if (i1 && i2) { user64_step(0); user64_step(1); user64_step(0); }
@@ -1093,19 +1479,23 @@ void user_selftest(void)
     };
     int wok = user64_load_process(0, 1, winprog, sizeof winprog);
     if (wok) {
+        u8_64 *window_code = (u8_64 *)process64_page_pointer(
+            0, PROCESS_MEMORY_CODE);
         u64 values[3] = {
             procs64[0].user_base + sizeof winprog - 23u,
             procs64[0].user_base + sizeof winprog - 12u,
             procs64[0].user_stack_top - 16u
         };
-        for (int marker = 1; marker <= 3; marker++) {
+        for (int marker = 1; window_code && marker <= 3; marker++) {
             for (u32 at = 0; at + 8 <= sizeof winprog; at++) {
                 int match = 1;
                 for (int j = 0; j < 8; j++)
-                    if (proc_code[0][at + (u32)j] != (u8_64)(marker * 0x11)) match = 0;
+                    if (window_code[at + (u32)j] !=
+                        (u8_64)(marker * 0x11)) match = 0;
                 if (!match) continue;
                 for (int j = 0; j < 8; j++)
-                    proc_code[0][at + (u32)j] = (u8_64)(values[marker - 1] >> (j * 8));
+                    window_code[at + (u32)j] =
+                        (u8_64)(values[marker - 1] >> (j * 8));
                 break;
             }
         }
@@ -1158,6 +1548,40 @@ void user_selftest(void)
         up("/"); upu(dw); up("/"); upu(cr); up(" ptr ");
         upu(proc64->bad_pointer_refused); up("\n");
     }
+
+    int released = 1;
+    for (int i = 0; i < U64_PROCS; i++)
+        released &= process64_release_slot(i);
+    int accounts = released;
+    unsigned long anonymous_high_water = 0;
+    for (int i = 0; i < U64_PROCS; i++) {
+        struct pmm_owner_account fixed = {0};
+        struct pmm_owner_account anonymous = {0};
+        accounts &= pmm_owner_account(
+            PROCESS_MEMORY_OWNER_BASE + (unsigned)i, &fixed) == PMM_OK;
+        accounts &= pmm_owner_account(
+            ANON_MEMORY_OWNER_BASE + (unsigned)i, &anonymous) == PMM_OK;
+        accounts &= fixed.used_pages == 0 &&
+                    fixed.high_water_pages >= PROCESS_MEMORY_PAGE_COUNT &&
+                    fixed.high_water_pages <= U64_PROCESS_FRAME_LIMIT &&
+                    fixed.limit_pages == U64_PROCESS_FRAME_LIMIT &&
+                    fixed.available_pages == U64_PROCESS_FRAME_LIMIT &&
+                    fixed.refusals == 0;
+        accounts &= anonymous.used_pages == 0 &&
+                    anonymous.high_water_pages <= U64_ANON_FRAME_LIMIT &&
+                    anonymous.limit_pages == U64_ANON_FRAME_LIMIT &&
+                    anonymous.available_pages == U64_ANON_FRAME_LIMIT &&
+                    anonymous.refusals == 0;
+        anonymous_high_water += anonymous.high_water_pages;
+    }
+    accounts &= anonymous_high_water >= 2;
+    if (accounts && pmm_used_pages() == process_frame_baseline && !pmm_check()) {
+        up(" <- process memory accounting: fixed/anonymous quotas and owner totals passed\n");
+        up(" <- process-owned page tables/code/stacks reclaimed; PMM baseline restored\n");
+    } else {
+        up(" <- process memory accounting FAILED\n");
+        up(" <- process frame reclamation FAILED\n");
+    }
 }
 
 __asm__(
@@ -1172,6 +1596,45 @@ __asm__(
     "  .byte 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b\n"
     ".globl user64_blob_end\n"
     "user64_blob_end:\n"
+    ".globl user64_anon_probe\n"
+    "user64_anon_probe:\n"
+    "  xor %r13d,%r13d\n"
+    "  mov $22,%eax\n  xor %ebx,%ebx\n  mov $2,%ecx\n  int $0x80\n"
+    "  mov %rax,%r12\n"
+    "  mov $23,%eax\n  xor %ebx,%ebx\n  mov $2,%ecx\n  int $0x80\n"
+    "  or %rax,%r13\n"
+    "  mov (%r12),%rbx\n  or 4096(%r12),%rbx\n  or %rbx,%r13\n"
+    "  movb $77,(%r12)\n  movb $78,4096(%r12)\n"
+    "  movzbl (%r12),%ebx\n  xor $77,%ebx\n  or %rbx,%r13\n"
+    "  movzbl 4096(%r12),%ebx\n  xor $78,%ebx\n  or %rbx,%r13\n"
+    "  mov $4,%eax\n  lea 4094(%r12),%rbx\n  mov $4,%ecx\n  int $0x80\n"
+    "  or %rax,%r13\n"
+    "  mov $24,%eax\n  xor %ebx,%ebx\n  mov $1,%ecx\n  int $0x80\n"
+    "  or %rax,%r13\n"
+    "  mov $4,%eax\n  mov %r12,%rbx\n  mov $1,%ecx\n  int $0x80\n"
+    "  inc %rax\n  or %rax,%r13\n"
+    "  mov $24,%eax\n  mov $1,%ebx\n  mov $1,%ecx\n  int $0x80\n"
+    "  or %rax,%r13\n  test %r13,%r13\n  jz .Lanon_success\n  ud2\n"
+    ".Lanon_success:\n"
+    "  mov $1,%eax\n  mov $77,%ebx\n  int $0x80\n"
+    "  mov $3,%eax\n  int $0x80\n  ud2\n"
+    ".globl user64_anon_probe_end\n"
+    "user64_anon_probe_end:\n"
+    ".globl user64_anon_reserved_fault\n"
+    "user64_anon_reserved_fault:\n"
+    "  mov $22,%eax\n  xor %ebx,%ebx\n  mov $1,%ecx\n  int $0x80\n"
+    "  mov %rax,%r12\n  mov (%r12),%rax\n  ud2\n"
+    ".globl user64_anon_reserved_fault_end\n"
+    "user64_anon_reserved_fault_end:\n"
+    ".globl user64_anon_released_fault\n"
+    "user64_anon_released_fault:\n"
+    "  mov $22,%eax\n  xor %ebx,%ebx\n  mov $1,%ecx\n  int $0x80\n"
+    "  mov %rax,%r12\n"
+    "  mov $23,%eax\n  xor %ebx,%ebx\n  mov $1,%ecx\n  int $0x80\n"
+    "  mov $24,%eax\n  xor %ebx,%ebx\n  mov $1,%ecx\n  int $0x80\n"
+    "  mov (%r12),%rax\n  ud2\n"
+    ".globl user64_anon_released_fault_end\n"
+    "user64_anon_released_fault_end:\n"
     ".text\n"
     ".globl user64_enter_asm\n"
     "user64_enter_asm:\n"
@@ -1212,8 +1675,9 @@ __asm__(
     "8:\n"
     ".globl user64_abort\n"
     "user64_abort:\n"
+    "  mov user64_return_rsp(%rip),%rsp\n"
     "  mov user64_kernel_cr3(%rip),%rax\n  mov %rax,%cr3\n"
-    "  mov user64_return_rsp(%rip),%rsp\n  jmp *user64_return_rip(%rip)\n"
+    "  jmp *user64_return_rip(%rip)\n"
     ".globl user64_timer_isr\n"
     "user64_timer_isr:\n"
     "  push %rax\n  push %rbx\n  push %rcx\n  push %rdx\n  push %rsi\n"

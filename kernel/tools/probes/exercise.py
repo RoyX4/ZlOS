@@ -339,7 +339,8 @@ def build(uefi):
         print(script, "failed:\n", r.stdout[-2000:], r.stderr[-2000:]); sys.exit(1)
 
 
-def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False):
+def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False,
+              boot_snapshot=False):
     disk, stick = os.path.join(tmp, "nvme.img"), os.path.join(tmp, "stick.img")
     for p, mb in ((disk, 64), (stick, 32)):
         subprocess.run(["qemu-img", "create", "-f", "raw", p, f"{mb}M"],
@@ -392,10 +393,17 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False):
     if uefi:
         varsf = os.path.join(tmp, "vars.fd")
         shutil.copy(OVMF_VARS, varsf)
+        boot_drive = f"format=raw,file={HERE}/zlOS-usb.img,if=none,id=boot"
+        if boot_snapshot:
+            # Evidence and visual-oracle boots must not let the guest's ZLLOG
+            # recorder alter the exact artifact they are inspecting. QEMU's
+            # temporary snapshot layer preserves guest writes for the running
+            # machine without changing zlOS-usb.img on the host.
+            boot_drive += ",snapshot=on"
         return ["qemu-system-x86_64"] + common + [
             "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={OVMF_CODE}",
             "-drive", f"if=pflash,format=raw,unit=1,file={varsf}",
-            "-drive", f"format=raw,file={HERE}/zlOS-usb.img,if=none,id=boot",
+            "-drive", boot_drive,
             "-device", "usb-storage,bus=xhci.0,drive=boot",
             # -vga std, NOT -vga none. OVMF publishes no GOP this kernel can use
             # for a bare virtio-gpu-pci, so efi.c found no framebuffer and fell

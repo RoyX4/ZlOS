@@ -49,9 +49,9 @@ fi
 ./tests/host/efi_stage0_test.py || exit 1
 python3 ./tests/host/efi_kernel_witness_test.py || exit 1
 
-VARS=$(mktemp); cp "$OVMF_VARS" "$VARS"
+VARS=$(mktemp)
 LOG=$(mktemp)
-BOOT_IMAGE=$(mktemp --suffix=.img); cp zlOS-usb.img "$BOOT_IMAGE"
+BOOT_IMAGE=$(mktemp --suffix=.img)
 
 # Wait for the expected OUTPUT, never for a fixed number of seconds. A gate
 # that fails because the host was busy costs a bisect every time it lies
@@ -66,35 +66,57 @@ CEILING=180
 # `-cpu host` is meaningless without KVM, so it moves with the accelerator.
 # TCG is several times slower; that is safe here only because the loop below
 # polls for the marker instead of racing a fixed clock.
-if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+if [ "${ZLOS_FORCE_TCG:-0}" = 1 ]; then
+    echo "  note  TCG forced for emulator-fallback verification"
+    ACCEL=(-cpu max -accel tcg)
+    ACCEL_KIND=tcg
+elif [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
     ACCEL=(-cpu host -accel kvm)
+    ACCEL_KIND=kvm
 else
     echo "  note  no /dev/kvm - falling back to TCG (slower, still correct)"
     ACCEL=(-cpu max -accel tcg)
+    ACCEL_KIND=tcg
 fi
 
-timeout "$CEILING" qemu-system-x86_64 \
-    -m 1G -smp 2 "${ACCEL[@]}" \
-    -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
-    -drive if=pflash,format=raw,unit=1,file="$VARS" \
-    -device qemu-xhci,id=xhci \
-    -drive format=raw,file="$BOOT_IMAGE",if=none,id=boot \
-    -device usb-storage,bus=xhci.0,drive=boot \
-    -device usb-kbd,bus=xhci.0 \
-    -device usb-mouse,bus=xhci.0 \
-    -vga std -display none -no-reboot \
-    -serial "file:$LOG" >/dev/null 2>&1 &
-QPID=$!
-for _ in $(seq $((CEILING * 2))); do
-    grep -q "ready\." "$LOG" 2>/dev/null && break
-    kill -0 "$QPID" 2>/dev/null || break
-    sleep 0.5
-done
-sleep 1                      # let the line after the prompt land
-kill "$QPID" 2>/dev/null; wait "$QPID" 2>/dev/null; QSTATUS=$?
-tr -d '\r' < "$LOG" > "$LOG.c" && mv "$LOG.c" "$LOG"
+boot_once() {
+    cp "$OVMF_VARS" "$VARS"
+    cp zlOS-usb.img "$BOOT_IMAGE"
+    : > "$LOG"
+    timeout "$CEILING" qemu-system-x86_64 \
+        -m 1G -smp 2 "$@" \
+        -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,unit=1,file="$VARS" \
+        -device qemu-xhci,id=xhci \
+        -drive format=raw,file="$BOOT_IMAGE",if=none,id=boot \
+        -device usb-storage,bus=xhci.0,drive=boot,removable=on \
+        -device usb-kbd,bus=xhci.0 \
+        -device usb-mouse,bus=xhci.0 \
+        -vga std -display none -no-reboot \
+        -serial "file:$LOG" >/dev/null 2>&1 &
+    QPID=$!
+    for _ in $(seq $((CEILING * 2))); do
+        grep -q "ready\." "$LOG" 2>/dev/null && break
+        kill -0 "$QPID" 2>/dev/null || break
+        sleep 0.5
+    done
+    sleep 1                    # let the line after the prompt land
+    kill "$QPID" 2>/dev/null
+    wait "$QPID" 2>/dev/null
+    QSTATUS=$?
+    tr -d '\r' < "$LOG" > "$LOG.c" && mv "$LOG.c" "$LOG"
+}
 
-qemu_crashed "$QSTATUS" || true
+boot_once "${ACCEL[@]}"
+if qemu_crashed "$QSTATUS"; then
+    if [ "$ACCEL_KIND" = kvm ] && ! grep -q "ready\." "$LOG"; then
+        echo "  note  retrying once with TCG after the KVM emulator crash"
+        ACCEL=(-cpu max -accel tcg)
+        ACCEL_KIND=tcg
+        boot_once "${ACCEL[@]}"
+        qemu_crashed "$QSTATUS" || true
+    fi
+fi
 if ! grep -q "zlOS starting" "$LOG"; then
     echo "  FAIL  the kernel never started"; fail=1
 elif ! grep -q "ready\." "$LOG"; then
@@ -121,11 +143,54 @@ else
     else
         echo "  ok    $(grep -oE 'framebuffer console, [0-9]+x[0-9]+' "$LOG" | head -1)"
     fi
+    if grep -Eq "vmm: 64 MiB mapped: virtual [0-9]+ GiB -> physical 256 MiB" "$LOG"; then
+        echo "  ok    transactional heap page tables were committed and reached through the alias"
+    else
+        echo "  FAIL  transactional heap mapping was absent or fell back to identity"
+        grep -E "vmm:|page-table transaction|window" "$LOG" | tail -5 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -Eq '^  pmm: [1-9][0-9]*/[1-9][0-9]* pages free in \[320, 1024\) MiB$' "$LOG" &&
+       grep -q "physical allocator reserved floor, owner quota/mismatch, double-free and zero/reuse passed; baseline restored" "$LOG"; then
+        echo "  ok    typed physical allocator admitted firmware RAM and restored its self-test baseline"
+    else
+        echo "  FAIL  physical allocator map/ownership/zero-reuse proof missing or failed"
+        grep -E "pmm:|physical allocator" "$LOG" | tail -4 | sed 's/^/          /'
+        fail=1
+    fi
     if grep -q "ring 3 64: u1 <- iretq/int80/iretq, 6 syscalls, process exited, kernel alive" "$LOG"; then
         echo "  ok    protected 64-bit Ring 3 entered, made syscalls, and exited"
     else
         echo "  FAIL  64-bit Ring 3 proof missing or incomplete"
         grep -E "ring 3 64:|FAULT|fault" "$LOG" | tail -5 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "syscall ABI: zero/gap/sign-bit/max refused with ENOSYS" "$LOG"; then
+        echo "  ok    syscall ABI rejects zero, gaps and sign-bit IDs with ENOSYS"
+    else
+        echo "  FAIL  unknown-syscall ENOSYS proof missing or failed"
+        grep -E "syscall ABI:" "$LOG" | tail -2 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "anonymous memory: M <- reserve/commit zero-fill, cross-page copy and release passed" "$LOG"; then
+        echo "  ok    Ring-3 anonymous pages reserve, commit zeroed frames, cross a page and release"
+    else
+        echo "  FAIL  anonymous reserve/commit/release proof missing or failed"
+        grep -E "anonymous memory:" "$LOG" | tail -2 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "reserved anonymous page stayed absent; sibling V exited" "$LOG"; then
+        echo "  ok    reserved anonymous pages remain non-present and fault only their owner"
+    else
+        echo "  FAIL  reserved anonymous-page fault proof missing or failed"
+        grep -E "reserved anonymous page" "$LOG" | tail -2 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "released anonymous page faulted exactly; sibling R exited" "$LOG"; then
+        echo "  ok    released anonymous pages are unmapped, reclaimed and fault exactly"
+    else
+        echo "  FAIL  released anonymous-page fault proof missing or failed"
+        grep -E "released anonymous page" "$LOG" | tail -2 | sed 's/^/          /'
         fail=1
     fi
     if grep -q "ring 3 hostile: cli GP, kernel/device PF, crossing pointer refused; kernel alive" "$LOG"; then
@@ -142,6 +207,20 @@ else
         grep -E "PML4 processes|multi-process|AB12" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
+    if grep -q "process-owned page tables/code/stacks reclaimed; PMM baseline restored" "$LOG"; then
+        echo "  ok    process page tables, code and stacks are PMM-owned and reclaimed"
+    else
+        echo "  FAIL  process-frame ownership/reclamation proof missing or failed"
+        grep -E "process-owned page tables|process frame reclamation" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "process memory accounting: fixed/anonymous quotas and owner totals passed" "$LOG"; then
+        echo "  ok    process and anonymous frame owners return to zero under bounded quotas"
+    else
+        echo "  FAIL  process/anonymous owner accounting proof missing or failed"
+        grep -E "process memory accounting" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
     if grep -q "PIT preempted two non-yielding Ring-3 loops PQ" "$LOG"; then
         echo "  ok    timer preemption switches non-yielding Ring-3 processes"
     else
@@ -154,6 +233,21 @@ else
     else
         echo "  FAIL  sibling process fault-isolation proof missing or failed"
         grep -E "sibling|GP-faulted" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "lower stack guard PF error 6 at exact address; sibling G exited" "$LOG"; then
+        echo "  ok    the lower user-stack guard faults exactly and kills only its offender"
+    else
+        echo "  FAIL  lower user-stack guard fault proof missing or failed"
+        grep -E "lower stack guard|guard fault containment" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "two guarded supervisor TSS stacks bounded through syscall/preempt/fault paths" "$LOG" &&
+       grep -Eq '^  kernel stacks high-water: P0 [1-9][0-9]* P1 [1-9][0-9]* bytes$' "$LOG"; then
+        echo "  ok    two guarded supervisor TSS stacks retain bounded high-water evidence"
+    else
+        echo "  FAIL  guarded supervisor TSS stack proof missing or failed"
+        grep -E "kernel stacks high-water|guarded supervisor TSS" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
     if grep -q "bounded IPC crossed PML4s hi/ok with sender IDs h1o2" "$LOG"; then
@@ -228,6 +322,27 @@ if [ "$fail" -eq 0 ]; then
         || fail=1
 fi
 
+if [ "$fail" -eq 0 ]; then
+    python3 ./tools/checks/write-scheduler-receipt.py \
+        --log "$LOG" --selftest \
+        --output docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json \
+        || fail=1
+fi
+
+if [ "$fail" -eq 0 ]; then
+    python3 ./tools/checks/write-user-process-receipt.py \
+        --log "$LOG" --selftest \
+        --output docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json \
+        || fail=1
+fi
+
+if [ "$fail" -eq 0 ]; then
+    python3 ./tools/checks/write-pmm-receipt.py \
+        --log "$LOG" --selftest \
+        --output docs/receipts/physical-page-allocator-native-uefi64-qemu-2026-08-30.json \
+        || fail=1
+fi
+
 JOURNAL=$(mktemp)
 if ! python3 ../tools/zllog.py read "$BOOT_IMAGE" --latest >"$JOURNAL" 2>/dev/null; then
     echo "  FAIL  could not read the QEMU journal after boot"; fail=1
@@ -235,6 +350,13 @@ elif ! grep -q "cache=write-combining" "$JOURNAL"; then
     echo "  FAIL  framebuffer stayed uncacheable after the WC transition"; fail=1
 else
     echo "  ok    live framebuffer mapping changed to write-combining"
+fi
+
+if [ "$fail" -eq 0 ]; then
+    python3 ./tools/checks/write-page-table-receipt.py \
+        --log "$LOG" --journal "$JOURNAL" --selftest \
+        --output docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json \
+        || fail=1
 fi
 
 python3 ./tests/host/efi_runtime_diag_test.py || fail=1

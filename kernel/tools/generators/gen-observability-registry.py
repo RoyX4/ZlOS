@@ -24,13 +24,19 @@ BOOT_RECEIPTS = (
     "docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json",
     "docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json",
 )
-CRASH_RECEIPT = "docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json"
+CRASH_CASES = (
+    ("docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json", "ud2", 6, 0, 0, 32, True, False),
+    ("docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json", "ud2", 6, 0, 0, 64, True, False),
+    ("docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json", "gp", 13, 1, 0x38, 64, True, False),
+    ("docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json", "double-fault", 8, 1, 0, 64, False, True),
+)
 
 CAPABILITIES = (
     ("hashed-boot-transcript", "QEMU_HASH_ONLY", "six route receipts carry boot-log SHA-256 but not durable raw logs"),
     ("heap-corruption-diagnostic", "HOST_PROVED_LIMITED", "heap refuses after detected corruption and prints once; no crash bundle"),
-    ("cpu-fault-stop", "QEMU_PROVED", "real UD2 reaches vector 6, emits a complete record and remains halted"),
-    ("fault-register-capture", "QEMU_PROVED_PARTIAL", "vector/error/IP/CS/FLAGS/SP/SS/CR2 control frame only; no general registers"),
+    ("cpu-fault-stop", "QEMU_PROVED", "real UD2, general-protection and double faults emit complete records and remain halted"),
+    ("fault-register-capture", "QEMU_PROVED_PARTIAL", "all pre-prologue general registers on BIOS32 and native-UEFI64 UD2 plus native-UEFI64 error-code and nested-fault routes; broader vector coverage remains open"),
+    ("double-fault-emergency-stack", "QEMU_PROVED", "native-UEFI64 page-fault-on-invalid-stack escalates to vector 8 and both recorded handler SP and independently queried halted CPU RSP are inside the dedicated IST1 stack"),
     ("stack-symbolization", "MISSING", "no unwind table, symbols or stack trace"),
     ("durable-crash-dump", "MISSING", "no reserved recorder, disk dump, checksum or recovery reader"),
     ("crash-service", "MISSING", "no offender-only collection, UI or submission workflow"),
@@ -65,19 +71,19 @@ def validate(value: dict) -> None:
     if [row.get("detail") for row in rows] != [row[2] for row in CAPABILITIES]:
         raise ValueError("observability claim detail drift")
     expected_counts = {
-        "capabilities": 14,
+        "capabilities": 15,
         "qemu_hash_only": 1,
-        "qemu_proved": 1,
+        "qemu_proved": 2,
         "qemu_proved_partial": 1,
         "host_proved_limited": 1,
         "host_proved_core": 4,
         "host_proved_partial": 1,
         "source_only": 0,
         "missing": 5,
-        "qemu_crash_receipts": 1,
+        "qemu_crash_receipts": 4,
         "durable_crash_receipts": 0,
         "typed_structured_event_fields": 28,
-        "current_build_bound_qemu_receipts": 7,
+        "current_build_bound_qemu_receipts": 10,
         "historical_qemu_receipts": 0,
     }
     if value.get("counts") != expected_counts:
@@ -94,8 +100,31 @@ def validate(value: dict) -> None:
     if any(row.get("current_build_bound") is not True \
            or len(row.get("subject_build_identity", "")) != 64 for row in boot):
         raise ValueError("current boot transcript binding was lost")
-    if value.get("qemu_crash_receipt", {}).get("current_build_bound") is not True:
+    crash_rows = value.get("qemu_crash_receipts", [])
+    if len(crash_rows) != len(CRASH_CASES) or any(
+            row.get("current_build_bound") is not True for row in crash_rows):
         raise ValueError("current crash receipt binding was lost")
+    for row, (_, fault_case, vector, has_error, error, bits, _, emergency) in zip(
+            crash_rows, CRASH_CASES):
+        expected_mask = 0xFF if bits == 32 else 0xFFFF
+        if row.get("fault_case") != fault_case \
+                or row.get("vector") != vector \
+                or row.get("has_error") != has_error \
+                or row.get("error") != error \
+                or row.get("record_version") != 3 \
+                or row.get("record_bytes") != 240 \
+                or row.get("register_bits") != bits \
+                or row.get("register_mask") != expected_mask \
+                or not row.get("handler_sp"):
+            raise ValueError("summarized crash evidence drifted")
+        low = row.get("emergency_stack_low", 0)
+        high = row.get("emergency_stack_high", 0)
+        halted_rsp = row.get("halted_cpu_rsp")
+        if emergency and not (low < row["handler_sp"] < high
+                              and low < (halted_rsp or 0) < high):
+            raise ValueError("summarized double-fault stack evidence drifted")
+        if not emergency and (low != 0 or high != 0):
+            raise ValueError("ordinary fault summary invented emergency-stack evidence")
     if len(value.get("build_identity", "")) != 64:
         raise ValueError("observability build identity missing")
 
@@ -131,20 +160,49 @@ def build() -> dict:
     passed = {row["name"] for row in host_receipt["results"] if row.get("status") == "passed"}
     if not {"heaptest", "crashtest"}.issubset(passed):
         raise ValueError("heap/crash host proof is not passing")
-    crash_path = KERNEL_ROOT / CRASH_RECEIPT
-    crash = json.loads(crash_path.read_text())
-    if crash.get("result") != "PASS" or len(crash.get("build_identity", "")) != 64:
-        raise ValueError("QEMU crash receipt is missing or invalid")
-    record = crash.get("record", {})
-    if record.get("vector") != 6 or record.get("has_error") != 0 \
-            or record.get("ip") != crash.get("kernel_symbol_ip") \
-            or crash.get("guest_halted_after_record") is not True:
-        raise ValueError("QEMU crash receipt does not prove exact fault capture")
+    crashes = []
+    for relative, fault_case, vector, has_error, error, bits, bind_ip, emergency in CRASH_CASES:
+        crash_path = KERNEL_ROOT / relative
+        crash = json.loads(crash_path.read_text())
+        if crash.get("result") != "PASS" or crash.get("build_identity") != identity:
+            raise ValueError("QEMU crash receipt is missing, invalid or stale")
+        record = crash.get("record", {})
+        expected_mask = 0xFF if bits == 32 else 0xFFFF
+        if crash.get("fault_case") != fault_case \
+                or record.get("vector") != vector \
+                or record.get("has_error") != has_error \
+                or record.get("error") != error \
+                or record.get("version") != 3 or record.get("bytes") != 240 \
+                or record.get("bits") != bits \
+                or record.get("register_mask") != expected_mask \
+                or record.get("register_sp") != record.get("sp") \
+                or not record.get("handler_sp") \
+                or crash.get("guest_halted_after_record") is not True:
+            raise ValueError("QEMU crash receipt does not prove exact fault capture")
+        if bind_ip and (record.get("ip") != crash.get("kernel_symbol_ip") \
+                or crash.get("runtime_symbol_binding", {}).get("address") != record.get("ip")):
+            raise ValueError("QEMU crash receipt lost exact runtime fault-IP binding")
+        if not bind_ip and (crash.get("kernel_symbol_ip") is not None \
+                or crash.get("runtime_symbol_binding", {}).get("address") is not None):
+            raise ValueError("double-fault receipt invented an architecturally undefined IP binding")
+        if emergency:
+            low = record.get("emergency_stack_low", 0)
+            high = record.get("emergency_stack_high", 0)
+            halted_rsp = crash.get("halted_cpu", {}).get("rsp", 0)
+            if not (low < record["handler_sp"] < high and low < halted_rsp < high):
+                raise ValueError("double-fault receipt does not independently prove IST1 use")
+        elif record.get("emergency_stack_low") != 0 or record.get("emergency_stack_high") != 0:
+            raise ValueError("ordinary fault receipt invented emergency-stack use")
+        crashes.append((relative, crash_path, crash))
     idt_source = (KERNEL_ROOT / "src/arch/x86/idt.c").read_text()
     crash_source = (KERNEL_ROOT / "src/core/crash.c").read_text()
-    if "static void fault_stop" not in idt_source or "FAULT_ERR(14)" not in idt_source \
+    gdt_source = (KERNEL_ROOT / "boot/gdt64.c").read_text()
+    if "fault_stop64" not in idt_source or "FAULT_ERR_ASM64(14)" not in idt_source \
+            or "fault_common32" not in idt_source or "CRASH_REGS_32_ALL" not in idt_source \
             or "crash_capture" not in idt_source or "crash_report" not in idt_source \
-            or "last_record.magic = CRASH_RECORD_MAGIC" not in crash_source:
+            or "set_gate_ist(8, fault_handlers[8], 1)" not in idt_source \
+            or "last_record.magic = CRASH_RECORD_MAGIC" not in crash_source \
+            or "tss.ist1 = gdt64_double_fault_stack_top();" not in gdt_source:
         raise ValueError("fault-record source boundary drift")
     ceilings = {
         "QEMU_HASH_ONLY": "current-build QEMU receipt hash only",
@@ -169,10 +227,25 @@ def build() -> dict:
         "host_test_receipt": {"path": "kernel/tests/host/test-run-receipt.json", "sha256": sha256(host_receipt_path),
                               "subject_head": host_receipt.get("git", {}).get("head"),
                               "current_build_bound": False},
-        "qemu_crash_receipt": {"path": "kernel/" + CRASH_RECEIPT,
-                               "sha256": sha256(crash_path),
-                               "subject_build_identity": crash["build_identity"],
-                               "current_build_bound": crash["build_identity"] == identity},
+        "qemu_crash_receipts": [
+            {"path": "kernel/" + relative, "sha256": sha256(path),
+             "route": crash["route"],
+             "fault_case": crash["fault_case"],
+             "subject_build_identity": crash["build_identity"],
+             "vector": crash["record"]["vector"],
+             "has_error": crash["record"]["has_error"],
+             "error": crash["record"]["error"],
+             "record_version": crash["record"]["version"],
+             "record_bytes": crash["record"]["bytes"],
+             "register_bits": crash["record"]["bits"],
+             "register_mask": crash["record"]["register_mask"],
+             "handler_sp": crash["record"]["handler_sp"],
+             "emergency_stack_low": crash["record"]["emergency_stack_low"],
+             "emergency_stack_high": crash["record"]["emergency_stack_high"],
+             "halted_cpu_rsp": crash.get("halted_cpu", {}).get("rsp"),
+             "current_build_bound": crash["build_identity"] == identity}
+            for relative, path, crash in crashes
+        ],
         "event_schema": {"path": "kernel/metadata/event-schema.json",
                          "sha256": sha256(event_schema_path),
                          "result": event_schema["result"],
@@ -180,7 +253,7 @@ def build() -> dict:
         "source_identities": {
             path: sha256(KERNEL_ROOT / path)
             for path in (
-                "src/arch/x86/idt.c", "src/core/crash.c", "src/core/crash.h",
+                "boot/gdt64.c", "src/arch/x86/idt.c", "src/core/crash.c", "src/core/crash.h",
                 "src/core/heap.c", "src/core/console.c", "src/arch/x86/support.c",
                 "src/graphics/windowing/term.c", "tools/checks/verify-crash.py",
                 "tests/host/trace_event.c", "tests/host/trace_event.h",
@@ -192,23 +265,23 @@ def build() -> dict:
         "counts": {
             "capabilities": len(rows),
             "qemu_hash_only": 1,
-            "qemu_proved": 1,
+            "qemu_proved": 2,
             "qemu_proved_partial": 1,
             "host_proved_limited": 1,
             "host_proved_core": 4,
             "host_proved_partial": 1,
             "source_only": 0,
             "missing": 5,
-            "qemu_crash_receipts": 1,
+            "qemu_crash_receipts": len(crashes),
             "durable_crash_receipts": 0,
             "typed_structured_event_fields": 28,
-            "current_build_bound_qemu_receipts": len(transcripts) + 1,
+            "current_build_bound_qemu_receipts": len(transcripts) + len(crashes),
             "historical_qemu_receipts": 0,
         },
         "open_gaps": [row["id"] for row in rows
                       if row["status"] not in ("QEMU_HASH_ONLY", "QEMU_PROVED")],
-        "evidence_ceiling": "current source inventory joined to current-build QEMU boot/crash and event-schema host evidence; no target event emitter or durable crash evidence",
-        "weakest_link": "the structured core is externally serialized and target-unintegrated; general registers, stack symbols and durable recovery remain absent",
+        "evidence_ceiling": "current source inventory joined to current-build QEMU boot, four exact register crash receipts including error-code and IST1 double-fault paths, and event-schema host evidence; no target event emitter or durable crash evidence",
+        "weakest_link": "the structured event core is target-unintegrated; broader fault-vector coverage, stack symbols, guard pages and durable crash recovery remain absent",
         "generator": {"path": "kernel/tools/generators/gen-observability-registry.py", "sha256": sha256(Path(__file__).resolve())},
     }
     validate(value)
@@ -232,6 +305,11 @@ def selftest(value: dict) -> None:
     binding = copy.deepcopy(value)
     binding["boot_transcripts"][0]["current_build_bound"] = False
     mutations["lost-current-boot-proof"] = binding
+    emergency = copy.deepcopy(value)
+    double_fault = next(row for row in emergency["qemu_crash_receipts"]
+                        if row["fault_case"] == "double-fault")
+    double_fault["halted_cpu_rsp"] = double_fault["emergency_stack_high"]
+    mutations["escaped-double-fault-stack"] = emergency
     typed = copy.deepcopy(value)
     typed["counts"]["typed_structured_event_fields"] = 29
     mutations["event-schema-field-drift"] = typed

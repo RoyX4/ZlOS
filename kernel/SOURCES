@@ -78,6 +78,10 @@ src/arch/x86/rtc.c
 # desktop/exec-track
 src/core/arena.c
 src/core/heap.c
+src/core/pmm.c
+src/core/process_memory.c
+src/core/anon_memory.c
+src/arch/x86/page_table_txn.c
 src/arch/x86/paging.c
 src/arch/x86/usermode.c
 src/core/exec.c

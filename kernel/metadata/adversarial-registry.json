@@ -1,9 +1,9 @@
 {
   "schema": "zlos.adversarial-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
-  "host_test_inventory_sha256": "3230182f58256a06d21c3e0367707c6405d6efedfd39ee19f90599d59e3fd9cc",
-  "host_test_receipt_sha256": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "host_test_inventory_sha256": "13635150f95bb3d73c229fbe649352e38d515f0cedb84d73a054917a67167adf",
+  "host_test_receipt_sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
   "verifier_canaries": [
     {
       "id": "CAN-001",
@@ -15,7 +15,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "02d9b45689c5deb004e8e51bb0bf35ae56e0003b1780f4a3a0b7cfd020030358",
+      "output_sha256": "9e373e7af557d6175c29cc1f17acf197bc73c7fbeed162dff3775541b8108f22",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -52,7 +52,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "a408634766a425f1add6961a937c75221cc0f5981a4080765b7360ed9947f879",
+      "output_sha256": "03c6cd3190b30ff1c474fe15dce9251fa34cff74472abe4a7c9944ae55dab202",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -76,7 +76,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "ad67628fc6e6c8d666178c4f58eefb44e9adad1c9bfb7ab0cdf14aa4266c8495",
+      "output_sha256": "7de2c3bb7c4c064296793fc73ac2ed3c9dfb9d01a58c373bd43bfbcb56274daa",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -89,7 +89,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "d882e0bcba958fb0f6c4cf154572ad6ec19f5fe28db57fac6202d070cd0a1ed2",
+      "output_sha256": "c327fb21f4d9e129d65b9c5e385d085ea3c2725b73870ce6e091b0fe8713f3ea",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -102,7 +102,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "eb6ec1c41c51260433e1b8356b1913010e6de93d2ce8a16c33f220de67f161d9",
+      "output_sha256": "e6816dc43afd5ebe2acb7176f008c7566afdca0213df84166a874188347bff4a",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -154,7 +154,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "5804d8d4f19317f63e830f9b47cfa7fb1de4f3e52b3803b070c5d544b1c5ae33",
+      "output_sha256": "994568ed3f8c2e21f48e945a9efb810cab3aab9c2d2691399880e58fad80318d",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -166,7 +166,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "9eae33eb327322305d86f253fbcecde9e564da949257674c94460c7d3736030c",
+      "output_sha256": "8311d14db8fa6f9a9fce532796f1720f90f36ef8f168066b3e4bce971b5d67bd",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -215,7 +215,7 @@
       ],
       "exit_code": 0,
       "required_output_marker": "mutations change IDs",
-      "output_sha256": "d8435dc58d10ce11bd9b0742d6ab07139bd898d174dd1ffdce50a1583c78c428",
+      "output_sha256": "48fffea54327ac945bc0a5d4363aa1740bdfc5c2f1b2297ddd023154c900779a",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -224,11 +224,13 @@
         "python3",
         "tools/checks/verify-crash.py",
         "--check",
+        "--fault",
+        "ud2",
         "--selftest"
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "888bfb4efd808739628d3ddb889074ca6efee6b26fe99bed3b9adc77058cee41",
+      "output_sha256": "1b55706dbb15206959714008824076d75dfe6c59b33c11ddfa578697f439301c",
       "result": "PLANTED_MUTATION_CAUGHT"
     },
     {
@@ -241,7 +243,71 @@
       ],
       "exit_code": 0,
       "required_output_marker": "selftest: caught",
-      "output_sha256": "fa9d28547fbfabba9647066e7ae700e95e6069b3a7718c3258c2fc1d594e37e1",
+      "output_sha256": "f4eccf6253577b9de40339c559647cd7fac13d9afbe866d11de6bd83d2d6b1d8",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-020",
+      "command": [
+        "python3",
+        "tools/checks/verify-dependency-archives.py",
+        "--receipt-check",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "e3f227d5c35e96a2c131e3b21b32565ce285ea531196c7eacc190a36b918b3f2",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-021",
+      "command": [
+        "python3",
+        "tools/checks/verify-crash.py",
+        "--check",
+        "--route",
+        "native-uefi64",
+        "--fault",
+        "ud2",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "6bdf7f6a21331b28aa057553ca60b7dd1af039c6f49c6cfc520937b42ee73bd3",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-022",
+      "command": [
+        "python3",
+        "tools/checks/verify-crash.py",
+        "--check",
+        "--route",
+        "native-uefi64",
+        "--fault",
+        "gp",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "2f3fa6016748d065972a835e2b74daa8a448cd69bbb5fdcd9133a7d34af63720",
+      "result": "PLANTED_MUTATION_CAUGHT"
+    },
+    {
+      "id": "CAN-023",
+      "command": [
+        "python3",
+        "tools/checks/verify-crash.py",
+        "--check",
+        "--route",
+        "native-uefi64",
+        "--fault",
+        "double-fault",
+        "--selftest"
+      ],
+      "exit_code": 0,
+      "required_output_marker": "selftest: caught",
+      "output_sha256": "4d294fbc334d33197a23c43300c74d26c6f8e83e489f19d30778768f93ae7c42",
       "result": "PLANTED_MUTATION_CAUGHT"
     }
   ],
@@ -251,9 +317,10 @@
       "status": "PARTIAL",
       "passed_host_targets": [
         "arenatest",
-        "heaptest"
+        "heaptest",
+        "pagetxntest"
       ],
-      "open_gap": "no deterministic every-nth-allocation failure sweep"
+      "open_gap": "bounded heap and page-table sweeps are current; dependent allocation callers remain uninjected"
     },
     {
       "family": "queue",
@@ -299,18 +366,59 @@
       "open_gap": "all current application open-ready-close routes pass, but lifecycle failure is not injected"
     }
   ],
+  "failure_evidence": {
+    "allocation": {
+      "host_receipt": {
+        "path": "kernel/tests/host/test-run-receipt.json",
+        "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467"
+      },
+      "heap": {
+        "target_id": "HT-031",
+        "target": "heaptest",
+        "executable_sha256": "7e0b06a341b5bade07c966cd6d1ba67d0d8b9da019b227cbc2384337008d653f",
+        "output_sha256": "db6e8ecbbeb540922edc8b5567dc4635bad8fbb2668a187c4cae6b3e4ca14b6e",
+        "checks": 2162,
+        "sweep_positions": 32,
+        "failed_call_state_unchanged": [
+          "heap_used",
+          "heap_blocks"
+        ],
+        "post_failure_recovery": true,
+        "implementation": {
+          "path": "kernel/src/core/heap.c",
+          "sha256": "2f5ede5e2fe6cfd610df93d2336b2e9423e7c44af0e8f6935c55b1b707ca2bd4"
+        },
+        "harness": {
+          "path": "kernel/tests/host/heaptest.c",
+          "sha256": "d7650b4cff66938243dc7c3020a5a1cfa196d82affd1e0bc70a6725f809fe45b"
+        }
+      },
+      "page_table_transaction": {
+        "target_id": "HT-052",
+        "target": "pagetxntest",
+        "executable_sha256": "43fde0319342133204a7c4e02119be21f1e6763017e6c9ea306612c8390b6346",
+        "output_sha256": "209205b9456e6c18c8fc4084fff916b83d2d6212583d8c26ab682db6a3218f4b",
+        "receipt": "kernel/docs/receipts/page-table-native-uefi64-qemu-2026-08-29.json",
+        "receipt_sha256": "540a3b0ce1ec4d8310297b64eaf43242b93343ea323ee9b19d5ae142dab55ace",
+        "write_positions": 512,
+        "flush_failure": true,
+        "post_flush_corruption": true,
+        "exact_rollback": true
+      }
+    }
+  },
   "hostile_corpus": [
     {
       "family": "elf",
-      "status": "MISSING",
+      "status": "HOST_PASSED",
       "passed_host_targets": [],
-      "detail": "no malformed ELF loader corpus"
+      "detail": "10 minimized malformed ELF headers/tables plus RWX mutation over every current kernel image"
     },
     {
       "family": "archive",
-      "status": "MISSING",
+      "status": "HOST_PASSED",
       "passed_host_targets": [],
-      "detail": "no malformed archive/initramfs/package corpus"
+      "detail": "missing/corrupt/path-escape/truncated deb and dsc archive cases fail closed"
     },
     {
       "family": "filesystem",
@@ -373,17 +481,34 @@
       "detail": "truncations, random bytes, forged root and time/host refusal"
     }
   ],
+  "hostile_evidence": {
+    "elf": {
+      "checker": "kernel/tools/checks/check-elf-permissions.py",
+      "checker_sha256": "eeb64fe7c90545a06654a0bf0418abd164138a9586ae2417653197f4a0e3d4e1",
+      "current_images": {
+        "kernel.elf": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1",
+        "kernel64.elf": "15877f83912895bcb2d3cd09b341afb88aeec5cb45f4965b9da288880df16521",
+        "kernel_raw.elf": "fc9e4aa37de9ed7b813a3caed12286914012c79e6866deebe6e09eeb41009050"
+      }
+    },
+    "archive": {
+      "verifier": "kernel/tools/checks/verify-dependency-archives.py",
+      "verifier_sha256": "6006a7f1cb0123aec49475ed5dae9812102eb24a4455e7d2946603152fdee051",
+      "receipt": "kernel/docs/receipts/dependency-archives-host-2026-08-29.json",
+      "receipt_sha256": "4f931ac96637f2e4cf2bd25ebb0da95e0eb736f403af86acda08d2671f67d03b"
+    }
+  },
   "counts": {
-    "verifier_canaries": 19,
-    "verifier_canaries_caught": 19,
+    "verifier_canaries": 23,
+    "verifier_canaries_caught": 23,
     "failure_seam_families": 7,
     "failure_seam_complete": 0,
     "failure_seam_partial": 4,
     "failure_seam_missing": 3,
     "hostile_families": 9,
-    "hostile_host_passed": 5,
+    "hostile_host_passed": 7,
     "hostile_source_only": 0,
-    "hostile_missing": 4
+    "hostile_missing": 2
   },
   "open_gaps": {
     "failure_injection": [
@@ -396,16 +521,14 @@
       "lifecycle"
     ],
     "hostile_corpus": [
-      "elf",
-      "archive",
       "font",
       "ipc"
     ]
   },
-  "evidence_ceiling": "host canary and hostile-input evidence only; no completeness or target-hardware promotion",
-  "weakest_link": "no failure family is exhaustive; ELF/archive/font/IPC corpora are absent",
+  "evidence_ceiling": "current host canary, bounded allocation failure and hostile-input evidence plus one page-table QEMU join; no family completeness or physical-hardware promotion",
+  "weakest_link": "no failure family is globally exhaustive; provider, service and package injection are absent; font and typed-IPC parsers/corpora are absent",
   "generator": {
-    "path": "kernel/gen-adversarial-registry.py",
-    "sha256": "94c7b00635bbdb7ba27ad02fdf5dfcdcef5f7439ac18ff67e39c6f6bb5cb222e"
+    "path": "kernel/tools/generators/gen-adversarial-registry.py",
+    "sha256": "0b7a302cbd821c7a1370df9578499e8a99df3a9d0b962c3a3cdf7e8a16d4f084"
   }
 }

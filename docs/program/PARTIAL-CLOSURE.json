@@ -1,13 +1,13 @@
 {
   "schema": "zlos.partial-closure.v1",
   "result": "PASS_WITH_EXTERNAL_GATES",
-  "feature_status_sha256": "b7a767303a2401eac3aab20ba2654dc72af336f494709d377f60cebbbdb8a07e",
+  "feature_status_sha256": "611a20766d0f21549c8360fcced81057c4edbc9d5f9abc9264c8d28c69b9d3e1",
   "counts": {
     "total": 23,
-    "proved_current": 1,
-    "still_partial": 17,
-    "locally_finishable_now": 3,
-    "external_authority_required": 9,
+    "proved_current": 2,
+    "still_partial": 21,
+    "locally_finishable_now": 0,
+    "external_authority_required": 11,
     "by_wave": {
       "H1_HOST_TRUTH": 2,
       "H2_HOST_ADVERSARIAL": 0,
@@ -27,7 +27,7 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/source-snapshot-2026-08-24.json",
-          "sha256": "297335e0160ac161b72962a0d538b96efe76c1a8a8a8cf7dc45e950c02973c8f",
+          "sha256": "2c7ad3cf4fd77bbb8bfdb3792c4b29baa1a44605cee6c5842ac76b33df1c4699",
           "schema": "zlos.source-snapshot-receipt.v1",
           "result": "PASS_WITH_OPEN_CUSTODY_GAP"
         }
@@ -80,7 +80,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/license-registry.json",
-          "sha256": "17ea97cba4cfb33bf0063365548f22de6d85f0a36851a915f5d10d90c2d5c985",
+          "sha256": "0df8c013274e2c53f5e63719bb1678aaf149c1be7ed56ab88b99380dc099eac4",
           "schema": "zlos.license-provenance-registry.v1",
           "result": "PASS_WITH_RELEASE_BLOCK"
         }
@@ -91,7 +91,7 @@
       ],
       "current_known_gaps": [
         "0 license files",
-        "149 inputs lack an established redistribution grant"
+        "160 inputs lack an established redistribution grant"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "X1_EXTERNAL_AUTHORITY",
@@ -127,9 +127,16 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/dependency-lock.json",
-          "sha256": "4c8a6e5bb0c961222ceda49d37f7a04bcecc159db37f296b757e8eb10adee109",
-          "schema": "zlos.host-dependency-lock.v2",
+          "sha256": "a394ae73386983afaabbca4788ab653b8a9544f2aefe707d0353171fb1a3c3e2",
+          "schema": "zlos.host-dependency-lock.v3",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/dependency-archives-host-2026-08-29.json",
+          "sha256": "4f931ac96637f2e4cf2bd25ebb0da95e0eb736f403af86acda08d2671f67d03b",
+          "schema": "zlos.dependency-archive-receipt.v1",
+          "result": "PASS_LOCAL_OFFLINE_ARCHIVE"
         }
       ],
       "current_tests": [
@@ -137,13 +144,16 @@
         "missing firmware identity",
         "missing package",
         "unresolved package dependency",
-        "invented source-archive custody"
+        "missing source relationship",
+        "archive byte drift",
+        "invented offline resolution"
       ],
       "current_known_gaps": [
-        "145 package source archives absent",
-        "offline rebuild not proved"
+        "archive cache is retained only on the current host",
+        "one stale Linux binary/source pair is outside the current signed rolling index",
+        "off-host custody and hermetic rebuild remain EV-002/EV-005 work"
       ],
-      "current_maturity": "PARTIAL_CURRENT",
+      "current_maturity": "PROVED_CURRENT",
       "wave": "H1_HOST_TRUTH",
       "dependencies": [
         "EV-002",
@@ -166,7 +176,7 @@
       "external_authority": [],
       "can_finish_in_current_environment": true,
       "promotion_rule": "Promote when the current build resolves offline from a complete transitive SBOM with exact hashes and no undeclared dependency.",
-      "next_action": "Add transitive package, source-archive, firmware and binary relationships to the dependency lock."
+      "next_action": "Preserve the current offline archive receipt; hand off off-host custody to EV-002 and the hermetic rebuild to EV-005."
     },
     {
       "id": "EV-005",
@@ -175,15 +185,15 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/toolchain-manifest.json",
-          "sha256": "e192dbdc1ad28d0ba338837a99044f15435e96ae1640228c37c5b9f62b112c4c",
+          "sha256": "17debf69ee8932071f0ecccc9d9a4751f0579f830ccf5a6c052ad6f2fef3b8fc",
           "schema": "zlos.toolchain-manifest.v1",
           "result": "PASS_WITH_OPEN_PORTABILITY_GAPS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/dependency-lock.json",
-          "sha256": "4c8a6e5bb0c961222ceda49d37f7a04bcecc159db37f296b757e8eb10adee109",
-          "schema": "zlos.host-dependency-lock.v2",
+          "sha256": "a394ae73386983afaabbca4788ab653b8a9544f2aefe707d0353171fb1a3c3e2",
+          "schema": "zlos.host-dependency-lock.v3",
           "result": "PASS_WITH_OPEN_SUPPLY_GAPS"
         }
       ],
@@ -235,14 +245,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/build-graph.json",
-          "sha256": "203a806d0c866b460eb24649a657762a377717aa83365e782320817d476feb8f",
+          "sha256": "fb0da821865b871e07363e066384d5ebe46d76dc9d4a9b998da61bb094a4753c",
           "schema": "zlos.build-graph.v1",
           "result": "PASS_CURRENT_ARTIFACTS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/artifact-registry.json",
-          "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
@@ -254,7 +264,7 @@
         "missing artifact"
       ],
       "current_known_gaps": [
-        "8 conservative scope-only inputs",
+        "11 conservative scope-only inputs",
         "no per-object binary receipts",
         "future package/service outputs absent"
       ],
@@ -292,14 +302,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/wrapper-registry.json",
-          "sha256": "d2b07fb1524e04db73313458eac7f679e550a0fb0d4a200323413a0662cf7c16",
+          "sha256": "7a3864341924054020633c50d6eeae920bc3563b30d5bff35f54030db1e7acaf",
           "schema": "zlos.wrapper-registry.v1",
           "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -344,13 +354,13 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
       ],
       "current_tests": [
-        "19 planted verifier mutations"
+        "23 planted verifier mutations"
       ],
       "current_known_gaps": [
         "one mutation per every future required field is not yet possible"
@@ -389,21 +399,31 @@
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-          "sha256": "e215ddc1a198c6c52fde0ff9ceba108ac514b21ac51a953829e0e7f09708ce18",
+          "sha256": "f73849fb06acdb985efe12409f85caf8b3c1fae0548949a845cc0e7db3582230",
           "schema": "zlos.host-benchmark-receipt.v2",
           "result": "PASS_WITH_OPEN_REGRESSIONS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/run/run-benchmarks.py",
+          "sha256": "d11b49d15ef07a3214377c93086b0e3b056fc54be7cb107dff85d69140526b9b",
+          "schema": null,
+          "result": "SOURCE"
         }
       ],
       "current_tests": [
-        "hidden regression",
-        "invented percentile",
+        "hidden regressions",
+        "distribution summary drift",
+        "raw output drift",
+        "missing executable identity",
         "target overclaim"
       ],
       "current_known_gaps": [
-        "4 frame metrics over budget",
-        "no percentiles/peaks/native-target distribution"
+        "0 native-target measurements",
+        "host timings were collected on one contended desktop",
+        "no QEMU or physical performance distribution"
       ],
-      "current_maturity": "PARTIAL_HISTORICAL",
+      "current_maturity": "PARTIAL_CURRENT",
       "wave": "X2_PHYSICAL",
       "dependencies": [
         "EV-005",
@@ -429,7 +449,7 @@
       ],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote only when all registered budgets pass statistically useful target distributions, including required physical lanes.",
-      "next_action": "Upgrade the host benchmark receipt to retain raw samples, percentiles, peaks and machine identity."
+      "next_action": "Preserve the current raw-sample/p50/p95/peak host receipt; collect equivalent contained-target and identified physical distributions before release promotion."
     },
     {
       "id": "EV-015",
@@ -437,19 +457,51 @@
       "current_evidence": [
         {
           "root": "implementation",
+          "path": "kernel/metadata/hardware-receipt-plan.json",
+          "sha256": "48a3a64c015a8bf9a8f8c396a132e0bb7a850dddf5e362629b380aa0c2009423",
+          "schema": "zlos.hardware-receipt-plan.v1",
+          "result": "READY_FOR_PHYSICAL_EXECUTION_WITHOUT_RECEIPTS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/hardware-receipt-template.json",
+          "sha256": "a2e61bbdcd397d6c8fc66787ec43b91651ba1a674ba1607547a0d486cfcf911e",
+          "schema": "zlos.hardware-receipt-template.v1",
+          "result": "NOT_RUN"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/generators/gen-hardware-receipt-plan.py",
+          "sha256": "a3337fc277a210c4113c4e48dd28fd4840ebb08323f2cfb6872409539acceba1",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/artifact-registry.json",
-          "sha256": "40f9403c1722102344de2ece668a018662c5dd701629d77c22dee27d11d6f12b",
+          "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
           "schema": "zlos.artifact-boot-registry.v1",
           "result": "PASS"
         }
       ],
       "current_tests": [
-        "physical overclaim"
+        "wrong artifact",
+        "missing firmware",
+        "missing topology",
+        "missing raw evidence",
+        "missing lifecycle",
+        "invented physical pass",
+        "foreign build",
+        "bad media readback",
+        "evidence path escape",
+        "content digest drift",
+        "zero-receipt overclaim"
       ],
       "current_known_gaps": [
-        "0 of 9 exact artifact hashes have native physical proof"
+        "0 of 6 physical route cases have validated receipts",
+        "0 exact executable or boot-medium artifact hashes have native physical proof"
       ],
-      "current_maturity": "PARTIAL_HISTORICAL",
+      "current_maturity": "PARTIAL_CURRENT",
       "wave": "X2_PHYSICAL",
       "dependencies": [
         "EV-009",
@@ -460,7 +512,7 @@
         "first-use/reuse/reset/teardown/recovery evidence"
       ],
       "deterministic_proof": [
-        "receipt rejects wrong artifact, firmware, topology, device, lane or missing raw evidence"
+        "current validator rejects wrong artifact, firmware, topology, device, lane, lifecycle, digest or missing raw evidence"
       ],
       "qemu_proof": [
         "QEMU remains a separate non-physical comparison lane"
@@ -474,7 +526,7 @@
       ],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote only when every required physical lane is bound to the exact artifact and raw device/firmware/topology evidence.",
-      "next_action": "Prepare the hardware receipt runner and device matrix without claiming a physical run."
+      "next_action": "Execute the six-case physical matrix on identified machines and retain the ten required raw-evidence classes without promoting unrun routes."
     },
     {
       "id": "EV-016",
@@ -482,19 +534,42 @@
       "current_evidence": [
         {
           "root": "implementation",
+          "path": "kernel/tools/run/run-visual-receipt.py",
+          "sha256": "57420584d19711bf70d6dbc5a2637938296ea496f689ec12a42e15be7c366cda",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/visual-qemu-2026-08-29.json",
+          "sha256": "36679572d19ee731f330da71db12da337b823e49afe1a183b64c64a9d879808c",
+          "schema": "zlos.visual-qemu-receipt.v1",
+          "result": "PASS_CURRENT_ARTIFACT_SCREENSHOTS"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/visual-registry.json",
-          "sha256": "ba7778d588677a54645ce6c32432bef972016be8220494e8618ebde31468a2c3",
+          "sha256": "731f185709ac4c42523c6a560135585ce97ea1e7b4503c07531f7aabc1add93f",
           "schema": "zlos.visual-evidence-registry.v1",
-          "result": "INVENTORY_WITH_OPEN_GAPS"
+          "result": "PARTIAL_CURRENT_VISUAL_EVIDENCE"
         }
       ],
       "current_tests": [
-        "invented build binding",
+        "missing route",
+        "foreign build",
+        "wrong artifact",
+        "missing state",
+        "image byte drift",
+        "pixel drift",
+        "blank capture",
+        "missing serial identity",
+        "dimension drift",
         "hidden variant gap"
       ],
       "current_known_gaps": [
-        "41 visual assets are unbound to the current build",
-        "6 variant dimensions are open"
+        "41 historical visual assets remain unbound",
+        "scale/theme/locale/accessibility/ui-state/backend matrices remain incomplete",
+        "no current video or physical-display receipt"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "Q1_CONTAINED_RUNTIME",
@@ -516,10 +591,12 @@
       "physical_or_external_proof": [
         "required native display captures bind to physical receipts"
       ],
-      "external_authority": [],
-      "can_finish_in_current_environment": true,
+      "external_authority": [
+        "identified native display hardware"
+      ],
+      "can_finish_in_current_environment": false,
       "promotion_rule": "Promote when current-build captures cover every required variant/state and bind byte-for-byte to the artifact and visual registry.",
-      "next_action": "Add deterministic QEMU capture and bind new goldens to the current artifact identity."
+      "next_action": "Extend the current exact-artifact BIOS/native-UEFI desktop/Paint receipt across the remaining scale, theme, locale, accessibility, state and backend matrix; retain physical display proof as external."
     },
     {
       "id": "EV-017",
@@ -527,21 +604,77 @@
       "current_evidence": [
         {
           "root": "implementation",
+          "path": "kernel/src/core/crash.c",
+          "sha256": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/idt.c",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
+          "sha256": "eafc015f54e270c89e50d56de994541db18401759444f43504e2a4830393ac9f",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8f2f2afc2748d8fb4681d140d66a1c4c8aa597d05a9c5f88e3bd120bcd2badf8",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "46c3d9372f2bf3092169828e833bceba6a4146484f86696178aa885b749c69de",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8ed2512650b7ae2ff7881384310eafa376b2adf2d1a09f92345f30c68b53492d",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/observability-registry.json",
-          "sha256": "71c531f1229055d766793503d1a3d9e0c333fd7e9c09b7e4a8c474480742dc1d",
+          "sha256": "6a4013202866a524be88b11a75b5944ab5d71c95dea90b3da707c25b1f8b3f46",
           "schema": "zlos.observability-registry.v1",
           "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS"
         }
       ],
       "current_tests": [
-        "overpromoted fault frame",
-        "invented general registers",
-        "invented raw log",
+        "wrong vector",
+        "wrong checksum",
+        "wrong symbol",
+        "missing registers",
+        "wrong register",
+        "invented upper register",
+        "stale artifact",
+        "guest not halted",
+        "escaped emergency stack",
         "hidden crash gap"
       ],
       "current_known_gaps": [
         "0 durable crash receipts",
-        "no general-register frame, symbols, persistence or recovery"
+        "broader exception-vector and spurious-interrupt coverage remains absent",
+        "no emergency-stack guard page, stack symbols, persistence or recovery service"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "Q1_CONTAINED_RUNTIME",
@@ -568,7 +701,7 @@
       "external_authority": [],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote when kernel and user crash paths create durable exact-build bundles and recovery succeeds without corrupting prior evidence.",
-      "next_action": "Extend the typed exception frame to all general registers and define a double-fault-safe crash store."
+      "next_action": "Exercise error-code and nested/double-fault paths, then add checked symbol/unwind binding and a durable recovery-readable crash store."
     },
     {
       "id": "EV-018",
@@ -591,14 +724,14 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/event-schema.json",
-          "sha256": "cf50a46a4955c51f4783f5ca93096af96f9e3858f440b8b87ceba33be058e36e",
+          "sha256": "787bc6bedd6ab0a9e792086eff8331973ba8547a7fd37e725d4baf5552f46800",
           "schema": "zlos.event-schema-registry.v1",
           "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED"
         },
         {
           "root": "implementation",
           "path": "kernel/metadata/observability-registry.json",
-          "sha256": "71c531f1229055d766793503d1a3d9e0c333fd7e9c09b7e4a8c474480742dc1d",
+          "sha256": "6a4013202866a524be88b11a75b5944ab5d71c95dea90b3da707c25b1f8b3f46",
           "schema": "zlos.observability-registry.v1",
           "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -651,18 +784,37 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tests/host/heaptest.c",
+          "sha256": "d7650b4cff66938243dc7c3020a5a1cfa196d82affd1e0bc70a6725f809fe45b",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/src/arch/x86/page_table_txn.c",
+          "sha256": "95232c2f9d38f532d5b0923d3658622819356b412ace2f54ba175155752014e5",
+          "schema": null,
+          "result": "SOURCE"
         }
       ],
       "current_tests": [
+        "lost allocation sweep",
+        "page-table failure drift",
         "hidden failure gap"
       ],
       "current_known_gaps": [
-        "all 7 failure families remain non-exhaustive"
+        "all 7 failure families remain non-exhaustive",
+        "provider, service and package injection are absent",
+        "queue, I/O and lifecycle seams remain bounded subsets",
+        "no physical-hardware failure-injection receipt exists"
       ],
-      "current_maturity": "PARTIAL_HISTORICAL",
+      "current_maturity": "PARTIAL_CURRENT",
       "wave": "B1_CROSS_PHASE_FOUNDATION",
       "dependencies": [
         "EV-013",
@@ -685,7 +837,7 @@
       "external_authority": [],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote for a release only when every then-current transactional seam has nth-step failure proof and exact rollback receipts.",
-      "next_action": "Generate injection points for current allocation, queue and I/O commit paths, then compare pre/post state."
+      "next_action": "Preserve the current 32-position heap and 512-write page-table receipts; add pre/post equivalence injectors for queue, I/O, provider, service, package and lifecycle commit paths."
     },
     {
       "id": "EV-020",
@@ -694,19 +846,22 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/adversarial-registry.json",
-          "sha256": "4f5ec7ed739fd6d52aa1a2062e4743b409d6410720386c5d20c083e248622592",
+          "sha256": "16079b423a29cb9a0901e3d4bf9f74b79391ce75997e46e24f740fd16c55518f",
           "schema": "zlos.adversarial-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
       ],
       "current_tests": [
-        "unearned ELF promotion",
+        "lost ELF proof",
+        "archive evidence drift",
+        "unearned font promotion",
         "hidden hostile gap"
       ],
       "current_known_gaps": [
-        "ELF/archive/font/IPC absent"
+        "no font parser/corpus exists",
+        "no typed IPC envelope parser/corpus exists"
       ],
-      "current_maturity": "PARTIAL_HISTORICAL",
+      "current_maturity": "PARTIAL_CURRENT",
       "wave": "B1_CROSS_PHASE_FOUNDATION",
       "dependencies": [
         "EV-013",
@@ -727,7 +882,7 @@
       "external_authority": [],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote when every parser/decoder boundary in the release has a versioned hostile corpus, sanitizer proof and target rejection path.",
-      "next_action": "Add ELF, archive and font host corpora now; add IPC cases when the typed transport lands."
+      "next_action": "Replay the current ELF/archive corpus on target; add font and IPC cases when those product parsers exist."
     },
     {
       "id": "EV-021",
@@ -735,19 +890,33 @@
       "current_evidence": [
         {
           "root": "implementation",
-          "path": "kernel/docs/receipts/benchmark-host-2026-08-23.json",
-          "sha256": "e215ddc1a198c6c52fde0ff9ceba108ac514b21ac51a953829e0e7f09708ce18",
-          "schema": "zlos.host-benchmark-receipt.v2",
-          "result": "PASS_WITH_OPEN_REGRESSIONS"
+          "path": "kernel/metadata/performance-registry.json",
+          "sha256": "8ed025c4155561c929b8e04aa9598d2744f052bc4979c1ab55c57f5c90ee180b",
+          "schema": "zlos.performance-registry.v1",
+          "result": "OPEN_REGRESSIONS_AND_GAPS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/tools/generators/gen-performance-registry.py",
+          "sha256": "f92aa2e76c049a8256f63bc7b6b87d2993c1fa6824d290a8bb389ef471e9dfc9",
+          "schema": null,
+          "result": "SOURCE"
         }
       ],
       "current_tests": [
-        "hidden performance regression"
+        "hidden product-build gap",
+        "hidden regression",
+        "frame summary drift",
+        "invented product latency",
+        "invented target proof"
       ],
       "current_known_gaps": [
-        "input/I/O/network/launch/memory/build budgets are not joined"
+        "any current host category outside its declared guard remains an open regression",
+        "the product artifact build has no current timed distribution",
+        "input/I/O/network/launch/memory values are host-gate runtimes, not product latency",
+        "0 native-target and 0 physical categories"
       ],
-      "current_maturity": "PARTIAL_HISTORICAL",
+      "current_maturity": "PARTIAL_CURRENT",
       "wave": "Q1_CONTAINED_RUNTIME",
       "dependencies": [
         "EV-014",
@@ -772,7 +941,7 @@
       "external_authority": [],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote when every current performance budget has deterministic collection, a red regression mutation and required target evidence.",
-      "next_action": "Register current input, block I/O, network, launch, memory and build metrics beside frame timings."
+      "next_action": "Keep every measured over-budget category red; remeasure under a controlled load, add a timed product-artifact build distribution, then replace host-gate runtimes with contained-target latency distributions."
     },
     {
       "id": "EV-022",
@@ -780,19 +949,38 @@
       "current_evidence": [
         {
           "root": "implementation",
+          "path": "kernel/tools/checks/check-visual-goldens.py",
+          "sha256": "11a2c422039e1182e55ad2d5048010025ff64c1059101966eace2896a3943266",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/metadata/visual-golden-registry.json",
+          "sha256": "70be92b9e8ba80cb42e5160ac035f453c4ad6ae42ea52d98043f324ab07efb8f",
+          "schema": "zlos.visual-golden-registry.v1",
+          "result": "PASS_CURRENT_STRICT_GOLDENS_WITH_OPEN_MATRIX"
+        },
+        {
+          "root": "implementation",
           "path": "kernel/metadata/visual-registry.json",
-          "sha256": "ba7778d588677a54645ce6c32432bef972016be8220494e8618ebde31468a2c3",
+          "sha256": "731f185709ac4c42523c6a560135585ce97ea1e7b4503c07531f7aabc1add93f",
           "schema": "zlos.visual-evidence-registry.v1",
-          "result": "INVENTORY_WITH_OPEN_GAPS"
+          "result": "PARTIAL_CURRENT_VISUAL_EVIDENCE"
         }
       ],
       "current_tests": [
-        "missing asset",
+        "missing golden",
+        "hidden variant gap",
+        "stable region defect",
+        "declared live region noise",
+        "dimension drift",
         "unearned variant promotion"
       ],
       "current_known_gaps": [
-        "no current build-bound golden",
-        "scale/theme/locale/a11y/state/backend matrix incomplete"
+        "goldens cover only 2 routes and 2 states",
+        "scale/theme/locale/accessibility/ui-state/backend matrix incomplete",
+        "no physical display comparison"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "Q1_CONTAINED_RUNTIME",
@@ -815,10 +1003,12 @@
       "physical_or_external_proof": [
         "native display lane confirms required hardware-specific output"
       ],
-      "external_authority": [],
-      "can_finish_in_current_environment": true,
+      "external_authority": [
+        "identified native display hardware"
+      ],
+      "can_finish_in_current_environment": false,
       "promotion_rule": "Promote when every required UI route/state/variant has a current artifact-bound golden and rejecting visual/structural comparison.",
-      "next_action": "Establish current QEMU goldens only after the build-bound capture runner exists."
+      "next_action": "Expand the four strict current RGB goldens and four live-region masks across every required variant; retain native display comparison as external."
     },
     {
       "id": "EV-023",
@@ -827,7 +1017,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/accessibility-registry.json",
-          "sha256": "8cba6a38e098f5e7bf05363efd8b658aaa103341489dfc88be6cb9801edbc269",
+          "sha256": "8799d3f3e46da9325f2db1e325d606403f8347e9ddfcaf3e5a3d27b53570f859",
           "schema": "zlos.accessibility-proof-registry.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         }
@@ -876,7 +1066,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/security-registry.json",
-          "sha256": "65ae9e2493e868cdf04b062a41a33a5c52920d17d18799a5c606f5c0b12cdfae",
+          "sha256": "90e1ead4e95576e08ae73287ea4085007a2f9db0c5a3d5c88614f0af9e60ff40",
           "schema": "zlos.security-claim-registry.v1",
           "result": "PASS_WITH_MIXED_CURRENT_AND_HISTORICAL_EVIDENCE_AND_OPEN_GAPS"
         }
@@ -976,7 +1166,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/decision-ledger.json",
-          "sha256": "8ce28e80a3449ff6afeffce581040a1ecbb86c53b50d6939934ce28a1e31beb0",
+          "sha256": "220c1419d958f282705510968d1c7d99049fe9b3f7d7f9f00d8c1d8c0ea9fe9a",
           "schema": "zlos.decision-ledger.v1",
           "result": "PASS_WITH_OPEN_GAPS"
         },
@@ -1037,7 +1227,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/release-notes.json",
-          "sha256": "587babc898c5877b2f80cecc613f0288600d9a25489d904097069b7f362286eb",
+          "sha256": "0d9e6e0ecdeeb365ec94052fd36d7888d018d2957ecb770ea36b56cedc1d134f",
           "schema": "zlos.release-notes.v1",
           "result": "PASS_UNRELEASED_WITH_BLOCKERS"
         },
@@ -1107,7 +1297,7 @@
         {
           "root": "implementation",
           "path": "kernel/metadata/provenance-viewer.json",
-          "sha256": "1a1579755d5fa432bbebed7938d7e7b9dd1fe04eb4ba50803c752d8f994a02e8",
+          "sha256": "3424f4e05e55c31d2c6e788cdbcda28b46da2bc136ca47dbe7541b296d6b5bd5",
           "schema": "zlos.provenance-viewer.v1",
           "result": "PASS_STATIC_VIEWER_WITH_OPEN_GAPS"
         },
@@ -1175,22 +1365,50 @@
         {
           "root": "implementation",
           "path": "kernel/src/core/crash.c",
-          "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
+          "sha256": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
           "path": "kernel/src/arch/x86/idt.c",
-          "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
+          "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+          "schema": null,
+          "result": "SOURCE"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/boot/gdt64.c",
+          "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
           "schema": null,
           "result": "SOURCE"
         },
         {
           "root": "implementation",
           "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-          "sha256": "de64f612a17653fb070d94a364e6a5987d43ef4edf633af19a03274018e822de",
-          "schema": "zlos.cpu-fault-qemu-receipt.v1",
+          "sha256": "eafc015f54e270c89e50d56de994541db18401759444f43504e2a4830393ac9f",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8f2f2afc2748d8fb4681d140d66a1c4c8aa597d05a9c5f88e3bd120bcd2badf8",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "46c3d9372f2bf3092169828e833bceba6a4146484f86696178aa885b749c69de",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
+          "result": "PASS"
+        },
+        {
+          "root": "implementation",
+          "path": "kernel/docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json",
+          "sha256": "8ed2512650b7ae2ff7881384310eafa376b2adf2d1a09f92345f30c68b53492d",
+          "schema": "zlos.cpu-fault-qemu-receipt.v3",
           "result": "PASS"
         }
       ],
@@ -1198,13 +1416,16 @@
         "wrong vector",
         "wrong checksum",
         "wrong symbol",
+        "missing registers",
+        "wrong register",
+        "invented upper register",
         "stale artifact",
         "guest not halted"
       ],
       "current_known_gaps": [
-        "no general-register capture",
-        "no nested-fault recovery",
-        "no user-fault offender-only containment"
+        "no broad kernel-fatal exception-vector or spurious-interrupt QEMU matrix",
+        "double fault stops safely but has no recovery or emergency-stack guard page",
+        "offender-only user-fault containment is limited to the native-UEFI64 two-slot harness; no general process lifecycle recovery"
       ],
       "current_maturity": "PARTIAL_CURRENT",
       "wave": "Q1_CONTAINED_RUNTIME",
@@ -1233,7 +1454,7 @@
       "external_authority": [],
       "can_finish_in_current_environment": false,
       "promotion_rule": "Promote when kernel, nested, spurious and user-fault paths preserve full state and containment on QEMU plus required physical interrupt hardware.",
-      "next_action": "Capture every general register in the typed frame, then add offender-only Ring-3 fault recovery in contained QEMU."
+      "next_action": "Exercise kernel-fatal error-code, nested/double-fault and spurious-interrupt paths, then extend the bounded two-slot Ring-3 containment proof to the general process lifecycle."
     }
   ]
 }

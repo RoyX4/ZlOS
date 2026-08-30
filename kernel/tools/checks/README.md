@@ -70,5 +70,14 @@ for repository-wide ownership.
 <!-- END GENERATED: directory-docs -->
 
 <!-- BEGIN LOCAL: directory-docs -->
-<!-- Add verified directory-specific notes here. -->
+`verify-crash.py` owns the current BIOS32/native-UEFI64 UD2, native-UEFI64
+general-protection, and native-UEFI64 double-fault QEMU receipts. The
+double-fault check independently queries the halted CPU RSP and requires both
+it and the serialized handler SP to fall inside the dedicated IST1 bounds.
+
+`verify-efi.sh` and its forced-ZLLOG-refusal subprobe expose the image through
+QEMU xHCI as `usb-storage` with `removable=on`. Keep that flag: QEMU 11.0.3
+repeatedly dereferenced a null request in `scsi_req_get_buf` when the removable
+USB image was incorrectly modeled as a fixed disk; the corrected launch shape
+survived five consecutive full verifier repetitions.
 <!-- END LOCAL: directory-docs -->

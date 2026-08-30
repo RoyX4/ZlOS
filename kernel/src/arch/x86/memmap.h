@@ -1,7 +1,8 @@
 /* memmap.h - the fixed high-RAM map, in ONE place, checked by the compiler.
  *
- * There is no allocator in this kernel, so every multi-megabyte buffer lives at
- * a fixed physical address. They are NEIGHBOURS, and the only thing stopping
+ * Legacy multi-megabyte buffers still live at fixed physical addresses. The
+ * physical allocator starts above their 320 MiB ceiling, so these are still
+ * NEIGHBOURS, and the only thing stopping
  * one from eating the next is arithmetic.
  *
  * WHY THIS IS A HEADER AND NOT A COMMENT
@@ -45,7 +46,7 @@
  *   0x0E000000  224   xhci.c        the USB DMA arena             16 MiB
  *   0x0F000000  240   virtio_gpu.c  rings + the GPU framebuffer   16 MiB
  *   0x10000000  256   heap.c        the general allocator         64 MiB
- *   0x14000000  320   --- everything above here is unclaimed ---
+ *   0x14000000  320   pmm.c         firmware-usable dynamic pages   to 1 GiB
  *   0x40000000 1024   --- HI_TOP: the smallest machine we promise ---
  *
  * FIVE FILES BELOW THE LINE ABOVE HELD A FIXED ADDRESS THIS FILE DID NOT KNOW
@@ -304,6 +305,7 @@
  * building the desktop app suite against this map at the time, and the one
  * thing that could not happen was an occupied region changing address. */
 #define HI_HEAP   0x10000000UL   /* heap.c       - the general allocator     */
+#define HI_PMM    0x14000000UL   /* pmm.c        - dynamic physical pages    */
 #define HI_TOP    0x40000000UL   /* 1 GiB - the smallest guest we promise   */
 
 /* The same number the gates must pass to `-m`, in the units `-m` takes, so the
@@ -374,6 +376,7 @@ _Static_assert(HI_BLUR  < HI_NVME,  "high-RAM map out of order: blur >= nvme");
 _Static_assert(HI_NVME  < HI_XHCI,  "high-RAM map out of order: nvme >= xhci");
 _Static_assert(HI_XHCI  < HI_VGPU,  "high-RAM map out of order: xhci >= vgpu");
 _Static_assert(HI_VGPU  < HI_HEAP,  "high-RAM map out of order: vgpu >= heap");
-_Static_assert(HI_HEAP  < HI_TOP,   "high-RAM map out of order: heap >= HI_TOP");
+_Static_assert(HI_HEAP  < HI_PMM,   "high-RAM map out of order: heap >= pmm");
+_Static_assert(HI_PMM   < HI_TOP,   "high-RAM map out of order: pmm >= HI_TOP");
 
 #endif /* ZL_MEMMAP_H */

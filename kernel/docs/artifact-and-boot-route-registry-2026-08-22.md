@@ -15,6 +15,11 @@ or ISO boot routes run in QEMU. No current receipt binds any of these exact
 hashes to physical hardware. That limitation is an intentional field in the
 registry, not a prose exception.
 
+The current physical-execution plan is generated into
+[`../metadata/hardware-receipt-plan.json`](../metadata/hardware-receipt-plan.json).
+It covers all six routes but contains zero observed receipts. The companion
+template is `NOT_RUN`; neither file is physical proof.
+
 | Artifact | What it is | Producer | Runtime proof |
 |---|---|---|---|
 | `kernel.elf` | 32-bit multiboot ELF | `build.sh` | Byte-exact member of the ISO that passed GRUB BIOS and GRUB UEFI |
@@ -67,6 +72,8 @@ The generator refuses to write or pass when any of these conditions fails:
 - one of the six named boot receipts is missing, failed, points at another
   artifact hash, or reports another origin/build identity;
 - the app evidence is not bound to the same ISO and build identity;
+- the six-case hardware plan is absent, stale, foreign or names different
+  artifact bytes;
 - the byte-exact `kernel64.elf` parent/runtime relationship is lost; or
 - any artifact is labeled physically verified without an exact-hash physical
   receipt.
@@ -87,8 +94,9 @@ manifest/lifecycle checks, all eight named boot scripts, the three graphical
 probes, both aggregate evidence generators and `kernel/SOURCES` are mandatory.
 There is no `if it exists` path around them: deleting a verifier is a failure,
 not removal of the requirement. `check-land-gate.py --selftest` machine-checks
-64 mandatory seams and plants deleted-verifier, optional-verifier,
-missing-`SOURCES` and deleted-boot-route mutations.
+105 mandatory seams and plants deleted-verifier, optional-verifier,
+missing-`SOURCES`, deleted-boot-route, deleted final-graph rebind, deleted rail
+gate, network-race restoration and masked-exit mutations.
 
 `check-elf-permissions.py --selftest` parses the 32-bit, 64-bit and raw ELF
 program-header tables directly. Each now has separate read/execute, read-only
@@ -125,6 +133,8 @@ python3 probe-run.py --no-build \
   --receipt docs/receipts/run-qemu-2026-08-22.json
 python3 gen-app-evidence.py --write --verify-artifact
 python3 gen-app-evidence.py --check --selftest --verify-artifact
+python3 gen-hardware-receipt-plan.py --write --selftest
+python3 gen-hardware-receipt-plan.py --check --selftest
 python3 gen-artifact-registry.py --write --selftest
 python3 gen-artifact-registry.py --check --selftest
 ```

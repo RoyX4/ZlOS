@@ -57,10 +57,14 @@ MANIFEST_MARKER=$(python3 ./tools/generators/gen-app-manifest.py --marker)
 BUILD_ID=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["identity_sha256"])')
 BUILD_HEAD=$(python3 -c 'import json; print(json.load(open("metadata/build-identity.json"))["git"]["head"])')
 BUILD_DIRTY=$(python3 -c 'import json; print(1 if json.load(open("metadata/build-identity.json"))["git"]["dirty"] else 0)')
+PMM_COUNT_MARKER="  pmm: 180192/180192 pages free in [320, 1024) MiB"
+PMM_SELFTEST_MARKER="  <- physical allocator reserved floor, owner quota/mismatch, double-free and zero/reuse passed; baseline restored"
 for marker in \
     "$MANIFEST_MARKER" \
     "build-identity: schema=1 id=$BUILD_ID" \
-    "build-source: head=$BUILD_HEAD dirty=$BUILD_DIRTY"; do
+    "build-source: head=$BUILD_HEAD dirty=$BUILD_DIRTY" \
+    "$PMM_COUNT_MARKER" \
+    "$PMM_SELFTEST_MARKER"; do
     [ "$(grep -Fc "$marker" "$OUT")" -eq 1 ] || {
         echo "FAIL: serial transcript has missing or duplicate current receipt: $marker"
         exit 1

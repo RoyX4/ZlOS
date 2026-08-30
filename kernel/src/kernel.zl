@@ -6103,6 +6103,8 @@ fn run_command(cmd, arg) {
     # term.c, so the old single-key shell cannot trigger it accidentally. It
     # never returns: vector 6 must produce a ZLCRASH record and halt.
     if cmd == 127 { crash_test()  return 0 }
+    if cmd == 128 { crash_test_gp()  return 0 }
+    if cmd == 129 { crash_test_df()  return 0 }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0
@@ -14290,6 +14292,7 @@ fs_try()
 # window exists. Each mark is synchronously durable when ZLLOG is active, so a
 # physical stop identifies the exact call that did not return.
 diag_mark(200)                           # allocator sequence entered
+if loader() != 0 { pmm_up() }            # sealed firmware map; raw BIOS has none
 arena_up()
 diag_mark(201)                           # program arena returned
 heap_up()

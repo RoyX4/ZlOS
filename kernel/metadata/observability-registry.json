@@ -1,96 +1,169 @@
 {
   "schema": "zlos.observability-registry.v1",
   "result": "PASS_WITH_CURRENT_QEMU_AND_HOST_SCHEMA_EVIDENCE_AND_OPEN_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
   "boot_transcripts": [
     {
       "path": "kernel/docs/receipts/app-manifest-raw-bios-qemu-2026-08-22.json",
-      "receipt_sha256": "c89afdb12af5e7d20b1e311b2c0f6f7b8f8b84eae66b0cb6f8946474f77f74cc",
+      "receipt_sha256": "e5bb74d0c9f0a5e06acd83e68b888a7d3fa7ac0aa98f526cbed45f58b3addf05",
       "route": "raw-bios",
-      "boot_log_sha256": "acb18d0c4b111c76a5dfef02471fdb942649124cc75f74783f22711d0ca5a9db",
+      "boot_log_sha256": "9d415794db9a0a14fc745416fd233afcd952f64c96aafd596a5ba7033f85dbee",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "52875c91c8c2fff88270845822621f2d0125e498f57374cad801d5acd2b39abf",
+      "receipt_sha256": "29036d075c29c4b1ffd4826313e1b8bd7352dc5e7214a4179e703b513cd543e4",
       "route": "native-uefi64",
-      "boot_log_sha256": "df8bba2ecb768fbb6c2dd7920622dd00864dbf33a91c57ab03fe510abbe7b7e6",
+      "boot_log_sha256": "ab5230b75b56a13c9a95901c7a65f84e343a1c97cae7c6900d41c97b990bbc73",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json",
-      "receipt_sha256": "f79d3a8b63b2ec1124f80fdbddb67899041f9a604f76db15326a1e8fff282ef1",
+      "receipt_sha256": "4f1b1bae12d57510b3581d2edc6b4c5f035f47fb2d4e0b62419726272a9575da",
       "route": "grub-bios32",
-      "boot_log_sha256": "f11a38bac85a8a97015be4999ee144812d1c5c0fdb2c6526d39d09a8ea3719ba",
+      "boot_log_sha256": "28ff20d9f1c8a82b8068343124c3207ae8e65ae0647bc80df08e3f8a2ab7ac2b",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-uefi32-qemu-2026-08-22.json",
-      "receipt_sha256": "9b4248934db8c55c4c5345f090777839273650afe2f1c213a314ce787f3d59b4",
+      "receipt_sha256": "fedccb6ecde6f30a66a821ccf153e1d12e8610fad2aa91b36a9615b514dd4559",
       "route": "grub-uefi32",
-      "boot_log_sha256": "6f5111a022a1b8e9077a273750ad898ec7aa4bd9d5a27e859a0af99545367e96",
+      "boot_log_sha256": "c32ea0ad05ad1536029f4b04c1ab0b237cf771a5a87571f82fe8d8d96541916c",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-bios64-qemu-2026-08-22.json",
-      "receipt_sha256": "47019c6291a9a90f61a3e57d8e5ea80bcfb5aa497ea274fbcbe2b4535e1da31a",
+      "receipt_sha256": "98bebb9e83caa35ffec02eec8e91d6d4e468c55de0381601357016e81b2d3b07",
       "route": "grub-bios64",
-      "boot_log_sha256": "05ef06bc609e30334d70b5f2377a9a69739eb6d5aa8bea8c531f88864cf7cfef",
+      "boot_log_sha256": "ff4dec4935e78e6c9f0e484fa5d50dae850c1b3c76964b18adf82fb129ee586d",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
       "current_build_bound": true
     },
     {
       "path": "kernel/docs/receipts/app-manifest-grub-uefi64-qemu-2026-08-22.json",
-      "receipt_sha256": "899ed57471498747678deeb0dabc4c8329eb18f02eb242fe7427b4f8714d823a",
+      "receipt_sha256": "30f7cda4c4da79dbee291d3bc5ff45e27513c1f40a95a7ca607f6a59b4cc5ef4",
       "route": "grub-uefi64",
-      "boot_log_sha256": "4d1a9d12fd70ee2c82e2f714e3b02d759ea64b7043772d203d99276c8c0b864d",
+      "boot_log_sha256": "a6c3ec13b4d02257b7e7e0c536fd20a1fab8f6e446e84bba8ac376bbe464dd85",
       "raw_log_preserved": false,
       "evidence_ceiling": "QEMU runtime boot and embedded manifest; not native physical hardware",
-      "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
       "current_build_bound": true
     }
   ],
   "host_test_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08",
-    "subject_head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
+    "sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
+    "subject_head": "3777678c0247862177eceb1c4f35e2402839d029",
     "current_build_bound": false
   },
-  "qemu_crash_receipt": {
-    "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
-    "sha256": "827a5f1aa73b2fbf4b59cf20d67c24b5508fc9f3647895b05c951f1156974bba",
-    "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
-    "current_build_bound": true
-  },
+  "qemu_crash_receipts": [
+    {
+      "path": "kernel/docs/receipts/cpu-fault-invalid-opcode-qemu-2026-08-23.json",
+      "sha256": "eafc015f54e270c89e50d56de994541db18401759444f43504e2a4830393ac9f",
+      "route": "grub-bios32-qemu",
+      "fault_case": "ud2",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "vector": 6,
+      "has_error": 0,
+      "error": 0,
+      "record_version": 3,
+      "record_bytes": 240,
+      "register_bits": 32,
+      "register_mask": 255,
+      "handler_sp": 7642904,
+      "emergency_stack_low": 0,
+      "emergency_stack_high": 0,
+      "halted_cpu_rsp": 7642676,
+      "current_build_bound": true
+    },
+    {
+      "path": "kernel/docs/receipts/cpu-fault-native-uefi64-qemu-2026-08-29.json",
+      "sha256": "8f2f2afc2748d8fb4681d140d66a1c4c8aa597d05a9c5f88e3bd120bcd2badf8",
+      "route": "native-uefi64-qemu",
+      "fault_case": "ud2",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "vector": 6,
+      "has_error": 0,
+      "error": 0,
+      "record_version": 3,
+      "record_bytes": 240,
+      "register_bits": 64,
+      "register_mask": 65535,
+      "handler_sp": 1071997888,
+      "emergency_stack_low": 0,
+      "emergency_stack_high": 0,
+      "halted_cpu_rsp": 1071997520,
+      "current_build_bound": true
+    },
+    {
+      "path": "kernel/docs/receipts/cpu-fault-general-protection-native-uefi64-qemu-2026-08-29.json",
+      "sha256": "46c3d9372f2bf3092169828e833bceba6a4146484f86696178aa885b749c69de",
+      "route": "native-uefi64-qemu",
+      "fault_case": "gp",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "vector": 13,
+      "has_error": 1,
+      "error": 56,
+      "record_version": 3,
+      "record_bytes": 240,
+      "register_bits": 64,
+      "register_mask": 65535,
+      "handler_sp": 1071997888,
+      "emergency_stack_low": 0,
+      "emergency_stack_high": 0,
+      "halted_cpu_rsp": 1071997520,
+      "current_build_bound": true
+    },
+    {
+      "path": "kernel/docs/receipts/cpu-fault-double-fault-native-uefi64-qemu-2026-08-29.json",
+      "sha256": "8ed2512650b7ae2ff7881384310eafa376b2adf2d1a09f92345f30c68b53492d",
+      "route": "native-uefi64-qemu",
+      "fault_case": "double-fault",
+      "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "vector": 8,
+      "has_error": 1,
+      "error": 0,
+      "record_version": 3,
+      "record_bytes": 240,
+      "register_bits": 64,
+      "register_mask": 65535,
+      "handler_sp": 1024310544,
+      "emergency_stack_low": 1024294336,
+      "emergency_stack_high": 1024310720,
+      "halted_cpu_rsp": 1024310176,
+      "current_build_bound": true
+    }
+  ],
   "event_schema": {
     "path": "kernel/metadata/event-schema.json",
-    "sha256": "fa7530bbd38ca661b96e194881984ab6ac987de02518355878f6bb61ff59fc9e",
+    "sha256": "787bc6bedd6ab0a9e792086eff8331973ba8547a7fd37e725d4baf5552f46800",
     "result": "PASS_CURRENT_SCHEMA_WITH_CURRENT_HOST_PROOF_TARGET_UNINTEGRATED",
     "target_emitters": 0
   },
   "source_identities": {
-    "src/arch/x86/idt.c": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
-    "src/core/crash.c": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
-    "src/core/crash.h": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",
-    "src/core/heap.c": "d3d7cbb7010e7527713ca516a40a3dfc3050875e01762e83cb4443bc17fe4d1f",
+    "boot/gdt64.c": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
+    "src/arch/x86/idt.c": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+    "src/core/crash.c": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+    "src/core/crash.h": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
+    "src/core/heap.c": "2f5ede5e2fe6cfd610df93d2336b2e9423e7c44af0e8f6935c55b1b707ca2bd4",
     "src/core/console.c": "124025daa79df82856d35d1aee78ff9981a886371fdfd74aa5e6f2f4aa1bd67d",
     "src/arch/x86/support.c": "4ce2cecf76a4da5547fbf9749fa817dc879cf6b5b0d05958e38c672fa022378a",
-    "src/graphics/windowing/term.c": "48d9563f12b91bc4280b6fbb553a80fcbf933f6f9a7edc66057eb287ef5b9c04",
-    "tools/checks/verify-crash.py": "44c745f78dae1c684768ceab3675e313048e8c971a588c6aa1120cf9b0921051",
+    "src/graphics/windowing/term.c": "617113fcae29504aa6cd210dce1d1367cb97906f034f8db9a8287b61b2c5f481",
+    "tools/checks/verify-crash.py": "d76a8606998ff5ca717b62deff4b77678f0446b5129896e644cecec4dc05ef23",
     "tests/host/trace_event.c": "32706c33984d11f3ba2079488c416112aff27b514556ec281b91c86c101c8aee",
     "tests/host/trace_event.h": "d678744211b19f04b056431e39150bbcc0c28ddca614f89cd21c94cd4f405bc4",
     "tools/generators/gen-event-schema.py": "50b54d901a5d14c0b5bd2e545a724f7de814f15704c3c431a183a84aea347f8c",
@@ -112,14 +185,20 @@
     {
       "id": "cpu-fault-stop",
       "status": "QEMU_PROVED",
-      "detail": "real UD2 reaches vector 6, emits a complete record and remains halted",
+      "detail": "real UD2, general-protection and double faults emit complete records and remain halted",
       "evidence_ceiling": "current-build exact QEMU target behavior"
     },
     {
       "id": "fault-register-capture",
       "status": "QEMU_PROVED_PARTIAL",
-      "detail": "vector/error/IP/CS/FLAGS/SP/SS/CR2 control frame only; no general registers",
+      "detail": "all pre-prologue general registers on BIOS32 and native-UEFI64 UD2 plus native-UEFI64 error-code and nested-fault routes; broader vector coverage remains open",
       "evidence_ceiling": "current-build exact QEMU target behavior, explicitly partial fields"
+    },
+    {
+      "id": "double-fault-emergency-stack",
+      "status": "QEMU_PROVED",
+      "detail": "native-UEFI64 page-fault-on-invalid-stack escalates to vector 8 and both recorded handler SP and independently queried halted CPU RSP are inside the dedicated IST1 stack",
+      "evidence_ceiling": "current-build exact QEMU target behavior"
     },
     {
       "id": "stack-symbolization",
@@ -183,19 +262,19 @@
     }
   ],
   "counts": {
-    "capabilities": 14,
+    "capabilities": 15,
     "qemu_hash_only": 1,
-    "qemu_proved": 1,
+    "qemu_proved": 2,
     "qemu_proved_partial": 1,
     "host_proved_limited": 1,
     "host_proved_core": 4,
     "host_proved_partial": 1,
     "source_only": 0,
     "missing": 5,
-    "qemu_crash_receipts": 1,
+    "qemu_crash_receipts": 4,
     "durable_crash_receipts": 0,
     "typed_structured_event_fields": 28,
-    "current_build_bound_qemu_receipts": 7,
+    "current_build_bound_qemu_receipts": 10,
     "historical_qemu_receipts": 0
   },
   "open_gaps": [
@@ -212,10 +291,10 @@
     "tamper-evident-anchor",
     "trace-export-import"
   ],
-  "evidence_ceiling": "current source inventory joined to current-build QEMU boot/crash and event-schema host evidence; no target event emitter or durable crash evidence",
-  "weakest_link": "the structured core is externally serialized and target-unintegrated; general registers, stack symbols and durable recovery remain absent",
+  "evidence_ceiling": "current source inventory joined to current-build QEMU boot, four exact register crash receipts including error-code and IST1 double-fault paths, and event-schema host evidence; no target event emitter or durable crash evidence",
+  "weakest_link": "the structured event core is target-unintegrated; broader fault-vector coverage, stack symbols, guard pages and durable crash recovery remain absent",
   "generator": {
     "path": "kernel/tools/generators/gen-observability-registry.py",
-    "sha256": "19d8c3fae480522e1a3b64e3cb65529fe620f8803e9447aeb7d00f6c08b94a64"
+    "sha256": "6c834f087329dad72a3f14844418f3a338fe5ea18b2f3c1566a68516c5bff8f0"
   }
 }

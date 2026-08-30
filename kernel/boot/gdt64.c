@@ -44,10 +44,28 @@ _Static_assert(sizeof(struct tss64) == 104, "long-mode TSS must be 104 bytes");
 
 static struct tss64 tss;
 static unsigned char tss_stack[16384] __attribute__((aligned(16)));
+#define DOUBLE_FAULT_STACK_BYTES 16384u
+static unsigned char double_fault_stack[DOUBLE_FAULT_STACK_BYTES]
+    __attribute__((aligned(16)));
+
+unsigned long long gdt64_double_fault_stack_low(void)
+{
+    return (unsigned long long)double_fault_stack;
+}
+
+unsigned long long gdt64_double_fault_stack_top(void)
+{
+    return (unsigned long long)(double_fault_stack + sizeof double_fault_stack);
+}
 
 unsigned long long gdt64_kernel_stack_top(void)
 {
     return (unsigned long long)(tss_stack + sizeof tss_stack);
+}
+
+unsigned long long gdt64_active_kernel_stack_top(void)
+{
+    return tss.rsp0;
 }
 
 void gdt64_set_kernel_stack(unsigned long long top)
@@ -75,6 +93,10 @@ void gdt_init(void)
     unsigned long long base = (unsigned long long)&tss;
     unsigned long long limit = sizeof(tss) - 1;
     tss.rsp0 = gdt64_kernel_stack_top();
+    /* IDT vector 8 names IST1. A double fault commonly means the interrupted
+     * stack is unusable, so reusing RSP0 here would preserve the exact failure
+     * mode IST exists to contain. */
+    tss.ist1 = gdt64_double_fault_stack_top();
     tss.iomap = sizeof(tss);       /* no I/O bitmap: all ports denied at CPL3 */
     gdt[5] = (limit & 0xffffULL) |
              ((base & 0xffffffULL) << 16) |

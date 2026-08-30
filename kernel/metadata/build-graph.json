@@ -1,14 +1,14 @@
 {
   "schema": "zlos.build-graph.v1",
   "result": "PASS_CURRENT_ARTIFACTS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
   "artifact_snapshot": {
-    "subject_build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+    "subject_build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
     "current_build_bound": true,
     "evidence_ceiling": "exact current artifact/QEMU registry bound to this build identity"
   },
-  "artifact_registry_sha256": "313663864ea2ffcce55a51de2db64c78115fc6f711778fccc9855edae8135415",
-  "toolchain_manifest_sha256": "aa5845dd6f851d1da85ed19f2bff68bc1dc8fbad2f4fb4c29d8475ead09a54f1",
+  "artifact_registry_sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70",
+  "toolchain_manifest_sha256": "17debf69ee8932071f0ecccc9d9a4751f0579f830ccf5a6c052ad6f2fef3b8fc",
   "source_inputs": [
     "freestanding/runtime_kernel.c",
     "freestanding/zl_freestanding.h",
@@ -46,12 +46,18 @@
     "kernel/src/arch/x86/dma.h",
     "kernel/src/arch/x86/idt.c",
     "kernel/src/arch/x86/memmap.h",
+    "kernel/src/arch/x86/page_table_txn.c",
+    "kernel/src/arch/x86/page_table_txn.h",
     "kernel/src/arch/x86/paging.c",
     "kernel/src/arch/x86/pci.c",
     "kernel/src/arch/x86/rtc.c",
     "kernel/src/arch/x86/smp.c",
     "kernel/src/arch/x86/support.c",
+    "kernel/src/arch/x86/user_syscalls.json",
+    "kernel/src/arch/x86/user_syscalls_generated.h",
     "kernel/src/arch/x86/usermode.c",
+    "kernel/src/core/anon_memory.c",
+    "kernel/src/core/anon_memory.h",
     "kernel/src/core/arena.c",
     "kernel/src/core/boot/boot_handover.c",
     "kernel/src/core/boot/boot_handover.h",
@@ -62,6 +68,10 @@
     "kernel/src/core/crash.h",
     "kernel/src/core/exec.c",
     "kernel/src/core/heap.c",
+    "kernel/src/core/pmm.c",
+    "kernel/src/core/pmm.h",
+    "kernel/src/core/process_memory.c",
+    "kernel/src/core/process_memory.h",
     "kernel/src/core/sched.c",
     "kernel/src/core/telemetry.h",
     "kernel/src/core/version.h",
@@ -154,6 +164,7 @@
     "kernel/tools/generators/gen-app-manifest.py",
     "kernel/tools/generators/gen-boot-media-ids.py",
     "kernel/tools/generators/gen-build-identity.py",
+    "kernel/tools/generators/gen-user-syscalls.py",
     "kernel/tools/images/mkdisk.sh",
     "kernel/tools/images/mkiso.sh",
     "kernel/tools/images/mkiso64.sh",
@@ -164,26 +175,26 @@
     {
       "id": "bios-multiboot32",
       "primary_artifact": "kernel.elf",
-      "logical_objects": 78,
-      "declared_c_units": 73
+      "logical_objects": 82,
+      "declared_c_units": 77
     },
     {
       "id": "multiboot64",
       "primary_artifact": "kernel64.elf",
-      "logical_objects": 78,
-      "declared_c_units": 73
+      "logical_objects": 82,
+      "declared_c_units": 77
     },
     {
       "id": "native-uefi64",
       "primary_artifact": "BOOTX64.EFI",
-      "logical_objects": 78,
-      "declared_c_units": 73
+      "logical_objects": 82,
+      "declared_c_units": 77
     },
     {
       "id": "raw-bios-loader32",
       "primary_artifact": "kernel_raw.elf",
-      "logical_objects": 78,
-      "declared_c_units": 73
+      "logical_objects": 82,
+      "declared_c_units": 77
     }
   ],
   "nodes": [
@@ -199,7 +210,7 @@
       "id": "artifact:boot-media-ids.json",
       "kind": "artifact",
       "path": "kernel/metadata/boot-media-ids.json",
-      "sha256": "25af6198c6e3d01855cefce5e879ce71c2dd9e6369af2cc29777926d0e350184",
+      "sha256": "af904d4607ca6ca74a7ff123d1e3339524f646e3e5c5a146b0c7c97b73b0c1fd",
       "bytes": 484,
       "current_build_bound": true
     },
@@ -207,31 +218,31 @@
       "id": "artifact:kernel.elf",
       "kind": "artifact",
       "path": "kernel/kernel.elf",
-      "sha256": "4eb06c9b2e9092c9da743184dcd288833c572d14b54481e40a636c0d6f0e5b98",
-      "bytes": 6493832,
+      "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1",
+      "bytes": 6516856,
       "current_build_bound": true
     },
     {
       "id": "artifact:kernel64.elf",
       "kind": "artifact",
       "path": "kernel/kernel64.elf",
-      "sha256": "cf5cec3f07b2b871c474e049c17ca9955bedb20213db0b97c5c274adb3030da1",
-      "bytes": 3335312,
+      "sha256": "15877f83912895bcb2d3cd09b341afb88aeec5cb45f4965b9da288880df16521",
+      "bytes": 3370832,
       "current_build_bound": true
     },
     {
       "id": "artifact:kernel_raw.elf",
       "kind": "artifact",
       "path": "kernel/kernel_raw.elf",
-      "sha256": "a556a6bf790dabbca985e104d4e46045355054454a3bc5b8c37e9b972c4cca65",
-      "bytes": 6493676,
+      "sha256": "fc9e4aa37de9ed7b813a3caed12286914012c79e6866deebe6e09eeb41009050",
+      "bytes": 6516700,
       "current_build_bound": true
     },
     {
       "id": "artifact:zlOS-usb.img",
       "kind": "artifact",
       "path": "kernel/zlOS-usb.img",
-      "sha256": "7ad982c17875d533d68dce4551f3060656f6b161abb02b8bdf39d93a02749875",
+      "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9",
       "bytes": 138412032,
       "current_build_bound": true
     },
@@ -239,7 +250,7 @@
       "id": "artifact:zlOS.img",
       "kind": "artifact",
       "path": "kernel/zlOS.img",
-      "sha256": "d9cfa162fc0e9064d48d86df14e231b0f366e623df65f722ec2b4a269cf961e5",
+      "sha256": "3cabdfb8af476225d4456da37bf65915c86ea0b960824a0c84805585ec319ce3",
       "bytes": 8389120,
       "current_build_bound": true
     },
@@ -247,16 +258,16 @@
       "id": "artifact:zlOS.iso",
       "kind": "artifact",
       "path": "kernel/zlOS.iso",
-      "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5",
-      "bytes": 31635456,
+      "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+      "bytes": 31660032,
       "current_build_bound": true
     },
     {
       "id": "artifact:zlOS64.iso",
       "kind": "artifact",
       "path": "kernel/zlOS64.iso",
-      "sha256": "e124b6667de1d98493d3737c5647e9c87f1b9e7377f35a0a442d1661a72d258b",
-      "bytes": 28477440,
+      "sha256": "379e9dffd08ee5efc24265dc1c4dc451b3876090cce7f4c3af60612918f72322",
+      "bytes": 28512256,
       "current_build_bound": true
     },
     {
@@ -329,6 +340,12 @@
       "physical_path": "kernel/_idt.o"
     },
     {
+      "id": "object:bios-multiboot32:src/arch/x86/page_table_txn.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_page_table_txn.o"
+    },
+    {
       "id": "object:bios-multiboot32:src/arch/x86/paging.c",
       "kind": "logical-object",
       "lane": "bios-multiboot32",
@@ -363,6 +380,12 @@
       "kind": "logical-object",
       "lane": "bios-multiboot32",
       "physical_path": "kernel/_usermode.o"
+    },
+    {
+      "id": "object:bios-multiboot32:src/core/anon_memory.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_anon_memory.o"
     },
     {
       "id": "object:bios-multiboot32:src/core/arena.c",
@@ -405,6 +428,18 @@
       "kind": "logical-object",
       "lane": "bios-multiboot32",
       "physical_path": "kernel/_heap.o"
+    },
+    {
+      "id": "object:bios-multiboot32:src/core/pmm.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_pmm.o"
+    },
+    {
+      "id": "object:bios-multiboot32:src/core/process_memory.c",
+      "kind": "logical-object",
+      "lane": "bios-multiboot32",
+      "physical_path": "kernel/_process_memory.o"
     },
     {
       "id": "object:bios-multiboot32:src/core/sched.c",
@@ -797,6 +832,12 @@
       "physical_path": "kernel/_idt64.o"
     },
     {
+      "id": "object:multiboot64:src/arch/x86/page_table_txn.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_page_table_txn64.o"
+    },
+    {
       "id": "object:multiboot64:src/arch/x86/paging.c",
       "kind": "logical-object",
       "lane": "multiboot64",
@@ -831,6 +872,12 @@
       "kind": "logical-object",
       "lane": "multiboot64",
       "physical_path": "kernel/_usermode64.o"
+    },
+    {
+      "id": "object:multiboot64:src/core/anon_memory.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_anon_memory64.o"
     },
     {
       "id": "object:multiboot64:src/core/arena.c",
@@ -873,6 +920,18 @@
       "kind": "logical-object",
       "lane": "multiboot64",
       "physical_path": "kernel/_heap64.o"
+    },
+    {
+      "id": "object:multiboot64:src/core/pmm.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_pmm64.o"
+    },
+    {
+      "id": "object:multiboot64:src/core/process_memory.c",
+      "kind": "logical-object",
+      "lane": "multiboot64",
+      "physical_path": "kernel/_process_memory64.o"
     },
     {
       "id": "object:multiboot64:src/core/sched.c",
@@ -1265,6 +1324,12 @@
       "physical_path": "kernel/_efi_idt.o"
     },
     {
+      "id": "object:native-uefi64:src/arch/x86/page_table_txn.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_page_table_txn.o"
+    },
+    {
       "id": "object:native-uefi64:src/arch/x86/paging.c",
       "kind": "logical-object",
       "lane": "native-uefi64",
@@ -1299,6 +1364,12 @@
       "kind": "logical-object",
       "lane": "native-uefi64",
       "physical_path": "kernel/_efi_usermode.o"
+    },
+    {
+      "id": "object:native-uefi64:src/core/anon_memory.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_anon_memory.o"
     },
     {
       "id": "object:native-uefi64:src/core/arena.c",
@@ -1341,6 +1412,18 @@
       "kind": "logical-object",
       "lane": "native-uefi64",
       "physical_path": "kernel/_efi_heap.o"
+    },
+    {
+      "id": "object:native-uefi64:src/core/pmm.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_pmm.o"
+    },
+    {
+      "id": "object:native-uefi64:src/core/process_memory.c",
+      "kind": "logical-object",
+      "lane": "native-uefi64",
+      "physical_path": "kernel/_efi_process_memory.o"
     },
     {
       "id": "object:native-uefi64:src/core/sched.c",
@@ -1733,6 +1816,12 @@
       "physical_path": "kernel/_idt.o"
     },
     {
+      "id": "object:raw-bios-loader32:src/arch/x86/page_table_txn.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_page_table_txn.o"
+    },
+    {
       "id": "object:raw-bios-loader32:src/arch/x86/paging.c",
       "kind": "logical-object",
       "lane": "raw-bios-loader32",
@@ -1767,6 +1856,12 @@
       "kind": "logical-object",
       "lane": "raw-bios-loader32",
       "physical_path": "kernel/_usermode.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:src/core/anon_memory.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_anon_memory.o"
     },
     {
       "id": "object:raw-bios-loader32:src/core/arena.c",
@@ -1809,6 +1904,18 @@
       "kind": "logical-object",
       "lane": "raw-bios-loader32",
       "physical_path": "kernel/_heap.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:src/core/pmm.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_pmm.o"
+    },
+    {
+      "id": "object:raw-bios-loader32:src/core/process_memory.c",
+      "kind": "logical-object",
+      "lane": "raw-bios-loader32",
+      "physical_path": "kernel/_process_memory.o"
     },
     {
       "id": "object:raw-bios-loader32:src/core/sched.c",
@@ -2155,7 +2262,7 @@
       "id": "source:freestanding/runtime_kernel.c",
       "kind": "source-input",
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "09480f71df8576a9bde15d903ecd7936699c3cf199e0f360a91dcaf0d6996e1c",
+      "sha256": "44a98e4017ae78b9ec6d759548b56a63faf1eb22054d5027bcca8b7c91145e80",
       "suffix": ".c"
     },
     {
@@ -2169,14 +2276,14 @@
       "id": "source:kernel/SOURCES",
       "kind": "source-input",
       "path": "kernel/SOURCES",
-      "sha256": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
+      "sha256": "f47d8e7dfd11992ab68c1ecf645d47dee1347b00fd6414930cfdf8c0121b6694",
       "suffix": ""
     },
     {
       "id": "source:kernel/app_manifest_embed.zl",
       "kind": "source-input",
       "path": "kernel/app_manifest_embed.zl",
-      "sha256": "c00b8a2760d39c380409c324392bd2b767bc1e8716198702664d2e5cfcf58364",
+      "sha256": "70711b59e00519320a661678e523a95c101ed840d97e5e8a48a51a6e9fddd8df",
       "suffix": ".zl"
     },
     {
@@ -2281,7 +2388,7 @@
       "id": "source:kernel/boot/gdt64.c",
       "kind": "source-input",
       "path": "kernel/boot/gdt64.c",
-      "sha256": "c4ddaa41af011ab47f81e3c308bc99dd26f2f99de93406a1bcbd493f86450db8",
+      "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf",
       "suffix": ".c"
     },
     {
@@ -2358,7 +2465,7 @@
       "id": "source:kernel/metadata/app-manifest.json",
       "kind": "source-input",
       "path": "kernel/metadata/app-manifest.json",
-      "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4",
+      "sha256": "2fee3e7aefb880268d21b0a0ce41398af94ccf3612ab357c54adc1ea3a529562",
       "suffix": ".json"
     },
     {
@@ -2393,21 +2500,35 @@
       "id": "source:kernel/src/arch/x86/idt.c",
       "kind": "source-input",
       "path": "kernel/src/arch/x86/idt.c",
-      "sha256": "2919c40097d401ecde8905bbb24249769a16888cc42355f4020d0f8477472560",
+      "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/arch/x86/memmap.h",
       "kind": "source-input",
       "path": "kernel/src/arch/x86/memmap.h",
-      "sha256": "889e741fd504aa5f315a0eeeef45d1f6cb0c8135eabf1b467d04265f46db9651",
+      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/src/arch/x86/page_table_txn.c",
+      "kind": "source-input",
+      "path": "kernel/src/arch/x86/page_table_txn.c",
+      "sha256": "95232c2f9d38f532d5b0923d3658622819356b412ace2f54ba175155752014e5",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/arch/x86/page_table_txn.h",
+      "kind": "source-input",
+      "path": "kernel/src/arch/x86/page_table_txn.h",
+      "sha256": "fb61024acc4d16f1423bc3548497435e7089a98a35a5a3de1ba37035605cd608",
       "suffix": ".h"
     },
     {
       "id": "source:kernel/src/arch/x86/paging.c",
       "kind": "source-input",
       "path": "kernel/src/arch/x86/paging.c",
-      "sha256": "0fde4015702cf2f711853d0ba153fe1c9ecff7e2e6a478087393c5816bbbd023",
+      "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
       "suffix": ".c"
     },
     {
@@ -2421,7 +2542,7 @@
       "id": "source:kernel/src/arch/x86/rtc.c",
       "kind": "source-input",
       "path": "kernel/src/arch/x86/rtc.c",
-      "sha256": "d5a79b23bfdb0f9803d941e9f2b04ae36d23a06e44e64ec1a3c0c2e94596df8d",
+      "sha256": "03ebec78424f83a56717153b62484d76f1a1529bc7afdf5755989f0e88678b7a",
       "suffix": ".c"
     },
     {
@@ -2439,11 +2560,39 @@
       "suffix": ".c"
     },
     {
+      "id": "source:kernel/src/arch/x86/user_syscalls.json",
+      "kind": "source-input",
+      "path": "kernel/src/arch/x86/user_syscalls.json",
+      "sha256": "b7ad9c0a9567aec99e4c9d0a4203c5eb40312e9a6cf1fef267249729a4f701f5",
+      "suffix": ".json"
+    },
+    {
+      "id": "source:kernel/src/arch/x86/user_syscalls_generated.h",
+      "kind": "source-input",
+      "path": "kernel/src/arch/x86/user_syscalls_generated.h",
+      "sha256": "16a8d11cb53e04cecdedd7b80c50aa6f1f2957101760153e0eac299d67ba9f6a",
+      "suffix": ".h"
+    },
+    {
       "id": "source:kernel/src/arch/x86/usermode.c",
       "kind": "source-input",
       "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "ea25de01de29a1916ba29a1afd5ed8fbe7fff03f57bc2098883c36ff37a0d773",
+      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
       "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/core/anon_memory.c",
+      "kind": "source-input",
+      "path": "kernel/src/core/anon_memory.c",
+      "sha256": "5415297acc8c30530cd63fd13f953292c597835374ed3ac6e1b27f72b29a2c1f",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/core/anon_memory.h",
+      "kind": "source-input",
+      "path": "kernel/src/core/anon_memory.h",
+      "sha256": "ed2c24adc62af909c535713eb35f794ff407559a855e127b023963c315db64e8",
+      "suffix": ".h"
     },
     {
       "id": "source:kernel/src/core/arena.c",
@@ -2491,14 +2640,14 @@
       "id": "source:kernel/src/core/crash.c",
       "kind": "source-input",
       "path": "kernel/src/core/crash.c",
-      "sha256": "ae20e992be8485695df07f70d8f38ac316570696a9581da57669cfc2cded136f",
+      "sha256": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
       "suffix": ".c"
     },
     {
       "id": "source:kernel/src/core/crash.h",
       "kind": "source-input",
       "path": "kernel/src/core/crash.h",
-      "sha256": "2d4fbb5bcb6523418f8caaed8e8e64b12e09e585f3bf37955a927b52dfa5d2d6",
+      "sha256": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
       "suffix": ".h"
     },
     {
@@ -2512,8 +2661,36 @@
       "id": "source:kernel/src/core/heap.c",
       "kind": "source-input",
       "path": "kernel/src/core/heap.c",
-      "sha256": "d3d7cbb7010e7527713ca516a40a3dfc3050875e01762e83cb4443bc17fe4d1f",
+      "sha256": "2f5ede5e2fe6cfd610df93d2336b2e9423e7c44af0e8f6935c55b1b707ca2bd4",
       "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/core/pmm.c",
+      "kind": "source-input",
+      "path": "kernel/src/core/pmm.c",
+      "sha256": "ee557109e2e842db7bac3803300cddf3eb37d78b8b7253a2e68f84e850623182",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/core/pmm.h",
+      "kind": "source-input",
+      "path": "kernel/src/core/pmm.h",
+      "sha256": "2a433acd02e8fab3fa28b0adbf80f7b4e18bcbd5b2121f2804bfb17570a90661",
+      "suffix": ".h"
+    },
+    {
+      "id": "source:kernel/src/core/process_memory.c",
+      "kind": "source-input",
+      "path": "kernel/src/core/process_memory.c",
+      "sha256": "b9a874c4139b613224ee74546e2b63c8ff6a2ac3faeca108f13986c49f0a2b63",
+      "suffix": ".c"
+    },
+    {
+      "id": "source:kernel/src/core/process_memory.h",
+      "kind": "source-input",
+      "path": "kernel/src/core/process_memory.h",
+      "sha256": "427295bb63ee6e893c8166148eec6980c1f77ab705b5a7dce85d9e83870e4832",
+      "suffix": ".h"
     },
     {
       "id": "source:kernel/src/core/sched.c",
@@ -2897,7 +3074,7 @@
       "id": "source:kernel/src/graphics/windowing/term.c",
       "kind": "source-input",
       "path": "kernel/src/graphics/windowing/term.c",
-      "sha256": "48d9563f12b91bc4280b6fbb553a80fcbf933f6f9a7edc66057eb287ef5b9c04",
+      "sha256": "617113fcae29504aa6cd210dce1d1367cb97906f034f8db9a8287b61b2c5f481",
       "suffix": ".c"
     },
     {
@@ -2925,7 +3102,7 @@
       "id": "source:kernel/src/kernel.zl",
       "kind": "source-input",
       "path": "kernel/src/kernel.zl",
-      "sha256": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
+      "sha256": "c69681f274758145bd3b96de96c1486d44f141a32b09d50cc2932ed4f30aa9c8",
       "suffix": ".zl"
     },
     {
@@ -3156,7 +3333,14 @@
       "id": "source:kernel/tools/generators/gen-build-identity.py",
       "kind": "source-input",
       "path": "kernel/tools/generators/gen-build-identity.py",
-      "sha256": "3dfd0a54fbd2206e88b9f94ced6e687e635834317c701552996a9beb4873ad5c",
+      "sha256": "d8d3c1e72c04ac711eeacb0a33eb6c6066bae4afd07225278798822e8494beda",
+      "suffix": ".py"
+    },
+    {
+      "id": "source:kernel/tools/generators/gen-user-syscalls.py",
+      "kind": "source-input",
+      "path": "kernel/tools/generators/gen-user-syscalls.py",
+      "sha256": "d62f5c2bbd0c0d6387ef4b0db57bc7ca040d2846921099b5cf66eeb15b6651b8",
       "suffix": ".py"
     },
     {
@@ -3287,6 +3471,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:bios-multiboot32:src/arch/x86/page_table_txn.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:bios-multiboot32:src/arch/x86/paging.c",
       "to": "artifact:kernel.elf",
       "relation": "linked-into"
@@ -3313,6 +3502,11 @@
     },
     {
       "from": "object:bios-multiboot32:src/arch/x86/usermode.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:src/core/anon_memory.c",
       "to": "artifact:kernel.elf",
       "relation": "linked-into"
     },
@@ -3348,6 +3542,16 @@
     },
     {
       "from": "object:bios-multiboot32:src/core/heap.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:src/core/pmm.c",
+      "to": "artifact:kernel.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:bios-multiboot32:src/core/process_memory.c",
       "to": "artifact:kernel.elf",
       "relation": "linked-into"
     },
@@ -3677,6 +3881,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:multiboot64:src/arch/x86/page_table_txn.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:multiboot64:src/arch/x86/paging.c",
       "to": "artifact:kernel64.elf",
       "relation": "linked-into"
@@ -3703,6 +3912,11 @@
     },
     {
       "from": "object:multiboot64:src/arch/x86/usermode.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:src/core/anon_memory.c",
       "to": "artifact:kernel64.elf",
       "relation": "linked-into"
     },
@@ -3738,6 +3952,16 @@
     },
     {
       "from": "object:multiboot64:src/core/heap.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:src/core/pmm.c",
+      "to": "artifact:kernel64.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:multiboot64:src/core/process_memory.c",
       "to": "artifact:kernel64.elf",
       "relation": "linked-into"
     },
@@ -4067,6 +4291,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:native-uefi64:src/arch/x86/page_table_txn.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:native-uefi64:src/arch/x86/paging.c",
       "to": "artifact:BOOTX64.EFI",
       "relation": "linked-into"
@@ -4093,6 +4322,11 @@
     },
     {
       "from": "object:native-uefi64:src/arch/x86/usermode.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:src/core/anon_memory.c",
       "to": "artifact:BOOTX64.EFI",
       "relation": "linked-into"
     },
@@ -4128,6 +4362,16 @@
     },
     {
       "from": "object:native-uefi64:src/core/heap.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:src/core/pmm.c",
+      "to": "artifact:BOOTX64.EFI",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:native-uefi64:src/core/process_memory.c",
       "to": "artifact:BOOTX64.EFI",
       "relation": "linked-into"
     },
@@ -4457,6 +4701,11 @@
       "relation": "linked-into"
     },
     {
+      "from": "object:raw-bios-loader32:src/arch/x86/page_table_txn.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
       "from": "object:raw-bios-loader32:src/arch/x86/paging.c",
       "to": "artifact:kernel_raw.elf",
       "relation": "linked-into"
@@ -4483,6 +4732,11 @@
     },
     {
       "from": "object:raw-bios-loader32:src/arch/x86/usermode.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:src/core/anon_memory.c",
       "to": "artifact:kernel_raw.elf",
       "relation": "linked-into"
     },
@@ -4518,6 +4772,16 @@
     },
     {
       "from": "object:raw-bios-loader32:src/core/heap.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:src/core/pmm.c",
+      "to": "artifact:kernel_raw.elf",
+      "relation": "linked-into"
+    },
+    {
+      "from": "object:raw-bios-loader32:src/core/process_memory.c",
       "to": "artifact:kernel_raw.elf",
       "relation": "linked-into"
     },
@@ -5162,6 +5426,36 @@
       "relation": "included-by"
     },
     {
+      "from": "source:kernel/src/arch/x86/page_table_txn.c",
+      "to": "object:bios-multiboot32:src/arch/x86/page_table_txn.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/arch/x86/page_table_txn.c",
+      "to": "object:multiboot64:src/arch/x86/page_table_txn.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/arch/x86/page_table_txn.c",
+      "to": "object:native-uefi64:src/arch/x86/page_table_txn.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/arch/x86/page_table_txn.c",
+      "to": "object:raw-bios-loader32:src/arch/x86/page_table_txn.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/arch/x86/page_table_txn.h",
+      "to": "source:kernel/src/arch/x86/page_table_txn.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/arch/x86/page_table_txn.h",
+      "to": "source:kernel/src/arch/x86/paging.c",
+      "relation": "included-by"
+    },
+    {
       "from": "source:kernel/src/arch/x86/paging.c",
       "to": "object:bios-multiboot32:src/arch/x86/paging.c",
       "relation": "compiled-to"
@@ -5262,6 +5556,16 @@
       "relation": "compiled-to"
     },
     {
+      "from": "source:kernel/src/arch/x86/user_syscalls.json",
+      "to": "scope:declared-build-input",
+      "relation": "declared-scope-only"
+    },
+    {
+      "from": "source:kernel/src/arch/x86/user_syscalls_generated.h",
+      "to": "source:kernel/src/arch/x86/usermode.c",
+      "relation": "included-by"
+    },
+    {
       "from": "source:kernel/src/arch/x86/usermode.c",
       "to": "object:bios-multiboot32:src/arch/x86/usermode.c",
       "relation": "compiled-to"
@@ -5280,6 +5584,31 @@
       "from": "source:kernel/src/arch/x86/usermode.c",
       "to": "object:raw-bios-loader32:src/arch/x86/usermode.c",
       "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/anon_memory.c",
+      "to": "object:bios-multiboot32:src/core/anon_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/anon_memory.c",
+      "to": "object:multiboot64:src/core/anon_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/anon_memory.c",
+      "to": "object:native-uefi64:src/core/anon_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/anon_memory.c",
+      "to": "object:raw-bios-loader32:src/core/anon_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/anon_memory.h",
+      "to": "source:kernel/src/core/anon_memory.c",
+      "relation": "included-by"
     },
     {
       "from": "source:kernel/src/core/arena.c",
@@ -5329,6 +5658,11 @@
     {
       "from": "source:kernel/src/core/boot/boot_handover.h",
       "to": "source:kernel/src/core/boot/boot_state.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/core/boot/boot_handover.h",
+      "to": "source:kernel/src/core/pmm.c",
       "relation": "included-by"
     },
     {
@@ -5440,6 +5774,66 @@
       "from": "source:kernel/src/core/heap.c",
       "to": "object:raw-bios-loader32:src/core/heap.c",
       "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.c",
+      "to": "object:bios-multiboot32:src/core/pmm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.c",
+      "to": "object:multiboot64:src/core/pmm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.c",
+      "to": "object:native-uefi64:src/core/pmm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.c",
+      "to": "object:raw-bios-loader32:src/core/pmm.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.h",
+      "to": "source:kernel/src/core/anon_memory.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.h",
+      "to": "source:kernel/src/core/pmm.c",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/core/pmm.h",
+      "to": "source:kernel/src/core/process_memory.h",
+      "relation": "included-by"
+    },
+    {
+      "from": "source:kernel/src/core/process_memory.c",
+      "to": "object:bios-multiboot32:src/core/process_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/process_memory.c",
+      "to": "object:multiboot64:src/core/process_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/process_memory.c",
+      "to": "object:native-uefi64:src/core/process_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/process_memory.c",
+      "to": "object:raw-bios-loader32:src/core/process_memory.c",
+      "relation": "compiled-to"
+    },
+    {
+      "from": "source:kernel/src/core/process_memory.h",
+      "to": "source:kernel/src/core/process_memory.c",
+      "relation": "included-by"
     },
     {
       "from": "source:kernel/src/core/sched.c",
@@ -6882,6 +7276,11 @@
       "relation": "generates"
     },
     {
+      "from": "source:kernel/tools/generators/gen-user-syscalls.py",
+      "to": "scope:declared-build-input",
+      "relation": "declared-scope-only"
+    },
+    {
       "from": "source:kernel/tools/images/mkdisk.sh",
       "to": "artifact:kernel_raw.elf",
       "relation": "build-script-produces"
@@ -6928,27 +7327,29 @@
     }
   ],
   "counts": {
-    "source_inputs": 149,
-    "declared_c_units": 73,
+    "source_inputs": 160,
+    "declared_c_units": 77,
     "target_lanes": 4,
     "artifacts": 9,
     "current_artifacts": 9,
     "historical_artifacts": 0,
-    "nodes": 474,
-    "edges": 746,
+    "nodes": 501,
+    "edges": 789,
     "orphan_source_inputs": 0,
-    "scope_only_inputs": 9
+    "scope_only_inputs": 11
   },
   "scope_only_inputs": [
     "freestanding/zl_freestanding.h",
     "kernel/src/arch/x86/dma.h",
+    "kernel/src/arch/x86/user_syscalls.json",
     "kernel/src/core/version.h",
     "kernel/src/drivers/display/assets/cursor.inc",
     "kernel/src/drivers/display/assets/gpu_batch.inc",
     "kernel/src/drivers/display/assets/gpu_shader.inc",
     "kernel/src/drivers/display/assets/gpu_surface.inc",
     "kernel/src/graphics/fonts/font_prop.h",
-    "kernel/src/graphics/fonts/font_prop.inc"
+    "kernel/src/graphics/fonts/font_prop.inc",
+    "kernel/tools/generators/gen-user-syscalls.py"
   ],
   "open_gaps": [
     "logical object graph is source-derived; object hashes are represented by final reproducibility receipts, not per-object receipts",

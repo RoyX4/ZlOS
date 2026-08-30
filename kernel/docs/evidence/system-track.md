@@ -230,7 +230,7 @@ file added none. Four new `.c` files went in that way.
 
 ```
 kernel/tests/host/fstest      117 assertions  zlfs, incl. a cold start in a SEPARATE PROCESS
-kernel/tests/host/rtctest      46 assertions  the clock, against a misbehaving CMOS
+kernel/tests/host/rtctest      50 assertions  the clock, against a misbehaving CMOS
 kernel/tests/host/systest      96 assertions  clipboard, snapping, notifications
 kernel/tests/host/toasttest    17 assertions  the toast INSIDE the compositor, by pixel
 kernel/verify.sh                            BIOS boot vs golden.txt

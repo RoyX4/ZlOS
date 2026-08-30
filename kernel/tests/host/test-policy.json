@@ -3,6 +3,7 @@
   "compiled": {
     "gate": [
       "arenatest",
+      "anonmemorytest",
       "blocktest",
       "boot_handover_test",
       "boot_state_test",
@@ -39,12 +40,17 @@
       "msctest",
       "nettest",
       "pagingtest",
+      "pagetxntest",
       "palette",
       "pngtest",
+      "pmmtest",
+      "processmemorytest",
+      "retest",
       "rtctest",
       "runtest",
       "settingstest",
       "systest",
+      "tartest",
       "tcptest",
       "termwrap",
       "tlscryptotest",
@@ -82,6 +88,7 @@
     "gate": [
       "killtest.sh",
       "memmap-guard-test.sh",
+      "user-syscalls-test.sh",
       "zladdrs.sh"
     ],
     "manual-hardware": [

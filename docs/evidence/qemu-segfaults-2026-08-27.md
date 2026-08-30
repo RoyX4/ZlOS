@@ -19,9 +19,10 @@ qemu-system-x86[1290219]: segfault at 10 ip 0000564f170a6234 sp 00007f3440314f48
     error 4 in qemu-system-x86_64[6ee234,564f16e7f000+67b000]
 ```
 
-Read the bracket: `6ee234` is the **file offset of the faulting instruction
-inside the binary**, and it is identical across crashes. The absolute `ip`
-values differ only because of ASLR. `segfault at 10` is a read of address
+Subtracting the mapped executable base from the instruction pointer gives
+`0x227234` in every observed crash. The absolute `ip` values differ only
+because of ASLR. The bracketed `6ee234` field is also identical, but this
+receipt does not assign it a meaning. `segfault at 10` is a read of address
 `0x10` - a NULL struct pointer plus a small field offset - and `error 4` is a
 user-mode read of an unmapped page.
 
@@ -41,15 +42,16 @@ also completed cleanly three times in a row at load 1.77.
     ... under OVMF pflash
 ```
 
-and it is also a gate that **SIGTERMs QEMU** once it has seen its marker. A
-teardown path dereferencing a device pointer that is already gone fits every
-piece of the evidence: same instruction, small offset from NULL, intermittent,
-and harmless to the guest - the observed crash happened *after* the kernel had
-written every marker the gate wanted.
+and it is also a gate that **SIGTERMs QEMU** once it has seen its marker. The
+2026-08-27 evidence suggested a teardown path dereferencing a device pointer
+that was already gone because those observed crashes happened after the kernel
+had written every required marker. The 2026-08-30 recurrence included crashes
+before the final prompt, so teardown is no longer an adequate explanation.
 
-Not proven. Nobody has attached a debugger to QEMU, and this run did not try;
-it is a hypothesis with the evidence that suggests it, written down so the next
-person starts from here rather than from "the kernel is broken".
+The QEMU source cause is not proven. Nobody has attached a debugger to QEMU;
+the stable relative instruction and NULL-like address are the current hard
+boundary, written down so the next person starts from evidence rather than
+from "the kernel is broken".
 
 ## What the gates did about it
 
@@ -79,3 +81,28 @@ happened during teardown, after the kernel had written everything, and the gate
 went red on a boot that had demonstrably succeeded. A mid-boot crash truncates
 the log and the marker checks fail on their own - and then the crash line is the
 explanation for that failure rather than a second one.
+
+## 2026-08-30 recurrence and bounded recovery
+
+QEMU 11.0.3 (`Debian 1:11.0.3+ds-2`, build ID
+`6728e9df9faf18c487ff53140f10ee58ea3931dd`) reproduced the same fault four
+more times at 10:10:03, 10:30:28, 10:31:08, and 10:33:18. Each event had
+`segfault at 10`, relative instruction `0x227234`, and bracket field `6ee234`.
+The first two occurred in complete `verify-efi.sh` runs; a subsequent run of
+the byte-identical `zlOS-usb.img` passed, refuting the image as the cause. One
+crash happened after zlOS had already reached its persistent-journal marker,
+so "the kernel started" is not a valid boundary for classifying this emulator
+fault.
+
+`verify-efi.sh` now keeps KVM as its first route. If and only if QEMU exits from
+an unexpected signal before the final `ready.` marker, the verifier reports the
+emulator crash, recreates the OVMF variables file and USB-image working copy,
+and retries once with TCG. Guest timeouts, ordinary non-signal exits, missing
+guest observations, and any failed TCG retry remain red. `ZLOS_FORCE_TCG=1`
+exists only to exercise the fallback execution lane directly; that lane passed
+the complete UEFI marker set and regenerated the scheduler, process, allocator,
+and page-table receipts.
+
+This is QEMU execution proof, not physical-hardware proof. The exact QEMU
+source function at relative instruction `0x227234` is still unknown because the
+installed binary has no usable line symbols and no debugger was attached.

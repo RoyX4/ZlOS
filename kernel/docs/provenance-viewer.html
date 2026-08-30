@@ -88,10 +88,10 @@
         <a href="#artifacts">Artifacts</a><a href="#applications">Applications</a>
         <a href="#security">Permissions &amp; security</a><a href="#changes">Changes</a>
       </nav>
-      <div class="identity">BUILD<br>54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d</div>
+      <div class="identity">BUILD<br>eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08</div>
     </aside>
     <main id="main">
-      <div class="warning" role="status">UNRELEASED DEVELOPMENT BUILD · CLEAN SOURCE TREE · PUBLIC RELEASE BLOCKED</div>
+      <div class="warning" role="status">UNRELEASED DEVELOPMENT BUILD · DIRTY TREE · PUBLIC RELEASE BLOCKED</div>
       <section id="overview" class="hero" aria-labelledby="overview-title">
         <div><div class="eyebrow">Exact identity / explicit gaps</div>
           <h2 id="overview-title">What these bytes actually prove.</h2>
@@ -101,16 +101,17 @@
           <div><span>State</span><span class="badge gap">UNRELEASED_DEVELOPMENT</span></div>
           <div><span>License</span><span class="badge blocked">BLOCKED</span></div>
           <div><span>Signatures</span><span class="badge gap">0 PRESENT</span></div>
-          <div><span>Physical hashes</span><span class="badge pass">0 PROVED</span></div>
+          <div><span>Physical routes</span><span class="badge pass">0 PROVED</span></div>
         </div>
       </section>
       <dl class="facts">
-        <dt>Commit</dt><dd><code>925bfd223d2efca05826cef2cfc13b298c8ab690</code></dd>
-        <dt>Branch / dirty</dt><dd>codex/presswork-local-closure / false</dd>
-        <dt>Source archive</dt><dd>149 inputs · 7,884,800 bytes · <code>b4bbc210bf5c01f94579d4307b837ffed6b2dac13302f2dacbff00356fd10cd3</code></dd>
+        <dt>Commit</dt><dd><code>3777678c0247862177eceb1c4f35e2402839d029</code></dd>
+        <dt>Branch / dirty</dt><dd>codex/906-feature-program / true</dd>
+        <dt>Source archive</dt><dd>160 inputs · 7,987,200 bytes · <code>f25092146d3954a29004deb1b328c006ab293367da0d0c4e0f63bc5e33ffc6a9</code></dd>
+        <dt>Dependency archive</dt><dd>160 binaries · 104 source packages · offline=true</dd>
         <dt>Custody</dt><dd>0 off-host copies · signed=false</dd>
-        <dt>Licensing</dt><dd>0 / 149 inputs have an established redistribution grant</dd>
-        <dt>Tests</dt><dd>59 host pass · 3 hardware skip · 12 not run · 6 QEMU boot routes</dd>
+        <dt>Licensing</dt><dd>0 / 160 inputs have an established redistribution grant</dd>
+        <dt>Tests</dt><dd>64 host pass · 3 hardware skip · 12 not run · 6 QEMU boot routes</dd>
       </dl>
       <div class="controls" aria-label="Table filters">
         <label for="search">Search evidence</label><input id="search" type="search" autocomplete="off" placeholder="artifact, app, claim, change…">
@@ -119,12 +120,14 @@
       </div>
       <div id="evidence-tables">
         <section id="health" aria-labelledby="health-title"><h2 id="health-title">Current health</h2><p class="section-note">Status words remain visible; color is only reinforcement.</p>
-          <div class="table-wrap"><table><caption>Eleven evidence areas for this exact build</caption><thead><tr><th>Area</th><th>Status</th><th>Evidence boundary</th></tr></thead><tbody><tr class="filterable" data-status="pass" data-search="build identity 149 declared inputs bind one exact build-input identity."><th scope="row">Build identity</th><td><span class="badge pass">PASS</span></td><td>149 declared inputs bind one exact build-input identity.</td></tr>
+          <div class="table-wrap"><table><caption>Thirteen evidence areas for this exact build</caption><thead><tr><th>Area</th><th>Status</th><th>Evidence boundary</th></tr></thead><tbody><tr class="filterable" data-status="pass" data-search="build identity 160 declared inputs bind one exact build-input identity."><th scope="row">Build identity</th><td><span class="badge pass">PASS</span></td><td>160 declared inputs bind one exact build-input identity.</td></tr>
 <tr class="filterable" data-status="blocked" data-search="source custody exact local archive exists; off-host copies and signatures are zero."><th scope="row">Source custody</th><td><span class="badge blocked">BLOCKED</span></td><td>Exact local archive exists; off-host copies and signatures are zero.</td></tr>
-<tr class="filterable" data-status="blocked" data-search="licensing 149 build inputs lack an established redistribution grant."><th scope="row">Licensing</th><td><span class="badge blocked">BLOCKED</span></td><td>149 build inputs lack an established redistribution grant.</td></tr>
-<tr class="filterable" data-status="gap" data-search="host tests dated receipt: 59 pass, 3 hardware skip, 12 not run; not current-build bound."><th scope="row">Host tests</th><td><span class="badge gap">HISTORICAL</span></td><td>Dated receipt: 59 pass, 3 hardware skip, 12 not run; not current-build bound.</td></tr>
-<tr class="filterable" data-status="regression" data-search="performance current build: 2 of 7 host frame metrics exceed budget; no native-target distribution exists."><th scope="row">Performance</th><td><span class="badge regression">CURRENT_HOST_REGRESSION</span></td><td>Current build: 2 of 7 host frame metrics exceed budget; no native-target distribution exists.</td></tr>
-<tr class="filterable" data-status="gap" data-search="visual proof 41 assets inventoried; 0 current-build screenshot receipts."><th scope="row">Visual proof</th><td><span class="badge gap">GAP</span></td><td>41 assets inventoried; 0 current-build screenshot receipts.</td></tr>
+<tr class="filterable" data-status="pass" data-search="dependency closure 160 binary archives and 104 source-package sets resolve offline; the cache is not retained off-host."><th scope="row">Dependency closure</th><td><span class="badge pass">PASS_CURRENT_HOST</span></td><td>160 binary archives and 104 source-package sets resolve offline; the cache is not retained off-host.</td></tr>
+<tr class="filterable" data-status="blocked" data-search="licensing 160 build inputs lack an established redistribution grant."><th scope="row">Licensing</th><td><span class="badge blocked">BLOCKED</span></td><td>160 build inputs lack an established redistribution grant.</td></tr>
+<tr class="filterable" data-status="gap" data-search="host tests current build-bound receipt: 64 pass, 3 hardware skip, 12 not run."><th scope="row">Host tests</th><td><span class="badge gap">CURRENT_HOST</span></td><td>Current build-bound receipt: 64 pass, 3 hardware skip, 12 not run.</td></tr>
+<tr class="filterable" data-status="regression" data-search="performance current build: 1 of 7 host frame metrics exceed budget; 5 of 7 categories are within host budget; 2 is over budget, product-build timing is missing, and no native-target distribution exists."><th scope="row">Performance</th><td><span class="badge regression">CURRENT_HOST_REGRESSION</span></td><td>Current build: 1 of 7 host frame metrics exceed budget; 5 of 7 categories are within host budget; 2 is over budget, product-build timing is missing, and no native-target distribution exists.</td></tr>
+<tr class="filterable" data-status="gap" data-search="physical hardware exact-hash receipt machinery covers 6 routes; 0 observed hardware receipts exist."><th scope="row">Physical hardware</th><td><span class="badge gap">NOT_RUN</span></td><td>Exact-hash receipt machinery covers 6 routes; 0 observed hardware receipts exist.</td></tr>
+<tr class="filterable" data-status="partial" data-search="visual proof 4 current-build screenshots and 4 strict goldens cover 2 routes; all 6 variant dimensions remain incomplete."><th scope="row">Visual proof</th><td><span class="badge partial">CURRENT_QEMU_PARTIAL</span></td><td>4 current-build screenshots and 4 strict goldens cover 2 routes; all 6 variant dimensions remain incomplete.</td></tr>
 <tr class="filterable" data-status="gap" data-search="accessibility 9 capabilities missing; 0 complete target workflows."><th scope="row">Accessibility</th><td><span class="badge gap">GAP</span></td><td>9 capabilities missing; 0 complete target workflows.</td></tr>
 <tr class="filterable" data-status="blocked" data-search="security 11 claims missing; 0 production-complete."><th scope="row">Security</th><td><span class="badge blocked">BLOCKED</span></td><td>11 claims missing; 0 production-complete.</td></tr>
 <tr class="filterable" data-status="gap" data-search="observability 5 capabilities missing; 0 durable crash receipts."><th scope="row">Observability</th><td><span class="badge gap">GAP</span></td><td>5 capabilities missing; 0 durable crash receipts.</td></tr>
@@ -133,14 +136,14 @@
         </section>
         <section id="artifacts" aria-labelledby="artifacts-title"><h2 id="artifacts-title">Artifacts</h2><p class="section-note">Byte identity and QEMU routes do not imply exact physical-hardware execution.</p>
           <div class="table-wrap"><table><caption>Nine current reproducible artifacts</caption><thead><tr><th>Name</th><th>SHA-256</th><th>Bytes</th><th>Proof</th><th>Physical</th></tr></thead><tbody><tr class="filterable" data-status="unverified" data-search="bootx64.efi pe32+ native uefi application"><th scope="row">BOOTX64.EFI</th><td><code>ce5d87163f213d83…</code></td><td>20,480</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="boot-media-ids.json deterministic disk/fat identity metadata"><th scope="row">boot-media-ids.json</th><td><code>25af6198c6e3d018…</code></td><td>484</td><td>METADATA_ONLY</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="kernel.elf elf32 multiboot kernel"><th scope="row">kernel.elf</th><td><code>4eb06c9b2e9092c9…</code></td><td>6,493,832</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="kernel64.elf elf64 freestanding kernel"><th scope="row">kernel64.elf</th><td><code>cf5cec3f07b2b871…</code></td><td>3,335,312</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="kernel_raw.elf elf32 raw-loader kernel"><th scope="row">kernel_raw.elf</th><td><code>a556a6bf790dabbc…</code></td><td>6,493,676</td><td>PARENT_DERIVED_PAYLOAD</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="zlos-usb.img gpt/fat uefi usb disk image"><th scope="row">zlOS-usb.img</th><td><code>7ad982c17875d533…</code></td><td>138,412,032</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="zlos.img raw bios disk image"><th scope="row">zlOS.img</th><td><code>d9cfa162fc0e9064…</code></td><td>8,389,120</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="zlos.iso hybrid iso with grub"><th scope="row">zlOS.iso</th><td><code>923c1688cd5c4038…</code></td><td>31,635,456</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
-<tr class="filterable" data-status="unverified" data-search="zlos64.iso hybrid grub iso with 64-bit multiboot payload"><th scope="row">zlOS64.iso</th><td><code>e124b6667de1d984…</code></td><td>28,477,440</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr></tbody></table></div>
+<tr class="filterable" data-status="unverified" data-search="boot-media-ids.json deterministic disk/fat identity metadata"><th scope="row">boot-media-ids.json</th><td><code>af904d4607ca6ca7…</code></td><td>484</td><td>METADATA_ONLY</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="kernel.elf elf32 multiboot kernel"><th scope="row">kernel.elf</th><td><code>e1ae8455065586cf…</code></td><td>6,516,856</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="kernel64.elf elf64 freestanding kernel"><th scope="row">kernel64.elf</th><td><code>15877f83912895bc…</code></td><td>3,370,832</td><td>PARENT_BYTE_EXACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="kernel_raw.elf elf32 raw-loader kernel"><th scope="row">kernel_raw.elf</th><td><code>fc9e4aa37de9ed7b…</code></td><td>6,516,700</td><td>PARENT_DERIVED_PAYLOAD</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos-usb.img gpt/fat uefi usb disk image"><th scope="row">zlOS-usb.img</th><td><code>180adb00551d0fd0…</code></td><td>138,412,032</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos.img raw bios disk image"><th scope="row">zlOS.img</th><td><code>3cabdfb8af476225…</code></td><td>8,389,120</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos.iso hybrid iso with grub"><th scope="row">zlOS.iso</th><td><code>a6daa014c68ba7ff…</code></td><td>31,660,032</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr>
+<tr class="filterable" data-status="unverified" data-search="zlos64.iso hybrid grub iso with 64-bit multiboot payload"><th scope="row">zlOS64.iso</th><td><code>379e9dffd08ee5ef…</code></td><td>28,512,256</td><td>QEMU_DIRECT_ARTIFACT</td><td><span class="badge unverified">UNVERIFIED_FOR_EXACT_HASH</span></td></tr></tbody></table></div>
         </section>
         <section id="applications" aria-labelledby="apps-title"><h2 id="apps-title">Applications</h2><p class="section-note">All 64 identities have QEMU lifecycle evidence. Per-app permission grants are still absent and shown as missing.</p>
           <div class="table-wrap"><table><caption>Application identity, route and permission state</caption><thead><tr><th>ID</th><th>Name</th><th>Kind</th><th>Migration</th><th>Route proof</th><th>Permissions</th></tr></thead><tbody><tr class="filterable" data-status="pass" data-search="0 terminal system"><th scope="row">0</th><td>Terminal</td><td>system</td><td>MP-12</td><td><span class="badge gap">QEMU_OPEN_DRAW</span></td><td><span class="badge blocked">MISSING</span></td></tr>

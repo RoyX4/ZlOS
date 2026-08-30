@@ -82,6 +82,7 @@
  */
 
 #include "memmap.h"
+#include "page_table_txn.h"
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -228,12 +229,17 @@ unsigned long long vmm_pat_leaf_bits(int index, int huge)
  * every driver's fixed physical addresses still work after ExitBootServices. */
 static u64 win_pd[PD_ENTRIES]   __attribute__((aligned(4096)));
 static u64 win_pdpt[PD_ENTRIES] __attribute__((aligned(4096)));
+static struct vmm_pt_change win_table_changes[PD_ENTRIES + 1];
+static struct vmm_pt_change win_publish_change[1];
 
 /* A 40 MiB framebuffer can cross at most two 1 GiB leaves.  Firmware such as
  * OVMF commonly identity-maps MMIO with 1 GiB leaves, so changing one cache
  * type requires replacing that leaf with 512 equivalent 2 MiB leaves.  These
  * tables live forever; freeing one while CR3 still names it would be fatal. */
 static u64 fb_wc_pd[2][PD_ENTRIES] __attribute__((aligned(4096)));
+#define FB_WC_MAX_BYTES   (64ULL * 1024ULL * 1024ULL)
+#define FB_WC_MAX_CHANGES ((FB_WC_MAX_BYTES / 4096ULL) + 2ULL)
+static struct vmm_pt_change fb_wc_changes[FB_WC_MAX_CHANGES];
 static int fb_wc_live;
 static int fb_wc_index = -1;
 static u64 fb_wc_pat;
@@ -241,6 +247,12 @@ static u64 fb_wc_leaf_before, fb_wc_leaf_after;
 
 static u64 rd_cr3(void) { u64 v; __asm__ volatile("mov %%cr3, %0" : "=r"(v)); return v; }
 static void wr_cr3(u64 v) { __asm__ volatile("mov %0, %%cr3" :: "r"(v) : "memory"); }
+static int no_tlb_flush(void *context) { (void)context; return 1; }
+static int flush_named_cr3(void *context)
+{
+    wr_cr3(*(u64 *)context);
+    return 1;
+}
 static u64 rd_cr0(void) { u64 v; __asm__ volatile("mov %%cr0, %0" : "=r"(v)); return v; }
 static void wr_cr0(u64 v) { __asm__ volatile("mov %0, %%cr0" :: "r"(v) : "memory"); }
 static u64 rd_cr4(void) { u64 v; __asm__ volatile("mov %%cr4, %0" : "=r"(v)); return v; }
@@ -326,6 +338,18 @@ static void install_pat(u64 value)
     if (flags & (1ULL << 9)) __asm__ volatile("sti" ::: "memory");
 }
 
+static int flush_global_mapping(void *context)
+{
+    u64 cr3 = *(u64 *)context;
+    u64 cr4 = rd_cr4();
+
+    if (cr4 & (1ULL << 7)) wr_cr4(cr4 & ~(1ULL << 7));
+    wr_cr3(cr3);
+    if (cr4 & (1ULL << 7)) wr_cr4(cr4);
+    __asm__ volatile("wbinvd" ::: "memory");
+    return 1;
+}
+
 /* Retype the existing identity mapping of one framebuffer to WC.
  *
  * A second virtual alias is deliberately not used: Intel forbids accessing
@@ -340,24 +364,26 @@ int vmm_framebuffer_write_combining(unsigned long long phys,
     const u64 addr_1g = 0x000fffffc0000000ULL;
     const u64 cache_h = PTE_PWT | PTE_PCD | PTE_PAT_H;
     const u64 cache_4k = PTE_PWT | PTE_PCD | PTE_PS;
-    u64 start, end, cr3, *pml4, pat, cur;
+    u64 start, end, cr3, *pml4, pat, pat_before, cur;
     u64 *split_entry[2] = { 0, 0 };
     u64 split_old[2] = { 0, 0 };
     u64 first_before = 0, first_after = 0;
     int have_before = 0, have_after = 0;
+    struct vmm_pt_transaction transaction;
     int split_count = 0;
+    int status;
 
     if (fb_wc_live) return 1;
     if (!bytes || phys + bytes < phys) return 0;
     start = phys & ~0xfffULL;
     end = (phys + bytes + 0xfffULL) & ~0xfffULL;
-    if (end <= start) return 0;
+    if (end <= start || end - start > FB_WC_MAX_BYTES) return 0;
 
     cr3 = rd_cr3();
     if (!(cr3 & ADDR_MASK)) return 0;
     pml4 = (u64 *)(uptr)(cr3 & ADDR_MASK);
 
-    pat = rd_msr(0x277u);
+    pat_before = pat = rd_msr(0x277u);
     int index = vmm_pat_wc_index(pat);
     int write_pat = 0;
     if (index < 0) {
@@ -369,6 +395,8 @@ int vmm_framebuffer_write_combining(unsigned long long phys,
         pat = (pat & ~(0xffULL << (index * 8))) | (1ULL << (index * 8));
         write_pat = 1;
     }
+    u64 wc_h = vmm_pat_leaf_bits(index, 1);
+    u64 wc_4k = vmm_pat_leaf_bits(index, 0);
 
     /* Pass one: validate every live leaf and remember at most two 1 GiB
      * leaves that need splitting.  Nothing is written in this pass. */
@@ -408,14 +436,75 @@ int vmm_framebuffer_write_combining(unsigned long long phys,
         cur += 4096;
     }
 
-    /* Build replacement tables while the live mapping is untouched. */
+    /* Build replacement tables while the live mapping is untouched. The
+     * target leaves receive their final cache bits before a split entry can
+     * publish the table. */
     for (int s = 0; s < split_count; s++) {
         u64 old = split_old[s];
         u64 base = old & addr_1g;
         u64 flags = old & ~addr_1g;
-        for (u64 i = 0; i < PD_ENTRIES; i++)
-            fb_wc_pd[s][i] = (base + i * two_mib) | flags;
+        for (u64 i = 0; i < PD_ENTRIES; i++) {
+            u64 leaf_start = base + i * two_mib;
+            u64 leaf = leaf_start | flags;
+            if (leaf_start < end && leaf_start + two_mib > start)
+                leaf = (leaf & ~cache_h) | wc_h;
+            fb_wc_pd[s][i] = leaf;
+        }
     }
+
+    status = vmm_pt_txn_begin(
+        &transaction, fb_wc_changes, (unsigned)FB_WC_MAX_CHANGES,
+        flush_global_mapping, &cr3
+    );
+    /* Reserve every already-live leaf first. A 1 GiB leaf is represented by
+     * its split publication entry, reserved after the leaf walk so rollback's
+     * reverse order unpublishes the replacement table first. */
+    for (cur = start; cur < end; ) {
+        u64 *pdpt = (u64 *)(uptr)(pml4[(cur >> 39) & 511u] & ADDR_MASK);
+        u64 *pep = &pdpt[(cur >> 30) & 511u];
+        u64 pe = *pep;
+        if (pe & PTE_PS) {
+            int split = -1;
+            for (int s = 0; s < split_count; s++)
+                if (split_entry[s] == pep) split = s;
+            if (split < 0) return 0;
+            if (!have_after) {
+                first_after = fb_wc_pd[split][(cur >> 21) & 511u];
+                have_after = 1;
+            }
+            u64 next = (cur & ~(one_gib - 1)) + one_gib;
+            cur = next < end ? next : end;
+            continue;
+        }
+        u64 *pd = (u64 *)(uptr)(pe & ADDR_MASK);
+        u64 *dep = &pd[(cur >> 21) & 511u];
+        u64 de = *dep;
+        if (de & PTE_PS) {
+            u64 after = (de & ~cache_h) | wc_h;
+            if (status == VMM_PT_TXN_OK)
+                status = vmm_pt_txn_reserve(&transaction, dep, after);
+            if (!have_after) { first_after = after; have_after = 1; }
+            u64 next = (cur & ~(two_mib - 1)) + two_mib;
+            cur = next < end ? next : end;
+        } else {
+            u64 *pt = (u64 *)(uptr)(de & ADDR_MASK);
+            u64 *tep = &pt[(cur >> 12) & 511u];
+            u64 after = (*tep & ~cache_4k) | wc_4k;
+            if (status == VMM_PT_TXN_OK)
+                status = vmm_pt_txn_reserve(&transaction, tep, after);
+            if (!have_after) { first_after = after; have_after = 1; }
+            cur += 4096;
+        }
+    }
+    for (int s = 0; status == VMM_PT_TXN_OK && s < split_count; s++) {
+        u64 old = split_old[s];
+        u64 table_flags = old & (PTE_P | PTE_W | PTE_U | PTE_NX);
+        status = vmm_pt_txn_reserve(
+            &transaction, split_entry[s],
+            ((u64)(uptr)fb_wc_pd[s] & ADDR_MASK) | table_flags
+        );
+    }
+    if (status != VMM_PT_TXN_OK) return 0;
 
     if (write_pat) install_pat(pat);
 
@@ -423,44 +512,17 @@ int vmm_framebuffer_write_combining(unsigned long long phys,
     __asm__ volatile("cli; wbinvd" ::: "memory");
     u64 cr0 = rd_cr0();
     wr_cr0(cr0 & ~CR0_WP);
-
-    for (int s = 0; s < split_count; s++) {
-        u64 old = split_old[s];
-        u64 table_flags = old & (PTE_P | PTE_W | PTE_U | PTE_NX);
-        *split_entry[s] = ((u64)(uptr)fb_wc_pd[s] & ADDR_MASK) | table_flags;
-    }
-
-    u64 wc_h = vmm_pat_leaf_bits(index, 1);
-    u64 wc_4k = vmm_pat_leaf_bits(index, 0);
-    for (cur = start; cur < end; ) {
-        u64 *pdpt = (u64 *)(uptr)(pml4[(cur >> 39) & 511u] & ADDR_MASK);
-        u64 pe = pdpt[(cur >> 30) & 511u];
-        u64 *pd = (u64 *)(uptr)(pe & ADDR_MASK);
-        u64 *dep = &pd[(cur >> 21) & 511u];
-        u64 de = *dep;
-        if (de & PTE_PS) {
-            *dep = (de & ~cache_h) | wc_h;
-            if (!have_after) { first_after = *dep; have_after = 1; }
-            u64 next = (cur & ~(two_mib - 1)) + two_mib;
-            cur = next < end ? next : end;
-        } else {
-            u64 *pt = (u64 *)(uptr)(de & ADDR_MASK);
-            u64 *tep = &pt[(cur >> 12) & 511u];
-            *tep = (*tep & ~cache_4k) | wc_4k;
-            if (!have_after) { first_after = *tep; have_after = 1; }
-            cur += 4096;
-        }
-    }
+    status = vmm_pt_txn_apply(&transaction);
+    if (status == VMM_PT_TXN_OK)
+        status = vmm_pt_txn_commit(&transaction);
 
     wr_cr0(cr0);
-    /* Reload CR3 for ordinary entries and toggle PGE so a firmware global
-     * identity leaf cannot survive with its old cache type in the TLB. */
-    u64 cr4 = rd_cr4();
-    if (cr4 & (1ULL << 7)) wr_cr4(cr4 & ~(1ULL << 7));
-    wr_cr3(cr3);
-    if (cr4 & (1ULL << 7)) wr_cr4(cr4);
     __asm__ volatile("wbinvd" ::: "memory");
     if (flags & (1ULL << 9)) __asm__ volatile("sti" ::: "memory");
+    if (status != VMM_PT_TXN_OK) {
+        if (write_pat) install_pat(pat_before);
+        return 0;
+    }
 
     fb_wc_pat = pat;
     fb_wc_index = index;
@@ -522,6 +584,9 @@ unsigned long long vmm_map_window(unsigned long long phys, unsigned long long by
 {
     u64 cr3, *pml4, want, cr0, virt;
     u64 pages, i;
+    struct vmm_pt_transaction table_transaction;
+    struct vmm_pt_transaction publish_transaction;
+    int status;
     int slot;
 
     if (vmm_live) return win_virt;              /* one window, once */
@@ -569,10 +634,28 @@ unsigned long long vmm_map_window(unsigned long long phys, unsigned long long by
      * every fixed physical address in memmap.h already rests on. */
     for (i = 0; i < PD_ENTRIES; i++) { win_pd[i] = 0; win_pdpt[i] = 0; }
     pages = bytes / TWO_MIB;
-    for (i = 0; i < pages; i++)
-        win_pd[i] = (phys + i * TWO_MIB) | PTE_P | PTE_W | PTE_PS;
-
-    win_pdpt[0] = ((u64)(uptr)win_pd) | PTE_P | PTE_W;
+    status = vmm_pt_txn_begin(
+        &table_transaction, win_table_changes, PD_ENTRIES + 1,
+        no_tlb_flush, 0
+    );
+    for (i = 0; status == VMM_PT_TXN_OK && i < pages; i++)
+        status = vmm_pt_txn_reserve(
+            &table_transaction, &win_pd[i],
+            (phys + i * TWO_MIB) | PTE_P | PTE_W | PTE_PS
+        );
+    if (status == VMM_PT_TXN_OK)
+        status = vmm_pt_txn_reserve(
+            &table_transaction, &win_pdpt[0],
+            ((u64)(uptr)win_pd) | PTE_P | PTE_W
+        );
+    if (status == VMM_PT_TXN_OK)
+        status = vmm_pt_txn_apply(&table_transaction);
+    if (status == VMM_PT_TXN_OK)
+        status = vmm_pt_txn_commit(&table_transaction);
+    if (status != VMM_PT_TXN_OK) {
+        vp("  vmm: refused - private page-table transaction failed\n");
+        return 0;
+    }
     want = ((u64)(uptr)win_pdpt) | PTE_P | PTE_W;
 
     /* ---- 4. install, with WP down --------------------------------------- *
@@ -581,30 +664,35 @@ unsigned long long vmm_map_window(unsigned long long phys, unsigned long long by
      * CR0.WP is set; clearing it for the duration is the standard, documented
      * way to do this and is exactly what Linux does to patch its own text.
      * Restored immediately, whatever happens next. */
+    status = vmm_pt_txn_begin(
+        &publish_transaction, win_publish_change, 1, flush_named_cr3, &cr3
+    );
+    if (status == VMM_PT_TXN_OK)
+        status = vmm_pt_txn_reserve(&publish_transaction, &pml4[slot], want);
     cr0 = rd_cr0();
     wr_cr0(cr0 & ~CR0_WP);
-    pml4[slot] = want;
+    if (status == VMM_PT_TXN_OK)
+        status = vmm_pt_txn_apply(&publish_transaction);
     wr_cr0(cr0);
-
-    wr_cr3(cr3);                                /* flush the TLB */
-
-    /* ---- 5. read back what we wrote, WITHOUT dereferencing the window --- */
-    if (pml4[slot] != want || win_pd[0] != (phys | PTE_P | PTE_W | PTE_PS)) {
-        cr0 = rd_cr0(); wr_cr0(cr0 & ~CR0_WP);
-        pml4[slot] = 0;
-        wr_cr0(cr0);
-        wr_cr3(cr3);
-        vp("  vmm: the page-directory entry did not read back - window refused\n");
+    if (status != VMM_PT_TXN_OK) {
+        vp("  vmm: refused - live page-table transaction failed\n");
         return 0;
     }
 
-    /* ---- 6. only now, touch it ------------------------------------------ */
+    /* ---- 5. only now, touch it ------------------------------------------ */
     if (!alias_ok(virt, phys, bytes)) {
-        cr0 = rd_cr0(); wr_cr0(cr0 & ~CR0_WP);
-        pml4[slot] = 0;
+        cr0 = rd_cr0();
+        wr_cr0(cr0 & ~CR0_WP);
+        status = vmm_pt_txn_rollback(&publish_transaction);
         wr_cr0(cr0);
-        wr_cr3(cr3);
-        vp("  vmm: the window did NOT alias its physical region - refused\n");
+        if (status == VMM_PT_TXN_OK)
+            vp("  vmm: the window did NOT alias its physical region - exactly rolled back\n");
+        else
+            vp("  vmm: FATAL - the rejected window could not be exactly rolled back\n");
+        return 0;
+    }
+    if (vmm_pt_txn_commit(&publish_transaction) != VMM_PT_TXN_OK) {
+        vp("  vmm: FATAL - the validated window could not be committed\n");
         return 0;
     }
 

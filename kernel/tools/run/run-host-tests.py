@@ -20,6 +20,7 @@ ROOT = os.path.dirname(KERNEL_ROOT)
 METADATA = os.path.join(KERNEL_ROOT, "metadata")
 HOST = os.path.join(KERNEL_ROOT, "tests", "host")
 INVENTORY = os.path.join(METADATA, "test-inventory.json")
+BUILD_IDENTITY = os.path.join(METADATA, "build-identity.json")
 DEFAULT_RECEIPT = os.path.join(HOST, "test-run-receipt.json")
 
 
@@ -121,6 +122,10 @@ def summary(results):
 def validate_receipt(receipt, inventory):
     if receipt.get("schema") != "zlos.host-test-run-receipt.v1":
         fail("wrong host-test receipt schema")
+    if receipt.get("build_identity") != load(BUILD_IDENTITY).get("identity_sha256"):
+        fail("receipt does not name the current build identity")
+    if receipt.get("runner_sha256") != sha256(os.path.abspath(__file__)):
+        fail("receipt does not name the current runner")
     if receipt.get("inventory_sha256") != sha256(INVENTORY):
         fail("receipt does not name the current inventory")
     results = receipt.get("results")
@@ -184,6 +189,8 @@ def fake_receipt(inventory):
             result["status"] = "not-run"
         results.append(result)
     value = {"schema": "zlos.host-test-run-receipt.v1",
+             "build_identity": load(BUILD_IDENTITY)["identity_sha256"],
+             "runner_sha256": sha256(os.path.abspath(__file__)),
              "inventory_sha256": sha256(INVENTORY), "results": results}
     value["counts"] = summary(results)
     value["outcome"] = "PASS"
@@ -195,6 +202,8 @@ def selftest(inventory):
     validate_receipt(base, inventory)
     caught = []
     mutations = (
+        ("foreign-build", lambda r: r.__setitem__("build_identity", "0" * 64)),
+        ("foreign-runner", lambda r: r.__setitem__("runner_sha256", "0" * 64)),
         ("missing-target", lambda r: r["results"].pop()),
         ("promoted-instrument", lambda r: next(x for x in r["results"]
                                                 if not x["auto_run"]).__setitem__("status", "passed")),
@@ -233,6 +242,8 @@ def run_all(inventory, receipt_path):
             print(result["commands"][-1]["output_tail"])
     value = {
         "schema": "zlos.host-test-run-receipt.v1",
+        "build_identity": load(BUILD_IDENTITY)["identity_sha256"],
+        "runner_sha256": sha256(os.path.abspath(__file__)),
         "inventory_sha256": sha256(INVENTORY),
         "git": {
             "head": command(["git", "rev-parse", "HEAD"]),
@@ -241,7 +252,7 @@ def run_all(inventory, receipt_path):
         },
         "host": {"platform": platform.platform(), "python": platform.python_version()},
         "results": results,
-        "evidence_ceiling": "host execution only; instruments/manual hardware are explicit non-runs and exit 77 is not a pass",
+        "evidence_ceiling": "current build-input-bound host execution only; exact executables and runner are identified, instruments/manual hardware are explicit non-runs, and exit 77 is not a pass",
     }
     value["counts"] = summary(results)
     value["outcome"] = "PASS" if value["counts"]["failed"] == 0 else "FAIL"

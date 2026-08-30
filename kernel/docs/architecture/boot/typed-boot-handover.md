@@ -1,8 +1,9 @@
 # Typed boot handover v1
 
-**Status:** Implemented locally on all three existing entry families. The host
-mutation gate and all four compile/link routes pass. Boot execution gates remain
-required before this can be promoted to runtime-verified.
+**Status:** Partial-current on all three existing entry families. The current
+host receipt passes the 288-check mutation gate, and the current artifact
+registry binds all six retained QEMU routes to the same build identity. This is
+not exact-origin, authenticated-kernel, normalized-map or physical proof.
 
 ## What changed
 
@@ -90,9 +91,9 @@ checks:
 Build and run the focused host gate:
 
 ```sh
-cd kernel/hosttest
+cd kernel/tests/host
 gcc -O2 -g -Wall -Wextra -o boot_handover_test \
-    boot_handover_test.c ../boot_handover.c
+    boot_handover_test.c ../../src/core/boot/boot_handover.c
 ./boot_handover_test
 ```
 
@@ -101,14 +102,14 @@ Multiboot64 and native UEFI boots. Hardware promotion additionally needs a new
 ThinkPad journal; QEMU cannot prove the physical firmware's map, GOP placement
 or boot-device identity.
 
-Current build receipt from this isolated tree:
+The current joined evidence records nine exact artifacts, six current-build
+QEMU routes, and a current-build-bound host receipt in which
+`boot_handover_test` passes 288 checks. The entry assembly and native UEFI path
+all stop before `kernel.zl` when the sealed record is invalid, so reaching each
+route's current ready marker is bounded runtime evidence for handover
+admission. No new QEMU run was performed merely to change the 906-row
+classification; the existing current-build receipts are the subject evidence.
 
-- Multiboot32: `kernel.elf`, 4,758,296 bytes, zero undefined symbols;
-- Multiboot64: `kernel64.elf`, 2,877,832 bytes, zero undefined symbols;
-- raw BIOS: 512-byte boot sector, 4,612,044-byte kernel, 1,640 KiB loader
-  headroom;
-- native UEFI: 20,480-byte stage zero and 2,895,872-byte kernel PE image;
-- EFI witness structural gate: passed;
-- typed-handover hostile host gate: 288 checks, zero failures.
-
-These are build/host facts, not boot or hardware claims.
+These are source, host and QEMU facts. No current artifact has an exact physical
+ThinkPad receipt, and the shipping loaders still leave exact-origin,
+exact-kernel and entropy claims absent.

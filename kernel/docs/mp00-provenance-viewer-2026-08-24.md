@@ -1,12 +1,8 @@
 # MP-00 provenance viewer — 2026-08-24
 
-> **Freshness notice (2026-08-25):** this is a dated generated artifact, not a
-> current projection. The retained visual inventory moved into
-> `docs/evidence/exercises/` and now contains 41 images, while the checked-in
-> viewer still reports 46. Regeneration correctly stops because its source
-> manifests carry three incompatible build identities. T-8 in
-> [`.ultra/TENSIONS.md`](../../.ultra/TENSIONS.md) records the identities,
-> failing command and closure gate.
+> **Freshness notice (2026-08-29):** the machine-readable model and HTML were
+> regenerated for the current build identity. This dated orientation remains a
+> description of the viewer boundary, not an independent run receipt.
 
 ## Result
 
@@ -14,8 +10,16 @@
 [`provenance-viewer.html`](provenance-viewer.html) implement the first EV-028
 read-only provenance viewer. The static projection includes the exact build and
 source origin, licensing and signature state, 9 artifacts, 64 applications, 17
-security/permission claims, host/QEMU test counts, 11 health areas and 17
+security/permission claims, host/QEMU test counts, 13 health areas and 17
 unreleased changes.
+
+The added physical-hardware health row reads the exact six-route receipt plan
+and reports `NOT_RUN` with zero validated receipts. A generated template is not
+shown as hardware proof.
+
+The visual-health row joins four exact current-artifact QEMU screenshots and
+four strict stable-region goldens. It remains partial because all six variant
+dimensions and physical display comparison are incomplete.
 
 This is `PARTIAL_CURRENT`. It is a host-viewable static artifact, not a booted
 zlOS application, live monitor, authenticated remote service or signed release
@@ -102,6 +106,6 @@ python3 kernel/tools/generators/gen-provenance-viewer.py --check --selftest
 
 EV-028 still requires a process-isolated zlOS app or authenticated read-only
 portal, admitted per-app permission data, signed provenance, live bounded health
-updates, a current screenshot/visual receipt, a complete assistive-provider
-target workflow and proof against the exact released artifact. Those gaps are
+updates, a complete assistive-provider target workflow and proof against the
+exact released artifact. Those gaps are
 part of the viewer model and cannot be hidden by its static host rendering.

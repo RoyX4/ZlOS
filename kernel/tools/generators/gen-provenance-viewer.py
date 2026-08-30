@@ -26,13 +26,18 @@ INPUTS = (
     "docs/receipts/source-snapshot-2026-08-24.json",
     "license-registry.json",
     "dependency-lock.json",
+    "docs/receipts/dependency-archives-host-2026-08-29.json",
     "toolchain-manifest.json",
     "artifact-registry.json",
+    "hardware-receipt-plan.json",
     "app-manifest.json",
     "app-evidence.json",
-    "tests/host/test-inventory.json",
+    "test-inventory.json",
     "tests/host/test-run-receipt.json",
     "docs/receipts/benchmark-host-2026-08-23.json",
+    "performance-registry.json",
+    "docs/receipts/visual-qemu-2026-08-29.json",
+    "visual-golden-registry.json",
     "visual-registry.json",
     "accessibility-registry.json",
     "security-registry.json",
@@ -43,7 +48,7 @@ INPUTS = (
 
 OPEN_GAPS = {
     "runtime_zlos_app_route_missing": True,
-    "current_screenshot_receipt_missing": True,
+    "current_screenshot_receipt_missing": False,
     "per_app_permission_grants_missing": True,
     "cryptographic_signatures_missing": True,
     "live_health_updates_missing": True,
@@ -52,8 +57,10 @@ OPEN_GAPS = {
     "public_release_missing": True,
     "current_artifact_snapshot_missing": False,
     "current_qemu_evidence_missing": False,
-    "current_host_test_receipt_missing": True,
+    "current_host_test_receipt_missing": False,
     "current_host_benchmark_missing": False,
+    "performance_product_build_missing": True,
+    "physical_matrix_receipts_missing": 6,
 }
 
 TOKENS = {
@@ -142,23 +149,45 @@ def health_rows(docs: dict[str, dict]) -> list[dict]:
     license_counts = docs["license-registry.json"]["counts"]
     tests = docs["tests/host/test-run-receipt.json"]["counts"]
     benchmark = docs["docs/receipts/benchmark-host-2026-08-23.json"]["counts"]
+    performance = docs["performance-registry.json"]["counts"]
+    hardware = docs["hardware-receipt-plan.json"]["counts"]
     visual = docs["visual-registry.json"]["counts"]
     accessibility = docs["accessibility-registry.json"]["counts"]
     security = docs["security-registry.json"]["counts"]
     observability = docs["observability-registry.json"]["counts"]
+    dependency_archives = docs["docs/receipts/dependency-archives-host-2026-08-29.json"]["counts"]
     return [
         {"area": "Build identity", "status": "PASS",
          "detail": f"{len(identity['source_files_sha256'])} declared inputs bind one exact build-input identity."},
         {"area": "Source custody", "status": "BLOCKED",
          "detail": "Exact local archive exists; off-host copies and signatures are zero."},
+        {"area": "Dependency closure", "status": "PASS_CURRENT_HOST",
+         "detail": (
+             f"{dependency_archives['binary_archives']} binary archives and "
+             f"{dependency_archives['source_packages']} source-package sets resolve offline; "
+             "the cache is not retained off-host."
+         )},
         {"area": "Licensing", "status": "BLOCKED",
          "detail": f"{license_counts['build_inputs']} build inputs lack an established redistribution grant."},
-        {"area": "Host tests", "status": "HISTORICAL",
-         "detail": f"Dated receipt: {tests['passed']} pass, {tests['skipped-hardware']} hardware skip, {tests['not-run']} not run; not current-build bound."},
+        {"area": "Host tests", "status": "CURRENT_HOST",
+         "detail": f"Current build-bound receipt: {tests['passed']} pass, {tests['skipped-hardware']} hardware skip, {tests['not-run']} not run."},
         {"area": "Performance", "status": "CURRENT_HOST_REGRESSION",
-         "detail": f"Current build: {benchmark['over_budget']} of {benchmark['measurements']} host frame metrics exceed budget; no native-target distribution exists."},
-        {"area": "Visual proof", "status": "GAP",
-         "detail": f"{visual['assets']} assets inventoried; {visual['current_build_bound']} current-build screenshot receipts."},
+         "detail": (
+             f"Current build: {benchmark['over_budget']} of {benchmark['measurements']} host frame metrics exceed budget; "
+             f"{performance['host_budget_passed']} of {performance['categories']} categories are within host budget; "
+             f"{performance['host_budget_failed']} is over budget, product-build timing is missing, and no native-target distribution exists."
+         )},
+        {"area": "Physical hardware", "status": "NOT_RUN",
+         "detail": (
+             f"Exact-hash receipt machinery covers {hardware['matrix_cases']} routes; "
+             f"{hardware['validated_receipts']} observed hardware receipts exist."
+         )},
+        {"area": "Visual proof", "status": "CURRENT_QEMU_PARTIAL",
+         "detail": (
+             f"{visual['current_build_bound']} current-build screenshots and "
+             f"{visual['strict_current_goldens']} strict goldens cover "
+             f"{visual['current_routes']} routes; all {visual['variant_dimensions_open']} variant dimensions remain incomplete."
+         )},
         {"area": "Accessibility", "status": "GAP",
          "detail": f"{accessibility['missing']} capabilities missing; {accessibility['complete_target_workflows']} complete target workflows."},
         {"area": "Security", "status": "BLOCKED",
@@ -179,10 +208,15 @@ def build_model() -> dict:
     snapshot = docs["docs/receipts/source-snapshot-2026-08-24.json"]
     license_registry = docs["license-registry.json"]
     dependency = docs["dependency-lock.json"]
+    dependency_archives = docs["docs/receipts/dependency-archives-host-2026-08-29.json"]
     toolchain = docs["toolchain-manifest.json"]
     artifact = docs["artifact-registry.json"]
+    hardware = docs["hardware-receipt-plan.json"]
+    visual_receipt = docs["docs/receipts/visual-qemu-2026-08-29.json"]
+    visual_goldens = docs["visual-golden-registry.json"]
     app_manifest = docs["app-manifest.json"]
     app_evidence = docs["app-evidence.json"]
+    test_inventory = docs["test-inventory.json"]
     tests = docs["tests/host/test-run-receipt.json"]
     release = docs["release-notes.json"]
     decisions = docs["decision-ledger.json"]
@@ -190,25 +224,47 @@ def build_model() -> dict:
     visual = docs["visual-registry.json"]
     accessibility = docs["accessibility-registry.json"]
     observability = docs["observability-registry.json"]
+    performance = docs["performance-registry.json"]
     current_identities = (
         snapshot["build_identity"], license_registry["build_identity"],
-        dependency["build_identity"], toolchain["build_identity"],
+        dependency["build_identity"], dependency_archives["build_identity"],
+        toolchain["build_identity"],
         release["build_identity"], decisions["build_identity"],
         security["build_identity"], visual["build_identity"],
         accessibility["build_identity"], observability["build_identity"],
+        performance["build_identity"],
+        hardware["build_identity"],
+        visual_receipt["build_identity"], visual_goldens["build_identity"],
     )
     if any(item != identity for item in current_identities):
         raise ValueError("provenance current inputs disagree on build identity")
     evidence_inputs = {
         "kernel/metadata/artifact-registry.json": artifact["build_identity"]["id"],
+        "kernel/metadata/hardware-receipt-plan.json": hardware["build_identity"],
+        "kernel/docs/receipts/visual-qemu-2026-08-29.json": visual_receipt["build_identity"],
+        "kernel/metadata/visual-golden-registry.json": visual_goldens["build_identity"],
         "kernel/metadata/app-evidence.json": app_evidence["shipped_build_identity"]["id"],
+        "kernel/docs/receipts/dependency-archives-host-2026-08-29.json": dependency_archives["build_identity"],
         "kernel/docs/receipts/benchmark-host-2026-08-23.json": docs[
             "docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"],
+        "kernel/metadata/performance-registry.json": performance["build_identity"],
+        "kernel/tests/host/test-run-receipt.json": tests["build_identity"],
     }
     if any(len(item) != 64 for item in evidence_inputs.values()) \
             or evidence_inputs["kernel/metadata/artifact-registry.json"] != identity \
+            or evidence_inputs["kernel/metadata/hardware-receipt-plan.json"] != identity \
+            or evidence_inputs["kernel/docs/receipts/visual-qemu-2026-08-29.json"] != identity \
+            or evidence_inputs["kernel/metadata/visual-golden-registry.json"] != identity \
             or evidence_inputs["kernel/metadata/app-evidence.json"] != identity \
-            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] != identity:
+            or evidence_inputs["kernel/docs/receipts/dependency-archives-host-2026-08-29.json"] != identity \
+            or evidence_inputs["kernel/docs/receipts/benchmark-host-2026-08-23.json"] != identity \
+            or evidence_inputs["kernel/metadata/performance-registry.json"] != identity \
+            or evidence_inputs["kernel/tests/host/test-run-receipt.json"] != identity \
+            or tests.get("inventory_sha256") != sha256(input_path("test-inventory.json")) \
+            or tests.get("runner_sha256") != sha256(KERNEL_ROOT / "tools/run/run-host-tests.py") \
+            or [(row.get("id"), row.get("name")) for row in tests.get("results", [])] != [
+                (row.get("id"), row.get("name")) for row in test_inventory.get("targets", [])
+            ]:
         raise ValueError("provenance evidence boundary is invalid")
     apps = application_rows(app_manifest, app_evidence)
     artifacts = artifact_rows(artifact)
@@ -267,6 +323,9 @@ def build_model() -> dict:
             "whole_repository_snapshot": snapshot["open_gaps"]["whole_repository_snapshot"],
             "dependency_commands": len(dependency["commands"]),
             "firmware_blobs": len(dependency["firmware"]),
+            "dependency_binary_archives": dependency_archives["counts"]["binary_archives"],
+            "dependency_source_packages": dependency_archives["counts"]["source_packages"],
+            "dependency_offline_resolution": not dependency_archives["offline_resolution"]["network_used"],
             "toolchain_lanes": [row["id"] for row in toolchain["target_lanes"]],
         },
         "licensing": {
@@ -281,10 +340,20 @@ def build_model() -> dict:
             "qemu_boot_routes": len(artifact["boot_routes"]),
             "app_lifecycle_qemu_proved": app_evidence["counts"]["with_qemu_open_ready_close"],
             "qemu_current_build_bound": True,
-            "host_current_build_bound": False,
+            "host_current_build_bound": True,
             "benchmark_current_build_bound": True,
+            "performance_registry_current_build_bound": True,
+            "hardware_plan_current_build_bound": True,
+            "visual_receipt_current_build_bound": True,
+            "visual_goldens_current_build_bound": True,
         },
         "health": health,
+        "hardware": {
+            "matrix_cases": hardware["counts"]["matrix_cases"],
+            "validated_receipts": hardware["counts"]["validated_receipts"],
+            "physically_passed_routes": hardware["counts"]["physically_passed_routes"],
+            "physical_status": hardware["physical_status"],
+        },
         "artifacts": artifacts,
         "applications": apps,
         "security_and_permissions": security_claims,
@@ -304,13 +373,17 @@ def build_model() -> dict:
                 int(item) for item in signatures.values() if isinstance(item, bool)
             ) + sum(item for item in signatures.values() if isinstance(item, int)
                   and not isinstance(item, bool)),
+            "hardware_matrix_cases": hardware["counts"]["matrix_cases"],
+            "hardware_validated_receipts": hardware["counts"]["validated_receipts"],
+            "visual_current_screenshots": visual["counts"]["current_build_bound"],
+            "visual_strict_goldens": visual["counts"]["strict_current_goldens"],
         },
         "open_gaps": OPEN_GAPS,
         "generator": {
             "path": "kernel/tools/generators/gen-provenance-viewer.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
-        "evidence_ceiling": "current static provenance projection with current artifact/QEMU and host benchmark evidence plus a dirty-tree host-test receipt; not a booted zlOS provenance app, live monitor, authenticated remote service or signed release portal",
+        "evidence_ceiling": "current static provenance projection with current artifact/QEMU, host-test, host-benchmark and performance-registry evidence; not a booted zlOS provenance app, live monitor, authenticated remote service or signed release portal",
         "weakest_link": "permissions are security claim state rather than admitted per-app grants, signatures are absent, and the viewer has no current visual or target accessibility receipt",
     }
     validate_model(model, docs)
@@ -343,9 +416,20 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
         raise ValueError("viewer input closure drift")
     expected_bindings = [
         ("kernel/metadata/artifact-registry.json", docs["artifact-registry.json"]["build_identity"]["id"], True),
+        ("kernel/metadata/hardware-receipt-plan.json", docs["hardware-receipt-plan.json"]["build_identity"], True),
+        ("kernel/docs/receipts/visual-qemu-2026-08-29.json",
+         docs["docs/receipts/visual-qemu-2026-08-29.json"]["build_identity"], True),
+        ("kernel/metadata/visual-golden-registry.json",
+         docs["visual-golden-registry.json"]["build_identity"], True),
         ("kernel/metadata/app-evidence.json", docs["app-evidence.json"]["shipped_build_identity"]["id"], True),
+        ("kernel/docs/receipts/dependency-archives-host-2026-08-29.json",
+         docs["docs/receipts/dependency-archives-host-2026-08-29.json"]["build_identity"], True),
         ("kernel/docs/receipts/benchmark-host-2026-08-23.json",
          docs["docs/receipts/benchmark-host-2026-08-23.json"]["build_identity"], True),
+        ("kernel/metadata/performance-registry.json",
+         docs["performance-registry.json"]["build_identity"], True),
+        ("kernel/tests/host/test-run-receipt.json",
+         docs["tests/host/test-run-receipt.json"]["build_identity"], True),
     ]
     if value.get("evidence_bindings") != [{
             "path": path, "subject_build_identity": subject,
@@ -363,11 +447,23 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
         raise ValueError("viewer security projection drift")
     if value.get("health") != health_rows(docs):
         raise ValueError("viewer health projection drift")
+    expected_hardware = docs["hardware-receipt-plan.json"]
+    if value.get("hardware") != {
+            "matrix_cases": expected_hardware["counts"]["matrix_cases"],
+            "validated_receipts": expected_hardware["counts"]["validated_receipts"],
+            "physically_passed_routes": expected_hardware["counts"]["physically_passed_routes"],
+            "physical_status": expected_hardware["physical_status"],
+    }:
+        raise ValueError("viewer hardware projection drift")
     if value.get("changes") != docs["release-notes.json"]["changes"]:
         raise ValueError("viewer change projection drift")
     if value.get("tests", {}).get("qemu_current_build_bound") is not True \
-            or value.get("tests", {}).get("host_current_build_bound") is not False \
-            or value.get("tests", {}).get("benchmark_current_build_bound") is not True:
+            or value.get("tests", {}).get("host_current_build_bound") is not True \
+            or value.get("tests", {}).get("benchmark_current_build_bound") is not True \
+            or value.get("tests", {}).get("performance_registry_current_build_bound") is not True \
+            or value.get("tests", {}).get("hardware_plan_current_build_bound") is not True \
+            or value.get("tests", {}).get("visual_receipt_current_build_bound") is not True \
+            or value.get("tests", {}).get("visual_goldens_current_build_bound") is not True:
         raise ValueError("viewer test evidence binding drift")
     if value.get("licensing", {}).get("public_release_blocked") is not True:
         raise ValueError("viewer hid release licensing block")
@@ -382,11 +478,13 @@ def validate_model(value: dict, docs: dict[str, dict]) -> None:
         docs["app-manifest.json"], docs["app-evidence.json"]
     ))
     if counts != {
-        "inputs": 17, "health_areas": 11, "artifacts": 9,
+        "inputs": 22, "health_areas": 13, "artifacts": 9,
         "applications": expected_application_count,
         "applications_with_declared_permission_grants": 0,
         "security_claims": 17, "change_candidates": 17,
         "current_decisions": 17, "cryptographic_signatures": 0,
+        "hardware_matrix_cases": 6, "hardware_validated_receipts": 0,
+        "visual_current_screenshots": 4, "visual_strict_goldens": 4,
     }:
         raise ValueError("viewer counts drift")
     if value.get("open_gaps") != OPEN_GAPS:
@@ -430,9 +528,10 @@ def render_html(value: dict) -> str:
         ) for row in value["health"]
     )
     artifact_html = "\n".join(
-        '<tr class="filterable" data-status="unverified" data-search="{search}">'
+        '<tr class="filterable" data-status="{state}" data-search="{search}">'
         '<th scope="row">{name}</th><td><code>{sha}</code></td><td>{size}</td>'
         '<td>{proof}</td><td>{physical}</td></tr>'.format(
+            state=status_class(row["physical_hardware"]),
             search=escape((row["name"] + " " + row["description"]).lower(), quote=True),
             name=escape(row["name"]), sha=escape(row["sha256"][:16] + "…"),
             size=f"{row['bytes']:,}", proof=escape(row["proof_state"]),
@@ -564,13 +663,14 @@ def render_html(value: dict) -> str:
           <div><span>State</span>{badge(identity['release_state'])}</div>
           <div><span>License</span>{badge('BLOCKED')}</div>
           <div><span>Signatures</span>{badge('0 PRESENT')}</div>
-          <div><span>Physical hashes</span>{badge('0 PROVED')}</div>
+          <div><span>Physical routes</span>{badge(str(value['hardware']['physically_passed_routes']) + ' PROVED')}</div>
         </div>
       </section>
       <dl class="facts">
         <dt>Commit</dt><dd><code>{escape(identity['head'])}</code></dd>
         <dt>Branch / dirty</dt><dd>{escape(identity['branch'])} / {str(identity['dirty']).lower()}</dd>
         <dt>Source archive</dt><dd>{origin['build_input_count']} inputs · {origin['archive_bytes']:,} bytes · <code>{escape(origin['archive_sha256'])}</code></dd>
+        <dt>Dependency archive</dt><dd>{origin['dependency_binary_archives']} binaries · {origin['dependency_source_packages']} source packages · offline={str(origin['dependency_offline_resolution']).lower()}</dd>
         <dt>Custody</dt><dd>{origin['off_host_copies']} off-host copies · signed={str(value['signatures']['source_snapshot_signed']).lower()}</dd>
         <dt>Licensing</dt><dd>{licensing['inputs_with_established_redistribution_grant']} / {licensing['build_inputs']} inputs have an established redistribution grant</dd>
         <dt>Tests</dt><dd>{tests['passed']} host pass · {tests['skipped-hardware']} hardware skip · {tests['not-run']} not run · {tests['qemu_boot_routes']} QEMU boot routes</dd>
@@ -582,7 +682,7 @@ def render_html(value: dict) -> str:
       </div>
       <div id="evidence-tables">
         <section id="health" aria-labelledby="health-title"><h2 id="health-title">Current health</h2><p class="section-note">Status words remain visible; color is only reinforcement.</p>
-          <div class="table-wrap"><table><caption>Eleven evidence areas for this exact build</caption><thead><tr><th>Area</th><th>Status</th><th>Evidence boundary</th></tr></thead><tbody>{health_rows_html}</tbody></table></div>
+          <div class="table-wrap"><table><caption>Thirteen evidence areas for this exact build</caption><thead><tr><th>Area</th><th>Status</th><th>Evidence boundary</th></tr></thead><tbody>{health_rows_html}</tbody></table></div>
         </section>
         <section id="artifacts" aria-labelledby="artifacts-title"><h2 id="artifacts-title">Artifacts</h2><p class="section-note">Byte identity and QEMU routes do not imply exact physical-hardware execution.</p>
           <div class="table-wrap"><table><caption>Nine current reproducible artifacts</caption><thead><tr><th>Name</th><th>SHA-256</th><th>Bytes</th><th>Proof</th><th>Physical</th></tr></thead><tbody>{artifact_html}</tbody></table></div>
@@ -710,8 +810,29 @@ def selftest(value: dict, docs: dict[str, dict], html_text: str) -> None:
     binding["evidence_bindings"][0]["current_build_bound"] = False
     mutations["lost-current-artifact-proof"] = binding
     benchmark = copy.deepcopy(value)
-    benchmark["evidence_bindings"][2]["current_build_bound"] = False
+    next(row for row in benchmark["evidence_bindings"]
+         if row["path"].endswith("benchmark-host-2026-08-23.json"))["current_build_bound"] = False
     mutations["lost-current-benchmark-proof"] = benchmark
+    host_tests = copy.deepcopy(value)
+    next(row for row in host_tests["evidence_bindings"]
+         if row["path"].endswith("test-run-receipt.json"))["current_build_bound"] = False
+    mutations["lost-current-host-test-proof"] = host_tests
+    performance = copy.deepcopy(value)
+    next(row for row in performance["evidence_bindings"]
+         if row["path"].endswith("performance-registry.json"))["current_build_bound"] = False
+    mutations["lost-current-performance-proof"] = performance
+    hardware = copy.deepcopy(value)
+    next(row for row in hardware["evidence_bindings"]
+         if row["path"].endswith("hardware-receipt-plan.json"))["current_build_bound"] = False
+    mutations["lost-current-hardware-plan"] = hardware
+    visual = copy.deepcopy(value)
+    next(row for row in visual["evidence_bindings"]
+         if row["path"].endswith("visual-qemu-2026-08-29.json"))["current_build_bound"] = False
+    mutations["lost-current-visual-receipt"] = visual
+    goldens = copy.deepcopy(value)
+    next(row for row in goldens["evidence_bindings"]
+         if row["path"].endswith("visual-golden-registry.json"))["current_build_bound"] = False
+    mutations["lost-current-visual-goldens"] = goldens
     caught = []
     for name, mutant in mutations.items():
         try:

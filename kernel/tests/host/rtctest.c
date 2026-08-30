@@ -253,10 +253,40 @@ int main(void)
     cmos_reset();
     set_bcd(2026, 8, 0, 12, 0, 0);
     ok("day 0 is refused", rtc_read() == 0);
+
+    cmos_reset();
+    set_bcd(2026, 2, 30, 12, 0, 0);
+    ok("February 30 is refused", rtc_read() == 0);
+    cmos_reset();
+    set_bcd(2025, 2, 29, 12, 0, 0);
+    ok("February 29 in a non-leap year is refused", rtc_read() == 0);
+    cmos_reset();
+    set_bcd(2024, 2, 29, 12, 0, 0);
+    ok("February 29 in a leap year is accepted", rtc_read() == 1);
+    cmos_reset();
+    set_bcd(2026, 4, 31, 12, 0, 0);
+    ok("April 31 is refused", rtc_read() == 0);
+
+    cmos_reset();
+    set_bcd(2026, 8, 18, 12, 0, 0);
+    reg[0x0B] = 0x00;
+    reg[0x04] = 0x00;
+    ok("hour zero in 12-hour mode is refused", rtc_read() == 0);
+
+    cmos_reset();
+    set_bcd(2026, 8, 18, 12, 0, 0);
+    reg[0x00] = 0x1A;
+    ok("a malformed BCD digit is refused", rtc_read() == 0);
+
     said_reset();
     rtc_print_time();
     ok("...and an invalid clock PRINTS '--', it does not draw a stale time",
        strcmp(saidbuf, "--") == 0);
+
+    cmos_reset();
+    set_bcd(2026, 8, 18, 12, 0, 0);
+    ok("a valid read recovers after a refusal", rtc_read() == 1);
+    ok("a successful read clears the previous failure reason", rtc_fail() == 0);
 
     /* ---- the century register -------------------------------------------- */
     printf("\n  -- the century register, which is not on every machine --\n");

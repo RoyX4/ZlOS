@@ -24,6 +24,10 @@ OUTPUT = METADATA / "dependency-lock.json"
 BUILD_IDENTITY = METADATA / "build-identity.json"
 
 COMMANDS = (
+    ("apt-cache", ("--version",)),
+    ("apt-get", ("--version",)),
+    ("dpkg-deb", ("--version",)),
+    ("dpkg-query", ("--version",)),
     ("gcc", ("--version",)),
     ("clang", ("--version",)),
     ("ld", ("--version",)),
@@ -39,6 +43,7 @@ COMMANDS = (
     ("mdir", ("-V",)),
     ("qemu-system-i386", ("--version",)),
     ("qemu-system-x86_64", ("--version",)),
+    ("ldd", ("--version",)),
 )
 
 FIRMWARE = (
@@ -203,7 +208,7 @@ def runtime_files(path: Path) -> list[Path]:
 
 
 def validate(value: dict) -> None:
-    if value.get("schema") != "zlos.host-dependency-lock.v2" or value.get("result") != "PASS_WITH_OPEN_SUPPLY_GAPS":
+    if value.get("schema") != "zlos.host-dependency-lock.v3" or value.get("result") != "PASS_WITH_OPEN_SUPPLY_GAPS":
         raise ValueError("wrong dependency-lock schema/result")
     commands = value.get("commands")
     expected = [name for name, _ in COMMANDS]
@@ -239,9 +244,47 @@ def validate(value: dict) -> None:
             raise ValueError(f"{row.get('name')}: unresolved package dependency")
         if row.get("source_archive_retained") is not False:
             raise ValueError(f"{row.get('name')}: invented source-archive custody")
+        if row.get("reverse_dependencies") != sorted(set(row.get("reverse_dependencies", []))):
+            raise ValueError(f"{row.get('name')}: reverse dependency drift")
+        if any(parent not in known for parent in row["reverse_dependencies"]):
+            raise ValueError(f"{row.get('name')}: unknown reverse dependency")
+    for row in commands + firmware + runtime:
+        if row.get("package") not in known:
+            raise ValueError(f"{row.get('path', row.get('name'))}: package relationship is unresolved")
+    source_packages = value.get("source_packages", [])
+    source_keys = [(row.get("name"), row.get("version")) for row in source_packages]
+    if not source_packages or source_keys != sorted(set(source_keys)):
+        raise ValueError("source-package closure is empty, duplicated or unordered")
+    expected_source_binaries: dict[tuple[str, str], list[str]] = {}
+    for row in packages:
+        key = (row["source_package"], row["source_version"])
+        expected_source_binaries.setdefault(key, []).append(row["name"])
+    for binaries in expected_source_binaries.values():
+        binaries.sort()
+    measured_source_binaries = {
+        (row["name"], row["version"]): row.get("binary_packages")
+        for row in source_packages
+    }
+    if measured_source_binaries != expected_source_binaries:
+        raise ValueError("binary-to-source package relationships drifted")
+    seed_packages = value.get("closure", {}).get("seed_packages", [])
+    if seed_packages != sorted(set(seed_packages)) or any(name not in known for name in seed_packages):
+        raise ValueError("seed-package closure is missing or invalid")
+    reachable = set(seed_packages)
+    pending = list(seed_packages)
+    by_name = {row["name"]: row for row in packages}
+    while pending:
+        name = pending.pop()
+        for dependency in by_name[name]["resolved_dependencies"]:
+            if dependency not in reachable:
+                reachable.add(dependency)
+                pending.append(dependency)
+    if reachable != known:
+        raise ValueError("package closure contains an unreachable package")
     closure = value.get("closure", {})
     if closure.get("all_runtime_files_owned") is not True \
             or closure.get("all_package_dependencies_resolved") is not True \
+            or closure.get("all_binary_source_relationships_resolved") is not True \
             or closure.get("all_source_archives_retained") is not False:
         raise ValueError("dependency closure hides its supply gaps")
     if len(value.get("build_identity", "")) != 64:
@@ -309,7 +352,16 @@ def build() -> dict:
         row["package"] = owners[str(Path(row["resolved_path"]).resolve())]
     for row in firmware:
         row["package"] = owners[str(Path(row["resolved_path"]).resolve())]
-    seed_packages = set(owners.values())
+    canonical_owner = {
+        path: package_row(owner)["name"] for path, owner in owners.items()
+    }
+    for row in all_runtime.values():
+        row["package"] = canonical_owner[row["path"]]
+    for row in commands:
+        row["package"] = canonical_owner[str(Path(row["resolved_path"]).resolve())]
+    for row in firmware:
+        row["package"] = canonical_owner[str(Path(row["resolved_path"]).resolve())]
+    seed_packages = set(canonical_owner.values())
 
     package_map: dict[str, dict] = {}
     pending = sorted(seed_packages)
@@ -324,10 +376,30 @@ def build() -> dict:
         package_map[name] = measured
         pending.extend(dep for dep in dependencies if dep not in package_map and dep not in pending)
         pending.sort()
+    reverse_dependencies: dict[str, list[str]] = {name: [] for name in package_map}
+    for name, row in package_map.items():
+        for dependency in row["resolved_dependencies"]:
+            reverse_dependencies[dependency].append(name)
+    for name, row in package_map.items():
+        row["reverse_dependencies"] = sorted(reverse_dependencies[name])
     packages = [package_map[name] for name in sorted(package_map)]
+    source_map: dict[tuple[str, str], list[str]] = {}
+    for row in packages:
+        key = (row["source_package"], row["source_version"])
+        source_map.setdefault(key, []).append(row["name"])
+    source_packages = [
+        {
+            "name": name,
+            "version": version,
+            "binary_packages": sorted(source_map[(name, version)]),
+            "archive_files": [],
+            "archives_retained": False,
+        }
+        for name, version in sorted(source_map)
+    ]
     binary_archives = sum(bool(row["binary_archive_retained"]) for row in packages)
     value = {
-        "schema": "zlos.host-dependency-lock.v2",
+        "schema": "zlos.host-dependency-lock.v3",
         "result": "PASS_WITH_OPEN_SUPPLY_GAPS",
         "build_identity": identity["identity_sha256"],
         "host": {
@@ -340,20 +412,24 @@ def build() -> dict:
         "firmware": firmware,
         "runtime_files": sorted(all_runtime.values(), key=lambda row: row["path"]),
         "packages": packages,
+        "source_packages": source_packages,
         "closure": {
-            "seed_packages": len(seed_packages),
+            "seed_packages": sorted(seed_packages),
+            "seed_package_count": len(seed_packages),
             "transitive_packages": len(packages),
+            "source_packages": len(source_packages),
             "runtime_files": len(all_runtime),
             "binary_archives_retained": binary_archives,
             "source_archives_retained": 0,
             "all_runtime_files_owned": True,
             "all_package_dependencies_resolved": True,
+            "all_binary_source_relationships_resolved": True,
             "all_binary_archives_retained": binary_archives == len(packages),
             "all_source_archives_retained": False,
             "offline_rebuild_proved": False,
         },
         "generator": {
-            "path": "kernel/gen-dependency-lock.py",
+            "path": "kernel/tools/generators/gen-dependency-lock.py",
             "sha256": sha256(Path(__file__).resolve()),
         },
         "evidence_ceiling": (
@@ -392,6 +468,15 @@ def selftest(value: dict) -> None:
     custody = copy.deepcopy(value)
     custody["packages"][0]["source_archive_retained"] = True
     mutations["invented-source-archive"] = custody
+    source = copy.deepcopy(value)
+    source["source_packages"].pop()
+    mutations["missing-source-relationship"] = source
+    reverse = copy.deepcopy(value)
+    reverse["packages"][0]["reverse_dependencies"].append("not-installed")
+    mutations["unknown-reverse-dependency"] = reverse
+    root = copy.deepcopy(value)
+    root["closure"]["seed_packages"].append("not-installed")
+    mutations["unknown-seed-package"] = root
     identity = copy.deepcopy(value)
     identity["build_identity"] = "short"
     mutations["missing-build-identity"] = identity
@@ -436,7 +521,7 @@ def main() -> int:
         print(
             f"dependency-lock: PASS_WITH_OPEN_SUPPLY_GAPS: {len(value['commands'])} commands, "
             f"{len(value['firmware'])} firmware blobs, {len(value['runtime_files'])} runtime files, "
-            f"{len(value['packages'])} transitive packages"
+            f"{len(value['packages'])} transitive packages, {len(value['source_packages'])} source packages"
         )
         return 0
     except (OSError, ValueError, json.JSONDecodeError, subprocess.SubprocessError) as error:

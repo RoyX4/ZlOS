@@ -468,6 +468,8 @@ static const struct cmd table[] = {
      * exact word is the target proof route for the CPU-fault recorder; code
      * 127 cannot be produced by the printable single-key text shell. */
     { "crashtest", 127 },
+    { "crashgptest", 128 },
+    { "crashdftest", 129 },
     /* Persistent zlfs. The kernel documents and dispatches single-key '.' as
      * code 46, but the compositor owns input after graphical boot, so leaving
      * it out here made the documented mount path unreachable. Keep the exact

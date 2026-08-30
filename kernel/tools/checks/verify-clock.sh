@@ -27,7 +27,9 @@ cd "$(dirname "$0")/../.." || exit
 
 CEILING=${CEILING:-240}
 MAX_BOOT_SECONDS=${MAX_BOOT_SECONDS:-30}
-OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT
+OUT=$(mktemp)
+OBS=$(mktemp)
+trap 'rm -f "$OUT" "$OBS"' EXIT
 
 if pgrep '^qemu-system' >/dev/null 2>&1; then
     echo "SKIP: another qemu-system is running; §1.2 allows one."; exit 2
@@ -69,6 +71,7 @@ check () {
 
     if [ "$rtc_epoch" = "$got_epoch" ] && [ "$offset" -ge 0 ] && [ "$offset" -le "$MAX_BOOT_SECONDS" ]; then
         echo "ok    $base -> $got_rtc  epoch $got_epoch (+${offset}s boot)"
+        printf '%s\t%s\t%s\t%s\n' "$base" "$got_rtc" "$got_epoch" "$offset" >> "$OBS"
     else
         echo "FAIL  $base"
         echo "        want start RTC=$want_rtc epoch=$want_epoch, offset 0..${MAX_BOOT_SECONDS}s"
@@ -83,5 +86,10 @@ check 2026-08-18T14:37:05 "2026-08-18 14:37:05" 1787063825
 check 2026-12-31T23:59:07 "2026-12-31 23:59:07" 1798761547
 check 2000-02-29T12:00:00 "2000-02-29 12:00:00" 951825600
 
-[ "$fails" = 0 ] && { echo "ok    the clock decodes every base correctly"; exit 0; }
+[ "$fails" = 0 ] && {
+    python3 tools/checks/write-clock-receipt.py \
+        --observations "$OBS" --max-boot-seconds "$MAX_BOOT_SECONDS" --selftest || exit 1
+    echo "ok    the clock decodes every base correctly"
+    exit 0
+}
 echo "FAIL: $fails of 3"; exit 1
