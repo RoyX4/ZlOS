@@ -1,0 +1,114 @@
+{
+  "schema": "zlos.physical-page-allocator-native-uefi64-qemu-receipt.v1",
+  "result": "PASS_BOUNDED_TYPED_ALLOCATOR_WITH_OPEN_GAPS",
+  "build_identity": "ecc49c5ca81a4c212edd0d5d67d99265bdb986c383b9236306e3eb89c24b9d57",
+  "route": "native-uefi64",
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "e43f589dfbed461640390ee17bcfb3a7244f1e38fc6a3c029766417a6ad2f38a"
+  },
+  "boot_log_sha256": "fabbb0bc889dae5122add819bacee52dc9cfdd39f6dc83db69b5fb6462202c38",
+  "harness": {
+    "path": "kernel/tools/checks/verify-efi.sh",
+    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+  },
+  "implementation": [
+    {
+      "path": "kernel/src/core/pmm.h",
+      "sha256": "5c7db078c9fb7f4dd09d6de90869a4ba5e14f66197a0f63d75075b4e311bb2fb"
+    },
+    {
+      "path": "kernel/src/core/pmm.c",
+      "sha256": "7f2add8d308258d8108b3299f8a5fd1b18660fa21b49d4a96885b1c7dc5c8d83"
+    },
+    {
+      "path": "freestanding/runtime_kernel.c",
+      "sha256": "44a98e4017ae78b9ec6d759548b56a63faf1eb22054d5027bcca8b7c91145e80"
+    },
+    {
+      "path": "kernel/src/kernel.zl",
+      "sha256": "c69681f274758145bd3b96de96c1486d44f141a32b09d50cc2932ed4f30aa9c8"
+    },
+    {
+      "path": "kernel/tests/host/pmmtest.c",
+      "sha256": "321a135b2bc7585ef45109b317b672d7927dd99b1ffb0f9dbfd06a4da0f872ed"
+    }
+  ],
+  "host_receipt": {
+    "path": "kernel/tests/host/test-run-receipt.json",
+    "sha256": "344b79d78f46da98e66fdd6ddd2500fe93228aa30ce7a9d4fa23eac21c66118c",
+    "target_id": "HT-056",
+    "target": "pmmtest",
+    "checks": 177
+  },
+  "consumer_receipt": {
+    "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
+    "sha256": "e04023a9c52f4950a95022367da8b03f19a510aa48c643c8f1cf28d0eab1dbd8",
+    "assertions": [
+      "process-frame-reclamation",
+      "anonymous-reserve-commit-release",
+      "released-anonymous-page-fault",
+      "process-memory-accounting"
+    ]
+  },
+  "assertions": [
+    {
+      "id": "bounded-firmware-map-admission",
+      "managed_floor_bytes": 335544320,
+      "managed_limit_bytes": 1073741824,
+      "admitted_pages": 168259,
+      "free_pages_after_selftest": 168259,
+      "firmware_conventional_memory_only": true,
+      "fixed_zlos_region_excluded": true
+    },
+    {
+      "id": "typed-owner-release",
+      "wrong_owner_refused_without_mutation": true,
+      "reserved_release_refused": true,
+      "double_free_refused": true,
+      "unaligned_release_refused": true
+    },
+    {
+      "id": "exact-owner-accounting-and-quota",
+      "exact_used_pages": true,
+      "exact_high_water_pages": true,
+      "exact_available_pages": true,
+      "exact_refusal_count": true,
+      "allocation_refused_at_limit": true,
+      "limit_shrink_below_usage_refused_without_mutation": true,
+      "metadata_owner_sum_invariant": true,
+      "target_owner_totals_restored_to_zero": true
+    },
+    {
+      "id": "zero-reuse-and-exhaustion",
+      "zero_on_every_allocation": true,
+      "deterministic_reuse": true,
+      "host_exhaustion_observed": true,
+      "target_baseline_restored": true
+    },
+    {
+      "id": "typed-process-and-anonymous-consumer",
+      "frames_per_process": 8,
+      "two_processes_disjoint": true,
+      "failure_atomic_acquire": true,
+      "anonymous_page_limit": 32,
+      "anonymous_zero_fill": true,
+      "anonymous_failure_atomic": true,
+      "anonymous_target_reclaimed": true,
+      "target_baseline_restored": true
+    }
+  ],
+  "known_gaps": [
+    "the allocator is deliberately bounded to firmware-declared usable pages from 320 MiB through the first 1 GiB",
+    "production accounting covers only the fixed two-slot native-UEFI64 process diagnostic and its bounded anonymous window, not services, caches, pinned memory, DMA or surfaces",
+    "there is no concurrent or interrupt-context locking contract",
+    "there is no segmented metadata for physical memory above 1 GiB",
+    "the saved live receipt is native-UEFI64 QEMU; Multiboot has an exact golden boot gate but no dedicated allocator receipt",
+    "there is no current physical-hardware allocator receipt"
+  ],
+  "evidence_ceiling": "current host exhaustion, exact owner accounting/quota and hostile ownership proof plus exact native-UEFI64 QEMU map admission, zero/reuse and bounded process/anonymous-frame reclamation; not unified consumers, SMP or physical hardware",
+  "generator": {
+    "path": "kernel/tools/checks/write-pmm-receipt.py",
+    "sha256": "4f4bfce1dfb42b29001432fda9ee07c61312e01be523a8b3aa4b832f59556f20"
+  }
+}

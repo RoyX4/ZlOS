@@ -25,7 +25,8 @@ packages, and has no publisher-signed attestation.
 
 The older dependency lock claimed every current build/boot command but omitted
 both Clang and `lld-link`, even though native UEFI requires them. They are now
-two of 15 locked commands.
+two of 20 locked commands. The dependency-lock tranche later added APT, dpkg
+and loader identities used by the offline archive verifier.
 
 The first correction then resolved `/usr/bin/lld-link` to
 `/usr/lib/llvm-21/bin/lld` before asking its version. LLD is a multi-call binary:

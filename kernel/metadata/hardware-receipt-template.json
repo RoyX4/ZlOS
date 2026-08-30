@@ -1,0 +1,192 @@
+{
+  "schema": "zlos.hardware-receipt-template.v1",
+  "result": "NOT_RUN",
+  "instructions": "Copy into kernel/docs/receipts/hardware only after a real observed run; replace every placeholder and use zlos.hardware-receipt.v1.",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "case_id": "physical-grub-bios32",
+  "route": "grub-bios32",
+  "started_at_utc": "REQUIRED",
+  "completed_at_utc": "REQUIRED",
+  "operator": {
+    "id": "REQUIRED",
+    "observed_in_person": false
+  },
+  "machine": {
+    "manufacturer": "REQUIRED",
+    "product": "REQUIRED",
+    "board": "REQUIRED",
+    "system_uuid_sha256": "REQUIRED",
+    "firmware": {
+      "type": "BIOS",
+      "vendor": "REQUIRED",
+      "version": "REQUIRED",
+      "release_date": "REQUIRED"
+    },
+    "cpu": {
+      "vendor": "REQUIRED",
+      "model": "REQUIRED",
+      "logical_processors": 0
+    },
+    "memory_bytes": 0,
+    "devices": {
+      "display": [
+        {
+          "bus": "REQUIRED",
+          "identity": "REQUIRED"
+        }
+      ],
+      "storage": [
+        {
+          "bus": "REQUIRED",
+          "identity": "REQUIRED"
+        }
+      ],
+      "keyboard": [
+        {
+          "bus": "REQUIRED",
+          "identity": "REQUIRED"
+        }
+      ],
+      "pointer": [
+        {
+          "bus": "REQUIRED",
+          "identity": "REQUIRED"
+        }
+      ],
+      "network": [
+        {
+          "bus": "REQUIRED",
+          "identity": "REQUIRED"
+        }
+      ]
+    }
+  },
+  "artifacts": {
+    "boot_medium": {
+      "name": "zlOS.iso",
+      "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+      "bytes": 31660032
+    },
+    "payload": {
+      "name": "kernel.elf",
+      "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1",
+      "bytes": 6516856
+    }
+  },
+  "boot_media_readback": {
+    "device": "REQUIRED",
+    "serial_sha256": "REQUIRED",
+    "sha256": "REQUIRED",
+    "bytes": 0
+  },
+  "scenarios": [
+    {
+      "id": "first-use",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    },
+    {
+      "id": "reuse",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    },
+    {
+      "id": "warm-reboot",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    },
+    {
+      "id": "cold-boot",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    },
+    {
+      "id": "reset",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    },
+    {
+      "id": "teardown",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    },
+    {
+      "id": "recovery",
+      "result": "NOT_RUN",
+      "observation": "REQUIRED"
+    }
+  ],
+  "raw_evidence": [
+    {
+      "kind": "artifact-readback",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "machine-inventory",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "firmware-inventory",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "device-topology",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "boot-log",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "screen-capture",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "interaction-log",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "storage-readback",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "teardown-log",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    },
+    {
+      "kind": "recovery-log",
+      "path": "REQUIRED",
+      "sha256": "REQUIRED",
+      "bytes": 0,
+      "captured_at_utc": "REQUIRED"
+    }
+  ],
+  "content_sha256": "REQUIRED_AFTER_ALL_FIELDS_ARE_FINAL"
+}

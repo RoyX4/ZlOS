@@ -1,8 +1,8 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
-  "landing_gate_sha256": "c8438bcb78fb83ef978d24bf9e9e1c6f41c1b494c6d989eab9fe886e7fd282ee",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "landing_gate_sha256": "2a11ed0db8a725cf80766e347e37118e332b08f59e2faf5f75cd70f20a67d5f8",
   "wrappers": [
     {
       "path": ".github/scripts/render-desktop.sh",
@@ -94,8 +94,8 @@
     },
     {
       "path": "gates/land-gate.sh",
-      "sha256": "c8438bcb78fb83ef978d24bf9e9e1c6f41c1b494c6d989eab9fe886e7fd282ee",
-      "bytes": 15986,
+      "sha256": "2a11ed0db8a725cf80766e347e37118e332b08f59e2faf5f75cd70f20a67d5f8",
+      "bytes": 20130,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -171,8 +171,8 @@
     },
     {
       "path": "kernel/tests/host/build.sh",
-      "sha256": "fc1ee2f532d121fbe189d3bef0334141c8eeae5040cb6ef295bc900241094795",
-      "bytes": 39491,
+      "sha256": "b6f2b6c9eff4852eb2265462e8aba1de83949dc20a1b6eec1c01f334eca8dd07",
+      "bytes": 41337,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -193,8 +193,8 @@
     },
     {
       "path": "kernel/tests/host/efi_runtime_diag_test.py",
-      "sha256": "950e2f3bc06cbb09740174724a386e13d88c8ba0648de6902c88e5474fb3dedd",
-      "bytes": 5309,
+      "sha256": "279f305ecf8c798646872dcf7b80d01a347bcd09054bfce1f9f5d011cba9e74a",
+      "bytes": 5548,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -276,6 +276,17 @@
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "SHELL_ERREXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tests/host/user-syscalls-test.sh",
+      "sha256": "acb25d3e0edc46fda1f77f947cf92ba0875c874c7a85b5c4d3c0e8cc8a7e6d7b",
+      "bytes": 1226,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "UTILITY_OR_LEGACY",
       "exit_policy": "SHELL_ERREXIT",
       "named_by_landing_gate": false
     },
@@ -369,8 +380,8 @@
     },
     {
       "path": "kernel/tests/oracle/zlosboot.py",
-      "sha256": "258e856c0e1ad472d8bc09968542da1894928a4b29d38bc4738f7741ede6b6ad",
-      "bytes": 28394,
+      "sha256": "4b7631ded89c7d4780e1b328691be9ad59f65a9719d2b2d5423a8a8b327788cd",
+      "bytes": 28498,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -446,8 +457,8 @@
     },
     {
       "path": "kernel/tools/checks/check-elf-permissions.py",
-      "sha256": "ad5b272bd556e3c273cdcc83623f7a8f9a4eb4962689c9d35689956418be1a28",
-      "bytes": 3846,
+      "sha256": "eeb64fe7c90545a06654a0bf0418abd164138a9586ae2417653197f4a0e3d4e1",
+      "bytes": 6287,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -468,8 +479,8 @@
     },
     {
       "path": "kernel/tools/checks/check-land-gate.py",
-      "sha256": "a2f36ad276b99ef4187f94f45b9f50695d1968f296899e34202d54d4686f442c",
-      "bytes": 8287,
+      "sha256": "20d1e209cfeff960466add1e6f12cbdd728b7de1171acc9cbf3c1aabfdc7dcae",
+      "bytes": 11077,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -545,8 +556,8 @@
     },
     {
       "path": "kernel/tools/checks/check-version-selftest.py",
-      "sha256": "d96944b09da028bf26a62941dc523c9ddfca2ee59137632032e280ac9b26ba54",
-      "bytes": 3659,
+      "sha256": "ec9b4ff23839d63f97ba7d5698140bf0178c04cca6474047fe9741249c9b905f",
+      "bytes": 3656,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -556,14 +567,25 @@
     },
     {
       "path": "kernel/tools/checks/check-version.py",
-      "sha256": "92bf83b9780f2f5cbb216f7e8e8f78a0466e461fc6f6115b714d2d5e267d926c",
-      "bytes": 4168,
+      "sha256": "8e4e3124dfa92f9c65278af0ae26544e964b9b01b8391b1bc6050461dca92caa",
+      "bytes": 4160,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "VERIFIER",
       "exit_policy": "PYTHON_EXPLICIT_EXIT",
       "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/check-visual-goldens.py",
+      "sha256": "11a2c422039e1182e55ad2d5048010025ff64c1059101966eace2896a3943266",
+      "bytes": 11730,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/tools/checks/check-zl-calls.sh",
@@ -633,8 +655,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-clock.sh",
-      "sha256": "84de4a0063582bac9afcb4d43e73acd00b3c981d0924b54beb390c76964600b6",
-      "bytes": 3755,
+      "sha256": "a976267ba08412fb77d26fe24fd63073c7ee29dcc3d0e1c6d30039790a873949",
+      "bytes": 4007,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -644,9 +666,20 @@
     },
     {
       "path": "kernel/tools/checks/verify-crash.py",
-      "sha256": "44c745f78dae1c684768ceab3675e313048e8c971a588c6aa1120cf9b0921051",
-      "bytes": 10396,
+      "sha256": "d76a8606998ff5ca717b62deff4b77678f0446b5129896e644cecec4dc05ef23",
+      "bytes": 20095,
       "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/verify-dependency-archives.py",
+      "sha256": "6006a7f1cb0123aec49475ed5dae9812102eb24a4455e7d2946603152fdee051",
+      "bytes": 30943,
+      "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "VERIFIER",
@@ -666,8 +699,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-efi.sh",
-      "sha256": "e598865b05408e54251d314577066f219ef5e045b7ea44c01b267697520e42de",
-      "bytes": 11467,
+      "sha256": "dd7035f11f43ebeee0e080ff6e509c1747370049f3e072a721663adbb14b3aef",
+      "bytes": 16741,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -742,9 +775,75 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/checks/write-clock-receipt.py",
+      "sha256": "b3980e85436b07d57f73582c4b5537d2fc6530fc8c2539e3362c741a164ba1e8",
+      "bytes": 6484,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/write-page-table-receipt.py",
+      "sha256": "5ded44a1ab222879d3254b59a6fa563632ad48375904d6460b2c2c543f39a1ca",
+      "bytes": 10296,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/write-pmm-receipt.py",
+      "sha256": "c8b3e5469a90874ad12b212b01958808b7d1611901729435ac198c3270f00f5b",
+      "bytes": 16012,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/write-scheduler-receipt.py",
+      "sha256": "c5c8ec014013ac0de5fd40a0c37dc2fa11d073ae14a0dff88dc14f0f22130f82",
+      "bytes": 7839,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/write-user-process-receipt.py",
+      "sha256": "1e93e463743f802611bbcc34027a85949fdaefaa59f92488c9b76ebd8b5fb48b",
+      "bytes": 18727,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/generators/gen-accessibility-registry.py",
-      "sha256": "b5dfb536b1715cf67eecf368978fe6cbbdc44981e93be4b66f8ae89d93864f6a",
-      "bytes": 8830,
+      "sha256": "557f0e079f487957bb3625fbe157cce7fc5331f638956d67dfd6bbd5676b60b7",
+      "bytes": 9267,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "BUILD_OR_GENERATOR",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/generators/gen-address-space-registry.py",
+      "sha256": "d0124a6757123da454dd193fcb9ef75ebcaf6bd1c224122fc37764f1e56d1fa0",
+      "bytes": 11343,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -754,8 +853,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-adversarial-registry.py",
-      "sha256": "94c7b00635bbdb7ba27ad02fdf5dfcdcef5f7439ac18ff67e39c6f6bb5cb222e",
-      "bytes": 13201,
+      "sha256": "0b7a302cbd821c7a1370df9578499e8a99df3a9d0b962c3a3cdf7e8a16d4f084",
+      "bytes": 20647,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -787,8 +886,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-artifact-registry.py",
-      "sha256": "cff10afb400c4aabbac7d221dfb188c0edeb3fc85516d4ee5b1d5c1fa7194069",
-      "bytes": 19164,
+      "sha256": "37bc335013c82f42a80d71adf0140799348a07beeeb0d76534740abce04f7259",
+      "bytes": 22315,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -820,8 +919,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-build-identity.py",
-      "sha256": "3dfd0a54fbd2206e88b9f94ced6e687e635834317c701552996a9beb4873ad5c",
-      "bytes": 11803,
+      "sha256": "d8d3c1e72c04ac711eeacb0a33eb6c6066bae4afd07225278798822e8494beda",
+      "bytes": 11887,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -831,8 +930,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-decision-ledger.py",
-      "sha256": "7e8d140a6d08db61056307a560fc6ac45d9f0c0d3082c49446d884d367e6ac20",
-      "bytes": 27060,
+      "sha256": "aefe501f7e492e2f47345dc5ca301e77258f68386b4a26c19f2cebea5c36d67b",
+      "bytes": 27070,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -842,8 +941,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-dependency-lock.py",
-      "sha256": "33648aae9b0cd45972eca3278b56785daf8385d2b9cff44d42f9c3d3a99c44bb",
-      "bytes": 18005,
+      "sha256": "cef1748b7baa5f1dd34eb90590921b3960a3969e5d157e2ef7c2b44e08ef98bf",
+      "bytes": 22355,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -864,9 +963,20 @@
     },
     {
       "path": "kernel/tools/generators/gen-evidence-registry.py",
-      "sha256": "358fae10b620c4bca5fc33b06cb6e7384358ab7a5100212f8cd6b9b58a6ea729",
-      "bytes": 41868,
+      "sha256": "18a196f694c26eaf8df51381913a34a217c6589adaf5a652e1ae00f3ef2424b5",
+      "bytes": 63030,
       "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "BUILD_OR_GENERATOR",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/generators/gen-hardware-receipt-plan.py",
+      "sha256": "a3337fc277a210c4113c4e48dd28fd4840ebb08323f2cfb6872409539acceba1",
+      "bytes": 21161,
+      "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "BUILD_OR_GENERATOR",
@@ -897,8 +1007,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-observability-registry.py",
-      "sha256": "19d8c3fae480522e1a3b64e3cb65529fe620f8803e9447aeb7d00f6c08b94a64",
-      "bytes": 14787,
+      "sha256": "6c834f087329dad72a3f14844418f3a338fe5ea18b2f3c1566a68516c5bff8f0",
+      "bytes": 20013,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -907,9 +1017,20 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/tools/generators/gen-performance-registry.py",
+      "sha256": "f92aa2e76c049a8256f63bc7b6b87d2993c1fa6824d290a8bb389ef471e9dfc9",
+      "bytes": 12517,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "BUILD_OR_GENERATOR",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
       "path": "kernel/tools/generators/gen-provenance-viewer.py",
-      "sha256": "a447209555b2cffea73c2d5bc30ff855e0f0d1d58b0c930b3cd2b97c85e359fd",
-      "bytes": 41492,
+      "sha256": "8f81b8afbaa0d00d78bf5b6f6d254848d07b570e9385b23f16e57c5d90740d72",
+      "bytes": 49702,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -919,8 +1040,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-release-notes.py",
-      "sha256": "8138b75db9602d10c628e1f013fc37d9f7dcfd161af1dacbca2168e9f1ad6ed9",
-      "bytes": 29998,
+      "sha256": "8e1d7507e925fb4af68b93ffa510607627158ca3df2537fbb120a80f33dcd927",
+      "bytes": 29993,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -952,8 +1073,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-test-inventory.py",
-      "sha256": "94033154d0f0097e80698d507af75571df7b0393592388dbcff32712434ea180",
-      "bytes": 10208,
+      "sha256": "19da5027527f9ed38053ba92779a06ac38a1993b747f2ea5d273b6f2818cbc4f",
+      "bytes": 10448,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -973,9 +1094,20 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/tools/generators/gen-user-syscalls.py",
+      "sha256": "d62f5c2bbd0c0d6387ef4b0db57bc7ca040d2846921099b5cf66eeb15b6651b8",
+      "bytes": 6039,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "BUILD_OR_GENERATOR",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/generators/gen-visual-registry.py",
-      "sha256": "36a132f6a4743498789a7cb506024f00898cfd74d0507cfcae19c819a8ea49ed",
-      "bytes": 10459,
+      "sha256": "00eaffd8c54caa79567b6fb1c0431917c0f3531e391f0076a4abd29af92716b6",
+      "bytes": 15765,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1194,8 +1326,8 @@
     },
     {
       "path": "kernel/tools/probes/exercise.py",
-      "sha256": "745e44d70a0593a9c78376b5953f02ccb6b7ff94b053174d52d926bc53324ea8",
-      "bytes": 29801,
+      "sha256": "52366a9726329c65bc63f8efed9088782d867d4053fdf1883189c81d33dec3d0",
+      "bytes": 30232,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1545,14 +1677,36 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/tools/run/run-build-benchmark.py",
+      "sha256": "33c5f3987683403987167104a86c241f4f4231a58f4c509f88df2c09255c4d20",
+      "bytes": 11657,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
       "path": "kernel/tools/run/run-host-tests.py",
-      "sha256": "8066bf950e40031949bd6b79b48ca00d0442e1790b917f1a6db8ab5a8e5755e9",
-      "bytes": 11144,
+      "sha256": "ac8a9253d70964320098323f47907807b897e5d551eee750cc29e4bd0aff1ea3",
+      "bytes": 11984,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "ACTION_OR_LAUNCHER",
       "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/run/run-visual-receipt.py",
+      "sha256": "57420584d19711bf70d6dbc5a2637938296ea496f689ec12a42e15be7c366cda",
+      "bytes": 15444,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "ACTION_OR_LAUNCHER",
+      "exit_policy": "PYTHON_MAIN_EXIT",
       "named_by_landing_gate": true
     },
     {
@@ -1601,8 +1755,8 @@
     },
     {
       "path": "kernel/verify.sh",
-      "sha256": "7ab61499795537676dcaabc5ef9faa5e7ae37486a790a99f45bf2c3393043619",
-      "bytes": 3540,
+      "sha256": "dd49681f9a66f249d72c47f37e5313d26906068aa486889e0821c431b80ee297",
+      "bytes": 3796,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1667,25 +1821,25 @@
     },
     {
       "path": "tools/gen_feature_status.py",
-      "sha256": "e94a56aaef35c7ace17f2ed5e1fee770f039d774bd384880ae5c709ca649ef33",
-      "bytes": 38912,
+      "sha256": "8934c7263b0a9826c474cf372c999344db003e63cb0ea8fff2cafebf3e9e67cb",
+      "bytes": 120613,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "UTILITY_OR_LEGACY",
       "exit_policy": "PYTHON_MAIN_EXIT",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "tools/gen_partial_closure.py",
-      "sha256": "3239df34118ef2f4da17033775561392bf10a56e02e1c797715a3c0a1827344d",
-      "bytes": 31306,
+      "sha256": "f7565a06ee6976ed578787d933cbff2f508520f17cee01c64f5278b10d07c840",
+      "bytes": 32138,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "UTILITY_OR_LEGACY",
       "exit_policy": "PYTHON_MAIN_EXIT",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "tools/hazard-scan.sh",
@@ -1773,7 +1927,7 @@
       "language": "python",
       "role": "UTILITY_OR_LEGACY",
       "exit_policy": "PYTHON_MAIN_EXIT",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "tools/zlbootdiag.py",
@@ -1821,9 +1975,9 @@
     }
   ],
   "counts": {
-    "wrappers": 165,
-    "executable": 163,
-    "named_by_landing_gate": 64,
+    "wrappers": 179,
+    "executable": 169,
+    "named_by_landing_gate": 76,
     "no_static_failure_policy": 18
   },
   "authority_contract": {

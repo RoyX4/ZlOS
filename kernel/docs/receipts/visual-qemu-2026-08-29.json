@@ -1,0 +1,168 @@
+{
+  "schema": "zlos.visual-qemu-receipt.v1",
+  "result": "PASS_CURRENT_ARTIFACT_SCREENSHOTS",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "artifact_registry": {
+    "path": "kernel/metadata/artifact-registry.json",
+    "sha256": "b4bbcea5cff5596158ecd20ba79218579e2d0b356407c5e50ebcc2e92bbbdb70"
+  },
+  "routes": [
+    {
+      "route": "grub-bios32",
+      "firmware": "BIOS",
+      "artifact": {
+        "name": "zlOS.iso",
+        "path": "kernel/zlOS.iso",
+        "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+        "bytes": 31660032
+      },
+      "boot_receipt": {
+        "path": "kernel/docs/receipts/app-manifest-grub-bios32-qemu-2026-08-22.json",
+        "sha256": "4f1b1bae12d57510b3581d2edc6b4c5f035f47fb2d4e0b62419726272a9575da"
+      },
+      "qemu": {
+        "path": "/usr/bin/qemu-system-i386",
+        "sha256": "aff856cb0231a992b4d2da76cb4581316035c5e7ff1cb01ef2ed69141c53ed00",
+        "version": "QEMU emulator version 11.0.3 (Debian 1:11.0.3+ds-2)"
+      },
+      "serial_log": {
+        "path": "kernel/docs/evidence/current-visuals-2026-08-29/grub-bios32-serial.log",
+        "sha256": "dc063d22d801ab444e34d7dae5a7440e03fabacb31167ffe554498875c615e4d",
+        "bytes": 2755,
+        "markers": {
+          "build_identity": true,
+          "ready": true,
+          "shell_prompt": true,
+          "paint_window": true
+        }
+      },
+      "display": {
+        "width": 1920,
+        "height": 1200
+      },
+      "captures": [
+        {
+          "state": "desktop-ready",
+          "interaction": "boot to ready and shell prompt",
+          "path": "kernel/docs/evidence/current-visuals-2026-08-29/grub-bios32-desktop-ready.png",
+          "sha256": "09dd48043918b0b56937f433c601443bdcab4bce400458f1be5c57454c8c8fd8",
+          "pixels_sha256": "3173ead77a1035bab206908cd60a74e4a99c2abb3be2de5b6c238b66122e3632",
+          "bytes": 154526,
+          "format": "PNG",
+          "width": 1920,
+          "height": 1200,
+          "distinct_colors": 2133
+        },
+        {
+          "state": "paint-open",
+          "interaction": "serial shell command paint; compositor reported a new window",
+          "path": "kernel/docs/evidence/current-visuals-2026-08-29/grub-bios32-paint-open.png",
+          "sha256": "59f101888698d7c282e1c0a349bba92212512f0367fe0ff0e8872d7266f1a97c",
+          "pixels_sha256": "963b2e0816b58a02db5fb2e9558cd755d466c6443fde89065c99b51348623574",
+          "bytes": 157082,
+          "format": "PNG",
+          "width": 1920,
+          "height": 1200,
+          "distinct_colors": 2134
+        }
+      ]
+    },
+    {
+      "route": "native-uefi64",
+      "firmware": "UEFI",
+      "artifact": {
+        "name": "zlOS-usb.img",
+        "path": "kernel/zlOS-usb.img",
+        "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9",
+        "bytes": 138412032
+      },
+      "boot_receipt": {
+        "path": "kernel/docs/receipts/app-manifest-native-uefi64-qemu-2026-08-22.json",
+        "sha256": "29036d075c29c4b1ffd4826313e1b8bd7352dc5e7214a4179e703b513cd543e4"
+      },
+      "qemu": {
+        "path": "/usr/bin/qemu-system-x86_64",
+        "sha256": "990a3b5a4fea1ba5d57dbc46bfe040b1fa27e645364f893e51c55aff63dcd2ba",
+        "version": "QEMU emulator version 11.0.3 (Debian 1:11.0.3+ds-2)"
+      },
+      "serial_log": {
+        "path": "kernel/docs/evidence/current-visuals-2026-08-29/native-uefi64-serial.log",
+        "sha256": "0ac6cca4623b2adb9a1b0344be92a4da9aaf17d4e501c726aa09ea87e5cf4f85",
+        "bytes": 4859,
+        "markers": {
+          "build_identity": true,
+          "ready": true,
+          "shell_prompt": true,
+          "paint_window": true
+        }
+      },
+      "display": {
+        "width": 1920,
+        "height": 1200
+      },
+      "captures": [
+        {
+          "state": "desktop-ready",
+          "interaction": "boot to ready and shell prompt",
+          "path": "kernel/docs/evidence/current-visuals-2026-08-29/native-uefi64-desktop-ready.png",
+          "sha256": "6cad275dcb188b15cd84b71e3c89cb01ab77f674cc86c807e8cd77fa42fc026b",
+          "pixels_sha256": "524319604f1a6c3ac26e89976c1f0a640f818da40b7b5d8d4baea66e49e37f90",
+          "bytes": 140462,
+          "format": "PNG",
+          "width": 1920,
+          "height": 1200,
+          "distinct_colors": 1536
+        },
+        {
+          "state": "paint-open",
+          "interaction": "serial shell command paint; compositor reported a new window",
+          "path": "kernel/docs/evidence/current-visuals-2026-08-29/native-uefi64-paint-open.png",
+          "sha256": "4ca182377119dc55cedb1667c51e877a8cb0411ca23fa3c40d31bff32de97228",
+          "pixels_sha256": "0258247e6f9edeb732c8da2c6e621e9bc1efa90b957d6f752742faa5ecd0be18",
+          "bytes": 131000,
+          "format": "PNG",
+          "width": 1920,
+          "height": 1200,
+          "distinct_colors": 1486
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "routes": 2,
+    "captures": 4,
+    "states": 2,
+    "blank_captures": 0
+  },
+  "variant_metadata": {
+    "scale": "current automatic scale for observed mode",
+    "theme": "current default theme",
+    "locale": "current built-in English strings",
+    "accessibility": "default motion/contrast path; no assistive-provider claim",
+    "ui_state": [
+      "desktop-ready",
+      "paint-open"
+    ],
+    "backend": [
+      "grub-bios32",
+      "native-uefi64"
+    ]
+  },
+  "sources": {
+    "runner": {
+      "path": "kernel/tools/run/run-visual-receipt.py",
+      "sha256": "57420584d19711bf70d6dbc5a2637938296ea496f689ec12a42e15be7c366cda"
+    },
+    "machine": {
+      "path": "kernel/tests/oracle/zlosboot.py",
+      "sha256": "4b7631ded89c7d4780e1b328691be9ad59f65a9719d2b2d5423a8a8b327788cd"
+    },
+    "qemu_harness": {
+      "path": "kernel/tools/probes/exercise.py",
+      "sha256": "52366a9726329c65bc63f8efed9088782d867d4053fdf1883189c81d33dec3d0"
+    }
+  },
+  "evidence_ceiling": "four current-artifact QEMU screenshots across BIOS and native UEFI in two states; not complete variant coverage, video, physical display or design approval",
+  "weakest_link": "theme, locale, accessibility, scale, full UI-state and all-backend matrices remain incomplete",
+  "content_sha256": "d276ab545451f9ce64f2f6d83c3a11a5e2b1d0f87bd93e814f4b47dcc735991a"
+}

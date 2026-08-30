@@ -23,6 +23,7 @@ BUILD_IDENTITY = os.path.join(METADATA, "build-identity.json")
 REPRO_RECEIPT = os.path.join(
     KERNEL_ROOT, "docs", "receipts", "reproducible-build-2026-08-22.json")
 APP_EVIDENCE = os.path.join(METADATA, "app-evidence.json")
+HARDWARE_PLAN = os.path.join(METADATA, "hardware-receipt-plan.json")
 ELF_PERMISSION_CHECKER = os.path.join(
     KERNEL_ROOT, "tools", "checks", "check-elf-permissions.py")
 ARTIFACTS = (
@@ -225,12 +226,30 @@ def validate_registry(value):
     routes = value.get("boot_routes", {})
     if set(routes) != set(BOOT_RECEIPTS):
         fail("boot route set drift")
+    hardware = value.get("hardware_receipt_plan", {})
+    passed_routes = set(hardware.get("passed_routes", []))
+    passed_artifacts = set(hardware.get("passed_artifacts", []))
+    if hardware.get("schema") != "zlos.hardware-receipt-plan.v1" \
+            or hardware.get("build_identity") != value.get("build_identity", {}).get("id"):
+        fail("hardware receipt plan is absent or foreign")
+    if not passed_routes.issubset(routes) or not passed_artifacts.issubset(artifacts):
+        fail("hardware receipt plan names unknown routes or artifacts")
     for route, record in routes.items():
         if record.get("result") != "PASS" or record.get("artifact") != ROUTE_ARTIFACT[route]:
             fail(f"{route}: invalid promoted route")
+        physical = record.get("physical_hardware")
+        if physical == "PASS_EXACT_HASH" and route not in passed_routes:
+            fail(f"{route}: physical evidence overclaim")
+        if physical != "PASS_EXACT_HASH" and route in passed_routes:
+            fail(f"{route}: validated physical evidence was dropped")
     for name, record in artifacts.items():
-        if record.get("physical_hardware") != "UNVERIFIED_FOR_EXACT_HASH":
+        physical = record.get("physical_hardware")
+        if physical == "PASS_EXACT_HASH" and name not in passed_artifacts:
             fail(f"{name}: physical evidence overclaim")
+        if physical != "PASS_EXACT_HASH" and name in passed_artifacts:
+            fail(f"{name}: validated physical evidence was dropped")
+        if physical not in ("PASS_EXACT_HASH", "UNVERIFIED_FOR_EXACT_HASH"):
+            fail(f"{name}: unknown physical evidence state")
         if record.get("sha256") is None or record.get("bytes") is None:
             fail(f"{name}: missing identity")
     for name in ("kernel.elf", "kernel64.elf", "kernel_raw.elf"):
@@ -261,6 +280,21 @@ def build(verify_files=True):
     format_checks()
     relations = extract_relations()
 
+    hardware_plan = load(HARDWARE_PLAN)
+    if hardware_plan.get("schema") != "zlos.hardware-receipt-plan.v1" \
+            or hardware_plan.get("build_identity") != wanted_identity:
+        fail("hardware receipt plan is absent or foreign")
+    validated_hardware = hardware_plan.get("validated_receipts", [])
+    passed_routes = sorted({row["route"] for row in validated_hardware})
+    passed_artifacts = sorted({artifact["name"] for row in validated_hardware
+                               for artifact in row["artifacts"].values()})
+    for case in hardware_plan.get("device_matrix", []):
+        for label in ("boot_medium", "payload"):
+            expected = repro_artifacts.get(case.get(label, {}).get("name"))
+            if expected is None or case[label].get("sha256") != expected.get("sha256") \
+                    or case[label].get("bytes") != expected.get("bytes"):
+                fail(f"hardware matrix {case.get('case_id')}: {label} identity mismatch")
+
     routes = {}
     receipt_dir = os.path.join(KERNEL_ROOT, "docs", "receipts")
     for route, filename in BOOT_RECEIPTS.items():
@@ -288,7 +322,8 @@ def build(verify_files=True):
             "receipt_sha256": sha256(os.path.join(receipt_dir, filename)),
             "result": "PASS",
             "evidence": "QEMU_RUNTIME",
-            "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH",
+            "physical_hardware": ("PASS_EXACT_HASH" if route in passed_routes
+                                  else "UNVERIFIED_FOR_EXACT_HASH"),
         }
 
     app_evidence = load(APP_EVIDENCE)
@@ -326,7 +361,8 @@ def build(verify_files=True):
             "proof_state": state,
             "boot_routes": boot_routes,
             "reproducibility": "TWO_INDEPENDENT_RUNS_BYTE_IDENTICAL",
-            "physical_hardware": "UNVERIFIED_FOR_EXACT_HASH",
+            "physical_hardware": ("PASS_EXACT_HASH" if name in passed_artifacts
+                                  else "UNVERIFIED_FOR_EXACT_HASH"),
         }
         if name in ("kernel.elf", "kernel64.elf", "kernel_raw.elf"):
             artifacts[name]["memory_permissions"] = "NO_RWX_LOAD"
@@ -353,10 +389,21 @@ def build(verify_files=True):
             "QEMU_DIRECT_ARTIFACT": "this exact artifact hash booted in QEMU",
             "METADATA_ONLY": "generated identity input; not executable",
             "UNVERIFIED_FOR_EXACT_HASH": "no physical receipt is bound to this exact artifact hash",
+            "PASS_EXACT_HASH": "a hostile-validated physical receipt is bound to this exact artifact hash",
         },
         "reproducibility_receipt": {
             "path": "kernel/docs/receipts/reproducible-build-2026-08-22.json",
             "sha256": sha256(REPRO_RECEIPT),
+        },
+        "hardware_receipt_plan": {
+            "schema": hardware_plan["schema"],
+            "path": "kernel/metadata/hardware-receipt-plan.json",
+            "sha256": sha256(HARDWARE_PLAN),
+            "build_identity": hardware_plan["build_identity"],
+            "physical_status": hardware_plan["physical_status"],
+            "validated_receipts": len(validated_hardware),
+            "passed_routes": passed_routes,
+            "passed_artifacts": passed_artifacts,
         },
         "relations": relations,
         "boot_routes": routes,
@@ -367,7 +414,9 @@ def build(verify_files=True):
             "claim_ceiling": app_evidence.get("evidence_ceiling"),
         },
         "artifacts": artifacts,
-        "weakest_link": "all runtime proof is QEMU and no artifact hash has current physical-hardware proof",
+        "weakest_link": ("physical proof covers only the exact validated receipt set"
+                         if validated_hardware else
+                         "all runtime proof is QEMU and no artifact hash has current physical-hardware proof"),
     }
     validate_registry(value)
     return value

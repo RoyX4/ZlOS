@@ -171,7 +171,7 @@ RECORDS = (
         "decision": "Dependency verification checks exact invoked/resolved bytes and never silently refreshes the lock.",
         "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
         "source": "kernel/docs/dependency-lock-truth-2026-08-23.md",
-        "needle": "The landing gate checks but never rewrites this file.",
+        "needle": "The landing gate checks but never rewrites the lock or receipt.",
         "legacy_labels": [], "supersedes": [], "replaced_by": None,
         "obsolete_evidence": [],
     },

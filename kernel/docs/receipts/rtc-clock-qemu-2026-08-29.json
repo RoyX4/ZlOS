@@ -1,0 +1,39 @@
+{
+  "schema": "zlos.rtc-clock-qemu-receipt.v1",
+  "result": "PASS",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "artifact": {
+    "path": "kernel/kernel.elf",
+    "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1"
+  },
+  "harness": {
+    "path": "kernel/tools/checks/verify-clock.sh",
+    "sha256": "a976267ba08412fb77d26fe24fd63073c7ee29dcc3d0e1c6d30039790a873949"
+  },
+  "cases": [
+    {
+      "base": "2026-08-18T14:37:05",
+      "observed_rtc": "2026-08-18 14:37:05",
+      "observed_epoch": 1787063825,
+      "boot_offset_seconds": 0
+    },
+    {
+      "base": "2026-12-31T23:59:07",
+      "observed_rtc": "2026-12-31 23:59:07",
+      "observed_epoch": 1798761547,
+      "boot_offset_seconds": 0
+    },
+    {
+      "base": "2000-02-29T12:00:00",
+      "observed_rtc": "2000-02-29 12:00:00",
+      "observed_epoch": 951825600,
+      "boot_offset_seconds": 0
+    }
+  ],
+  "max_boot_seconds": 30,
+  "evidence_ceiling": "controlled QEMU MC146818/CMOS decoding on the exact current kernel.elf; not physical RTC accuracy, timezone, synchronization or suspend proof",
+  "generator": {
+    "path": "kernel/tools/checks/write-clock-receipt.py",
+    "sha256": "b3980e85436b07d57f73582c4b5537d2fc6530fc8c2539e3362c741a164ba1e8"
+  }
+}

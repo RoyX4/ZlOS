@@ -39,24 +39,25 @@ in the same session, not from arithmetic.
 | `0x0E000000` | 224 MiB | the USB DMA arena | `xhci.c` | `memmap.h` chain |
 | `0x0F000000` | 240 MiB | virtio-gpu rings + framebuffer | `virtio_gpu.c` | `memmap.h` chain |
 | `0x10000000` | 256 MiB | **the heap**, 64 MiB, hands out and takes back | `heap.c` | `memmap.h` chain |
-| `0x14000000` | 320 MiB | — unclaimed — | | |
+| `0x14000000` | 320 MiB | start of the bounded physical-page allocator pool | `pmm.c` | sealed boot map + owner table |
 | `0x40000000` | 1 GiB | **`HI_TOP`** — the smallest guest we promise | `memmap.h` | `check-ram.sh` |
 
 Note what the heap row does to this table: it is the first region whose
 *contents* have no fixed addresses. Everything above it is one buffer at one
 address chosen by a person. Nothing inside the heap appears in `memmap.h`,
 because nothing inside it has an address until something asks for one. That is
-the whole direction of travel — Stage 4 extends it to the rest of the table.
+the direction of travel: the bounded frame allocator now owns admissible pages
+above the fixed map, while Stage 4 gives selected physical regions independent
+virtual addresses.
 
-Current measured raw-build sizes, 2026-08-28:
+Current measured build sizes after the bounded physical allocator, 2026-08-30:
 
 ```
-kernel_raw.bin    6,324,036 bytes   what the raw loader must carry (no .bss)
-__bss_start       0x00707F50        7.031 MiB
-__bss_end         0x00943880        9.264 MiB   = raw __kernel_end
-kernel.elf        6,492,004 bytes   multiboot artifact
-kernel64.elf      3,334,984 bytes
-ZLOS.EFI          3,432,448 bytes
+kernel_raw.bin    6,340,516 bytes   what the raw loader must carry (no .bss)
+__kernel_end      0x009C7A00        9.780 MiB; 2.220 MiB below the 12 MiB stack
+kernel.elf        6,509,804 bytes   multiboot artifact
+kernel64.elf      3,354,920 bytes
+ZLOS.EFI          3,457,024 bytes
 ```
 
 ---
@@ -104,6 +105,17 @@ that shape: raising (1) pushed the loaded region through the stack, which is
   realloc-in-place, and a worst case **measured** at 3 steps for `alloc` and 4
   for `free`. It is added *alongside* `arena.c`, which is unchanged — see "two
   allocators, on purpose" below.
+- **Stage 3A — physical frame ownership. PARTIALLY DONE.** `pmm.c` consumes the
+  sealed UEFI or Multiboot memory map and manages only complete firmware-usable
+  pages from 320 MiB through the first 1 GiB. Owner tags, reserved/foreign/
+  double-free refusal, exhaustion and zero/reuse are host-proved. Every owner
+  also has exact live, high-water, quota-aware available and refusal counters;
+  allocation stops at its limit, and a shrink below live ownership is refused
+  without mutation. The fixed two-slot UEFI64 process diagnostic acquires and
+  reclaims eight typed page-table/code/stack frames per slot under a 16-frame
+  replacement quota, while each 32-page anonymous window has a 32-frame quota.
+  General service/cache/pinned/DMA/surface/kernel accounting, pressure policy,
+  SMP locking, >1 GiB metadata and physical-hardware proof remain open.
 - **Stage 4 — paging for the kernel's own use. DONE, for one region.**
   `paging.c` maps the heap's 64 MiB at virtual 4 GiB on the 64-bit builds, with
   everything else identity-mapped underneath. `dma.h` is the seam every
@@ -111,9 +123,12 @@ that shape: raising (1) pushed the loaded region through the stack, which is
   and `check-dma.sh` fails the build if a new one skips it. See below.
 - **Stage 5 — ring 3 and syscalls. PARTIALLY DONE.** Ring 3, a TSS, a DPL-3
   syscall gate and a working `int 0x80` round trip exist on the 32-bit build and
-  are pinned by `verify.sh`'s golden transcript. **Per-process address spaces do
-  NOT exist.** See "what Stage 5 does and does not buy" below — the distinction
-  between privilege separation and memory isolation is the whole of it.
+  are pinned by `verify.sh`'s golden transcript, but that route remains flat and
+  has privilege separation without memory isolation. Native UEFI64 has a
+  separate bounded path with two fixed CR3-owned process slots, RX user code,
+  guarded RW/NX user stacks, guarded supervisor/NX TSS stacks, complete-range
+  user-copy admission and offender-only fault containment. It is a proved
+  diagnostic and file-backed program seam, not a persistent process service.
 
 ---
 
@@ -194,7 +209,7 @@ questions and keeping both is a decision, not a migration that stalled:
 | freeing | all of it at once, `arena_reset()` | one object at a time |
 | `free()` | there isn't one | `heap_free`, with coalescing |
 | lifetime | one `run` | the uptime of the machine |
-| what it defends against | use-after-free, by making every pointer die at the same instant | fragmentation and leaks |
+| what it defends against | use-after-free, by making every pointer die at the same instant | fragmentation, leaks, and bounded freed-block writes |
 
 `k_malloc`/`k_free`/`k_realloc` in `interp_kernel.c` **still forward to the
 arena, deliberately.** Pointing them at the heap would look like progress and
@@ -239,10 +254,29 @@ with the two times this project shipped a pointer-sized quantity that differed
 between builds. An allocator's header is that hazard in its purest form: three
 different heaps compiled from one file, corrupting on one target only.
 
+### Tags, poisoning, and injected failure
+
+The upper 24 bits of the fixed 32-bit flags word carry a caller-selected
+diagnostic tag. `heap_alloc_tagged()` records it, `heap_tag()` reads it, and
+`heap_realloc()` preserves it across both in-place and moving growth. Tags do
+not grant ownership or permission; they make allocation classes inspectable
+without changing the 16-byte header on ILP32, LP64, or LLP64 builds.
+
+`heap_fail_after(n)` deterministically refuses one allocation after `n`
+successful allocation calls and then disables itself. This is a test seam, not
+a random production fault. The refusal follows the ordinary counted OOM path,
+so callers exercise the same null/error behavior they see under pressure.
+
+Every free-list block also carries two poison words immediately after its two
+link words. Removing the block verifies those words before returning storage to
+a caller. Poisoning the complete payload would make `free` proportional to the
+allocation size, so this is deliberately an 8-byte constant-time guard rather
+than a claim that every stale write is detected.
+
 ### What proves it
 
-`hosttest/heaptest.c` compiles the shipping `heap.c` unmodified as a Linux
-program. **1923 checks, 0 failures**, no QEMU:
+`kernel/tests/host/heaptest.c` compiles the shipping `heap.c` unmodified as a
+Linux program. **2162 checks, 0 failures**, no QEMU:
 
 - `heap_check()` — a full boundary-tag walk — after **every** operation in the
   stress phases, not at the end. An allocator that is sound at the end and
@@ -258,6 +292,9 @@ program. **1923 checks, 0 failures**, no QEMU:
 - the determinism claim **measured**: `alloc 3 steps, free 4 steps` worst case
   over the whole run, with thousands of free blocks outstanding. If the bound
   were secretly O(free blocks) those numbers would be in the thousands.
+- allocation tags survive moving `realloc`, failure injection refuses exactly
+  the selected call and is one-shot, and a write through a freed pointer into
+  the poison guard takes the heap offline before reuse.
 
 ### The limit worth knowing
 
@@ -460,12 +497,14 @@ still read and write any address.** It simply cannot reprogram the machine.
 
 ### What is left, precisely
 
-Per-process address spaces need, in order: the page-table `U/S` bit honoured
-per region; a per-process CR3 and the tables behind it; a process abstraction
-that owns one; a loader that places a program in it; and the syscall ABI
-extended to take **pointers**, which today it deliberately does not — a pointer
-argument has to be range-checked against an address space that does not exist
-yet. `syscall_dispatch()`'s three calls pass values only, on purpose.
+The native UEFI64 diagnostic now has per-process CR3 roots, `U/S` page
+permissions, a raw one-page file-backed loader and bounded pointer-taking
+syscalls. What remains is general process creation/reaping, arbitrary mapped
+region walks and copy-fault recovery, address-space teardown and reclamation,
+PID reuse, direct kernel-stack overflow injection, guarded IST stacks, per-CPU
+ownership/migration, ABI compatibility tooling and physical-hardware proof.
+The 32-bit route still has none of that memory isolation and must not inherit
+the 64-bit evidence by name alone.
 
 Ring 3 is 32-bit-only, and that is a scope decision: the entry stub is
 hand-written assembly, and a 64-bit one wants `syscall`/`sysret` plus three MSRs

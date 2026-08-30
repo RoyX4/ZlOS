@@ -1,16 +1,37 @@
 {
-  "build_script_sha256": "51044672113e66b3e46033ee771786406d8c3cf898bca398668fa0e3157bc255",
+  "build_script_sha256": "b6f2b6c9eff4852eb2265462e8aba1de83949dc20a1b6eec1c01f334eca8dd07",
   "counts": {
-    "auto_run_commands": 53,
-    "auto_run_targets": 51,
-    "compiled": 55,
-    "manual_or_instrument_targets": 11,
-    "scripts": 7,
-    "total": 62
+    "auto_run_commands": 69,
+    "auto_run_targets": 67,
+    "compiled": 70,
+    "manual_or_instrument_targets": 12,
+    "scripts": 9,
+    "total": 79
   },
-  "policy_sha256": "601195abdd13798b4b54d3ba1563225b743722457bf195b14cda1e9c473aec8f",
+  "policy_sha256": "666e8bf817c27cd80e0f404d39937fc98b1775e46e5be706496ba487119fc1ea",
   "schema": "zlos.host-test-inventory.v1",
   "targets": [
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./anonmemorytest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-001",
+      "kind": "gate",
+      "name": "anonmemorytest",
+      "optional_build": false,
+      "source": "anonmemorytest.c",
+      "source_present": true,
+      "source_sha256": "55c3ef2d7e0adf840d40d4b1cc468456223b5bbdff60b1a519fb253d7a5dea35",
+      "timeout_seconds": 180
+    },
     {
       "allowed_exit_codes": [
         0
@@ -23,13 +44,76 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-001",
+      "id": "HT-002",
       "kind": "gate",
       "name": "arenatest",
       "optional_build": false,
       "source": "arenatest.c",
       "source_present": true,
       "source_sha256": "cc9113e4435dad713d468ed3d5049473bf8dfad468f67e903ac2331ae795320d",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./blocktest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-003",
+      "kind": "gate",
+      "name": "blocktest",
+      "optional_build": false,
+      "source": "blocktest.c",
+      "source_present": true,
+      "source_sha256": "77bb110bdb1df6cd31f447a61669f48b6b6feb2a1617a2438624cffebac21c4d",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./boot_handover_test"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-004",
+      "kind": "gate",
+      "name": "boot_handover_test",
+      "optional_build": false,
+      "source": "boot_handover_test.c",
+      "source_present": true,
+      "source_sha256": "48c143fb34260e6ea05897719630a6342ed05f9dbd4bcbb0fe2e5294f62a5fac",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./boot_state_test"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-005",
+      "kind": "gate",
+      "name": "boot_state_test",
+      "optional_build": false,
+      "source": "boot_state_test.c",
+      "source_present": true,
+      "source_sha256": "08a1e1e26957ee11f4a04cffd62f63d574ca580fb8ef85f0d356f3d4e1137357",
       "timeout_seconds": 180
     },
     {
@@ -44,13 +128,13 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-002",
+      "id": "HT-006",
       "kind": "instrument",
       "name": "browsershot",
       "optional_build": false,
       "source": "browsershot.c",
       "source_present": true,
-      "source_sha256": "4ab7281f8031216f9373957f6eac4093b4f22c82654e65f169ff5e113da8f656",
+      "source_sha256": "b7fb2788bdea0daf2dfc3b9d32c688adc9b6407ee81bed6cf3a3e0e5c7371f0b",
       "timeout_seconds": 180
     },
     {
@@ -65,13 +149,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-003",
+      "id": "HT-007",
       "kind": "gate",
       "name": "browsertest",
       "optional_build": false,
       "source": "browsertest.c",
       "source_present": true,
-      "source_sha256": "35f79185ddaf066575e51e69a0795020906c0fc01742bb70d67faa373e5c3614",
+      "source_sha256": "fa3d798327e6ee0d54bd9ef257d7bea2c50206fccb25a593cd2be77856b7dd8d",
       "timeout_seconds": 180
     },
     {
@@ -86,13 +170,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-004",
+      "id": "HT-008",
       "kind": "gate",
       "name": "browsertest_san",
       "optional_build": false,
       "source": "browsertest.c",
       "source_present": true,
-      "source_sha256": "35f79185ddaf066575e51e69a0795020906c0fc01742bb70d67faa373e5c3614",
+      "source_sha256": "fa3d798327e6ee0d54bd9ef257d7bea2c50206fccb25a593cd2be77856b7dd8d",
       "timeout_seconds": 180
     },
     {
@@ -107,13 +191,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-005",
+      "id": "HT-009",
       "kind": "builder",
       "name": "build.sh",
       "optional_build": false,
       "source": "build.sh",
       "source_present": true,
-      "source_sha256": "51044672113e66b3e46033ee771786406d8c3cf898bca398668fa0e3157bc255",
+      "source_sha256": "b6f2b6c9eff4852eb2265462e8aba1de83949dc20a1b6eec1c01f334eca8dd07",
       "timeout_seconds": 180
     },
     {
@@ -128,13 +212,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-006",
+      "id": "HT-010",
       "kind": "gate",
       "name": "crashtest",
       "optional_build": false,
       "source": "crashtest.c",
       "source_present": true,
-      "source_sha256": "9b093d1d7dc2f07b7c647dd9b884191a6cf88ce198238fee6c6e6169d3eccd90",
+      "source_sha256": "8586e2d0cb2dae7aa012b3a4e6967e02b1aa26a939c361683ed8cce89fc5b7fd",
       "timeout_seconds": 180
     },
     {
@@ -149,13 +233,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-007",
+      "id": "HT-011",
       "kind": "gate",
       "name": "cryptotest",
       "optional_build": false,
       "source": "cryptotest.c",
       "source_present": true,
-      "source_sha256": "b4829325b58a41b59b4acb3305957d3ad77dba4b542461e92ed7e897fbc93016",
+      "source_sha256": "7116d25ef05fc5cbb399d520f798a3af0dc74a78b1e0f8284db9d183ebb5a400",
       "timeout_seconds": 180
     },
     {
@@ -170,13 +254,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-008",
+      "id": "HT-012",
       "kind": "gate",
       "name": "csstest",
       "optional_build": false,
       "source": "csstest.c",
       "source_present": true,
-      "source_sha256": "43f50ce1a5819194b306834cffcdd58a3a32cd32119735618db2a7ac558d5379",
+      "source_sha256": "68e1a844f1a6aecdbdfcd366885e7f185161ad0d79a02e0cb0cea24c8f80eb34",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./dhcptest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-013",
+      "kind": "gate",
+      "name": "dhcptest",
+      "optional_build": false,
+      "source": "dhcptest.c",
+      "source_present": true,
+      "source_sha256": "57ddf2f74057f63c60fa8ff6f8dd00a209bf8d38c26675a2f10cc35404803a15",
       "timeout_seconds": 180
     },
     {
@@ -191,13 +296,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-009",
+      "id": "HT-014",
       "kind": "gate",
       "name": "dnstest",
       "optional_build": false,
       "source": "dnstest.c",
       "source_present": true,
-      "source_sha256": "440d274916085810ae75ec955a7a49527421cf9abd5fca2bbbbbda8d31faa009",
+      "source_sha256": "fc20d42dd9762c0ef23c5e60d5f9f709d9802185eafbfc821beebdcd8cd70a73",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./e1000test"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-015",
+      "kind": "gate",
+      "name": "e1000test",
+      "optional_build": false,
+      "source": "e1000test.c",
+      "source_present": true,
+      "source_sha256": "49d56be8df9528d1bd1966892feefc9949b1cbc57028a9e36bfe5dcdbc10ae86",
       "timeout_seconds": 180
     },
     {
@@ -212,13 +338,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-010",
+      "id": "HT-016",
       "kind": "gate",
       "name": "easetest",
       "optional_build": false,
       "source": "easetest.c",
       "source_present": true,
-      "source_sha256": "fa69e1352c0646e918a109bda65c6fcac1c480da90d3f9d41c7ae74024f75f96",
+      "source_sha256": "f20a7e72bfea8290963b0ddf747b701fb7e9fd2fc26c62330383bf7d2d2bc7e6",
       "timeout_seconds": 180
     },
     {
@@ -233,7 +359,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-011",
+      "id": "HT-017",
       "kind": "gate",
       "name": "ecdsatest",
       "optional_build": false,
@@ -254,13 +380,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-012",
+      "id": "HT-018",
       "kind": "gate",
       "name": "exectest",
       "optional_build": false,
       "source": "exectest.c",
       "source_present": true,
-      "source_sha256": "7ea85ea931dbe4ea633ee27c3b19e41a27fa307e0db3f6964bf9358ddbf65d0a",
+      "source_sha256": "f38d6e35ca6dd9c3205633229c0b8dc9d96f0e67bf078d9e9c584b3f2bab9cc1",
       "timeout_seconds": 180
     },
     {
@@ -275,13 +401,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-013",
+      "id": "HT-019",
       "kind": "gate",
       "name": "fbbench",
       "optional_build": false,
       "source": "fbbench.c",
       "source_present": true,
-      "source_sha256": "d345fa3cef05a1da3c4ba3503774ec7d17c2cc606bb6187770c199ba1c4cfe2d",
+      "source_sha256": "82ec06c8a8b0479ef0f61caa6e1e23313449b29c0bb089e635a9fd025d6bd5c3",
       "timeout_seconds": 180
     },
     {
@@ -296,7 +422,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-014",
+      "id": "HT-020",
       "kind": "gate",
       "name": "fbtext",
       "optional_build": false,
@@ -317,13 +443,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-015",
+      "id": "HT-021",
       "kind": "gate",
       "name": "fstest",
       "optional_build": false,
       "source": "fstest.c",
       "source_present": true,
-      "source_sha256": "40be31f9ce4f830d2a9b3eebfb87ea28f23eca7ea6ef701cab1e8a7c7bc833fb",
+      "source_sha256": "0a9eb960d13bfff1afa8f42ba5b89fe10e8ba993d4b0ba3b5615ffb734252a47",
       "timeout_seconds": 180
     },
     {
@@ -338,13 +464,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-016",
+      "id": "HT-022",
       "kind": "gate",
       "name": "fuzz",
       "optional_build": false,
       "source": "fuzz.c",
       "source_present": true,
-      "source_sha256": "0e6e8d4c37dca60bed391a106716da53bc33a8b999266c47a005879d48a5c9d0",
+      "source_sha256": "6b46e59d4aab12afd73defece644a27cccd372ac9ce5bad7616a24e7ca4e68a4",
       "timeout_seconds": 180
     },
     {
@@ -359,13 +485,13 @@
       ],
       "evidence_ceiling": "manual physical-hardware action",
       "form": "script",
-      "id": "HT-017",
+      "id": "HT-023",
       "kind": "manual-hardware",
       "name": "gpu-dev.sh",
       "optional_build": false,
       "source": "gpu-dev.sh",
       "source_present": true,
-      "source_sha256": "e8b7c08c42d592c40caa6789ceb37f91e8b018ba78e3d9951f1b921c5e9934e9",
+      "source_sha256": "4fbaf7bb42b3f693ebbc2bdb145b35b83ed7f2255cdc4fc6e4c7055cf5d11e7e",
       "timeout_seconds": 180
     },
     {
@@ -380,7 +506,7 @@
       ],
       "evidence_ceiling": "manual physical-hardware action",
       "form": "script",
-      "id": "HT-018",
+      "id": "HT-024",
       "kind": "manual-hardware",
       "name": "gpu-ring-run.sh",
       "optional_build": false,
@@ -402,7 +528,7 @@
       ],
       "evidence_ceiling": "host behavior; exit 77 is an explicit hardware absence",
       "form": "compiled",
-      "id": "HT-019",
+      "id": "HT-025",
       "kind": "hardware-gate",
       "name": "gpu_aperture",
       "optional_build": false,
@@ -428,13 +554,13 @@
       ],
       "evidence_ceiling": "host behavior; exit 77 is an explicit hardware absence",
       "form": "compiled",
-      "id": "HT-020",
+      "id": "HT-026",
       "kind": "hardware-gate",
       "name": "gpu_blt",
       "optional_build": true,
       "source": "gpu_blt.c",
       "source_present": true,
-      "source_sha256": "65a7d0e594a442fd267c396deec898b2ddec2997cd0d15a611abfd0ab4a6cb7d",
+      "source_sha256": "77cc3e9af648e29d3cb1f12f207d0fa5bdc3020bfc32b8b9e19d1981fbe198c3",
       "timeout_seconds": 180
     },
     {
@@ -449,7 +575,7 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-021",
+      "id": "HT-027",
       "kind": "optional-instrument",
       "name": "gpu_fillrate",
       "optional_build": true,
@@ -471,13 +597,13 @@
       ],
       "evidence_ceiling": "host behavior; exit 77 is an explicit hardware absence",
       "form": "compiled",
-      "id": "HT-022",
+      "id": "HT-028",
       "kind": "hardware-gate",
       "name": "gpu_planes",
       "optional_build": false,
       "source": "gpu_planes.c",
       "source_present": true,
-      "source_sha256": "43ad2f638794017eecd9a7e818faa43fe60b5e4b564e75ccd3668a27baf3efc7",
+      "source_sha256": "9edf991c8febf820e401943b0f14afcdfeb6d3f2f472404c6a92c066b24a4705",
       "timeout_seconds": 180
     },
     {
@@ -493,13 +619,13 @@
       ],
       "evidence_ceiling": "host behavior; exit 77 is an explicit hardware absence",
       "form": "compiled",
-      "id": "HT-023",
+      "id": "HT-029",
       "kind": "hardware-gate",
       "name": "gpu_ring",
       "optional_build": false,
       "source": "gpu_ring.c",
       "source_present": true,
-      "source_sha256": "4f323419783f74a1e01767f4b7300db73def906ee2bb22fcde1598b4417e1e60",
+      "source_sha256": "9f9ea5c62c642a124a941936cd773f14a26740a9e46430f3f7b11aaf93d85601",
       "timeout_seconds": 180
     },
     {
@@ -514,13 +640,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-024",
+      "id": "HT-030",
       "kind": "gate",
       "name": "gputest",
       "optional_build": false,
       "source": "gputest.c",
       "source_present": true,
-      "source_sha256": "216bc85c2465f8c36643f60c2b8130d86e645b82d0459640c9e0e5b8a1dc7776",
+      "source_sha256": "bc671246366032b0e0aef2e824766c38a0a01dbc8794ed89b6ca0ab816886aad",
       "timeout_seconds": 180
     },
     {
@@ -535,13 +661,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-025",
+      "id": "HT-031",
       "kind": "gate",
       "name": "heaptest",
       "optional_build": false,
       "source": "heaptest.c",
       "source_present": true,
-      "source_sha256": "ee881cbd2f092a3e2997b312fd46f0ca2a0a71e603af8e2a395e30fda8f01091",
+      "source_sha256": "d7650b4cff66938243dc7c3020a5a1cfa196d82affd1e0bc70a6725f809fe45b",
       "timeout_seconds": 180
     },
     {
@@ -556,13 +682,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-026",
+      "id": "HT-032",
       "kind": "gate",
       "name": "htmltest",
       "optional_build": false,
       "source": "htmltest.c",
       "source_present": true,
-      "source_sha256": "13fe46e25d205b69ca61d1276f9b4698b52a4cbb0bccdfc8658b5e8606665515",
+      "source_sha256": "e8d9b09f56d07aa0e51ea43a12eb16a806834f69189040e8a0ef16e2fcb2ad1a",
       "timeout_seconds": 180
     },
     {
@@ -577,13 +703,55 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-027",
+      "id": "HT-033",
       "kind": "gate",
       "name": "httptest",
       "optional_build": false,
       "source": "httptest.c",
       "source_present": true,
-      "source_sha256": "3e4bd6ac3ca424a3142c92489da26331d30d74e918ed6fc27adf6daeec00e204",
+      "source_sha256": "cb5f48a0fc695deb20256ba4ee57b6f598bf877414b39322b48cd3abd6e07022",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./i2c_touchtest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-034",
+      "kind": "gate",
+      "name": "i2c_touchtest",
+      "optional_build": false,
+      "source": "i2c_touchtest.c",
+      "source_present": true,
+      "source_sha256": "01d1bca536a0db9e733da2614725cce2841b87927933bd6db569c62568fed041",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./i2ctest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-035",
+      "kind": "gate",
+      "name": "i2ctest",
+      "optional_build": false,
+      "source": "i2ctest.c",
+      "source_present": true,
+      "source_sha256": "d6af4cecefc1506c62df9a7f3cedaa5f01fc79401d7f0e090effb4a5ea6c5060",
       "timeout_seconds": 180
     },
     {
@@ -598,7 +766,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-028",
+      "id": "HT-036",
       "kind": "gate",
       "name": "inputtest",
       "optional_build": false,
@@ -619,7 +787,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-029",
+      "id": "HT-037",
       "kind": "gate",
       "name": "inputtest_feel",
       "optional_build": false,
@@ -640,13 +808,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-030",
+      "id": "HT-038",
       "kind": "gate",
       "name": "inputtest_hid",
       "optional_build": false,
       "source": "inputtest_hid.c",
       "source_present": true,
-      "source_sha256": "8d60e94dda8a9f9a18e58f7d9268c73e6edd2c3fa79d2d4f8e1d4b7115f3804e",
+      "source_sha256": "98fba1e6381779a9017675aba7d44dfc82604239096d7163e1f4243b66b37f38",
       "timeout_seconds": 180
     },
     {
@@ -661,7 +829,7 @@
       ],
       "evidence_ceiling": "manual physical-hardware action",
       "form": "compiled",
-      "id": "HT-031",
+      "id": "HT-039",
       "kind": "manual-hardware",
       "name": "intel_probe",
       "optional_build": false,
@@ -677,12 +845,33 @@
       "auto_run": true,
       "commands": [
         [
+          "./iwlwifitest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-040",
+      "kind": "gate",
+      "name": "iwlwifitest",
+      "optional_build": false,
+      "source": "iwlwifitest.c",
+      "source_present": true,
+      "source_sha256": "c3d320963520c22f07fe163045dd157d99afb7e343cd1b993908f6faf687ac28",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
           "./jmptest"
         ]
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-032",
+      "id": "HT-041",
       "kind": "gate",
       "name": "jmptest",
       "optional_build": false,
@@ -703,7 +892,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-033",
+      "id": "HT-042",
       "kind": "gate",
       "name": "jmptest32",
       "optional_build": false,
@@ -724,13 +913,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-034",
+      "id": "HT-043",
       "kind": "gate",
       "name": "jstest",
       "optional_build": false,
       "source": "jstest.c",
       "source_present": true,
-      "source_sha256": "180a54c925e2889a02f38ca55190cfbcecb0c40517346618905608d482343b88",
+      "source_sha256": "e53062ae36b99252e3d623e03d4d2f57b05337c4db27f1a14c38d5870e1e6b8e",
       "timeout_seconds": 180
     },
     {
@@ -745,13 +934,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-035",
+      "id": "HT-044",
       "kind": "gate",
       "name": "killtest.sh",
       "optional_build": false,
       "source": "killtest.sh",
       "source_present": true,
-      "source_sha256": "c6187711a105994a052a4413118fa8ed47e6a58615b84ba8f5713b83639dd052",
+      "source_sha256": "23f0ebec1fb1aec189b595b517673fd08d68b1ae0c89baa98e0e1637f97380c7",
       "timeout_seconds": 180
     },
     {
@@ -766,7 +955,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-036",
+      "id": "HT-045",
       "kind": "gate",
       "name": "libctest",
       "optional_build": false,
@@ -787,13 +976,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-037",
+      "id": "HT-046",
       "kind": "gate",
       "name": "memmap-guard-test.sh",
       "optional_build": false,
       "source": "memmap-guard-test.sh",
       "source_present": true,
-      "source_sha256": "305540278eb64eb50d5900d54a69546c9704cfdabd28706f822824361165517a",
+      "source_sha256": "6361084e634253dc130dbbb8edd672cc9ee0a7d2962e9bb51fdc77ef8cc7a39f",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./memtypetest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-047",
+      "kind": "gate",
+      "name": "memtypetest",
+      "optional_build": false,
+      "source": "memtypetest.c",
+      "source_present": true,
+      "source_sha256": "cebd8ea73b26ec1b4c59df84d57e8867bf02eb27c5620758c75ed702cb4ec600",
       "timeout_seconds": 180
     },
     {
@@ -808,7 +1018,7 @@
       ],
       "evidence_ceiling": "manual physical-hardware action",
       "form": "script",
-      "id": "HT-038",
+      "id": "HT-048",
       "kind": "manual-hardware",
       "name": "modeset-run.sh",
       "optional_build": false,
@@ -829,13 +1039,34 @@
       ],
       "evidence_ceiling": "manual physical-hardware action",
       "form": "compiled",
-      "id": "HT-039",
+      "id": "HT-049",
       "kind": "manual-hardware",
       "name": "modeset_test",
       "optional_build": false,
       "source": "modeset_test.c",
       "source_present": true,
-      "source_sha256": "629a962ecab738547b4ae5414c37b3df49de33bc9a6553ce160774923f4abdc9",
+      "source_sha256": "e073b5729d02c9da44c16147d99ff6149f89054b9b4ed580d7e503fc3c1eef13",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./msctest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-050",
+      "kind": "gate",
+      "name": "msctest",
+      "optional_build": false,
+      "source": "msctest.c",
+      "source_present": true,
+      "source_sha256": "e3127f8b35c990579b2f88d1ff77e998ff310350ee2e9ed6beb661243d129949",
       "timeout_seconds": 180
     },
     {
@@ -850,13 +1081,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-040",
+      "id": "HT-051",
       "kind": "gate",
       "name": "nettest",
       "optional_build": false,
       "source": "nettest.c",
       "source_present": true,
-      "source_sha256": "10800da820cb181580d4c90bda0a787b9a58869e89fada482cf46e8c6e95be18",
+      "source_sha256": "a61bafb14d1adfabf25409cae7b9725bde2feea5d1c45c92f0cf875e8e77f3c4",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./pagetxntest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-052",
+      "kind": "gate",
+      "name": "pagetxntest",
+      "optional_build": false,
+      "source": "pagetxntest.c",
+      "source_present": true,
+      "source_sha256": "5decfaa8d25c413df1f409fc7e9ce9c09df4933d650df0177cbec0b5cfccaacd",
       "timeout_seconds": 180
     },
     {
@@ -871,13 +1123,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-041",
+      "id": "HT-053",
       "kind": "gate",
       "name": "pagingtest",
       "optional_build": false,
       "source": "pagingtest.c",
       "source_present": true,
-      "source_sha256": "524464bac81abf21572e6753ba6b7d93eae7ec4355569ad73f2326da8a639c00",
+      "source_sha256": "644deb08f3e4a133ac66a57e928aad25498c8b2916abf532b16d4637bfb8055d",
       "timeout_seconds": 180
     },
     {
@@ -892,13 +1144,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-042",
+      "id": "HT-054",
       "kind": "gate",
       "name": "palette",
       "optional_build": false,
       "source": "palette.c",
       "source_present": true,
-      "source_sha256": "4719c998c4a17579f5354a3211eee9443d7c38723300f29d1923297cf67e6cd3",
+      "source_sha256": "08a33c35cfe0649907bab1568c43ce772c98f950f9537cf0159e44b5885bfaad",
       "timeout_seconds": 180
     },
     {
@@ -913,13 +1165,34 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-043",
+      "id": "HT-055",
       "kind": "instrument",
       "name": "parsestat",
       "optional_build": false,
       "source": "parsestat.c",
       "source_present": true,
-      "source_sha256": "23b23ff73e6a9e942166fa86c5236e1fad8d1218c50ba288eba78b7a13462299",
+      "source_sha256": "bd37f7ff7060d29ef61883b31761de4cb236aaeac524c17577328eb58011a83a",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./pmmtest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-056",
+      "kind": "gate",
+      "name": "pmmtest",
+      "optional_build": false,
+      "source": "pmmtest.c",
+      "source_present": true,
+      "source_sha256": "321a135b2bc7585ef45109b317b672d7927dd99b1ffb0f9dbfd06a4da0f872ed",
       "timeout_seconds": 180
     },
     {
@@ -934,13 +1207,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-044",
+      "id": "HT-057",
       "kind": "gate",
       "name": "pngtest",
       "optional_build": false,
       "source": "pngtest.c",
       "source_present": true,
-      "source_sha256": "c91fd1274aa96eefef3d67fb0064e2a7e97331f472b7b4e433a8d6861822dc59",
+      "source_sha256": "65883db1a3d54ac4c9880fe53348af18c2883bfb61c106068606a6e4916ad58f",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./processmemorytest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-058",
+      "kind": "gate",
+      "name": "processmemorytest",
+      "optional_build": false,
+      "source": "processmemorytest.c",
+      "source_present": true,
+      "source_sha256": "6e538516ef96987fcec1b503768bce955fcabc34ff52bfd8722993f80483fc6b",
       "timeout_seconds": 180
     },
     {
@@ -955,13 +1249,55 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-045",
+      "id": "HT-059",
       "kind": "gate",
       "name": "rtctest",
       "optional_build": false,
       "source": "rtctest.c",
       "source_present": true,
-      "source_sha256": "4a58a92d12a9131925fb3dd7358bf86c31f185290aeee64414c2c895cf47cb0b",
+      "source_sha256": "b266da7f355d0c849cde30f9ef07d2cc3a4dff9a42256b0ded7a42fa6857ccdc",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": false,
+      "commands": [
+        [
+          "./run-all.sh"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "script",
+      "id": "HT-060",
+      "kind": "builder",
+      "name": "run-all.sh",
+      "optional_build": false,
+      "source": "run-all.sh",
+      "source_present": true,
+      "source_sha256": "eb84d060e7e124032ea48bbc86afcf94e6bff9cb12398123189540b99c09ba2a",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./runtest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-061",
+      "kind": "gate",
+      "name": "runtest",
+      "optional_build": false,
+      "source": "runtest.c",
+      "source_present": true,
+      "source_sha256": "e487317921c0d305682d20f10f9e85dd9c366786aa90ab5530237e01b514ca64",
       "timeout_seconds": 180
     },
     {
@@ -976,13 +1312,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-046",
+      "id": "HT-062",
       "kind": "gate",
       "name": "settingstest",
       "optional_build": false,
       "source": "settingstest.c",
       "source_present": true,
-      "source_sha256": "90dbb4ff1f038ff5a948b4f1d31a50091c3679da2f86a1387eda8ff4ff64c1a8",
+      "source_sha256": "d4cb8a1fe9172e2337874bb6841dad83575c1685529ce57f2f2f50f15fe6315e",
       "timeout_seconds": 180
     },
     {
@@ -997,13 +1333,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-047",
+      "id": "HT-063",
       "kind": "gate",
       "name": "systest",
       "optional_build": false,
       "source": "systest.c",
       "source_present": true,
-      "source_sha256": "15c98fad6217496ed79d2c3b7e50e1f4f02b72391f401bcdf89870ac1eab1c08",
+      "source_sha256": "bdb55f74b3ebc14a7c8d4c0ac0d92be260d8316920aafea1118342d50d18ad35",
       "timeout_seconds": 180
     },
     {
@@ -1018,13 +1354,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-048",
+      "id": "HT-064",
       "kind": "gate",
       "name": "tcptest",
       "optional_build": false,
       "source": "tcptest.c",
       "source_present": true,
-      "source_sha256": "d6eab6bcc4fc10a24262efa51d744fe32b00737827159779cb16d27c5a20efa4",
+      "source_sha256": "222ff4f443536954dfc03350d7729c5d533e162d12e67d4d8977a0ef4e555e46",
       "timeout_seconds": 180
     },
     {
@@ -1039,13 +1375,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-049",
+      "id": "HT-065",
       "kind": "gate",
       "name": "termwrap",
       "optional_build": false,
       "source": "termwrap.c",
       "source_present": true,
-      "source_sha256": "ba01992c7e7460d2f2a4cc544d933e7b4f46f8a58526e02299ef66fb84024b2e",
+      "source_sha256": "a37cdbce49071aa3d7d69fd78893b3e7095cac4e5f923fef30f270bad789ff66",
       "timeout_seconds": 180
     },
     {
@@ -1060,13 +1396,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-050",
+      "id": "HT-066",
       "kind": "gate",
       "name": "tlscryptotest",
       "optional_build": false,
       "source": "tlscryptotest.c",
       "source_present": true,
-      "source_sha256": "391eaae590b9ed333e423a42f2171b639e78fe7ac965a0de4dc1735626925a3c",
+      "source_sha256": "4d55bb5e921364e6879599d105ac715846a3a55f8618ede590549a571f1e0d70",
       "timeout_seconds": 180
     },
     {
@@ -1081,13 +1417,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-051",
+      "id": "HT-067",
       "kind": "gate",
       "name": "tlstest",
       "optional_build": false,
       "source": "tlstest.c",
       "source_present": true,
-      "source_sha256": "48423c20133dfd69af753d2307a2f9177d883881ad8c3eb9d77fe6ea25884fdb",
+      "source_sha256": "c634ab39ccdb6375731d592734ef3d39a6cc9567674208dde9bc5c5d45eb7996",
       "timeout_seconds": 180
     },
     {
@@ -1102,13 +1438,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-052",
+      "id": "HT-068",
       "kind": "gate",
       "name": "toasttest",
       "optional_build": false,
       "source": "toasttest.c",
       "source_present": true,
-      "source_sha256": "7d5d6d1b30294910b7da8cf6d8f06538d9e255acd2dcd59ba334c903d3c4136a",
+      "source_sha256": "237ac94a09778e314fba46d227ebe04167cb1ceec064e47c5b62cec2890f2d43",
       "timeout_seconds": 180
     },
     {
@@ -1123,7 +1459,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-053",
+      "id": "HT-069",
       "kind": "gate",
       "name": "tritest",
       "optional_build": false,
@@ -1144,13 +1480,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-054",
+      "id": "HT-070",
       "kind": "gate",
       "name": "uitest",
       "optional_build": false,
       "source": "uitest.c",
       "source_present": true,
-      "source_sha256": "ebe267d57124d83da3fa6b5d0bcaeac200d74040e527c0b646ecc32b9045f747",
+      "source_sha256": "0d5d866cd4be9c9d34776ab928c5f01cf2dcef4a0a4ad250ce3798b60ad0f7a2",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./user-syscalls-test.sh"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "script",
+      "id": "HT-071",
+      "kind": "gate",
+      "name": "user-syscalls-test.sh",
+      "optional_build": false,
+      "source": "user-syscalls-test.sh",
+      "source_present": true,
+      "source_sha256": "acb25d3e0edc46fda1f77f947cf92ba0875c874c7a85b5c4d3c0e8cc8a7e6d7b",
       "timeout_seconds": 180
     },
     {
@@ -1165,13 +1522,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-055",
+      "id": "HT-072",
       "kind": "gate",
       "name": "walltest",
       "optional_build": false,
       "source": "walltest.c",
       "source_present": true,
-      "source_sha256": "9086cdbc4fa32f5753b650a0ba8d445ae2fb04a8b0aad6e6fdb7c99f7d30e9fa",
+      "source_sha256": "c26fd3fd67c8c5f8604c7d9bcac791d942ec5b708bc467e5b15893878f4f18a5",
       "timeout_seconds": 180
     },
     {
@@ -1186,13 +1543,13 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-056",
+      "id": "HT-073",
       "kind": "instrument",
       "name": "wmbench",
       "optional_build": false,
       "source": "wmbench.c",
       "source_present": true,
-      "source_sha256": "cb485bfb8d38082a9f6964bad01da2518bacc2e36ac74b354caa98bf89f51fec",
+      "source_sha256": "51972ad607a2e37ea57098f0c263bc73724b853b84c8de09dc0a3dc05bc7d2a2",
       "timeout_seconds": 180
     },
     {
@@ -1207,13 +1564,13 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-057",
+      "id": "HT-074",
       "kind": "instrument",
       "name": "wmshot",
       "optional_build": false,
       "source": "wmshot.c",
       "source_present": true,
-      "source_sha256": "f75a71d62865ff7093c4353ea84a57dc7e237fd46e0cb5237437e55890a9c27f",
+      "source_sha256": "88b460bde8594bdc6313f2a520b2b3fd66d4115c6eb209459effa0de214dee86",
       "timeout_seconds": 180
     },
     {
@@ -1228,13 +1585,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-058",
+      "id": "HT-075",
       "kind": "gate",
       "name": "wmtest",
       "optional_build": false,
       "source": "wmtest.c",
       "source_present": true,
-      "source_sha256": "f3c6d7b3f95f4e33233654bccbcca1647cc6718a21e98c3e57c107c91320cd29",
+      "source_sha256": "2c5b4aebd083af3dd73355758c026eeb29ca4f9970a836b0c9c894ae26ed4bfd",
       "timeout_seconds": 180
     },
     {
@@ -1249,13 +1606,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-059",
+      "id": "HT-076",
       "kind": "gate",
       "name": "wmtest_feel",
       "optional_build": false,
       "source": "wmtest_feel.c",
       "source_present": true,
-      "source_sha256": "cc8261a2017fde81af9461197bd0251216d891ac8aab493ce93dac6781dd23e6",
+      "source_sha256": "4d6427f07a01525bc771067e3210177d7160df2e9f57390239cb1fda3d3c7e24",
       "timeout_seconds": 180
     },
     {
@@ -1270,13 +1627,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-060",
+      "id": "HT-077",
       "kind": "gate",
       "name": "x509test",
       "optional_build": false,
       "source": "x509test.c",
       "source_present": true,
-      "source_sha256": "a5bd37d341d64489ad2b2f13fe041bbdf86b67aed09380e46d1782684df9ff66",
+      "source_sha256": "95e2f31eaaff012d366d977842849a6489cffa59dd3a9e0a08bfff8db97d7277",
       "timeout_seconds": 180
     },
     {
@@ -1291,13 +1648,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-061",
+      "id": "HT-078",
       "kind": "gate",
       "name": "xhcitest",
       "optional_build": false,
       "source": "xhcitest.c",
       "source_present": true,
-      "source_sha256": "5dc4c9e335372d0df027ed0726f3f8e8c2927caa65d10144f2be3dbc79061265",
+      "source_sha256": "78471d5be3bc6c711b9e3a925de97c1a25b03235a4fc5b14cb225ac3ea5a87d6",
       "timeout_seconds": 180
     },
     {
@@ -1316,13 +1673,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-062",
+      "id": "HT-079",
       "kind": "gate",
       "name": "zladdrs.sh",
       "optional_build": false,
       "source": "zladdrs.sh",
       "source_present": true,
-      "source_sha256": "129a55532bde3c1d563e50632aa3ae66ecc8f095a03b8ae78658b16a04772896",
+      "source_sha256": "7bf44ee33771e4da9354e45c0f4ccb098838fdb47864df2cc539c7a44e4ef048",
       "timeout_seconds": 180
     }
   ]

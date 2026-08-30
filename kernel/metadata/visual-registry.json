@@ -1,8 +1,105 @@
 {
   "schema": "zlos.visual-evidence-registry.v1",
-  "result": "INVENTORY_WITH_OPEN_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "result": "PARTIAL_CURRENT_VISUAL_EVIDENCE",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "current_receipt": {
+    "path": "kernel/docs/receipts/visual-qemu-2026-08-29.json",
+    "sha256": "36679572d19ee731f330da71db12da337b823e49afe1a183b64c64a9d879808c"
+  },
+  "current_golden_registry": {
+    "path": "kernel/metadata/visual-golden-registry.json",
+    "sha256": "70be92b9e8ba80cb42e5160ac035f453c4ad6ae42ea52d98043f324ab07efb8f",
+    "comparison": {
+      "stable_region": "exact RGB pixel equality",
+      "dynamic_region": "ignored only inside the named rectangles below",
+      "dimension_change": "always fail",
+      "missing_or_extra_capture": "always fail",
+      "thresholds": {
+        "changed_stable_pixels": 0
+      }
+    }
+  },
   "assets": [
+    {
+      "path": "docs/evidence/current-visuals-2026-08-29/grub-bios32-desktop-ready.png",
+      "sha256": "09dd48043918b0b56937f433c601443bdcab4bce400458f1be5c57454c8c8fd8",
+      "bytes": 154526,
+      "format": "PNG",
+      "width": 1920,
+      "height": 1200,
+      "evidence_class": "CURRENT_QEMU_SCREENSHOT",
+      "current_build_bound": true,
+      "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "route": "grub-bios32",
+      "state": "desktop-ready",
+      "artifact": {
+        "name": "zlOS.iso",
+        "path": "kernel/zlOS.iso",
+        "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+        "bytes": 31660032
+      },
+      "reason": "exact current artifact/build/route/state receipt"
+    },
+    {
+      "path": "docs/evidence/current-visuals-2026-08-29/grub-bios32-paint-open.png",
+      "sha256": "59f101888698d7c282e1c0a349bba92212512f0367fe0ff0e8872d7266f1a97c",
+      "bytes": 157082,
+      "format": "PNG",
+      "width": 1920,
+      "height": 1200,
+      "evidence_class": "CURRENT_QEMU_SCREENSHOT",
+      "current_build_bound": true,
+      "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "route": "grub-bios32",
+      "state": "paint-open",
+      "artifact": {
+        "name": "zlOS.iso",
+        "path": "kernel/zlOS.iso",
+        "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+        "bytes": 31660032
+      },
+      "reason": "exact current artifact/build/route/state receipt"
+    },
+    {
+      "path": "docs/evidence/current-visuals-2026-08-29/native-uefi64-desktop-ready.png",
+      "sha256": "6cad275dcb188b15cd84b71e3c89cb01ab77f674cc86c807e8cd77fa42fc026b",
+      "bytes": 140462,
+      "format": "PNG",
+      "width": 1920,
+      "height": 1200,
+      "evidence_class": "CURRENT_QEMU_SCREENSHOT",
+      "current_build_bound": true,
+      "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "route": "native-uefi64",
+      "state": "desktop-ready",
+      "artifact": {
+        "name": "zlOS-usb.img",
+        "path": "kernel/zlOS-usb.img",
+        "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9",
+        "bytes": 138412032
+      },
+      "reason": "exact current artifact/build/route/state receipt"
+    },
+    {
+      "path": "docs/evidence/current-visuals-2026-08-29/native-uefi64-paint-open.png",
+      "sha256": "4ca182377119dc55cedb1667c51e877a8cb0411ca23fa3c40d31bff32de97228",
+      "bytes": 131000,
+      "format": "PNG",
+      "width": 1920,
+      "height": 1200,
+      "evidence_class": "CURRENT_QEMU_SCREENSHOT",
+      "current_build_bound": true,
+      "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+      "route": "native-uefi64",
+      "state": "paint-open",
+      "artifact": {
+        "name": "zlOS-usb.img",
+        "path": "kernel/zlOS-usb.img",
+        "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9",
+        "bytes": 138412032
+      },
+      "reason": "exact current artifact/build/route/state receipt"
+    },
     {
       "path": "docs/evidence/exercises/2026-08-24/bios/anim-before.ppm",
       "sha256": "b9ab822532ae0739409090fd43967af90b17db84c73fc9d800ddec65bd9198fc",
@@ -14,6 +111,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -27,6 +126,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -40,6 +141,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -53,6 +156,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -66,6 +171,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -79,6 +186,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -92,6 +201,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -105,6 +216,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -118,6 +231,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -131,6 +246,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -144,6 +261,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -157,6 +276,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -170,6 +291,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -183,6 +306,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -196,6 +321,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -209,6 +336,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -222,6 +351,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -235,6 +366,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -248,6 +381,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -261,6 +396,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "bios",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -274,6 +411,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -287,6 +426,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -300,6 +441,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -313,6 +456,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -326,6 +471,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -339,6 +486,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -352,6 +501,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -365,6 +516,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -378,6 +531,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -391,6 +546,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -404,6 +561,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -417,6 +576,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -430,6 +591,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -443,6 +606,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -456,6 +621,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -469,6 +636,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -482,6 +651,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -495,6 +666,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -508,6 +681,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -521,6 +696,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": "uefi",
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     },
     {
@@ -534,6 +711,8 @@
       "current_build_bound": false,
       "build_identity": null,
       "route": null,
+      "state": null,
+      "artifact": null,
       "reason": "image name suggests prior QEMU evidence; no current build sidecar"
     }
   ],
@@ -701,35 +880,60 @@
   ],
   "variant_coverage": {
     "scale": {
-      "status": "MISSING_METADATA",
+      "status": "PARTIAL_CURRENT",
+      "observed": [
+        "1920x1200 automatic scale"
+      ],
       "required": "1x/2x/fractional and multiple modes"
     },
     "theme": {
-      "status": "MISSING_METADATA",
+      "status": "PARTIAL_CURRENT",
+      "observed": [
+        "current default"
+      ],
       "required": "light/dark/high-contrast and custom tokens"
     },
     "locale": {
-      "status": "MISSING_METADATA",
+      "status": "PARTIAL_CURRENT",
+      "observed": [
+        "built-in English"
+      ],
       "required": "long strings, RTL and non-Latin"
     },
     "accessibility": {
-      "status": "MISSING_METADATA",
+      "status": "PARTIAL_CURRENT",
+      "observed": [
+        "default motion and contrast"
+      ],
       "required": "focus, semantics, magnification and reduced motion"
     },
     "ui-state": {
-      "status": "MISSING_METADATA",
+      "status": "PARTIAL_CURRENT",
+      "observed": [
+        "desktop-ready",
+        "paint-open"
+      ],
       "required": "empty/loading/error/disabled/focus/hover/pressed"
     },
     "backend": {
-      "status": "PARTIAL_UNBOUND",
+      "status": "PARTIAL_CURRENT",
+      "observed": [
+        "grub-bios32",
+        "native-uefi64"
+      ],
       "required": "exact artifact-bound BIOS/UEFI/GPU/fallback pairs"
     }
   },
   "counts": {
-    "assets": 41,
+    "assets": 45,
     "prior_qemu_unbound": 41,
     "host_render_unbound": 0,
-    "current_build_bound": 0,
+    "current_build_bound": 4,
+    "current_qemu": 4,
+    "current_routes": 2,
+    "current_states": 2,
+    "strict_current_goldens": 4,
+    "declared_dynamic_masks": 4,
     "bios_uefi_pairs": 20,
     "variant_dimensions_complete": 0,
     "variant_dimensions_open": 6
@@ -742,10 +946,10 @@
     "ui-state",
     "backend"
   ],
-  "evidence_ceiling": "asset inventory and unbound BIOS/UEFI pairing only; no current visual-regression promotion",
-  "weakest_link": "none of 41 images names the current build identity; all six required variant dimensions remain open",
+  "evidence_ceiling": "four current-artifact QEMU screenshots and strict stable-region goldens plus historical asset inventory; no video, complete variant matrix, physical display or design approval",
+  "weakest_link": "only 4 of 45 images are current and all six required variant dimensions remain incomplete",
   "generator": {
     "path": "kernel/tools/generators/gen-visual-registry.py",
-    "sha256": "36a132f6a4743498789a7cb506024f00898cfd74d0507cfcae19c819a8ea49ed"
+    "sha256": "00eaffd8c54caa79567b6fb1c0431917c0f3531e391f0076a4abd29af92716b6"
   }
 }

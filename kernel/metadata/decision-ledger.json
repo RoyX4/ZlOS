@@ -2,7 +2,7 @@
   "schema": "zlos.decision-ledger.v1",
   "result": "PASS_WITH_OPEN_GAPS",
   "feature_id": "EV-026",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
   "records": [
     {
       "id": "DEC-0001",
@@ -153,7 +153,7 @@
       "rationale": "Four hand-maintained lists repeatedly produced route-specific source drift.",
       "source": {
         "path": "kernel/SOURCES",
-        "sha256": "8c5556e5e695f14745df3a1902d5096a29e702143139739d609b6997e3e77c86",
+        "sha256": "f47d8e7dfd11992ab68c1ecf645d47dee1347b00fd6414930cfdf8c0121b6694",
         "needle": "# SOURCES - the kernel sources that EVERY target compiles."
       },
       "needle": "# SOURCES - the kernel sources that EVERY target compiles.",
@@ -255,7 +255,7 @@
       "rationale": "Similar names and parent/payload relationships do not prove the exact bytes executed on another route.",
       "source": {
         "path": "kernel/docs/artifact-and-boot-route-registry-2026-08-22.md",
-        "sha256": "2591129a27bd647963a29e6210937be396532013aa97cdb2010d5022417d2d63",
+        "sha256": "cba3bed2fb3148e9df42c35b80cbf1a770393411ba53ee3acda6f48ac44c3ea6",
         "needle": "runtime or hardware claim merely because a similarly named artifact passed."
       },
       "needle": "runtime or hardware claim merely because a similarly named artifact passed.",
@@ -373,10 +373,10 @@
       "rationale": "PATH aliases, package upgrades and firmware drift must make the gate red until inspected.",
       "source": {
         "path": "kernel/docs/dependency-lock-truth-2026-08-23.md",
-        "sha256": "6fd60eeeb3d3c73e2308faa65899f212604219fbc2c6eeaf12eab13510a6d3c0",
-        "needle": "The landing gate checks but never rewrites this file."
+        "sha256": "391799a22707b25ccc77b3e29015d0744bc28f9d17a06ccf4f023a3b341a6694",
+        "needle": "The landing gate checks but never rewrites the lock or receipt."
       },
-      "needle": "The landing gate checks but never rewrites this file.",
+      "needle": "The landing gate checks but never rewrites the lock or receipt.",
       "legacy_labels": [],
       "supersedes": [],
       "replaced_by": null,
@@ -1251,6 +1251,6 @@
   "weakest_link": "system-wide non-DECISIONS.md sources, independent approval, automatic migration and target history UI remain open",
   "generator": {
     "path": "kernel/gen-decision-ledger.py",
-    "sha256": "7e8d140a6d08db61056307a560fc6ac45d9f0c0d3082c49446d884d367e6ac20"
+    "sha256": "aefe501f7e492e2f47345dc5ca301e77258f68386b4a26c19f2cebea5c36d67b"
   }
 }

@@ -48,13 +48,19 @@
 #define HEAP_BYTES  0x04000000UL
 #define HDR_BYTES   16UL
 #define ALIGN_BYTES 16UL
+#define FAILURE_SWEEP_ALLOCATIONS 32
 
 /* ---- heap.c's interface --------------------------------------------------*/
 int   heap_init(void);
 int   heap_ok(void);
 void *heap_alloc(unsigned long);
+void *heap_alloc_tagged(unsigned long, unsigned int);
 void  heap_free(void *);
 void *heap_realloc(void *, unsigned long);
+unsigned int heap_tag(const void *);
+void  heap_fail_after(unsigned long);
+void  heap_fail_disable(void);
+unsigned long heap_injected_failures(void);
 unsigned long heap_base_addr(void);
 unsigned long heap_capacity(void);
 unsigned long heap_used(void);
@@ -275,6 +281,107 @@ int main(void)
         ok(heap_ok() == 1, "neither of those tripped the corruption halt");
     }
 
+    /* ---- tags and deterministic allocation failure ----------------------*/
+    {
+        char *tagged = heap_alloc_tagged(64, 0xA11Cu);
+        ok(tagged != NULL, "a tagged allocation succeeds");
+        okv(heap_tag(tagged), "the allocation tag reads back", heap_tag(tagged), 0xA11Cu);
+        tagged = heap_realloc(tagged, 256);
+        ok(tagged != NULL, "a tagged allocation can grow");
+        okv(heap_tag(tagged), "realloc preserves the allocation tag",
+            heap_tag(tagged), 0xA11Cu);
+        heap_free(tagged);
+
+        {
+            unsigned long before = heap_injected_failures();
+            void *first, *failed, *after;
+            heap_fail_after(1);
+            first = heap_alloc(32);
+            failed = heap_alloc(32);
+            after = heap_alloc(32);
+            ok(first != NULL, "failure injection allows the requested successes");
+            ok(failed == NULL, "failure injection refuses the selected allocation");
+            ok(after != NULL, "failure injection is one-shot");
+            okv(heap_injected_failures(), "the injected refusal is counted",
+                heap_injected_failures(), before + 1);
+            heap_fail_disable();
+            heap_free(first);
+            heap_free(after);
+        }
+        sound("tags and deterministic allocation failure");
+    }
+
+    /* ---- every position in a bounded allocation transaction -------------
+     * A single planted refusal proves the switch works; it does not prove the
+     * allocator leaves identical state regardless of where the refusal lands.
+     * Sweep every call in one fixed transaction, then require the selected
+     * call alone to fail, later calls to recover, all surviving payloads to
+     * remain intact and the entire heap to coalesce again. */
+    {
+        unsigned long fail_at;
+
+        for (fail_at = 0; fail_at < FAILURE_SWEEP_ALLOCATIONS; fail_at++) {
+            void *slot[FAILURE_SWEEP_ALLOCATIONS];
+            unsigned long used_before = 0, blocks_before = 0;
+            int i, selected_failed = 0, other_calls_succeeded = 1;
+            int failed_call_unchanged = 0, payloads_intact = 1;
+
+            quiet = 1;
+            if (!heap_init()) {
+                quiet = 0;
+                ok(0, "heap reinitialises for every failure position");
+                break;
+            }
+            heap_fail_after(fail_at);
+            for (i = 0; i < FAILURE_SWEEP_ALLOCATIONS; i++) {
+                unsigned long bytes = 32UL + (unsigned long)i;
+                if ((unsigned long)i == fail_at) {
+                    used_before = heap_used();
+                    blocks_before = heap_blocks();
+                }
+                slot[i] = heap_alloc(bytes);
+                if ((unsigned long)i == fail_at) {
+                    selected_failed = slot[i] == NULL;
+                    failed_call_unchanged = heap_used() == used_before
+                                         && heap_blocks() == blocks_before;
+                } else if (!slot[i]) {
+                    other_calls_succeeded = 0;
+                } else {
+                    memset(slot[i], i + 1, bytes);
+                }
+            }
+            heap_fail_disable();
+            quiet = 0;
+
+            ok(selected_failed, "the selected allocation position is refused");
+            ok(other_calls_succeeded, "all non-selected allocation positions succeed");
+            ok(failed_call_unchanged, "the injected refusal changes no heap accounting");
+            okv(heap_injected_failures(), "exactly one refusal is injected",
+                heap_injected_failures(), 1);
+
+            for (i = 0; i < FAILURE_SWEEP_ALLOCATIONS; i++) {
+                unsigned long j, bytes = 32UL + (unsigned long)i;
+                unsigned char *payload = slot[i];
+                if (!payload) continue;
+                for (j = 0; j < bytes; j++) {
+                    if (payload[j] != (unsigned char)(i + 1)) {
+                        payloads_intact = 0;
+                        break;
+                    }
+                }
+            }
+            ok(payloads_intact, "surviving payloads remain intact after refusal");
+
+            for (i = 0; i < FAILURE_SWEEP_ALLOCATIONS; i++) heap_free(slot[i]);
+            okv(heap_used() == 0,
+                "the failure sweep releases every successful allocation",
+                heap_used(), 0);
+            sound("bounded every-position allocation failure sweep");
+        }
+        okv(fail_at, "every bounded allocation position was exercised",
+            fail_at, FAILURE_SWEEP_ALLOCATIONS);
+    }
+
     /* ---- the stress phase, and the determinism measurement ---------------
      * A random mix of sizes, allocated and freed in a scrambled order, with
      * the invariant re-checked on every single operation. The size
@@ -355,8 +462,28 @@ int main(void)
         ok(wa > 0, "the step counter is actually being written");
     }
 
+    /* ---- bounded freed-block poison -------------------------------------
+     * The allocator owns the first eight payload bytes while a block is free
+     * for list links. Corrupt the next byte instead: a same-size reuse must
+     * detect the write before returning the block to a caller. This runs last
+     * because detecting metadata corruption deliberately takes the heap
+     * offline. */
+    {
+        unsigned char *dead = heap_alloc(32);
+        ok(dead != NULL, "the poison probe allocation succeeds");
+        heap_free(dead);
+        dead[8] ^= 0xFFu;
+        quiet = 1;
+        ok(heap_alloc(32) == NULL, "reuse detects a write through a freed pointer");
+        quiet = 0;
+        ok(heap_ok() == 0, "freed-block poison failure takes the heap offline");
+        ok(heap_init() == 1, "heap_init recovers a deliberately poisoned test heap");
+        sound("reinitialised after the poison probe");
+    }
+
     printf("\n%d checks, %d failures\n", checks, failures);
     if (failures) { printf("FAIL  the heap is not sound\n"); return 1; }
     printf("ok    free, reuse, coalescing and a bounded worst case\n");
+    printf("ok    tags, a 32-position allocation-failure sweep, and freed-block poison\n");
     return 0;
 }

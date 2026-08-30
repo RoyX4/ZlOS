@@ -42,7 +42,7 @@ guard() {
   mem=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
   # The 2026-08-24 desktop freeze had no surviving OOM or panic record. Guard
   # both load and memory without pretending either was the sole cause.
-  if awk "BEGIN{exit !($la > 4.0)}"; then echo "load $la > 4.0 — waiting"; return 1; fi
+  if awk "BEGIN{exit !($la > 3.0)}"; then echo "load $la > 3.0 — waiting"; return 1; fi
   if [ "$mem" -lt 3000 ]; then echo "available memory ${mem}MB < 3000 — waiting"; return 1; fi
   if pgrep '^qemu-system' >/dev/null; then echo "a qemu is already running — waiting"; return 1; fi
   return 0
@@ -63,20 +63,29 @@ run "landing authority closure" "$WT/kernel" \
     python3 tools/checks/check-land-gate.py --selftest
 run "QEMU crash classifier" "$WT/kernel" \
     bash tools/checks/qemu-crash-selftest.sh
+run "build input identity" "$WT/kernel" \
+    python3 tools/generators/gen-build-identity.py --write --selftest
 run "wrapper inventory write" "$WT/kernel" \
     python3 tools/generators/gen-wrapper-registry.py --write --selftest
 run "wrapper inventory check" "$WT/kernel" \
     python3 tools/generators/gen-wrapper-registry.py --check --selftest
 run "warning-strict build contract" "$WT/kernel" \
     python3 tools/checks/check-build-contract.py --selftest
-run "host dependency lock" "$WT/kernel" \
+run "host dependency lock write" "$WT/kernel" \
+    python3 tools/generators/gen-dependency-lock.py --write --selftest
+run "host dependency lock check" "$WT/kernel" \
     python3 tools/generators/gen-dependency-lock.py --check --selftest
-run "license/provenance truth" "$WT/kernel" \
+run "offline dependency archive receipt refresh" "$WT/kernel" \
+    python3 tools/checks/verify-dependency-archives.py --refresh-receipt --selftest
+run "offline dependency archive receipt check" "$WT/kernel" \
+    python3 tools/checks/verify-dependency-archives.py --receipt-check --selftest
+run "license/provenance truth write" "$WT/kernel" \
+    python3 tools/generators/gen-license-registry.py --write --selftest
+run "license/provenance truth check" "$WT/kernel" \
     python3 tools/generators/gen-license-registry.py --check --selftest
 
 # --- toolchain and compile-only steps (cheap, no QEMU)
 run "zl toolchain"     "$WT"               ./build.sh
-run "build input identity" "$WT/kernel" python3 tools/generators/gen-build-identity.py --write --selftest
 run "toolchain manifest write" "$WT/kernel" python3 tools/generators/gen-toolchain-manifest.py --write --selftest
 run "toolchain manifest check" "$WT/kernel" python3 tools/generators/gen-toolchain-manifest.py --check --selftest
 run "build graph write" "$WT/kernel" python3 tools/generators/gen-build-graph.py --write --selftest
@@ -98,10 +107,18 @@ run "hosttest build"   "$WT/kernel/tests/host" ./build.sh
 # manual hardware actions, optional builds, real gates and exit-77 hardware
 # absences are now distinct machine-checked states. No non-run is counted as a
 # pass and every compiled output plus executable script must be classified.
-run "host test inventory" "$WT/kernel" python3 tools/generators/gen-test-inventory.py --check --selftest
+run "host test inventory write" "$WT/kernel" \
+    python3 tools/generators/gen-test-inventory.py --write --selftest
+run "host test inventory check" "$WT/kernel" \
+    python3 tools/generators/gen-test-inventory.py --check --selftest
 run "host tests execute" "$WT/kernel" python3 tools/run/run-host-tests.py --run --selftest
 until guard; do sleep 30; done
 run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest
+# The frame benchmark can occupy the host long enough for another task to
+# resume. Admit the independently measured build distribution separately.
+until guard; do sleep 30; done
+run "host build benchmark receipt" "$WT/kernel" \
+    python3 tools/run/run-build-benchmark.py --run --selftest
 
 # --- the two static checkers. Neither builds anything or boots anything, so
 # there is no excuse for them not being in the gate: check-zl-calls proves every
@@ -111,6 +128,10 @@ run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --
 run "zl call sites" "$WT/kernel" ./tools/checks/check-zl-calls.sh
 run "zl generated dispatch" "$WT/kernel" \
     python3 tools/checks/check-zl-dispatch.py --selftest
+run "address-space registry write" "$WT/kernel" \
+    python3 tools/generators/gen-address-space-registry.py --write --selftest
+run "address-space registry check" "$WT/kernel" \
+    python3 tools/generators/gen-address-space-registry.py --check --selftest
 run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
 run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
 run "memory-map mirrors" "$WT/kernel" python3 tools/checks/check-memmap-mirror.py
@@ -200,7 +221,16 @@ done
 run "final canonical ISO" "$WT/kernel" ./tools/images/mkiso.sh
 until guard; do sleep 30; done
 run "CPU fault capture QEMU" "$WT/kernel" python3 tools/checks/verify-crash.py --run \
-    --no-build --selftest
+    --route bios32 --fault ud2 --no-build --selftest
+until guard; do sleep 30; done
+run "CPU fault capture native UEFI64 QEMU" "$WT/kernel" \
+    python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault ud2 --no-build --selftest
+until guard; do sleep 30; done
+run "CPU GP error-code capture native UEFI64 QEMU" "$WT/kernel" \
+    python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault gp --no-build --selftest
+until guard; do sleep 30; done
+run "CPU double-fault IST capture native UEFI64 QEMU" "$WT/kernel" \
+    python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault double-fault --no-build --selftest
 until guard; do sleep 30; done
 run "app routes QEMU" "$WT/kernel" python3 tools/probes/probe-app-routes.py --no-build \
     --receipt docs/receipts/app-routes-qemu-2026-08-22.json
@@ -212,10 +242,19 @@ run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycl
 until guard; do sleep 30; done
 run "Run route QEMU" "$WT/kernel" python3 tools/probes/probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
+until guard; do sleep 30; done
+run "page-table QEMU receipt check" "$WT/kernel" \
+    python3 tools/checks/write-page-table-receipt.py --check --selftest
+run "physical allocator QEMU receipt check" "$WT/kernel" \
+    python3 tools/checks/write-pmm-receipt.py --check --selftest
 run "application evidence registry write" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --write --verify-artifact
 run "application evidence registry check" "$WT/kernel" \
     python3 tools/generators/gen-app-evidence.py --check --selftest --verify-artifact
+run "hardware receipt plan write" "$WT/kernel" \
+    python3 tools/generators/gen-hardware-receipt-plan.py --write --selftest
+run "hardware receipt plan check" "$WT/kernel" \
+    python3 tools/generators/gen-hardware-receipt-plan.py --check --selftest
 run "artifact and boot-route registry write" "$WT/kernel" \
     python3 tools/generators/gen-artifact-registry.py --write --selftest
 run "artifact and boot-route registry check" "$WT/kernel" \
@@ -227,6 +266,17 @@ run "final build graph artifact rebind write" "$WT/kernel" \
     python3 tools/generators/gen-build-graph.py --write --selftest
 run "final build graph artifact rebind check" "$WT/kernel" \
     python3 tools/generators/gen-build-graph.py --check --selftest
+# The visual receipt binds the exact artifact-registry bytes. Capture only
+# after app evidence, hardware evidence and boot receipts have refreshed that
+# registry; capturing earlier makes the later registry write invalidate the
+# visual receipt inside the same gate. Require two idle observations here too,
+# because the preceding QEMU probe can leave a helper settling briefly.
+sleep 3
+until guard; do sleep 30; done
+run "current visual receipt write" "$WT/kernel" \
+    python3 tools/run/run-visual-receipt.py --run --selftest
+run "visual golden registry write" "$WT/kernel" \
+    python3 tools/checks/check-visual-goldens.py --write --selftest
 run "initialization registry write" "$WT/kernel" \
     python3 tools/generators/gen-init-registry.py --write --selftest
 run "initialization registry check" "$WT/kernel" \
@@ -237,6 +287,16 @@ run "adversarial registry check" "$WT/kernel" \
     python3 tools/generators/gen-adversarial-registry.py --check --selftest
 run "host benchmark receipt check" "$WT/kernel" \
     python3 tools/run/run-benchmarks.py --check --selftest
+run "host build benchmark receipt check" "$WT/kernel" \
+    python3 tools/run/run-build-benchmark.py --check --selftest
+run "performance regression registry write" "$WT/kernel" \
+    python3 tools/generators/gen-performance-registry.py --write --selftest
+run "performance regression registry check" "$WT/kernel" \
+    python3 tools/generators/gen-performance-registry.py --check --selftest
+run "current visual receipt check" "$WT/kernel" \
+    python3 tools/run/run-visual-receipt.py --check --selftest
+run "visual golden registry check" "$WT/kernel" \
+    python3 tools/checks/check-visual-goldens.py --check --selftest
 run "visual evidence registry write" "$WT/kernel" \
     python3 tools/generators/gen-visual-registry.py --write --selftest
 run "visual evidence registry check" "$WT/kernel" \
@@ -277,6 +337,16 @@ run "joined evidence registry write" "$WT/kernel" \
     python3 tools/generators/gen-evidence-registry.py --write --selftest
 run "joined evidence registry check" "$WT/kernel" \
     python3 tools/generators/gen-evidence-registry.py --check --selftest
+run "906 feature status write" "$WT" \
+    python3 tools/gen_feature_status.py --write --selftest
+run "906 feature status check" "$WT" \
+    python3 tools/gen_feature_status.py --check --selftest
+run "906 partial closure write" "$WT" \
+    python3 tools/gen_partial_closure.py --write --selftest
+run "906 partial closure check" "$WT" \
+    python3 tools/gen_partial_closure.py --check --selftest
+run "906 master program" "$WT" \
+    python3 tools/validate_master_program.py --self-test
 
 echo
 echo "================================"

@@ -1,7 +1,7 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "923c1688cd5c403890029159846eea35502c50b6a880b8df3dabec6ea1e433b5"
+    "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7"
   },
   "evidence": "QEMU keyboard, filesystem error ladder, window lifecycle; not successful executable loading or physical proof",
   "result": {
@@ -45,30 +45,30 @@
   },
   "schema": "zlos.run-route-qemu-receipt.v1",
   "shipped_build_identity": {
-    "dirty": false,
-    "head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
-    "id": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+    "dirty": true,
+    "head": "3777678c0247862177eceb1c4f35e2402839d029",
+    "id": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
     "schema": 1
   },
   "shipped_manifest": {
     "entries": 64,
     "schema": 1,
-    "sha256": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4"
+    "sha256": "2fee3e7aefb880268d21b0a0ce41398af94ccf3612ab357c54adc1ea3a529562"
   },
   "source_files_sha256": {
-    "kernel/build_identity_embed.zl": "8dc9c6d5adc0777af680e39a0bcece9079fb44d330a069fce01c486ef3d613c8",
-    "kernel/metadata/app-manifest.json": "313e0a6b40b93f1d4f57eacf6ae69b8cef75de68c21c9b1703569c1f22103fa4",
-    "kernel/metadata/build-identity.json": "c35d13de187623a6a2605f795bd6f2e6227ed421160a764d9dca9f1ae4fa2b52",
+    "kernel/build_identity_embed.zl": "fc6f72f5829b47842b4d01a416c07b8aae6bb2cbd1eb423b1d0c6a95699a5914",
+    "kernel/metadata/app-manifest.json": "2fee3e7aefb880268d21b0a0ce41398af94ccf3612ab357c54adc1ea3a529562",
+    "kernel/metadata/build-identity.json": "c5c97f8e2eea5177a44d3df780323f25900367b0eb04b34b532098332b920712",
     "kernel/src/core/exec.c": "3a5ee6373afaa20ba3d3564f84e15eac80673d5f3e8928a2184e2ae707d07b51",
-    "kernel/src/graphics/windowing/term.c": "48d9563f12b91bc4280b6fbb553a80fcbf933f6f9a7edc66057eb287ef5b9c04",
+    "kernel/src/graphics/windowing/term.c": "617113fcae29504aa6cd210dce1d1367cb97906f034f8db9a8287b61b2c5f481",
     "kernel/src/graphics/windowing/wm.c": "8d5a1e6a5d4429581a7a2e891ff05b350870050df85413db8afa4ad29ccbd536",
-    "kernel/src/kernel.zl": "81b21bc745ad9313a1e47ba72498c8191bc020ec733ace6bbbf408eb9f086063",
-    "kernel/tests/oracle/zlosboot.py": "258e856c0e1ad472d8bc09968542da1894928a4b29d38bc4738f7741ede6b6ad",
-    "kernel/tools/probes/exercise.py": "745e44d70a0593a9c78376b5953f02ccb6b7ff94b053174d52d926bc53324ea8",
+    "kernel/src/kernel.zl": "c69681f274758145bd3b96de96c1486d44f141a32b09d50cc2932ed4f30aa9c8",
+    "kernel/tests/oracle/zlosboot.py": "4b7631ded89c7d4780e1b328691be9ad59f65a9719d2b2d5423a8a8b327788cd",
+    "kernel/tools/probes/exercise.py": "52366a9726329c65bc63f8efed9088782d867d4053fdf1883189c81d33dec3d0",
     "kernel/tools/probes/probe-app-lifecycle.py": "c6cedd4f5d2bad3bc069fcd77d8e878733856ae769401dd9ccc3dfe5be012a1a",
     "kernel/tools/probes/probe-run.py": "e3afcf13b492b5fd6193e99c21852f3460b7acab1cfaab53c20330b79e9e1c67",
     "kernel/tools/probes/probe-term.py": "b8f289db7481f0fe51701083572cc8d29d0a799d9871ab74ca270b2928487dbb"
   },
-  "source_head": "925bfd223d2efca05826cef2cfc13b298c8ab690",
+  "source_head": "3777678c0247862177eceb1c4f35e2402839d029",
   "weakest_link": "the loader's successful execution path is outside this receipt; physical keyboard and display are unproven here"
 }

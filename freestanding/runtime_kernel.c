@@ -91,6 +91,10 @@ extern void idt_init(void);
 extern unsigned int idt_ticks(void);
 extern int  idt_scan(void);
 extern void crash_test_ud2(void);
+#if defined(ZL_64)
+extern void crash_test_gp(void);
+extern void crash_test_df(void);
+#endif
 extern void console_at_num(int row, int col, long n, unsigned char attr);
 extern void console_fill_rgb(int x, int y, int w, int h, unsigned int rgb);
 extern void console_gradient_rgb(int x, int y, int w, int h, unsigned int top, unsigned int bot);
@@ -185,6 +189,15 @@ extern unsigned long heap_high_water(void);
 extern unsigned long heap_refusals(void);
 extern unsigned long heap_blocks(void);
 extern unsigned long heap_check(void);
+
+extern void pmm_report(void);
+extern int pmm_ready(void);
+extern unsigned long pmm_total_pages(void);
+extern unsigned long pmm_free_pages(void);
+extern unsigned long pmm_used_pages(void);
+extern unsigned long pmm_high_water_pages(void);
+extern unsigned long pmm_refusals(void);
+extern unsigned long pmm_check(void);
 
 extern int arena_init(void);
 extern int arena_ok(void);
@@ -2298,9 +2311,29 @@ Value zl_calln(const char *name, int n, ...)
      * term.c accepts only the exact word `crashtest`, and the QEMU gate uses
      * that route to prove vector 6 reaches the bounded crash recorder. */
     if (streq(name, "crash_test"))    { crash_test_ud2(); return zl_nil(); }
+    if (streq(name, "crash_test_gp")) {
+#if defined(ZL_64)
+        crash_test_gp();
+#endif
+        return zl_num(-64.0);
+    }
+    if (streq(name, "crash_test_df")) {
+#if defined(ZL_64)
+        crash_test_df();
+#endif
+        return zl_num(-64.0);
+    }
 
     if (streq(name, "vmm_up"))        { vmm_report(); return zl_num((double)vmm_active()); }
     if (streq(name, "vmm_on"))        return zl_num((double)vmm_active());
+
+    if (streq(name, "pmm_up"))        { pmm_report(); return zl_num((double)pmm_ready()); }
+    if (streq(name, "pmm_total"))     return zl_num((double)pmm_total_pages());
+    if (streq(name, "pmm_free"))      return zl_num((double)pmm_free_pages());
+    if (streq(name, "pmm_used"))      return zl_num((double)pmm_used_pages());
+    if (streq(name, "pmm_hw"))        return zl_num((double)pmm_high_water_pages());
+    if (streq(name, "pmm_refused"))   return zl_num((double)pmm_refusals());
+    if (streq(name, "pmm_chk"))       return zl_num((double)pmm_check());
 
     if (streq(name, "heap_up"))       return zl_num((double)heap_init());
     if (streq(name, "heap_ok"))       return zl_num((double)heap_ok());

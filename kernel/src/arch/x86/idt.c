@@ -12,9 +12,10 @@
  * masked except the ones you handle. v1 handles IRQ0 (timer) and IRQ1
  * (keyboard); everything else is masked.
  *
- * The ISRs use gcc's `interrupt` attribute, which emits the register
- * save/restore and the `iret` for us - so no hand-written asm stubs. The
- * file is compiled with -mgeneral-regs-only so a handler never touches SSE.
+ * Hardware IRQs use gcc's `interrupt` attribute. CPU exceptions use typed
+ * assembly stubs so every general register is captured before a compiler
+ * prologue and error-code and no-error frames cannot be confused. The file is
+ * compiled with -mgeneral-regs-only so a handler never touches SSE.
  */
 typedef unsigned int   u32;
 typedef unsigned short u16;
@@ -30,14 +31,10 @@ typedef u32 uptr;
 #endif
 
 #include "telemetry.h"
+#include "crash.h"
 
 void          zl_outb(u16 port, u8 val);
 unsigned char zl_inb(u16 port);
-int  crash_capture(u32 vector, u32 has_error, u64 error_code,
-                   u64 ip, u64 cs, u64 flags, u64 sp, u64 ss,
-                   u64 cr2, u32 word_bits);
-void crash_report(void);
-
 /* The live screen size, so the pointer can be clamped to pixels that exist.
  * CACHED here rather than fetched by calling console_pxw() from the handler.
  * This file is built -mgeneral-regs-only so an interrupt never touches SSE;
@@ -104,7 +101,7 @@ static void set_gate_user(int n, void *handler)
 #endif
 }
 
-static void set_gate(int n, void *handler)
+static void set_gate_ist(int n, void *handler, u8 ist)
 {
 #ifdef ZL_64
     /* MUST be 64 bits. As `unsigned long` this truncated the handler address to
@@ -117,10 +114,11 @@ static void set_gate(int n, void *handler)
     idt[n].mid   = (a >> 16) & 0xFFFF;
     idt[n].hi    = (u32)(a >> 32);
     idt[n].sel   = 0x08;        /* the 64-bit code selector from boot64.S */
-    idt[n].ist   = 0;           /* no separate interrupt stack for now     */
+    idt[n].ist   = ist & 7u;
     idt[n].flags = 0x8E;        /* present, ring 0, 64-bit interrupt gate  */
     idt[n].zero  = 0;
 #else
+    (void)ist;
     u32 a = (u32)handler;
     idt[n].lo    = a & 0xFFFF;
     idt[n].hi    = (a >> 16) & 0xFFFF;
@@ -128,6 +126,11 @@ static void set_gate(int n, void *handler)
     idt[n].zero  = 0;
     idt[n].flags = 0x8E;        /* present, ring 0, 32-bit interrupt gate */
 #endif
+}
+
+static void set_gate(int n, void *handler)
+{
+    set_gate_ist(n, handler, 0);
 }
 
 /* ---- the state the ISRs publish, read by zl ------------------------- */
@@ -398,65 +401,211 @@ static void smp_wake_isr(struct interrupt_frame *f)
  * as a no-error handler shifted RIP/CS/RFLAGS and made the old "fault record"
  * fiction. Each gate below now uses the ABI-matching signature and supplies
  * its vector explicitly. */
-__attribute__((noreturn, noinline))
-static void fault_stop(u32 vector, u32 has_error, uptr error,
-                       struct interrupt_frame *f)
+#ifdef ZL_64
+struct fault_frame64 {
+    u64 r15, r14, r13, r12, r11, r10, r9, r8;
+    u64 bp, di, si, dx, cx, bx, ax;
+    u64 vector, error, ip, cs, flags, sp, ss;
+};
+
+__attribute__((noreturn, noinline, used))
+void fault_stop64(const struct fault_frame64 *r)
 {
-    uptr sp;
-    uptr ss = 0;
-    uptr cr2 = 0;
+    /* Intel SDM 3A 6.14.2: 64-bit mode pushes SS:RSP unconditionally, even
+     * without a CPL change. The old same-CPL branch recorded the address of
+     * the saved field instead of the saved RSP and the old receipt compared
+     * that derived value only with itself. */
+    u64 sp = r->sp;
+    u64 ss = r->ss;
+    u64 cr2 = 0;
+    u64 handler_sp = (u64)(uptr)r;
+    u64 stack_low = 0, stack_high = 0;
+    extern unsigned long long gdt64_double_fault_stack_low(void);
+    extern unsigned long long gdt64_double_fault_stack_top(void);
+    if (r->vector == 8u) {
+        stack_low = gdt64_double_fault_stack_low();
+        stack_high = gdt64_double_fault_stack_top();
+    }
+    struct crash_registers registers = {
+        CRASH_REGS_64_ALL, 0,
+        r->ax, r->bx, r->cx, r->dx, r->si, r->di, r->bp, sp,
+        r->r8, r->r9, r->r10, r->r11, r->r12, r->r13, r->r14, r->r15
+    };
 
     __asm__ volatile("cli");
-    if ((f->cs & 3u) != 0) {
-        sp = (uptr)f->sp;
-        ss = (uptr)f->ss;
-    } else {
-        sp = (uptr)f + 3u * (uptr)sizeof(uptr);
-    }
-    if (vector == 14u) __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
-#ifdef ZL_64
+    if (r->vector == 8u || r->vector == 14u)
+        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
     extern int user64_is_running(void);
-    extern void user64_mark_fault(u32 vector);
+    extern void user64_mark_fault(u32 vector, u32 error, u64 address);
     extern void user64_abort(void) __attribute__((noreturn));
-    if ((f->cs & 3u) == 3u && user64_is_running()) {
+    if ((r->cs & 3u) == 3u && user64_is_running()) {
         zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_ERROR,
-                      vector, (u32)error, (u32)cr2);
-        user64_mark_fault(vector);
+                      (u32)r->vector, (u32)r->error, (u32)cr2);
+        user64_mark_fault((u32)r->vector, (u32)r->error, cr2);
         user64_abort();
     }
-#endif
     zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
-                  vector, (u32)error, (u32)cr2);
-#ifdef ZL_64
+                  (u32)r->vector, (u32)r->error, (u32)cr2);
     zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
-                  (u32)f->ip, (u32)(f->ip >> 32), (u32)f->flags);
-#else
-    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
-                  f->ip, f->cs, f->flags);
-#endif
-    (void)crash_capture(vector, has_error, (u64)error,
-                        (u64)f->ip, (u64)f->cs, (u64)f->flags,
-                        (u64)sp, (u64)ss, (u64)cr2,
-                        (u32)(sizeof(uptr) * 8u));
+                  (u32)r->ip, (u32)(r->ip >> 32), (u32)r->flags);
+    (void)crash_capture((u32)r->vector,
+                        (u32)crash_vector_has_error((u32)r->vector), r->error,
+                        r->ip, r->cs, r->flags, sp, ss, cr2, handler_sp,
+                        stack_low, stack_high, 64u, &registers);
     crash_report();
     for (;;) __asm__ volatile("hlt");
 }
 
-#define FAULT_NOERR(n) \
-    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f) \
-    { fault_stop((n), 0, 0, f); }
-#define FAULT_ERR(n) \
-    __attribute__((interrupt)) static void fault_##n(struct interrupt_frame *f, uptr error) \
-    { fault_stop((n), 1, error, f); }
+#define DECLARE_FAULT(n) void fault_##n(void);
+DECLARE_FAULT(0)  DECLARE_FAULT(1)  DECLARE_FAULT(2)  DECLARE_FAULT(3)
+DECLARE_FAULT(4)  DECLARE_FAULT(5)  DECLARE_FAULT(6)  DECLARE_FAULT(7)
+DECLARE_FAULT(8)  DECLARE_FAULT(9)  DECLARE_FAULT(10) DECLARE_FAULT(11)
+DECLARE_FAULT(12) DECLARE_FAULT(13) DECLARE_FAULT(14) DECLARE_FAULT(15)
+DECLARE_FAULT(16) DECLARE_FAULT(17) DECLARE_FAULT(18) DECLARE_FAULT(19)
+DECLARE_FAULT(20) DECLARE_FAULT(21) DECLARE_FAULT(22) DECLARE_FAULT(23)
+DECLARE_FAULT(24) DECLARE_FAULT(25) DECLARE_FAULT(26) DECLARE_FAULT(27)
+DECLARE_FAULT(28) DECLARE_FAULT(29) DECLARE_FAULT(30) DECLARE_FAULT(31)
+#undef DECLARE_FAULT
 
-FAULT_NOERR(0)   FAULT_NOERR(1)   FAULT_NOERR(2)   FAULT_NOERR(3)
-FAULT_NOERR(4)   FAULT_NOERR(5)   FAULT_NOERR(6)   FAULT_NOERR(7)
-FAULT_ERR(8)     FAULT_NOERR(9)   FAULT_ERR(10)    FAULT_ERR(11)
-FAULT_ERR(12)    FAULT_ERR(13)    FAULT_ERR(14)    FAULT_NOERR(15)
-FAULT_NOERR(16)  FAULT_ERR(17)    FAULT_NOERR(18)  FAULT_NOERR(19)
-FAULT_NOERR(20)  FAULT_ERR(21)    FAULT_NOERR(22)  FAULT_NOERR(23)
-FAULT_NOERR(24)  FAULT_NOERR(25)  FAULT_NOERR(26)  FAULT_NOERR(27)
-FAULT_NOERR(28)  FAULT_ERR(29)    FAULT_ERR(30)    FAULT_NOERR(31)
+#define FAULT_NOERR_ASM64(n) \
+    ".globl fault_" #n "\nfault_" #n ":\n pushq $0\n pushq $" #n \
+    "\n jmp fault_common64\n"
+#define FAULT_ERR_ASM64(n) \
+    ".globl fault_" #n "\nfault_" #n ":\n pushq $" #n \
+    "\n jmp fault_common64\n"
+#ifdef ZL_EFI
+#define FAULT_CALL64 \
+    "    mov %rsp, %rcx\n" \
+    "    andq $-16, %rsp\n" \
+    "    subq $32, %rsp\n" \
+    "    call fault_stop64\n"
+#else
+#define FAULT_CALL64 \
+    "    mov %rsp, %rdi\n" \
+    "    andq $-16, %rsp\n" \
+    "    call fault_stop64\n"
+#endif
+
+__asm__(
+    ".text\n"
+    "fault_common64:\n"
+    "    pushq %rax\n    pushq %rbx\n    pushq %rcx\n    pushq %rdx\n"
+    "    pushq %rsi\n    pushq %rdi\n    pushq %rbp\n"
+    "    pushq %r8\n     pushq %r9\n     pushq %r10\n    pushq %r11\n"
+    "    pushq %r12\n    pushq %r13\n    pushq %r14\n    pushq %r15\n"
+    "    cld\n"
+    FAULT_CALL64
+    "    ud2\n"
+    FAULT_NOERR_ASM64(0)  FAULT_NOERR_ASM64(1)
+    FAULT_NOERR_ASM64(2)  FAULT_NOERR_ASM64(3)
+    FAULT_NOERR_ASM64(4)  FAULT_NOERR_ASM64(5)
+    FAULT_NOERR_ASM64(6)  FAULT_NOERR_ASM64(7)
+    FAULT_ERR_ASM64(8)    FAULT_NOERR_ASM64(9)
+    FAULT_ERR_ASM64(10)   FAULT_ERR_ASM64(11)
+    FAULT_ERR_ASM64(12)   FAULT_ERR_ASM64(13)
+    FAULT_ERR_ASM64(14)   FAULT_NOERR_ASM64(15)
+    FAULT_NOERR_ASM64(16) FAULT_ERR_ASM64(17)
+    FAULT_NOERR_ASM64(18) FAULT_NOERR_ASM64(19)
+    FAULT_NOERR_ASM64(20) FAULT_ERR_ASM64(21)
+    FAULT_NOERR_ASM64(22) FAULT_NOERR_ASM64(23)
+    FAULT_NOERR_ASM64(24) FAULT_NOERR_ASM64(25)
+    FAULT_NOERR_ASM64(26) FAULT_NOERR_ASM64(27)
+    FAULT_NOERR_ASM64(28) FAULT_ERR_ASM64(29)
+    FAULT_ERR_ASM64(30)   FAULT_NOERR_ASM64(31)
+);
+
+#undef FAULT_CALL64
+#undef FAULT_NOERR_ASM64
+#undef FAULT_ERR_ASM64
+#else
+/* The compiler interrupt attribute saves registers before C runs, which makes
+ * a C-level register dump post-fault evidence rather than fault-time evidence.
+ * These stubs normalize the error-code shape and run PUSHA before any compiler
+ * prologue. The frame layout is asserted by the field order below and exercised
+ * with exact sentinels by verify-crash.py. */
+struct fault_frame32 {
+    u32 di, si, bp, saved_sp, bx, dx, cx, ax;
+    u32 vector, error, ip, cs, flags, sp, ss;
+};
+
+__attribute__((noreturn, noinline, used))
+void fault_stop32(const struct fault_frame32 *r)
+{
+    u32 sp = (r->cs & 3u) ? r->sp : r->saved_sp + 5u * sizeof(u32);
+    u32 ss = (r->cs & 3u) ? r->ss : 0;
+    u32 cr2 = 0;
+    struct crash_registers registers = {
+        CRASH_REGS_32_ALL, 0,
+        r->ax, r->bx, r->cx, r->dx, r->si, r->di, r->bp, sp,
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+
+    __asm__ volatile("cli");
+    if (r->vector == 8u || r->vector == 14u)
+        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
+                  r->vector, r->error, cr2);
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL,
+                  r->ip, r->cs, r->flags);
+    (void)crash_capture(r->vector, crash_vector_has_error(r->vector), r->error,
+                        r->ip, r->cs, r->flags, sp, ss, cr2, (u32)(uptr)r,
+                        0, 0, 32u, &registers);
+    crash_report();
+    for (;;) __asm__ volatile("hlt");
+}
+
+#define DECLARE_FAULT(n) void fault_##n(void);
+DECLARE_FAULT(0)  DECLARE_FAULT(1)  DECLARE_FAULT(2)  DECLARE_FAULT(3)
+DECLARE_FAULT(4)  DECLARE_FAULT(5)  DECLARE_FAULT(6)  DECLARE_FAULT(7)
+DECLARE_FAULT(8)  DECLARE_FAULT(9)  DECLARE_FAULT(10) DECLARE_FAULT(11)
+DECLARE_FAULT(12) DECLARE_FAULT(13) DECLARE_FAULT(14) DECLARE_FAULT(15)
+DECLARE_FAULT(16) DECLARE_FAULT(17) DECLARE_FAULT(18) DECLARE_FAULT(19)
+DECLARE_FAULT(20) DECLARE_FAULT(21) DECLARE_FAULT(22) DECLARE_FAULT(23)
+DECLARE_FAULT(24) DECLARE_FAULT(25) DECLARE_FAULT(26) DECLARE_FAULT(27)
+DECLARE_FAULT(28) DECLARE_FAULT(29) DECLARE_FAULT(30) DECLARE_FAULT(31)
+#undef DECLARE_FAULT
+
+#define FAULT_NOERR_ASM(n) \
+    ".globl fault_" #n "\n.type fault_" #n ", @function\n" \
+    "fault_" #n ":\n pushl $0\n pushl $" #n "\n jmp fault_common32\n" \
+    ".size fault_" #n ", .-fault_" #n "\n"
+#define FAULT_ERR_ASM(n) \
+    ".globl fault_" #n "\n.type fault_" #n ", @function\n" \
+    "fault_" #n ":\n pushl $" #n "\n jmp fault_common32\n" \
+    ".size fault_" #n ", .-fault_" #n "\n"
+
+__asm__(
+    ".text\n"
+    "fault_common32:\n"
+    "    pusha\n"
+    "    cld\n"
+    "    mov $0x10, %ax\n"
+    "    mov %ax, %ds\n"
+    "    mov %ax, %es\n"
+    "    pushl %esp\n"
+    "    call fault_stop32\n"
+    "    ud2\n"
+    FAULT_NOERR_ASM(0)  FAULT_NOERR_ASM(1)
+    FAULT_NOERR_ASM(2)  FAULT_NOERR_ASM(3)
+    FAULT_NOERR_ASM(4)  FAULT_NOERR_ASM(5)
+    FAULT_NOERR_ASM(6)  FAULT_NOERR_ASM(7)
+    FAULT_ERR_ASM(8)    FAULT_NOERR_ASM(9)
+    FAULT_ERR_ASM(10)   FAULT_ERR_ASM(11)
+    FAULT_ERR_ASM(12)   FAULT_ERR_ASM(13)
+    FAULT_ERR_ASM(14)   FAULT_NOERR_ASM(15)
+    FAULT_NOERR_ASM(16) FAULT_ERR_ASM(17)
+    FAULT_NOERR_ASM(18) FAULT_NOERR_ASM(19)
+    FAULT_NOERR_ASM(20) FAULT_ERR_ASM(21)
+    FAULT_NOERR_ASM(22) FAULT_NOERR_ASM(23)
+    FAULT_NOERR_ASM(24) FAULT_NOERR_ASM(25)
+    FAULT_NOERR_ASM(26) FAULT_NOERR_ASM(27)
+    FAULT_NOERR_ASM(28) FAULT_ERR_ASM(29)
+    FAULT_ERR_ASM(30)   FAULT_NOERR_ASM(31)
+);
+
+#undef FAULT_NOERR_ASM
+#undef FAULT_ERR_ASM
+#endif
 
 static void *const fault_handlers[32] = {
     fault_0, fault_1, fault_2, fault_3, fault_4, fault_5, fault_6, fault_7,
@@ -467,7 +616,99 @@ static void *const fault_handlers[32] = {
 
 /* Deliberate invalid-opcode trigger for the dedicated QEMU crash receipt.
  * It is reachable only through the explicit `crashtest` diagnostic command. */
-void crash_test_ud2(void) { __asm__ volatile("ud2"); }
+#ifdef ZL_64
+__asm__(
+    ".text\n"
+    ".globl crash_test_ud2\n"
+    "crash_test_ud2:\n"
+    "    movabs $0x0102030405060708, %rax\n"
+    "    movabs $0x1112131415161718, %rbx\n"
+    "    movabs $0x2122232425262728, %rcx\n"
+    "    movabs $0x3132333435363738, %rdx\n"
+    "    movabs $0x4142434445464748, %rsi\n"
+    "    movabs $0x5152535455565758, %rdi\n"
+    "    movabs $0x6162636465666768, %rbp\n"
+    "    movabs $0x8182838485868788, %r8\n"
+    "    movabs $0x9192939495969798, %r9\n"
+    "    movabs $0xa1a2a3a4a5a6a7a8, %r10\n"
+    "    movabs $0xb1b2b3b4b5b6b7b8, %r11\n"
+    "    movabs $0xc1c2c3c4c5c6c7c8, %r12\n"
+    "    movabs $0xd1d2d3d4d5d6d7d8, %r13\n"
+    "    movabs $0xe1e2e3e4e5e6e7e8, %r14\n"
+    /* A relocated PE image has no fixed link-time IP. Carry the exact runtime
+     * fault-label address in one saved register so an external receipt can
+     * prove symbol identity without guessing the firmware load base. */
+    "    lea crash_test_ud2_fault(%rip), %r15\n"
+    ".globl crash_test_ud2_fault\n"
+    "crash_test_ud2_fault:\n"
+    "    ud2\n"
+);
+
+/* An out-of-range GDT selector gives a deterministic #GP with selector 0x38
+ * as its architectural error code. It proves the CPU-pushed error-code frame,
+ * unlike INT 13 which would not push one. */
+__asm__(
+    ".text\n"
+    ".globl crash_test_gp\n"
+    "crash_test_gp:\n"
+    "    movabs $0x1112131415161718, %rbx\n"
+    "    movabs $0x2122232425262728, %rcx\n"
+    "    movabs $0x3132333435363738, %rdx\n"
+    "    movabs $0x4142434445464748, %rsi\n"
+    "    movabs $0x5152535455565758, %rdi\n"
+    "    movabs $0x6162636465666768, %rbp\n"
+    "    movabs $0x8182838485868788, %r8\n"
+    "    movabs $0x9192939495969798, %r9\n"
+    "    movabs $0xa1a2a3a4a5a6a7a8, %r10\n"
+    "    movabs $0xb1b2b3b4b5b6b7b8, %r11\n"
+    "    movabs $0xc1c2c3c4c5c6c7c8, %r12\n"
+    "    movabs $0xd1d2d3d4d5d6d7d8, %r13\n"
+    "    movabs $0xe1e2e3e4e5e6e7e8, %r14\n"
+    "    lea crash_test_gp_fault(%rip), %r15\n"
+    "    mov $0x38, %eax\n"
+    ".globl crash_test_gp_fault\n"
+    "crash_test_gp_fault:\n"
+    "    mov %ax, %ds\n"
+    "    ud2\n"
+);
+
+/* A page fault while RSP names an unmapped page cannot deliver on that same
+ * stack. The second page fault becomes #DF, whose IDT gate must switch to IST1
+ * before any push. This route is destructive and QEMU-only. */
+__asm__(
+    ".text\n"
+    ".globl crash_test_df\n"
+    "crash_test_df:\n"
+    "    cli\n"
+    "    xor %rsp, %rsp\n"
+    ".globl crash_test_df_fault\n"
+    "crash_test_df_fault:\n"
+    "    mov (%rsp), %rax\n"
+    "    ud2\n"
+);
+#else
+/* Distinct nonzero values make register swaps and post-prologue captures
+ * observable. crash_test_ud2_fault names the exact instruction that must be
+ * reported as IP. The function never returns, so clobbering callee-saved
+ * registers is intentional. */
+__asm__(
+    ".text\n"
+    ".globl crash_test_ud2\n"
+    ".type crash_test_ud2, @function\n"
+    "crash_test_ud2:\n"
+    "    mov $0xa1b2c3d4, %eax\n"
+    "    mov $0xb1c2d3e4, %ebx\n"
+    "    mov $0xc1d2e3f4, %ecx\n"
+    "    mov $0xd1e2f304, %edx\n"
+    "    mov $0x51627384, %esi\n"
+    "    mov $0x61728394, %edi\n"
+    "    mov $0x718293a4, %ebp\n"
+    ".globl crash_test_ud2_fault\n"
+    "crash_test_ud2_fault:\n"
+    "    ud2\n"
+    ".size crash_test_ud2, .-crash_test_ud2\n"
+);
+#endif
 
 /* usermode.c, in assembly. Declared as a function taking no arguments purely so
  * its address can be taken - it is never called from C and never returns
@@ -606,6 +847,10 @@ static void mouse_init(void)
 void idt_init(void)
 {
     for (int i = 0;  i < 32;  i++) set_gate(i, fault_handlers[i]);
+#ifdef ZL_64
+    /* #DF must not depend on the stack whose failure may have caused it. */
+    set_gate_ist(8, fault_handlers[8], 1);
+#endif
     for (int i = 32; i < 256; i++) set_gate(i, ignore_isr);   /* stray IRQs: ack     */
     /* THE SYSCALL DOOR. Installed before the IRQs so the ordering is visible:
      * this is the only DPL-3 entry in the whole table, and it is the only way

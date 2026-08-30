@@ -1,0 +1,304 @@
+{
+  "schema": "zlos.hardware-receipt-plan.v1",
+  "result": "READY_FOR_PHYSICAL_EXECUTION_WITHOUT_RECEIPTS",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "inputs": {
+    "build_identity": {
+      "path": "kernel/metadata/build-identity.json",
+      "sha256": "c5c97f8e2eea5177a44d3df780323f25900367b0eb04b34b532098332b920712"
+    },
+    "reproducible_artifacts": {
+      "path": "kernel/docs/receipts/reproducible-build-2026-08-22.json",
+      "sha256": "05e9e8e319b71ec707ad59e4963ca51847606cbdadb1f5e88ff165e6484be45f"
+    }
+  },
+  "receipt_schema": "zlos.hardware-receipt.v1",
+  "device_matrix": [
+    {
+      "case_id": "physical-grub-bios32",
+      "route": "grub-bios32",
+      "target_class": "secondary-compatibility",
+      "firmware": "BIOS",
+      "entry_bits": 32,
+      "boot_medium": {
+        "name": "zlOS.iso",
+        "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+        "bytes": 31660032
+      },
+      "payload": {
+        "name": "kernel.elf",
+        "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1",
+        "bytes": 6516856
+      },
+      "required_scenarios": [
+        "first-use",
+        "reuse",
+        "warm-reboot",
+        "cold-boot",
+        "reset",
+        "teardown",
+        "recovery"
+      ],
+      "required_evidence_kinds": [
+        "artifact-readback",
+        "machine-inventory",
+        "firmware-inventory",
+        "device-topology",
+        "boot-log",
+        "screen-capture",
+        "interaction-log",
+        "storage-readback",
+        "teardown-log",
+        "recovery-log"
+      ],
+      "required_device_classes": [
+        "display",
+        "storage",
+        "keyboard",
+        "pointer",
+        "network"
+      ]
+    },
+    {
+      "case_id": "physical-grub-uefi32",
+      "route": "grub-uefi32",
+      "target_class": "secondary-compatibility",
+      "firmware": "UEFI",
+      "entry_bits": 32,
+      "boot_medium": {
+        "name": "zlOS.iso",
+        "sha256": "a6daa014c68ba7ff2c272b56fdd7572796e8612337f25a0026486f92b76504e7",
+        "bytes": 31660032
+      },
+      "payload": {
+        "name": "kernel.elf",
+        "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1",
+        "bytes": 6516856
+      },
+      "required_scenarios": [
+        "first-use",
+        "reuse",
+        "warm-reboot",
+        "cold-boot",
+        "reset",
+        "teardown",
+        "recovery"
+      ],
+      "required_evidence_kinds": [
+        "artifact-readback",
+        "machine-inventory",
+        "firmware-inventory",
+        "device-topology",
+        "boot-log",
+        "screen-capture",
+        "interaction-log",
+        "storage-readback",
+        "teardown-log",
+        "recovery-log"
+      ],
+      "required_device_classes": [
+        "display",
+        "storage",
+        "keyboard",
+        "pointer",
+        "network"
+      ]
+    },
+    {
+      "case_id": "physical-grub-bios64",
+      "route": "grub-bios64",
+      "target_class": "secondary-compatibility",
+      "firmware": "BIOS",
+      "entry_bits": 64,
+      "boot_medium": {
+        "name": "zlOS64.iso",
+        "sha256": "379e9dffd08ee5efc24265dc1c4dc451b3876090cce7f4c3af60612918f72322",
+        "bytes": 28512256
+      },
+      "payload": {
+        "name": "kernel64.elf",
+        "sha256": "15877f83912895bcb2d3cd09b341afb88aeec5cb45f4965b9da288880df16521",
+        "bytes": 3370832
+      },
+      "required_scenarios": [
+        "first-use",
+        "reuse",
+        "warm-reboot",
+        "cold-boot",
+        "reset",
+        "teardown",
+        "recovery"
+      ],
+      "required_evidence_kinds": [
+        "artifact-readback",
+        "machine-inventory",
+        "firmware-inventory",
+        "device-topology",
+        "boot-log",
+        "screen-capture",
+        "interaction-log",
+        "storage-readback",
+        "teardown-log",
+        "recovery-log"
+      ],
+      "required_device_classes": [
+        "display",
+        "storage",
+        "keyboard",
+        "pointer",
+        "network"
+      ]
+    },
+    {
+      "case_id": "physical-grub-uefi64",
+      "route": "grub-uefi64",
+      "target_class": "secondary-compatibility",
+      "firmware": "UEFI",
+      "entry_bits": 64,
+      "boot_medium": {
+        "name": "zlOS64.iso",
+        "sha256": "379e9dffd08ee5efc24265dc1c4dc451b3876090cce7f4c3af60612918f72322",
+        "bytes": 28512256
+      },
+      "payload": {
+        "name": "kernel64.elf",
+        "sha256": "15877f83912895bcb2d3cd09b341afb88aeec5cb45f4965b9da288880df16521",
+        "bytes": 3370832
+      },
+      "required_scenarios": [
+        "first-use",
+        "reuse",
+        "warm-reboot",
+        "cold-boot",
+        "reset",
+        "teardown",
+        "recovery"
+      ],
+      "required_evidence_kinds": [
+        "artifact-readback",
+        "machine-inventory",
+        "firmware-inventory",
+        "device-topology",
+        "boot-log",
+        "screen-capture",
+        "interaction-log",
+        "storage-readback",
+        "teardown-log",
+        "recovery-log"
+      ],
+      "required_device_classes": [
+        "display",
+        "storage",
+        "keyboard",
+        "pointer",
+        "network"
+      ]
+    },
+    {
+      "case_id": "physical-raw-bios",
+      "route": "raw-bios",
+      "target_class": "secondary-compatibility",
+      "firmware": "BIOS",
+      "entry_bits": 32,
+      "boot_medium": {
+        "name": "zlOS.img",
+        "sha256": "3cabdfb8af476225d4456da37bf65915c86ea0b960824a0c84805585ec319ce3",
+        "bytes": 8389120
+      },
+      "payload": {
+        "name": "kernel_raw.elf",
+        "sha256": "fc9e4aa37de9ed7b813a3caed12286914012c79e6866deebe6e09eeb41009050",
+        "bytes": 6516700
+      },
+      "required_scenarios": [
+        "first-use",
+        "reuse",
+        "warm-reboot",
+        "cold-boot",
+        "reset",
+        "teardown",
+        "recovery"
+      ],
+      "required_evidence_kinds": [
+        "artifact-readback",
+        "machine-inventory",
+        "firmware-inventory",
+        "device-topology",
+        "boot-log",
+        "screen-capture",
+        "interaction-log",
+        "storage-readback",
+        "teardown-log",
+        "recovery-log"
+      ],
+      "required_device_classes": [
+        "display",
+        "storage",
+        "keyboard",
+        "pointer",
+        "network"
+      ]
+    },
+    {
+      "case_id": "physical-native-uefi64",
+      "route": "native-uefi64",
+      "target_class": "primary-h2-thinkpad",
+      "firmware": "UEFI",
+      "entry_bits": 64,
+      "boot_medium": {
+        "name": "zlOS-usb.img",
+        "sha256": "180adb00551d0fd097105bf7e4ca46aa068251643d438ccf387f7613ecb05fa9",
+        "bytes": 138412032
+      },
+      "payload": {
+        "name": "BOOTX64.EFI",
+        "sha256": "ce5d87163f213d834895621b0e34c8ebe027dd1eb9947df9341a70f720f6eca0",
+        "bytes": 20480
+      },
+      "required_scenarios": [
+        "first-use",
+        "reuse",
+        "warm-reboot",
+        "cold-boot",
+        "reset",
+        "teardown",
+        "recovery"
+      ],
+      "required_evidence_kinds": [
+        "artifact-readback",
+        "machine-inventory",
+        "firmware-inventory",
+        "device-topology",
+        "boot-log",
+        "screen-capture",
+        "interaction-log",
+        "storage-readback",
+        "teardown-log",
+        "recovery-log"
+      ],
+      "required_device_classes": [
+        "display",
+        "storage",
+        "keyboard",
+        "pointer",
+        "network"
+      ]
+    }
+  ],
+  "validated_receipts": [],
+  "counts": {
+    "matrix_cases": 6,
+    "validated_receipts": 0,
+    "physically_passed_routes": 0,
+    "physically_passed_artifacts": 0,
+    "required_scenarios_per_case": 7,
+    "required_evidence_kinds_per_case": 10
+  },
+  "physical_status": "NOT_RUN",
+  "evidence_ceiling": "current exact-hash physical execution plan and hostile receipt validator only; zero hardware runs, routes or artifact hashes are promoted",
+  "weakest_link": "a human-observed physical run with durable raw evidence is still required for every matrix case",
+  "generator": {
+    "path": "kernel/tools/generators/gen-hardware-receipt-plan.py",
+    "sha256": "a3337fc277a210c4113c4e48dd28fd4840ebb08323f2cfb6872409539acceba1"
+  }
+}

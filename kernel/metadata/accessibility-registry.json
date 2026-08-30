@@ -1,8 +1,8 @@
 {
   "schema": "zlos.accessibility-proof-registry.v1",
   "result": "PASS_WITH_OPEN_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
-  "host_test_receipt_sha256": "361ead51f30128bb28e6bb4e28010f7857742b84ee43c05715b2019357bbaf08",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "host_test_receipt_sha256": "14b5187ee0f4dd2e1f6b89f99e2984d3be0de5c9e8a51f7380b8e2911ff0e467",
   "source_identities": {
     "src/drivers/input/input.c": "e52f16e20ba44e7217dac67670b17ff38cdb9fedbad35c817d70e5f173201bd0",
     "src/graphics/ui/ui.c": "73a791e0a19541bd3962588e6eff7e62b2f0aad654e817c44bab3e36de7e95ba",
@@ -14,8 +14,8 @@
   },
   "visual_registry": {
     "path": "kernel/metadata/visual-registry.json",
-    "sha256": "48226f79e13cc9c361f0051b43cb76a54be42e897553eb61afb73867e71fda09",
-    "current_build_bound": 0
+    "sha256": "731f185709ac4c42523c6a560135585ce97ea1e7b4503c07531f7aabc1add93f",
+    "current_build_bound": 4
   },
   "capabilities": [
     {
@@ -163,6 +163,6 @@
   "weakest_link": "semantic tree and assistive providers do not exist; no all-app keyboard, QEMU or native a11y workflow receipt",
   "generator": {
     "path": "kernel/tools/generators/gen-accessibility-registry.py",
-    "sha256": "b5dfb536b1715cf67eecf368978fe6cbbdc44981e93be4b66f8ae89d93864f6a"
+    "sha256": "557f0e079f487957bb3625fbe157cce7fc5331f638956d67dfd6bbd5676b60b7"
   }
 }

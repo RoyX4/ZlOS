@@ -1,0 +1,85 @@
+[2J[001;001H[=3h[2J[001;001H[2J[001;001H[8;056;240t[2J[001;001H[2J[001;001H[=3h[2J[001;001H[2J[001;001H[8;042;160t[2J[001;001HBdsDxe: failed to load Boot0002 "UEFI QEMU NVMe Ctrl zlos001 1" from PciRoot(0x0)/Pci(0x4,0x0)/NVMe(0x1,00-00-00-00-00-00-00-00): Not Found
+BdsDxe: failed to load Boot0003 "UEFI QEMU QEMU USB HARDDRIVE 1-0000:00:05.0-1" from PciRoot(0x0)/Pci(0x5,0x0)/USB(0x0,0x0): Not Found
+BdsDxe: loading Boot0004 "UEFI QEMU QEMU USB HARDDRIVE 1-0000:00:05.0-4.1" from PciRoot(0x0)/Pci(0x5,0x0)/USB(0x7,0x0)/USB(0x0,0x0)
+BdsDxe: starting Boot0004 "UEFI QEMU QEMU USB HARDDRIVE 1-0000:00:05.0-4.1" from PciRoot(0x0)/Pci(0x5,0x0)/USB(0x7,0x0)/USB(0x0,0x0)
+
+zlOS EFI witness stage 0 entered
+LoadedImage: 0x0000000000000000
+SimpleFS: 0x0000000000000000
+OpenVolume: 0x0000000000000000
+Open ZLOS.EFI: 0x0000000000000000
+GetInfo: 0x0000000000000000
+BuildDevicePath: 0x0000000000000000
+LoadImage: 0x0000000000000000
+  fb: 1280x800x32 cell 8x16 ui 1x, back ON  (4000 KiB/mode)
+      back at 969 MiB, ends at 973 MiB (UEFI-reserved pages)
+  USB: HID keyboard live on slot 2
+  settings: no NVMe, load skipped
+  pmm: 167156/167156 pages free in [320, 1024) MiB
+  <- physical allocator reserved floor, owner mismatch, double-free and zero/reuse passed; baseline restored
+  arena: 16 MiB at 14 MiB, ends at 30 MiB, ceiling 128 MiB (bg_buf)
+  heap: 64 MiB at 130560 GiB [VIRTUAL, physical 256 MiB]
+  vmm: 64 MiB mapped: virtual 130560 GiB -> physical 256 MiB  (everything else identity)
+  fb: 1920x1200x32 cell 8x16 ui 1x, back OFF  (9000 KiB/mode)
+      back OFF: wants 9000 KiB, 4000 KiB reserved by the loader - no subpixel text, read-back hits VRAM
+wm:lifecycle v=1 event=open slot=0 app=0 generation=1 live=1
+wm:lifecycle v=1 event=open slot=1 app=13 generation=1 live=2
+wm:lifecycle v=1 event=open slot=2 app=1 generation=1 live=3
+  fb: wallpaper cached RGB565, 4500 KiB; 11884 KiB left in the arena
+  [ INFO ] no Intel GPU on the bus - vblank pacing unavailable here
+  compositor: 3 windows, shell client 198,84 594x317
+  wm: win 0 title 198,56 594x28 client 198,84 594x317
+  wm: win 1 title 280,332 666x28 client 280,360 666x301
+  wm: win 2 title 800,60 418x28 client 800,88 418x325
+  zlOS starting
+
+  [  OK  ] UEFI application - no GRUB, no bootloader, 64-bit from the start
+  [  OK  ] stack established, 256 KiB
+  [  OK  ] COM1 initialised, 115200 8N1
+  [  OK  ] framebuffer console, 240x75
+  [  OK  ] GDT loaded - 64-bit flat segments, 4-level paging, SSE on
+  [  OK  ] IDT installed, PIC remapped, interrupts ON
+  [  OK  ] APIC: IRQs via I/O APIC at 0xFEC00000, 4 CPU(s)
+  [  OK  ] PIT timer running at 100 Hz on IRQ0
+  [  OK  ] keyboard on IRQ1 - no more polling the port
+  [ INFO ] persistent boot observer - RAM only; no exact ZLLOG target
+  ring 3 64: u1 <- iretq/int80/iretq, 6 syscalls, process exited, kernel alive
+  syscall ABI: zero/gap/sign-bit/max refused with ENOSYS
+  anonymous memory: M <- reserve/commit zero-fill, cross-page copy and release passed
+V <- reserved anonymous page stayed absent; sibling V exited
+R <- released anonymous page faulted exactly; sibling R exited
+AB12 <- two PML4 processes yielded/resumed AB12 and exited independently
+PQ <- PIT preempted two non-yielding Ring-3 loops PQ
+K <- one process GP-faulted; its sibling ran and exited
+G <- lower stack guard PF error 6 at exact address; sibling G exited
+  kernel stacks high-water: P0 1536 P1 776 bytes
+ <- two guarded supervisor TSS stacks bounded through syscall/preempt/fault paths
+h1o2 <- bounded IPC crossed PML4s hi/ok with sender IDs h1o2
+wm:lifecycle v=1 event=open slot=3 app=30000 generation=1 live=4
+Wwm:lifecycle v=1 event=close slot=3 app=30000 generation=1 live=3
+ <- Ring-3 window presented text, polled input W, and closed
+  ring 3 hostile: cli GP, kernel/device PF, crossing pointer refused; kernel alive
+ <- process-owned page tables/code/stacks reclaimed; PMM baseline restored
+  network driver: Intel e1000e/I219 device 0x100E
+  network: link ready, DHCP started
+  [  OK  ] zl runtime, kernel subset
+  [ INFO ] heap online, zlfs mounts on demand, scheduler opt-in
+  app-manifest: schema=1 entries=64 sha256=2fee3e7aefb880268d21b0a0ce41398af94ccf3612ab357c54adc1ea3a529562
+  build-identity: schema=1 id=eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08
+  build-source: head=3777678c0247862177eceb1c4f35e2402839d029 dirty=1
+
+  ready.
+  press h for help, q to halt
+
+zlOS 0.3
+one system, one language
+
+system ready
+type h for commands
+zl> wm:lifecycle v=1 event=ready slot=1 app=13 generation=1 live=3
+wm:lifecycle v=1 event=ready slot=2 app=1 generation=1 live=3
+wm:lifecycle v=1 event=ready slot=0 app=0 generation=1 live=3
+paint
+wm:lifecycle v=1 event=open slot=3 app=8 generation=2 live=4
+  wm: win 3 title 24,230 274x28 client 24,258 274x109
+zl> wm:lifecycle v=1 event=ready slot=3 app=8 generation=2 live=4

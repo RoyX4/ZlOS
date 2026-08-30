@@ -79,6 +79,60 @@ def mutated_rwx(blob: bytes) -> bytes:
     raise AssertionError("selftest fixture has no LOAD segment")
 
 
+def minimal_elf(elf_class: int, segment_type: int = PT_LOAD,
+                flags: int = PF_X) -> bytes:
+    blob = bytearray(128)
+    blob[:7] = b"\x7fELF" + bytes((elf_class, 1, 1))
+    if elf_class == 1:
+        phoff, phentsize = 52, 32
+        struct.pack_into("<I", blob, 28, phoff)
+        struct.pack_into("<HH", blob, 42, phentsize, 1)
+        struct.pack_into("<I", blob, phoff, segment_type)
+        struct.pack_into("<I", blob, phoff + 24, flags)
+    elif elf_class == 2:
+        phoff, phentsize = 64, 56
+        struct.pack_into("<Q", blob, 32, phoff)
+        struct.pack_into("<HH", blob, 54, phentsize, 1)
+        struct.pack_into("<I", blob, phoff, segment_type)
+        struct.pack_into("<I", blob, phoff + 4, flags)
+    else:
+        raise ValueError(f"unsupported fixture class {elf_class}")
+    return bytes(blob)
+
+
+def hostile_selftest() -> int:
+    elf32 = minimal_elf(1)
+    elf64 = minimal_elf(2)
+    if check_blob(elf32) != [PF_X] or check_blob(elf64) != [PF_X]:
+        raise ValueError("minimized valid ELF fixtures were rejected")
+    cases = {
+        "empty": (b"", "not an ELF"),
+        "bad-magic": (b"BAD!" + elf64[4:], "not an ELF"),
+        "unknown-class": (elf64[:4] + b"\x03" + elf64[5:], "unknown ELF class"),
+        "big-endian": (elf64[:5] + b"\x02" + elf64[6:], "little-endian"),
+        "small-phdr": (elf64[:54] + struct.pack("<H", 8) + elf64[56:], "entry too small"),
+        "zero-phnum": (elf64[:56] + b"\x00\x00" + elf64[58:], "absent or out of bounds"),
+        "table-out-of-bounds": (
+            elf64[:32] + struct.pack("<Q", len(elf64) - 4) + elf64[40:],
+            "absent or out of bounds",
+        ),
+        "no-load-segment": (minimal_elf(2, segment_type=2), "no LOAD segments"),
+        "truncated-table": (elf32[:70], "absent or out of bounds"),
+        "writable-executable": (minimal_elf(2, flags=PF_W | PF_X), "writable-executable"),
+    }
+    caught = 0
+    for name, (blob, marker) in cases.items():
+        try:
+            check_blob(blob)
+        except (ValueError, struct.error) as error:
+            if marker not in str(error):
+                raise ValueError(f"{name}: wrong rejection: {error}") from error
+            caught += 1
+        else:
+            raise ValueError(f"{name}: hostile ELF escaped")
+    return caught
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("images", nargs="*", default=list(DEFAULT_IMAGES))
@@ -98,7 +152,11 @@ def main() -> int:
                 else:
                     raise ValueError(f"{name}: planted RWX mutation escaped")
         if args.selftest:
-            print("elf-permissions selftest: caught planted RWX on every image")
+            hostile = hostile_selftest()
+            print(
+                "elf-permissions selftest: caught planted RWX on every image "
+                f"and {hostile} minimized malformed ELF cases"
+            )
     except (OSError, ValueError, struct.error) as error:
         print(f"elf-permissions: FAIL: {error}")
         return 1

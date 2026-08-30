@@ -148,8 +148,8 @@ typedef unsigned int       uptr;
 #define HEAP_END    (HEAP_BASE + HEAP_BYTES)
 
 _Static_assert(HEAP_BASE >= HI_VGPU, "the heap is below the high-RAM map");
-_Static_assert(HEAP_END <= HI_TOP,
-               "the heap runs past HI_TOP - the RAM every gate promises");
+_Static_assert(HEAP_END <= HI_PMM,
+               "the heap runs into the physical-page allocator");
 _Static_assert((HEAP_BASE & 0xFFFFFUL) == 0, "the heap base is not 1 MiB aligned");
 
 #define ALIGN_BYTES 16UL
@@ -157,7 +157,14 @@ _Static_assert((HEAP_BASE & 0xFFFFFUL) == 0, "the heap base is not 1 MiB aligned
 #define MIN_BLOCK   32UL                  /* header + 16 bytes of payload */
 
 #define F_FREE      0x00000001u
+#define F_POISONED  0x00000002u
+#define TAG_SHIFT   8u
+#define TAG_MAX     0x00FFFFFFu
+#define TAG_MASK    0xFFFFFF00u
 #define BLK_MAGIC   0x7A4C4845u           /* "zLHE" */
+
+#define FREE_POISON_A 0xD15EA5EDu
+#define FREE_POISON_B 0xA110C8EDu
 
 /* The offset that means "no block". 0 is a real offset - it is the first
  * block - so it cannot double as the null. HEAP_BYTES is one past the end and
@@ -242,6 +249,10 @@ static int  tried;
  * which is the only reason to believe the determinism claim at the top. */
 static unsigned long worst_alloc_steps;
 static unsigned long worst_free_steps;
+
+#define FAIL_DISABLED (~0UL)
+static unsigned long fail_countdown = FAIL_DISABLED;
+static unsigned long injected_failures;
 
 /* ---- the seam, exactly as arena.c does it ---------------------------------
  * Two things from outside, which is what lets hosttest/heaptest.c compile THIS
@@ -393,6 +404,20 @@ static void map_clear(int bin)
 static u32 *lnk_next(struct blk *b) { return (u32 *)(void *)((u8 *)b + HDR_BYTES); }
 static u32 *lnk_prev(struct blk *b) { return (u32 *)(void *)((u8 *)b + HDR_BYTES + 4); }
 
+/* A full-block fill would make free O(bytes), violating the bounded allocator
+ * contract. Guard the next eight payload bytes after the free-list links
+ * instead. Every free block has at least sixteen payload bytes, so this is a
+ * constant-size use-after-free tripwire on all size classes. */
+static u32 *poison_a(struct blk *b) { return (u32 *)(void *)((u8 *)b + HDR_BYTES + 8); }
+static u32 *poison_b(struct blk *b) { return (u32 *)(void *)((u8 *)b + HDR_BYTES + 12); }
+
+static void poison_set(struct blk *b)
+{
+    *poison_a(b) = FREE_POISON_A;
+    *poison_b(b) = FREE_POISON_B;
+    b->flags |= F_POISONED;
+}
+
 static void list_push(u32 off)
 {
     struct blk *b = at(off);
@@ -403,20 +428,39 @@ static void list_push(u32 off)
     *lnk_prev(b) = NIL;
     if (*h != NIL) *lnk_prev(at(*h)) = off;
     *h = off;
+    poison_set(b);
     map_set(bin);
 }
 
-static void list_remove(u32 off)
+static int list_remove(u32 off)
 {
-    struct blk *b = at(off);
-    int bin = bin_of(b->size);
-    u32 n = *lnk_next(b), p = *lnk_prev(b);
+    struct blk *b;
+    int bin;
+    u32 n, p;
+
+    if (!blk_ok(off, "free-list entry is not a block")) return 0;
+    b = at(off);
+    if (!(b->flags & F_FREE)) {
+        heap_panic("allocated block on a free list", off);
+        return 0;
+    }
+    if (!(b->flags & F_POISONED) || *poison_a(b) != FREE_POISON_A ||
+        *poison_b(b) != FREE_POISON_B) {
+        heap_panic("freed-block poison was modified", off);
+        return 0;
+    }
+
+    bin = bin_of(b->size);
+    n = *lnk_next(b);
+    p = *lnk_prev(b);
 
     if (p != NIL) *lnk_next(at(p)) = n;
     else          *head_of(bin)    = n;
     if (n != NIL) *lnk_prev(at(n)) = p;
 
     if (*head_of(bin) == NIL) map_clear(bin);
+    b->flags &= ~(u32)F_POISONED;
+    return 1;
 }
 
 /* ---- init -----------------------------------------------------------------*/
@@ -476,6 +520,7 @@ int heap_init(void)
     }
     used = 0; high_water = 0; refusals = 0; live_blocks = 0;
     worst_alloc_steps = 0; worst_free_steps = 0;
+    fail_countdown = FAIL_DISABLED; injected_failures = 0;
     small_map = 0; fl_map = 0;
     for (i = 0; i < LARGE_FL; i++) sl_map[i] = 0;
     for (i = 0; i < SMALL_BINS; i++) small_head[i] = NIL;
@@ -533,6 +578,14 @@ unsigned long heap_blocks(void)      { return live_blocks; }
 unsigned long heap_available(void)   { return live ? HEAP_BYTES - used : 0UL; }
 unsigned long heap_worst_alloc(void) { return worst_alloc_steps; }
 unsigned long heap_worst_free(void)  { return worst_free_steps; }
+unsigned long heap_injected_failures(void) { return injected_failures; }
+
+void heap_fail_after(unsigned long successes_before_failure)
+{
+    fail_countdown = successes_before_failure;
+}
+
+void heap_fail_disable(void) { fail_countdown = FAIL_DISABLED; }
 
 /* The same suppression rule arena.c:172 uses, for the same reason. */
 #define REFUSE_LOUD 8
@@ -564,14 +617,14 @@ static void refuse(const char *why, unsigned long want)
  * the free lists. Only splits if the remainder can stand on its own as a block;
  * otherwise the caller gets the few spare bytes as slack, which is preferable
  * to creating a fragment too small to ever satisfy anything. */
-static void split(u32 off, unsigned long need)
+static int split(u32 off, unsigned long need)
 {
     struct blk *b = at(off);
     unsigned long rest = b->size - need;
     u32 roff;
     struct blk *r;
 
-    if (rest < MIN_BLOCK) return;               /* keep the slack */
+    if (rest < MIN_BLOCK) return 1;             /* keep the slack */
 
     roff = off + (u32)need;
 
@@ -594,7 +647,7 @@ static void split(u32 off, unsigned long need)
     if ((unsigned long)roff + rest < HEAP_BYTES) {
         struct blk *nx = at(roff + (u32)rest);
         if (nx->magic == BLK_MAGIC && (nx->flags & F_FREE)) {
-            list_remove(roff + (u32)rest);
+            if (!list_remove(roff + (u32)rest)) return 0;
             rest += nx->size;
             nx->magic = 0;                      /* no longer a block */
         }
@@ -615,10 +668,11 @@ static void split(u32 off, unsigned long need)
         at(roff + (u32)rest)->prev_size = (u32)rest;
 
     list_push(roff);
+    return 1;
 }
 
 /* ---- alloc ----------------------------------------------------------------*/
-void *heap_alloc(unsigned long bytes)
+void *heap_alloc_tagged(unsigned long bytes, unsigned int tag)
 {
     unsigned long need;
     int bin, chosen;
@@ -628,6 +682,7 @@ void *heap_alloc(unsigned long bytes)
 
     if (!tried) { refuse("the heap was never initialised", bytes); return 0; }
     if (!live)  { refuse("the heap is not backed by RAM", bytes); return 0; }
+    if (tag > TAG_MAX) { refuse("allocation tag is wider than 24 bits", bytes); return 0; }
 
     /* A zero-byte allocation still gets its own distinct address, same rule as
      * arena.c:274 - returning one pointer for two objects is correct right up
@@ -640,6 +695,16 @@ void *heap_alloc(unsigned long bytes)
     if (bytes > HEAP_BYTES - HDR_BYTES) {
         refuse("larger than the whole heap", bytes);
         return 0;
+    }
+
+    if (fail_countdown != FAIL_DISABLED) {
+        if (!fail_countdown) {
+            fail_countdown = FAIL_DISABLED;
+            injected_failures++;
+            refuse("injected allocation failure", bytes);
+            return 0;
+        }
+        fail_countdown--;
     }
     need = (bytes + HDR_BYTES + (ALIGN_BYTES - 1UL)) & ~(ALIGN_BYTES - 1UL);
     if (need < MIN_BLOCK) need = MIN_BLOCK;
@@ -719,10 +784,10 @@ void *heap_alloc(unsigned long bytes)
      * and corrupts the neighbour's header some time later. */
     if (b->size < need) { heap_panic("bin head smaller than the request", off); return 0; }
 
-    list_remove(off);
-    split(off, need);
+    if (!list_remove(off)) return 0;
+    if (!split(off, need)) return 0;
 
-    b->flags &= ~(u32)F_FREE;
+    b->flags = (u32)tag << TAG_SHIFT;
     used += b->size;
     live_blocks++;
     if (used > high_water) high_water = used;
@@ -732,6 +797,24 @@ void *heap_alloc(unsigned long bytes)
     zlt_count(ZLLOG_C_ALLOC_BYTES, (unsigned)b->size);
 
     return (void *)((u8 *)b + HDR_BYTES);
+}
+
+void *heap_alloc(unsigned long bytes) { return heap_alloc_tagged(bytes, 0); }
+
+unsigned int heap_tag(const void *p)
+{
+    uptr a;
+    u32 off;
+    struct blk *b;
+
+    if (!p || !live) return 0;
+    a = (uptr)p;
+    if (a < heap_win + HDR_BYTES || a >= heap_win + (uptr)HEAP_BYTES) return 0;
+    off = (u32)(a - heap_win - HDR_BYTES);
+    if (!blk_ok(off, "heap_tag() of something that is not a block")) return 0;
+    b = at(off);
+    if (b->flags & F_FREE) return 0;
+    return (b->flags & TAG_MASK) >> TAG_SHIFT;
 }
 
 /* ---- free -----------------------------------------------------------------
@@ -766,7 +849,7 @@ void heap_free(void *p)
     used -= b->size;
     live_blocks--;
     zlt_count(ZLLOG_C_FREE, 1);
-    b->flags |= F_FREE;
+    b->flags = F_FREE;
 
     /* FORWARD: absorb the next block if it is free. */
     noff = off + b->size;
@@ -775,7 +858,7 @@ void heap_free(void *p)
         if (!blk_ok(noff, "the block after this one is corrupt")) return;
         n = at(noff);
         if (n->flags & F_FREE) {
-            list_remove(noff);
+            if (!list_remove(noff)) return;
             b->size += n->size;
             n->magic = 0;                  /* it is not a block any more */
             steps++;
@@ -796,7 +879,7 @@ void heap_free(void *p)
                 return;
             }
             if (pb->flags & F_FREE) {
-                list_remove(poff);
+                if (!list_remove(poff)) return;
                 pb->size += b->size;
                 b->magic = 0;
                 off = poff;
@@ -824,6 +907,7 @@ void *heap_realloc(void *p, unsigned long bytes)
     u32 off, noff;
     struct blk *b;
     unsigned long old_payload, need;
+    unsigned int tag;
     void *q;
 
     if (!p) return heap_alloc(bytes);
@@ -843,6 +927,7 @@ void *heap_realloc(void *p, unsigned long bytes)
     if (b->flags & F_FREE) { heap_panic("realloc of a freed block", off); return 0; }
 
     old_payload = b->size - HDR_BYTES;
+    tag = (b->flags & TAG_MASK) >> TAG_SHIFT;
 
     if (bytes > HEAP_BYTES - HDR_BYTES) { refuse("larger than the whole heap", bytes); return 0; }
     need = (bytes + HDR_BYTES + (ALIGN_BYTES - 1UL)) & ~(ALIGN_BYTES - 1UL);
@@ -855,7 +940,7 @@ void *heap_realloc(void *p, unsigned long bytes)
      * MIN_BLOCK and in that case nothing was handed back at all. */
     if (need <= b->size) {
         unsigned long before = b->size;
-        split(off, need);
+        if (!split(off, need)) return 0;
         used -= (before - b->size);
         return p;
     }
@@ -869,20 +954,20 @@ void *heap_realloc(void *p, unsigned long bytes)
             if ((n->flags & F_FREE) &&
                 (unsigned long)b->size + n->size >= need) {
                 unsigned long merged = (unsigned long)b->size + n->size;
-                list_remove(noff);
+                if (!list_remove(noff)) return 0;
                 n->magic = 0;
                 used -= b->size;
                 b->size = (u32)merged;
                 if ((unsigned long)off + merged < HEAP_BYTES)
                     at(off + (u32)merged)->prev_size = (u32)merged;
-                split(off, need);
+                if (!split(off, need)) return 0;
                 used += b->size;
                 return p;
             }
         }
     }
 
-    q = heap_alloc(bytes);
+    q = heap_alloc_tagged(bytes, tag);
     if (!q) return 0;
     {
         unsigned long n = old_payload < bytes ? old_payload : bytes;

@@ -550,12 +550,14 @@ class Machine:
     """
 
     def __init__(self, width=1280, height=800, do_build=True,
-                 boot_timeout=300.0, cmd_timeout=60.0, tablet=True, how="src"):
+                 boot_timeout=300.0, cmd_timeout=60.0, tablet=True, how="src",
+                 uefi=False):
         self.want = (width, height)
         self.do_build = do_build
         self.boot_timeout = boot_timeout
         self.cmd_timeout = cmd_timeout
         self.tablet = tablet
+        self.uefi = uefi
         if how not in ("src", "toggle", "native"):
             raise SystemExit("how must be 'src', 'toggle' or 'native'")
         self.how = how
@@ -587,12 +589,13 @@ class Machine:
                       "already contains. If the last build was not this "
                       "variant, the size check below will catch it.")
         if self.do_build:
-            build(False)
+            build(self.uefi)
         self.tmp = tempfile.mkdtemp(prefix="zlos-oracle-")
         ser_path = os.path.join(self.tmp, "ser")
         qmp_path = os.path.join(self.tmp, "qmp")
         self.proc = subprocess.Popen(
-            qemu_argv(self.tmp, False, ser_path, qmp_path, tablet=self.tablet),
+            qemu_argv(self.tmp, self.uefi, ser_path, qmp_path,
+                      tablet=self.tablet, boot_snapshot=True),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.ser, self.qmp = LoggedSerial(ser_path), Qmp(qmp_path)
         ok, log = self.ser.wait("ready.", self.boot_timeout)

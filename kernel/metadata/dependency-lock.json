@@ -1,7 +1,7 @@
 {
-  "schema": "zlos.host-dependency-lock.v2",
+  "schema": "zlos.host-dependency-lock.v3",
   "result": "PASS_WITH_OPEN_SUPPLY_GAPS",
-  "build_identity": "54162c053eab3b13b1731f1f955ef293700b6a95944c9d89438a47e450665a3d",
+  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
   "host": {
     "platform": "Linux-7.0.12+kali-amd64-x86_64-with-glibc2.42",
     "python": "3.14.6",
@@ -9,6 +9,112 @@
     "python_sha256": "36103f0154f128cf946c4fdc4ea2dc21eb30a48d42dd83541a6b751f005fa60d"
   },
   "commands": [
+    {
+      "name": "apt-cache",
+      "path": "/usr/bin/apt-cache",
+      "resolved_path": "/usr/bin/apt-cache",
+      "bytes": 100744,
+      "sha256": "fef881777071a03f2cbad96a0a27b1e119b95f4b11281d264539f736ced35e36",
+      "version_argv": [
+        "apt-cache",
+        "--version"
+      ],
+      "version": "apt 3.3.2 (amd64)",
+      "runtime_files": [
+        "/usr/bin/apt-cache",
+        "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+        "/usr/lib/x86_64-linux-gnu/libapt-pkg.so.7.0.0",
+        "/usr/lib/x86_64-linux-gnu/libapt-private.so.0.0.0",
+        "/usr/lib/x86_64-linux-gnu/libbz2.so.1.0.4",
+        "/usr/lib/x86_64-linux-gnu/libc.so.6",
+        "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
+        "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+        "/usr/lib/x86_64-linux-gnu/liblz4.so.1.10.0",
+        "/usr/lib/x86_64-linux-gnu/liblzma.so.5.8.3",
+        "/usr/lib/x86_64-linux-gnu/libm.so.6",
+        "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.36",
+        "/usr/lib/x86_64-linux-gnu/libsystemd.so.0.44.0",
+        "/usr/lib/x86_64-linux-gnu/libudev.so.1.7.14",
+        "/usr/lib/x86_64-linux-gnu/libxxhash.so.0.8.3",
+        "/usr/lib/x86_64-linux-gnu/libz.so.1.3.2",
+        "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7"
+      ],
+      "package": "apt"
+    },
+    {
+      "name": "apt-get",
+      "path": "/usr/bin/apt-get",
+      "resolved_path": "/usr/bin/apt-get",
+      "bytes": 55688,
+      "sha256": "e2ee334800da86b4c8458d9d956d22141cae35f256774d6064863657e31d40cf",
+      "version_argv": [
+        "apt-get",
+        "--version"
+      ],
+      "version": "apt 3.3.2 (amd64)",
+      "runtime_files": [
+        "/usr/bin/apt-get",
+        "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+        "/usr/lib/x86_64-linux-gnu/libapt-pkg.so.7.0.0",
+        "/usr/lib/x86_64-linux-gnu/libapt-private.so.0.0.0",
+        "/usr/lib/x86_64-linux-gnu/libbz2.so.1.0.4",
+        "/usr/lib/x86_64-linux-gnu/libc.so.6",
+        "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
+        "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+        "/usr/lib/x86_64-linux-gnu/liblz4.so.1.10.0",
+        "/usr/lib/x86_64-linux-gnu/liblzma.so.5.8.3",
+        "/usr/lib/x86_64-linux-gnu/libm.so.6",
+        "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.36",
+        "/usr/lib/x86_64-linux-gnu/libsystemd.so.0.44.0",
+        "/usr/lib/x86_64-linux-gnu/libudev.so.1.7.14",
+        "/usr/lib/x86_64-linux-gnu/libxxhash.so.0.8.3",
+        "/usr/lib/x86_64-linux-gnu/libz.so.1.3.2",
+        "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7"
+      ],
+      "package": "apt"
+    },
+    {
+      "name": "dpkg-deb",
+      "path": "/usr/bin/dpkg-deb",
+      "resolved_path": "/usr/bin/dpkg-deb",
+      "bytes": 178720,
+      "sha256": "0c1424ae83d97b7410588ef3c4700d06be3524b2b4e29f1ce88e076b2a23148f",
+      "version_argv": [
+        "dpkg-deb",
+        "--version"
+      ],
+      "version": "Debian 'dpkg-deb' package archive backend version 1.23.7 (amd64).",
+      "runtime_files": [
+        "/usr/bin/dpkg-deb",
+        "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+        "/usr/lib/x86_64-linux-gnu/libbz2.so.1.0.4",
+        "/usr/lib/x86_64-linux-gnu/libc.so.6",
+        "/usr/lib/x86_64-linux-gnu/liblzma.so.5.8.3",
+        "/usr/lib/x86_64-linux-gnu/libmd.so.0.2.0",
+        "/usr/lib/x86_64-linux-gnu/libz.so.1.3.2",
+        "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7"
+      ],
+      "package": "dpkg"
+    },
+    {
+      "name": "dpkg-query",
+      "path": "/usr/bin/dpkg-query",
+      "resolved_path": "/usr/bin/dpkg-query",
+      "bytes": 170768,
+      "sha256": "46678b71dbc7c9b4bdf60655780359e58b4ddfe4f26e98c83522f34e3b4e42d2",
+      "version_argv": [
+        "dpkg-query",
+        "--version"
+      ],
+      "version": "Debian dpkg-query package management program query tool version 1.23.7 (amd64).",
+      "runtime_files": [
+        "/usr/bin/dpkg-query",
+        "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+        "/usr/lib/x86_64-linux-gnu/libc.so.6",
+        "/usr/lib/x86_64-linux-gnu/libmd.so.0.2.0"
+      ],
+      "package": "dpkg"
+    },
     {
       "name": "gcc",
       "path": "/usr/bin/gcc",
@@ -433,6 +539,23 @@
         "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7"
       ],
       "package": "qemu-system-x86"
+    },
+    {
+      "name": "ldd",
+      "path": "/usr/bin/ldd",
+      "resolved_path": "/usr/bin/ldd",
+      "bytes": 5356,
+      "sha256": "e56c3e32047f195cd3dc94803ae50b228c297c66e3146afce104049073814c8b",
+      "version_argv": [
+        "ldd",
+        "--version"
+      ],
+      "version": "ldd (Debian GLIBC 2.42-17) 2.42",
+      "runtime_files": [
+        "/usr/bin/bash",
+        "/usr/bin/ldd"
+      ],
+      "package": "libc-bin"
     }
   ],
   "firmware": [
@@ -453,6 +576,51 @@
   ],
   "runtime_files": [
     {
+      "path": "/usr/bin/apt-cache",
+      "bytes": 100744,
+      "sha256": "fef881777071a03f2cbad96a0a27b1e119b95f4b11281d264539f736ced35e36",
+      "reasons": [
+        "command:apt-cache"
+      ],
+      "package": "apt"
+    },
+    {
+      "path": "/usr/bin/apt-get",
+      "bytes": 55688,
+      "sha256": "e2ee334800da86b4c8458d9d956d22141cae35f256774d6064863657e31d40cf",
+      "reasons": [
+        "command:apt-get"
+      ],
+      "package": "apt"
+    },
+    {
+      "path": "/usr/bin/bash",
+      "bytes": 1417520,
+      "sha256": "6b55b5ff65cb6ec230748164e5e596020e656ee7b27059d7a496c92ee386d930",
+      "reasons": [
+        "command:ldd"
+      ],
+      "package": "bash"
+    },
+    {
+      "path": "/usr/bin/dpkg-deb",
+      "bytes": 178720,
+      "sha256": "0c1424ae83d97b7410588ef3c4700d06be3524b2b4e29f1ce88e076b2a23148f",
+      "reasons": [
+        "command:dpkg-deb"
+      ],
+      "package": "dpkg"
+    },
+    {
+      "path": "/usr/bin/dpkg-query",
+      "bytes": 170768,
+      "sha256": "46678b71dbc7c9b4bdf60655780359e58b4ddfe4f26e98c83522f34e3b4e42d2",
+      "reasons": [
+        "command:dpkg-query"
+      ],
+      "package": "dpkg"
+    },
+    {
       "path": "/usr/bin/grub-mkrescue",
       "bytes": 1137944,
       "sha256": "a0dac5abedeb1e042b65eb5f1907b6be97b6f76c095081fa38a051d9a87b19c7",
@@ -460,6 +628,15 @@
         "command:grub-mkrescue"
       ],
       "package": "grub2-common"
+    },
+    {
+      "path": "/usr/bin/ldd",
+      "bytes": 5356,
+      "sha256": "e56c3e32047f195cd3dc94803ae50b228c297c66e3146afce104049073814c8b",
+      "reasons": [
+        "command:ldd"
+      ],
+      "package": "libc-bin"
     },
     {
       "path": "/usr/bin/mtools",
@@ -567,6 +744,10 @@
       "bytes": 230200,
       "sha256": "25881bb87cba6b787b71dbfaf80a0248af791f0764c0a4d0f26308efb457b3fd",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
+        "command:dpkg-deb",
+        "command:dpkg-query",
         "command:gcc",
         "command:clang",
         "command:ld",
@@ -614,6 +795,26 @@
         "command:qemu-system-x86_64"
       ],
       "package": "libaio1t64:amd64"
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libapt-pkg.so.7.0.0",
+      "bytes": 2859288,
+      "sha256": "bae272c78d6fb4717ad6aa70d5f499bb81478025f009331c8a4d3c84af7f7f4a",
+      "reasons": [
+        "command:apt-cache",
+        "command:apt-get"
+      ],
+      "package": "libapt-pkg7.0:amd64"
+    },
+    {
+      "path": "/usr/lib/x86_64-linux-gnu/libapt-private.so.0.0.0",
+      "bytes": 855216,
+      "sha256": "cfdbdceebb790dafb0958c9a0668bb6c240b2ac5d6ae73ca7f6d5583d919b52c",
+      "reasons": [
+        "command:apt-cache",
+        "command:apt-get"
+      ],
+      "package": "apt"
     },
     {
       "path": "/usr/lib/x86_64-linux-gnu/libatomic.so.1.2.0",
@@ -679,6 +880,9 @@
       "bytes": 78784,
       "sha256": "773b2daffd36a613170f0a0761d8ed8e240ff5c032201c253b12058da8b65576",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
+        "command:dpkg-deb",
         "command:xorriso"
       ],
       "package": "libbz2-1.0:amd64"
@@ -688,6 +892,10 @@
       "bytes": 2014472,
       "sha256": "91dda8307e039398a773bbb010936df016607e411e7f594b619393c31c2b70d6",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
+        "command:dpkg-deb",
+        "command:dpkg-query",
         "command:gcc",
         "command:clang",
         "command:ld",
@@ -731,6 +939,8 @@
       "bytes": 6483312,
       "sha256": "eb2563ab709e96bb2c33057538fa2861f74d076349aac9f08c478de6a6b47d44",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
         "command:qemu-system-i386",
         "command:qemu-system-x86_64"
       ],
@@ -848,6 +1058,8 @@
       "bytes": 182856,
       "sha256": "3067c0998b6ef073078454d17daf6b31188f74b159d17f62ab2f9a8ec34a7363",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
         "command:clang",
         "command:lld-link",
         "command:sgdisk"
@@ -1001,10 +1213,23 @@
       "package": "libkmod2:amd64"
     },
     {
+      "path": "/usr/lib/x86_64-linux-gnu/liblz4.so.1.10.0",
+      "bytes": 174576,
+      "sha256": "6af0b7fdb5b079c238ba9342339dacb1d45ba29b4efe4c9678756e46e1fada2b",
+      "reasons": [
+        "command:apt-cache",
+        "command:apt-get"
+      ],
+      "package": "liblz4-1:amd64"
+    },
+    {
       "path": "/usr/lib/x86_64-linux-gnu/liblzma.so.5.8.3",
       "bytes": 198832,
       "sha256": "81c6c4081e0165d24edbaa721a716ac59005c564930cd760cc859e2c4e3fcc42",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
+        "command:dpkg-deb",
         "command:grub-mkrescue"
       ],
       "package": "liblzma5:amd64"
@@ -1014,6 +1239,8 @@
       "bytes": 1001688,
       "sha256": "b3c4eff8090b116f5cf0a65e34685b790d76f96de1341abced9d1ca33998049c",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
         "command:clang",
         "command:lld-link",
         "command:grub-mkrescue",
@@ -1029,6 +1256,8 @@
       "bytes": 71760,
       "sha256": "954ac3b48727458a9464d90b2214fb3d9dbe1e54fc52a334ee00c9f1ebb8a971",
       "reasons": [
+        "command:dpkg-deb",
+        "command:dpkg-query",
         "command:clang",
         "command:lld-link"
       ],
@@ -1229,6 +1458,8 @@
       "bytes": 2797096,
       "sha256": "8229e01e946086cfbd4cd9976c05b7a5b7603a5256154b61383605cfb12b1474",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
         "command:clang",
         "command:lld-link",
         "command:sgdisk"
@@ -1240,6 +1471,8 @@
       "bytes": 1205576,
       "sha256": "27c65672221224be7eb8c4b29a887ed34d0e3d77808136fc282932d48060a09d",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
         "command:qemu-system-i386",
         "command:qemu-system-x86_64"
       ],
@@ -1271,6 +1504,8 @@
       "bytes": 297888,
       "sha256": "13b5bccf23e5874b31613df9d55897915d68622547a09a43670c9bccb3fadb3f",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
         "command:grub-mkrescue",
         "command:qemu-system-i386",
         "command:qemu-system-x86_64"
@@ -1329,10 +1564,23 @@
       "package": "libxml2-16:amd64"
     },
     {
+      "path": "/usr/lib/x86_64-linux-gnu/libxxhash.so.0.8.3",
+      "bytes": 75688,
+      "sha256": "cd56d028bf4c1dbda4d3e4beba6a044d2b13ab4506dfa7b8bfe66ef97982d193",
+      "reasons": [
+        "command:apt-cache",
+        "command:apt-get"
+      ],
+      "package": "libxxhash0:amd64"
+    },
+    {
       "path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.2",
       "bytes": 121328,
       "sha256": "032754aa5f865b32034dbc2e6b70153f29f38cf182dc41fa36aa469143fa53ca",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
+        "command:dpkg-deb",
         "command:clang",
         "command:ld",
         "command:lld-link",
@@ -1359,6 +1607,9 @@
       "bytes": 821240,
       "sha256": "afac1dce1f655e102000a1ad60c1b7be4f74772b6514105130a77dae71303c93",
       "reasons": [
+        "command:apt-cache",
+        "command:apt-get",
+        "command:dpkg-deb",
         "command:clang",
         "command:ld",
         "command:lld-link",
@@ -1389,6 +1640,100 @@
   ],
   "packages": [
     {
+      "name": "apt",
+      "version": "3.3.2+kali1",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "apt",
+      "source_version": "3.3.2+kali1",
+      "depends_raw": "base-passwd (>= 3.6.1) | adduser, sqv (>= 1.3.0), libapt-pkg7.0 (>= 3.3.2+kali1), debian-archive-keyring, libc6 (>= 2.38), libgcc-s1 (>= 3.0), libseccomp2 (>= 2.4.2), libssl3t64 (>= 3.0.0), libstdc++6 (>= 13.1), libsystemd0",
+      "pre_depends_raw": "",
+      "provides_raw": "apt-transport-https (= 3.3.2+kali1)",
+      "binary_archive": "/var/cache/apt/archives/apt_3.3.2+kali1_amd64.deb",
+      "binary_archive_retained": true,
+      "binary_archive_sha256": "4fe770537356c8b477c376c1c084bf50316a8f933af4eb2ba46c279695aebaee",
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "base-passwd",
+        "debian-archive-keyring",
+        "libapt-pkg7.0:amd64",
+        "libc6:amd64",
+        "libgcc-s1:amd64",
+        "libseccomp2:amd64",
+        "libssl3t64:amd64",
+        "libstdc++6:amd64",
+        "libsystemd0:amd64",
+        "sqv"
+      ],
+      "reverse_dependencies": []
+    },
+    {
+      "name": "base-files",
+      "version": "1:2026.3.0",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "base-files",
+      "source_version": "1:2026.3.0",
+      "depends_raw": "",
+      "pre_depends_raw": "awk",
+      "provides_raw": "base, usr-is-merged",
+      "binary_archive": "/var/cache/apt/archives/base-files_1%3a2026.3.0_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "gawk"
+      ],
+      "reverse_dependencies": [
+        "bash"
+      ]
+    },
+    {
+      "name": "base-passwd",
+      "version": "3.6.8",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "base-passwd",
+      "source_version": "3.6.8",
+      "depends_raw": "libc6 (>= 2.34), libdebconfclient0 (>= 0.145), libselinux1 (>= 3.1~)",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/base-passwd_3.6.8_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64",
+        "libdebconfclient0:amd64",
+        "libselinux1:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt"
+      ]
+    },
+    {
+      "name": "bash",
+      "version": "5.3-3+b1",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "bash",
+      "source_version": "5.3-3",
+      "depends_raw": "base-files (>= 2.1.12), debianutils (>= 5.6-0.1)",
+      "pre_depends_raw": "libc6 (>= 2.38), libtinfo6 (>= 6)",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/bash_5.3-3+b1_amd64.deb",
+      "binary_archive_retained": true,
+      "binary_archive_sha256": "57c42d075fef4813f03a3cc7dcf73bc5deaebb89dca90c4bfe59c3a2250f66c9",
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "base-files",
+        "debianutils",
+        "libc6:amd64",
+        "libtinfo6:amd64"
+      ],
+      "reverse_dependencies": []
+    },
+    {
       "name": "binutils",
       "version": "2.47-2",
       "architecture": "amd64",
@@ -1410,6 +1755,9 @@
         "libgcc-s1:amd64",
         "libgprofng0:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21"
       ]
     },
     {
@@ -1426,7 +1774,12 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "binutils",
+        "binutils-x86-64-linux-gnu",
+        "libbinutils:amd64"
+      ]
     },
     {
       "name": "binutils-x86-64-linux-gnu",
@@ -1452,6 +1805,10 @@
         "libsframe3:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils",
+        "gcc-15-x86-64-linux-gnu"
       ]
     },
     {
@@ -1482,7 +1839,8 @@
         "libstdc++-15-dev:amd64",
         "libstdc++6:amd64",
         "llvm-21-linker-tools"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "cpp-15-x86-64-linux-gnu",
@@ -1507,6 +1865,49 @@
         "libmpfr6:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "gcc-15-x86-64-linux-gnu"
+      ]
+    },
+    {
+      "name": "debian-archive-keyring",
+      "version": "2025.1",
+      "architecture": "all",
+      "status": "install ok installed",
+      "source_package": "debian-archive-keyring",
+      "source_version": "2025.1",
+      "depends_raw": "",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/debian-archive-keyring_2025.1_all.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "apt"
+      ]
+    },
+    {
+      "name": "debianutils",
+      "version": "5.23.2",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "debianutils",
+      "source_version": "5.23.2",
+      "depends_raw": "",
+      "pre_depends_raw": "libc6 (>= 2.38)",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/debianutils_5.23.2_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "bash"
       ]
     },
     {
@@ -1526,6 +1927,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libdevmapper1.02.1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libdevmapper1.02.1:amd64"
       ]
     },
     {
@@ -1544,6 +1948,57 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": []
+    },
+    {
+      "name": "dpkg",
+      "version": "1.23.7+kali1",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "dpkg",
+      "source_version": "1.23.7+kali1",
+      "depends_raw": "tar (>= 1.28-1)",
+      "pre_depends_raw": "libbz2-1.0, libc6 (>= 2.38), liblzma5 (>= 5.4.0), libmd0 (>= 0.0.0), libselinux1 (>= 3.1~), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.1.4)",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/dpkg_1.23.7+kali1_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libbz2-1.0:amd64",
+        "libc6:amd64",
+        "liblzma5:amd64",
+        "libmd0:amd64",
+        "libselinux1:amd64",
+        "libzstd1:amd64",
+        "tar",
+        "zlib1g:amd64"
+      ],
+      "reverse_dependencies": []
+    },
+    {
+      "name": "gawk",
+      "version": "1:5.3.2-1",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "gawk",
+      "source_version": "1:5.3.2-1",
+      "depends_raw": "",
+      "pre_depends_raw": "libc6 (>= 2.38), libgmp10 (>= 2:6.3.0+dfsg), libmpfr6 (>= 3.1.3), libreadline8t64 (>= 6.0)",
+      "provides_raw": "awk",
+      "binary_archive": "/var/cache/apt/archives/gawk_1%3a5.3.2-1_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64",
+        "libgmp10:amd64",
+        "libmpfr6:amd64",
+        "libreadline8t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "base-files"
       ]
     },
     {
@@ -1560,7 +2015,14 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "cpp-15-x86-64-linux-gnu",
+        "gcc-15-x86-64-linux-gnu",
+        "libgcc-15-dev:amd64",
+        "libobjc-15-dev:amd64",
+        "libstdc++-15-dev:amd64"
+      ]
     },
     {
       "name": "gcc-15-x86-64-linux-gnu",
@@ -1591,7 +2053,8 @@
         "libstdc++6:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "gcc-16-base:amd64",
@@ -1607,7 +2070,22 @@
       "binary_archive_retained": true,
       "binary_archive_sha256": "2c83b8b5a3ebe4431ca1f8f20370af04f8e80ca5a8726afd56f3fa1523f83e16",
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "libasan8:amd64",
+        "libatomic1:amd64",
+        "libcc1-0:amd64",
+        "libgcc-s1:amd64",
+        "libgomp1:amd64",
+        "libhwasan0:amd64",
+        "libitm1:amd64",
+        "liblsan0:amd64",
+        "libobjc4:amd64",
+        "libquadmath0:amd64",
+        "libstdc++6:amd64",
+        "libtsan2:amd64",
+        "libubsan1:amd64"
+      ]
     },
     {
       "name": "gdisk",
@@ -1631,7 +2109,8 @@
         "libstdc++6:amd64",
         "libtinfo6:amd64",
         "libuuid1:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "gettext-base",
@@ -1649,6 +2128,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "grub2-common"
       ]
     },
     {
@@ -1674,7 +2156,8 @@
         "libfreetype6:amd64",
         "libfuse3-4:amd64",
         "liblzma5:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "ipxe-qemu",
@@ -1690,7 +2173,10 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "qemu-system-x86"
+      ]
     },
     {
       "name": "libacl1:amd64",
@@ -1708,6 +2194,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libisofs6t64:amd64",
+        "tar"
       ]
     },
     {
@@ -1726,6 +2216,41 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
+      ]
+    },
+    {
+      "name": "libapt-pkg7.0:amd64",
+      "version": "3.3.2+kali1",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "apt",
+      "source_version": "3.3.2+kali1",
+      "depends_raw": "libbz2-1.0, libc6 (>= 2.38), libgcc-s1 (>= 3.0), liblz4-1 (>= 0.0~r127), liblzma5 (>= 5.1.1alpha+20120614), libssl3t64 (>= 3.0.0), libstdc++6 (>= 14), libsystemd0 (>= 221), libudev1 (>= 183), libxxhash0 (>= 0.8), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.2.2.3)",
+      "pre_depends_raw": "",
+      "provides_raw": "libapt-pkg (= 3.3.2+kali1)",
+      "binary_archive": "/var/cache/apt/archives/libapt-pkg7.0_3.3.2+kali1_amd64.deb",
+      "binary_archive_retained": true,
+      "binary_archive_sha256": "04dc25363ee026baa81f643d2e5b20daa98d8039f94f0b57e44c4db67bba2517",
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libbz2-1.0:amd64",
+        "libc6:amd64",
+        "libgcc-s1:amd64",
+        "liblz4-1:amd64",
+        "liblzma5:amd64",
+        "libssl3t64:amd64",
+        "libstdc++6:amd64",
+        "libsystemd0:amd64",
+        "libudev1:amd64",
+        "libxxhash0:amd64",
+        "libzstd1:amd64",
+        "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt"
       ]
     },
     {
@@ -1746,6 +2271,9 @@
         "gcc-16-base:amd64",
         "libc6:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -1762,7 +2290,10 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "libasound2t64:amd64"
+      ]
     },
     {
       "name": "libasound2t64:amd64",
@@ -1781,6 +2312,9 @@
       "resolved_dependencies": [
         "libasound2-data",
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common"
       ]
     },
     {
@@ -1800,6 +2334,10 @@
       "resolved_dependencies": [
         "gcc-16-base:amd64",
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64",
+        "libglib2.0-0t64:amd64"
       ]
     },
     {
@@ -1822,6 +2360,12 @@
         "libsframe3:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils",
+        "binutils-x86-64-linux-gnu",
+        "libctf0:amd64",
+        "libgprofng0:amd64"
       ]
     },
     {
@@ -1840,6 +2384,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libmount1:amd64",
+        "systemd"
       ]
     },
     {
@@ -1860,6 +2408,9 @@
         "libc6:amd64",
         "libelf1t64:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -1879,6 +2430,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libsystemd0:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common"
       ]
     },
     {
@@ -1897,6 +2451,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libfreetype6:amd64"
       ]
     },
     {
@@ -1916,6 +2473,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libmd0:amd64"
+      ],
+      "reverse_dependencies": [
+        "libedit2:amd64"
       ]
     },
     {
@@ -1934,6 +2494,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libisoburn1t64:amd64"
       ]
     },
     {
@@ -1952,7 +2515,32 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "dpkg",
+        "libapt-pkg7.0:amd64",
+        "libfreetype6:amd64",
+        "libjte2:amd64"
       ]
+    },
+    {
+      "name": "libc-bin",
+      "version": "2.42-17",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "glibc",
+      "source_version": "2.42-17",
+      "depends_raw": "libc6 (>> 2.42), libc6 (<< 2.43)",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/libc-bin_2.42-17_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64"
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "libc-dev-bin",
@@ -1970,6 +2558,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libc6-dev:amd64"
       ]
     },
     {
@@ -1986,7 +2577,11 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "libc6:amd64",
+        "mtools"
+      ]
     },
     {
       "name": "libc6-dev:amd64",
@@ -2007,6 +2602,10 @@
         "libc6:amd64",
         "linux-libc-dev",
         "rpcsvc-proto"
+      ],
+      "reverse_dependencies": [
+        "clang-21",
+        "libstdc++-15-dev:amd64"
       ]
     },
     {
@@ -2026,6 +2625,150 @@
       "resolved_dependencies": [
         "libc-gconv-modules-extra:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt",
+        "base-passwd",
+        "bash",
+        "binutils",
+        "binutils-x86-64-linux-gnu",
+        "clang-21",
+        "cpp-15-x86-64-linux-gnu",
+        "debianutils",
+        "dmsetup",
+        "dosfstools",
+        "dpkg",
+        "gawk",
+        "gcc-15-x86-64-linux-gnu",
+        "gdisk",
+        "gettext-base",
+        "grub2-common",
+        "libacl1:amd64",
+        "libaio1t64:amd64",
+        "libapt-pkg7.0:amd64",
+        "libasan8:amd64",
+        "libasound2t64:amd64",
+        "libatomic1:amd64",
+        "libbinutils:amd64",
+        "libblkid1:amd64",
+        "libbpf1:amd64",
+        "libbrlapi0.8:amd64",
+        "libbrotli1:amd64",
+        "libbsd0:amd64",
+        "libburn4t64:amd64",
+        "libbz2-1.0:amd64",
+        "libc-bin",
+        "libc-dev-bin",
+        "libc6-dev:amd64",
+        "libcacard0:amd64",
+        "libcap-ng0:amd64",
+        "libcapstone5:amd64",
+        "libcc1-0:amd64",
+        "libclang-cpp21",
+        "libclang1-21",
+        "libctf-nobfd0:amd64",
+        "libctf0:amd64",
+        "libdaxctl1:amd64",
+        "libdb5.3t64:amd64",
+        "libdebconfclient0:amd64",
+        "libdevmapper1.02.1:amd64",
+        "libedit2:amd64",
+        "libefiboot1t64:amd64",
+        "libefivar1t64:amd64",
+        "libelf1t64:amd64",
+        "libexecs1:amd64",
+        "libexpat1:amd64",
+        "libfdt1:amd64",
+        "libffi8:amd64",
+        "libfreetype6:amd64",
+        "libfuse3-4:amd64",
+        "libgc1:amd64",
+        "libgcc-s1:amd64",
+        "libglib2.0-0t64:amd64",
+        "libgmp10:amd64",
+        "libgnutls30t64:amd64",
+        "libgomp1:amd64",
+        "libgprofng0:amd64",
+        "libhogweed6t64:amd64",
+        "libhwasan0:amd64",
+        "libibverbs1:amd64",
+        "libidn2-0:amd64",
+        "libisl23:amd64",
+        "libisoburn1t64:amd64",
+        "libisofs6t64:amd64",
+        "libitm1:amd64",
+        "libjansson4:amd64",
+        "libjpeg62-turbo:amd64",
+        "libjte2:amd64",
+        "libkmod2:amd64",
+        "libllvm21:amd64",
+        "liblsan0:amd64",
+        "liblz4-1:amd64",
+        "liblzma5:amd64",
+        "libmd0:amd64",
+        "libmount1:amd64",
+        "libmpc3:amd64",
+        "libmpfr6:amd64",
+        "libncursesw6:amd64",
+        "libndctl6:amd64",
+        "libnettle8t64:amd64",
+        "libnl-3-200:amd64",
+        "libnl-route-3-200:amd64",
+        "libnspr4:amd64",
+        "libnss3:amd64",
+        "libnuma1:amd64",
+        "libobjc4:amd64",
+        "libp11-kit0:amd64",
+        "libpcre2-8-0:amd64",
+        "libpcsclite1:amd64",
+        "libpixman-1-0:amd64",
+        "libpmem1:amd64",
+        "libpng16-16t64:amd64",
+        "libpopt0:amd64",
+        "libpython3.14-minimal:amd64",
+        "libquadmath0:amd64",
+        "librdmacm1t64:amd64",
+        "libreadline8t64:amd64",
+        "libsasl2-2:amd64",
+        "libsasl2-modules-db:amd64",
+        "libseccomp2:amd64",
+        "libselinux1:amd64",
+        "libsframe3:amd64",
+        "libslirp0:amd64",
+        "libsqlite3-0:amd64",
+        "libssl3t64:amd64",
+        "libstdc++6:amd64",
+        "libsystemd-shared:amd64",
+        "libsystemd0:amd64",
+        "libtasn1-6:amd64",
+        "libtinfo6:amd64",
+        "libtsan2:amd64",
+        "libubsan1:amd64",
+        "libudev1:amd64",
+        "libunistring5:amd64",
+        "liburing2:amd64",
+        "libusb-1.0-0:amd64",
+        "libusbredirparser1t64:amd64",
+        "libuuid1:amd64",
+        "libvdeplug2t64:amd64",
+        "libxml2-16:amd64",
+        "libxxhash0:amd64",
+        "libz3-4:amd64",
+        "libzstd1:amd64",
+        "lld-21",
+        "llvm-21-linker-tools",
+        "mtools",
+        "nasm",
+        "openssl-provider-legacy",
+        "python3.14-minimal",
+        "qemu-system-common",
+        "qemu-system-x86",
+        "rpcsvc-proto",
+        "sqv",
+        "systemd",
+        "tar",
+        "xorriso",
+        "zlib1g:amd64"
       ]
     },
     {
@@ -2048,6 +2791,9 @@
         "libnspr4:amd64",
         "libnss3:amd64",
         "libpcsclite1:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common"
       ]
     },
     {
@@ -2066,6 +2812,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common"
       ]
     },
     {
@@ -2084,6 +2833,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -2105,6 +2857,9 @@
         "libc6:amd64",
         "libgcc-s1:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "gcc-15-x86-64-linux-gnu"
       ]
     },
     {
@@ -2121,7 +2876,10 @@
       "binary_archive_retained": true,
       "binary_archive_sha256": "c9c9b47cea2b0cf07fd73767f3f22ec16995f6ce92a4fbf123b6de804ca85127",
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "clang-21"
+      ]
     },
     {
       "name": "libclang-cpp21",
@@ -2142,6 +2900,9 @@
         "libgcc-s1:amd64",
         "libllvm21:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21"
       ]
     },
     {
@@ -2163,6 +2924,9 @@
         "libgcc-s1:amd64",
         "libllvm21:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21"
       ]
     },
     {
@@ -2182,6 +2946,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils-x86-64-linux-gnu"
       ]
     },
     {
@@ -2202,6 +2969,9 @@
         "libbinutils:amd64",
         "libc6:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils-x86-64-linux-gnu"
       ]
     },
     {
@@ -2222,6 +2992,10 @@
         "libc6:amd64",
         "libkmod2:amd64",
         "libuuid1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libndctl6:amd64",
+        "libpmem1:amd64"
       ]
     },
     {
@@ -2240,6 +3014,30 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libsasl2-modules-db:amd64"
+      ]
+    },
+    {
+      "name": "libdebconfclient0:amd64",
+      "version": "0.283",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "cdebconf",
+      "source_version": "0.283",
+      "depends_raw": "libc6 (>= 2.38)",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/libdebconfclient0_0.283_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "base-passwd"
       ]
     },
     {
@@ -2261,6 +3059,10 @@
         "libc6:amd64",
         "libselinux1:amd64",
         "libudev1:amd64"
+      ],
+      "reverse_dependencies": [
+        "dmsetup",
+        "grub2-common"
       ]
     },
     {
@@ -2281,6 +3083,9 @@
         "libbsd0:amd64",
         "libc6:amd64",
         "libtinfo6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libllvm21:amd64"
       ]
     },
     {
@@ -2300,6 +3105,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libefivar1t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "grub2-common"
       ]
     },
     {
@@ -2318,6 +3126,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "grub2-common",
+        "libefiboot1t64:amd64"
       ]
     },
     {
@@ -2338,6 +3150,9 @@
         "libc6:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "libbpf1:amd64"
       ]
     },
     {
@@ -2356,6 +3171,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libvdeplug2t64:amd64"
       ]
     },
     {
@@ -2374,6 +3192,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "python3.14-minimal"
       ]
     },
     {
@@ -2392,6 +3213,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -2410,6 +3234,11 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libglib2.0-0t64:amd64",
+        "libllvm21:amd64",
+        "libp11-kit0:amd64"
       ]
     },
     {
@@ -2432,6 +3261,9 @@
         "libc6:amd64",
         "libpng16-16t64:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "grub2-common"
       ]
     },
     {
@@ -2450,6 +3282,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "grub2-common",
+        "qemu-system-x86"
       ]
     },
     {
@@ -2469,6 +3305,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libobjc4:amd64"
       ]
     },
     {
@@ -2497,6 +3336,12 @@
         "libquadmath0:amd64",
         "libtsan2:amd64",
         "libubsan1:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21",
+        "gcc-15-x86-64-linux-gnu",
+        "libobjc-15-dev:amd64",
+        "libstdc++-15-dev:amd64"
       ]
     },
     {
@@ -2516,6 +3361,32 @@
       "resolved_dependencies": [
         "gcc-16-base:amd64",
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt",
+        "binutils",
+        "clang-21",
+        "gcc-15-x86-64-linux-gnu",
+        "gdisk",
+        "libapt-pkg7.0:amd64",
+        "libasan8:amd64",
+        "libc6:amd64",
+        "libcc1-0:amd64",
+        "libclang-cpp21",
+        "libclang1-21",
+        "libgcc-15-dev:amd64",
+        "libgprofng0:amd64",
+        "libhwasan0:amd64",
+        "libllvm21:amd64",
+        "liblsan0:amd64",
+        "libobjc4:amd64",
+        "libstdc++6:amd64",
+        "libtsan2:amd64",
+        "libubsan1:amd64",
+        "libz3-4:amd64",
+        "lld-21",
+        "llvm-21-linker-tools",
+        "sqv"
       ]
     },
     {
@@ -2540,6 +3411,12 @@
         "libpcre2-8-0:amd64",
         "libselinux1:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "libcacard0:amd64",
+        "libslirp0:amd64",
+        "qemu-system-common",
+        "qemu-system-x86"
       ]
     },
     {
@@ -2558,6 +3435,17 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "cpp-15-x86-64-linux-gnu",
+        "gawk",
+        "gcc-15-x86-64-linux-gnu",
+        "libgnutls30t64:amd64",
+        "libhogweed6t64:amd64",
+        "libisl23:amd64",
+        "libmpc3:amd64",
+        "libmpfr6:amd64",
+        "sqv"
       ]
     },
     {
@@ -2583,6 +3471,10 @@
         "libp11-kit0:amd64",
         "libtasn1-6:amd64",
         "libunistring5:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common",
+        "qemu-system-x86"
       ]
     },
     {
@@ -2602,6 +3494,9 @@
       "resolved_dependencies": [
         "gcc-16-base:amd64",
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -2624,6 +3519,9 @@
         "libgcc-s1:amd64",
         "libstdc++6:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils"
       ]
     },
     {
@@ -2644,6 +3542,10 @@
         "libc6:amd64",
         "libgmp10:amd64",
         "libnettle8t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgnutls30t64:amd64",
+        "sqv"
       ]
     },
     {
@@ -2664,6 +3566,9 @@
         "gcc-16-base:amd64",
         "libc6:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -2685,6 +3590,10 @@
         "libnl-3-200:amd64",
         "libnl-route-3-200:amd64",
         "systemd"
+      ],
+      "reverse_dependencies": [
+        "librdmacm1t64:amd64",
+        "qemu-system-x86"
       ]
     },
     {
@@ -2704,6 +3613,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libunistring5:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgnutls30t64:amd64"
       ]
     },
     {
@@ -2723,6 +3635,10 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libgmp10:amd64"
+      ],
+      "reverse_dependencies": [
+        "cpp-15-x86-64-linux-gnu",
+        "gcc-15-x86-64-linux-gnu"
       ]
     },
     {
@@ -2745,6 +3661,9 @@
         "libisofs6t64:amd64",
         "libjte2:amd64",
         "libreadline8t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "xorriso"
       ]
     },
     {
@@ -2766,6 +3685,9 @@
         "libc6:amd64",
         "libjte2:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "libisoburn1t64:amd64"
       ]
     },
     {
@@ -2785,6 +3707,9 @@
       "resolved_dependencies": [
         "gcc-16-base:amd64",
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -2803,6 +3728,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils-x86-64-linux-gnu"
       ]
     },
     {
@@ -2821,6 +3749,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -2841,6 +3772,10 @@
         "libbz2-1.0:amd64",
         "libc6:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "libisoburn1t64:amd64",
+        "libisofs6t64:amd64"
       ]
     },
     {
@@ -2860,6 +3795,10 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libssl3t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "libdaxctl1:amd64",
+        "libndctl6:amd64"
       ]
     },
     {
@@ -2886,6 +3825,13 @@
         "libz3-4:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21",
+        "libclang-cpp21",
+        "libclang1-21",
+        "lld-21",
+        "llvm-21-linker-tools"
       ]
     },
     {
@@ -2906,6 +3852,31 @@
         "gcc-16-base:amd64",
         "libc6:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
+      ]
+    },
+    {
+      "name": "liblz4-1:amd64",
+      "version": "1.10.0-10",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "lz4",
+      "source_version": "1.10.0-10",
+      "depends_raw": "libc6 (>= 2.14), libxxhash0 (>= 0.6.5)",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/liblz4-1_1.10.0-10_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64",
+        "libxxhash0:amd64"
+      ],
+      "reverse_dependencies": [
+        "libapt-pkg7.0:amd64"
       ]
     },
     {
@@ -2924,6 +3895,11 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "dpkg",
+        "grub2-common",
+        "libapt-pkg7.0:amd64"
       ]
     },
     {
@@ -2942,6 +3918,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "dpkg",
+        "libbsd0:amd64"
       ]
     },
     {
@@ -2963,6 +3943,10 @@
         "libc6:amd64",
         "libselinux1:amd64",
         "libsystemd0:amd64"
+      ],
+      "reverse_dependencies": [
+        "libglib2.0-0t64:amd64",
+        "systemd"
       ]
     },
     {
@@ -2983,6 +3967,10 @@
         "libc6:amd64",
         "libgmp10:amd64",
         "libmpfr6:amd64"
+      ],
+      "reverse_dependencies": [
+        "cpp-15-x86-64-linux-gnu",
+        "gcc-15-x86-64-linux-gnu"
       ]
     },
     {
@@ -3002,6 +3990,12 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libgmp10:amd64"
+      ],
+      "reverse_dependencies": [
+        "cpp-15-x86-64-linux-gnu",
+        "gawk",
+        "gcc-15-x86-64-linux-gnu",
+        "libmpc3:amd64"
       ]
     },
     {
@@ -3021,6 +4015,10 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libtinfo6:amd64"
+      ],
+      "reverse_dependencies": [
+        "gdisk",
+        "qemu-system-common"
       ]
     },
     {
@@ -3043,6 +4041,9 @@
         "libkmod2:amd64",
         "libudev1:amd64",
         "libuuid1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libpmem1:amd64"
       ]
     },
     {
@@ -3061,6 +4062,11 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgnutls30t64:amd64",
+        "libhogweed6t64:amd64",
+        "sqv"
       ]
     },
     {
@@ -3079,6 +4085,11 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libibverbs1:amd64",
+        "libnl-route-3-200:amd64",
+        "librdmacm1t64:amd64"
       ]
     },
     {
@@ -3098,6 +4109,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libnl-3-200:amd64"
+      ],
+      "reverse_dependencies": [
+        "libibverbs1:amd64"
       ]
     },
     {
@@ -3116,6 +4130,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libcacard0:amd64",
+        "libnss3:amd64"
       ]
     },
     {
@@ -3136,6 +4154,9 @@
         "libc6:amd64",
         "libnspr4:amd64",
         "libsqlite3-0:amd64"
+      ],
+      "reverse_dependencies": [
+        "libcacard0:amd64"
       ]
     },
     {
@@ -3154,6 +4175,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3174,6 +4199,9 @@
         "gcc-15-base:amd64",
         "libgcc-15-dev:amd64",
         "libobjc4:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21"
       ]
     },
     {
@@ -3195,6 +4223,9 @@
         "libc6:amd64",
         "libgc1:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libobjc-15-dev:amd64"
       ]
     },
     {
@@ -3214,6 +4245,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libffi8:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgnutls30t64:amd64"
       ]
     },
     {
@@ -3232,6 +4266,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libglib2.0-0t64:amd64",
+        "libselinux1:amd64"
       ]
     },
     {
@@ -3250,6 +4288,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libcacard0:amd64"
       ]
     },
     {
@@ -3268,6 +4309,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3288,6 +4333,9 @@
         "libc6:amd64",
         "libdaxctl1:amd64",
         "libndctl6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -3307,6 +4355,10 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "libfreetype6:amd64",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3325,6 +4377,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "gdisk"
       ]
     },
     {
@@ -3344,6 +4399,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libssl3t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "python3.14-minimal"
       ]
     },
     {
@@ -3363,6 +4421,9 @@
       "resolved_dependencies": [
         "gcc-16-base:amd64",
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -3383,6 +4444,9 @@
         "libc6:amd64",
         "libibverbs1:amd64",
         "libnl-3-200:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -3403,6 +4467,10 @@
         "libc6:amd64",
         "libtinfo6:amd64",
         "readline-common"
+      ],
+      "reverse_dependencies": [
+        "gawk",
+        "libisoburn1t64:amd64"
       ]
     },
     {
@@ -3423,6 +4491,9 @@
         "libc6:amd64",
         "libsasl2-modules-db:amd64",
         "libssl3t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -3442,6 +4513,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libdb5.3t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "libsasl2-2:amd64"
       ]
     },
     {
@@ -3460,6 +4534,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3479,6 +4557,14 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libpcre2-8-0:amd64"
+      ],
+      "reverse_dependencies": [
+        "base-passwd",
+        "dpkg",
+        "libdevmapper1.02.1:amd64",
+        "libglib2.0-0t64:amd64",
+        "libmount1:amd64",
+        "tar"
       ]
     },
     {
@@ -3497,6 +4583,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils-x86-64-linux-gnu",
+        "libbinutils:amd64"
       ]
     },
     {
@@ -3516,6 +4606,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libglib2.0-0t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -3534,6 +4627,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libnss3:amd64"
       ]
     },
     {
@@ -3555,6 +4651,14 @@
         "libzstd1:amd64",
         "openssl-provider-legacy",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt",
+        "libapt-pkg7.0:amd64",
+        "libkmod2:amd64",
+        "libpython3.14-minimal:amd64",
+        "libsasl2-2:amd64",
+        "openssl-provider-legacy"
       ]
     },
     {
@@ -3576,6 +4680,9 @@
         "libc6-dev:amd64",
         "libgcc-15-dev:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21"
       ]
     },
     {
@@ -3596,6 +4703,25 @@
         "gcc-16-base:amd64",
         "libc6:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt",
+        "binutils",
+        "clang-21",
+        "gcc-15-x86-64-linux-gnu",
+        "gdisk",
+        "libapt-pkg7.0:amd64",
+        "libcc1-0:amd64",
+        "libclang-cpp21",
+        "libclang1-21",
+        "libgc1:amd64",
+        "libgprofng0:amd64",
+        "libllvm21:amd64",
+        "libstdc++-15-dev:amd64",
+        "libubsan1:amd64",
+        "libz3-4:amd64",
+        "lld-21",
+        "llvm-21-linker-tools"
       ]
     },
     {
@@ -3614,6 +4740,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "systemd"
       ]
     },
     {
@@ -3632,6 +4761,13 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt",
+        "libapt-pkg7.0:amd64",
+        "libbrlapi0.8:amd64",
+        "libmount1:amd64",
+        "systemd"
       ]
     },
     {
@@ -3650,6 +4786,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgnutls30t64:amd64"
       ]
     },
     {
@@ -3668,6 +4807,14 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "bash",
+        "gdisk",
+        "libedit2:amd64",
+        "libncursesw6:amd64",
+        "libreadline8t64:amd64",
+        "qemu-system-common"
       ]
     },
     {
@@ -3688,6 +4835,9 @@
         "gcc-16-base:amd64",
         "libc6:amd64",
         "libgcc-s1:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -3709,6 +4859,9 @@
         "libc6:amd64",
         "libgcc-s1:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgcc-15-dev:amd64"
       ]
     },
     {
@@ -3727,6 +4880,13 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libapt-pkg7.0:amd64",
+        "libdevmapper1.02.1:amd64",
+        "libndctl6:amd64",
+        "libusb-1.0-0:amd64",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3745,6 +4905,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libgnutls30t64:amd64",
+        "libidn2-0:amd64"
       ]
     },
     {
@@ -3763,6 +4927,10 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3782,6 +4950,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libudev1:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common"
       ]
     },
     {
@@ -3800,6 +4971,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-common"
       ]
     },
     {
@@ -3818,6 +4992,11 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "gdisk",
+        "libdaxctl1:amd64",
+        "libndctl6:amd64"
       ]
     },
     {
@@ -3837,6 +5016,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libexecs1:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -3856,6 +5038,31 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "zlib1g:amd64"
+      ],
+      "reverse_dependencies": [
+        "libllvm21:amd64"
+      ]
+    },
+    {
+      "name": "libxxhash0:amd64",
+      "version": "0.8.3-2+b2",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "xxhash",
+      "source_version": "0.8.3-2",
+      "depends_raw": "libc6 (>= 2.14)",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/libxxhash0_0.8.3-2+b2_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libapt-pkg7.0:amd64",
+        "liblz4-1:amd64"
       ]
     },
     {
@@ -3876,6 +5083,9 @@
         "libc6:amd64",
         "libgcc-s1:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libllvm21:amd64"
       ]
     },
     {
@@ -3894,6 +5104,19 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils-x86-64-linux-gnu",
+        "cpp-15-x86-64-linux-gnu",
+        "dpkg",
+        "gcc-15-x86-64-linux-gnu",
+        "libapt-pkg7.0:amd64",
+        "libbinutils:amd64",
+        "libelf1t64:amd64",
+        "libllvm21:amd64",
+        "libssl3t64:amd64",
+        "lld-21",
+        "qemu-system-x86"
       ]
     },
     {
@@ -3910,7 +5133,10 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "libc6-dev:amd64"
+      ]
     },
     {
       "name": "lld-21",
@@ -3933,7 +5159,8 @@
         "libstdc++6:amd64",
         "libzstd1:amd64",
         "zlib1g:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "llvm-21-linker-tools",
@@ -3954,6 +5181,9 @@
         "libgcc-s1:amd64",
         "libllvm21:amd64",
         "libstdc++6:amd64"
+      ],
+      "reverse_dependencies": [
+        "clang-21"
       ]
     },
     {
@@ -3973,7 +5203,8 @@
       "resolved_dependencies": [
         "libc-gconv-modules-extra:amd64",
         "libc6:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "nasm",
@@ -3991,7 +5222,8 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "openssl-provider-legacy",
@@ -4010,6 +5242,9 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libssl3t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "libssl3t64:amd64"
       ]
     },
     {
@@ -4026,7 +5261,8 @@
       "binary_archive_retained": true,
       "binary_archive_sha256": "0f2d4de080ebeaf0972c5e212253c28dd2d90aa641542f42f37c6d6ecd4c67eb",
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": []
     },
     {
       "name": "python3.14-minimal",
@@ -4047,7 +5283,8 @@
         "libexpat1:amd64",
         "libpython3.14-minimal:amd64",
         "zlib1g:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "qemu-system-common",
@@ -4078,6 +5315,9 @@
         "liburing2:amd64",
         "libusb-1.0-0:amd64",
         "libusbredirparser1t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "qemu-system-x86"
       ]
     },
     {
@@ -4094,7 +5334,10 @@
       "binary_archive_retained": true,
       "binary_archive_sha256": "1b49020069c53580ed11c1a304b6c642226f2ab6bf57c4dd911b61581875e057",
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "qemu-system-x86"
+      ]
     },
     {
       "name": "qemu-system-x86",
@@ -4138,7 +5381,8 @@
         "qemu-system-data",
         "seabios",
         "zlib1g:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "readline-common",
@@ -4154,7 +5398,10 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "libreadline8t64:amd64"
+      ]
     },
     {
       "name": "rpcsvc-proto",
@@ -4172,6 +5419,9 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "libc6-dev:amd64"
       ]
     },
     {
@@ -4188,7 +5438,35 @@
       "binary_archive_retained": false,
       "binary_archive_sha256": null,
       "source_archive_retained": false,
-      "resolved_dependencies": []
+      "resolved_dependencies": [],
+      "reverse_dependencies": [
+        "qemu-system-x86"
+      ]
+    },
+    {
+      "name": "sqv",
+      "version": "1.4.0-1",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "rust-sequoia-sqv",
+      "source_version": "1.4.0-1",
+      "depends_raw": "libc6 (>= 2.34), libgcc-s1 (>= 4.2), libgmp10 (>= 2:6.3.0+dfsg), libhogweed6t64, libnettle8t64 (>= 3.9~)",
+      "pre_depends_raw": "",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/sqv_1.4.0-1_amd64.deb",
+      "binary_archive_retained": false,
+      "binary_archive_sha256": null,
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libc6:amd64",
+        "libgcc-s1:amd64",
+        "libgmp10:amd64",
+        "libhogweed6t64:amd64",
+        "libnettle8t64:amd64"
+      ],
+      "reverse_dependencies": [
+        "apt"
+      ]
     },
     {
       "name": "systemd",
@@ -4210,6 +5488,32 @@
         "libmount1:amd64",
         "libsystemd-shared:amd64",
         "libsystemd0:amd64"
+      ],
+      "reverse_dependencies": [
+        "libibverbs1:amd64"
+      ]
+    },
+    {
+      "name": "tar",
+      "version": "1.35+dfsg-5",
+      "architecture": "amd64",
+      "status": "install ok installed",
+      "source_package": "tar",
+      "source_version": "1.35+dfsg-5",
+      "depends_raw": "",
+      "pre_depends_raw": "libacl1 (>= 2.2.23), libc6 (>= 2.38), libselinux1 (>= 3.1~)",
+      "provides_raw": "",
+      "binary_archive": "/var/cache/apt/archives/tar_1.35+dfsg-5_amd64.deb",
+      "binary_archive_retained": true,
+      "binary_archive_sha256": "c1c24b21c27006e49d691d41c847ad09fbbd6516626a942f69e59c15fbecc81e",
+      "source_archive_retained": false,
+      "resolved_dependencies": [
+        "libacl1:amd64",
+        "libc6:amd64",
+        "libselinux1:amd64"
+      ],
+      "reverse_dependencies": [
+        "dpkg"
       ]
     },
     {
@@ -4229,7 +5533,8 @@
       "resolved_dependencies": [
         "libc6:amd64",
         "libisoburn1t64:amd64"
-      ]
+      ],
+      "reverse_dependencies": []
     },
     {
       "name": "zlib1g:amd64",
@@ -4247,24 +5552,1138 @@
       "source_archive_retained": false,
       "resolved_dependencies": [
         "libc6:amd64"
+      ],
+      "reverse_dependencies": [
+        "binutils-x86-64-linux-gnu",
+        "cpp-15-x86-64-linux-gnu",
+        "dpkg",
+        "gcc-15-x86-64-linux-gnu",
+        "libapt-pkg7.0:amd64",
+        "libbinutils:amd64",
+        "libbpf1:amd64",
+        "libctf-nobfd0:amd64",
+        "libctf0:amd64",
+        "libelf1t64:amd64",
+        "libfreetype6:amd64",
+        "libglib2.0-0t64:amd64",
+        "libgprofng0:amd64",
+        "libisofs6t64:amd64",
+        "libjte2:amd64",
+        "libllvm21:amd64",
+        "libpng16-16t64:amd64",
+        "libssl3t64:amd64",
+        "libxml2-16:amd64",
+        "lld-21",
+        "python3.14-minimal",
+        "qemu-system-x86"
       ]
     }
   ],
+  "source_packages": [
+    {
+      "name": "acl",
+      "version": "2.4.0-1",
+      "binary_packages": [
+        "libacl1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "alsa-lib",
+      "version": "1.2.16.1-1",
+      "binary_packages": [
+        "libasound2-data",
+        "libasound2t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "apt",
+      "version": "3.3.2+kali1",
+      "binary_packages": [
+        "apt",
+        "libapt-pkg7.0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "base-files",
+      "version": "1:2026.3.0",
+      "binary_packages": [
+        "base-files"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "base-passwd",
+      "version": "3.6.8",
+      "binary_packages": [
+        "base-passwd"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "bash",
+      "version": "5.3-3",
+      "binary_packages": [
+        "bash"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "binutils",
+      "version": "2.47-2",
+      "binary_packages": [
+        "binutils",
+        "binutils-common:amd64",
+        "binutils-x86-64-linux-gnu",
+        "libbinutils:amd64",
+        "libctf-nobfd0:amd64",
+        "libctf0:amd64",
+        "libgprofng0:amd64",
+        "libsframe3:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "brltty",
+      "version": "6.9.1+repack-1",
+      "binary_packages": [
+        "libbrlapi0.8:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "brotli",
+      "version": "1.2.0-3",
+      "binary_packages": [
+        "libbrotli1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "bzip2",
+      "version": "1.0.8-6",
+      "binary_packages": [
+        "libbz2-1.0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "capstone",
+      "version": "5.0.9-1",
+      "binary_packages": [
+        "libcapstone5:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "cdebconf",
+      "version": "0.283",
+      "binary_packages": [
+        "libdebconfclient0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "cyrus-sasl2",
+      "version": "2.1.28+dfsg1-11",
+      "binary_packages": [
+        "libsasl2-2:amd64",
+        "libsasl2-modules-db:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "db5.3",
+      "version": "5.3.28+dfsg2-11",
+      "binary_packages": [
+        "libdb5.3t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "debian-archive-keyring",
+      "version": "2025.1",
+      "binary_packages": [
+        "debian-archive-keyring"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "debianutils",
+      "version": "5.23.2",
+      "binary_packages": [
+        "debianutils"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "device-tree-compiler",
+      "version": "1.7.2-2",
+      "binary_packages": [
+        "libfdt1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "dosfstools",
+      "version": "4.2-1.2",
+      "binary_packages": [
+        "dosfstools"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "dpkg",
+      "version": "1.23.7+kali1",
+      "binary_packages": [
+        "dpkg"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "edk2",
+      "version": "2026.05-2",
+      "binary_packages": [
+        "ovmf-generic"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "efivar",
+      "version": "39-2",
+      "binary_packages": [
+        "libefiboot1t64:amd64",
+        "libefivar1t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "elfutils",
+      "version": "0.195-1",
+      "binary_packages": [
+        "libelf1t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "expat",
+      "version": "2.8.3-1",
+      "binary_packages": [
+        "libexpat1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "freetype",
+      "version": "2.14.3+dfsg-2",
+      "binary_packages": [
+        "libfreetype6:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "fuse3",
+      "version": "3.18.2-2",
+      "binary_packages": [
+        "libfuse3-4:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gawk",
+      "version": "1:5.3.2-1",
+      "binary_packages": [
+        "gawk"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gcc-15",
+      "version": "15.3.0-2",
+      "binary_packages": [
+        "cpp-15-x86-64-linux-gnu",
+        "gcc-15-base:amd64",
+        "gcc-15-x86-64-linux-gnu",
+        "libgcc-15-dev:amd64",
+        "libobjc-15-dev:amd64",
+        "libstdc++-15-dev:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gcc-16",
+      "version": "16.2.0-1",
+      "binary_packages": [
+        "gcc-16-base:amd64",
+        "libasan8:amd64",
+        "libatomic1:amd64",
+        "libcc1-0:amd64",
+        "libgcc-s1:amd64",
+        "libgomp1:amd64",
+        "libhwasan0:amd64",
+        "libitm1:amd64",
+        "liblsan0:amd64",
+        "libobjc4:amd64",
+        "libquadmath0:amd64",
+        "libstdc++6:amd64",
+        "libtsan2:amd64",
+        "libubsan1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gdisk",
+      "version": "1.0.10-3",
+      "binary_packages": [
+        "gdisk"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gettext",
+      "version": "1.0-3",
+      "binary_packages": [
+        "gettext-base"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "glib2.0",
+      "version": "2.88.3-2",
+      "binary_packages": [
+        "libglib2.0-0t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "glibc",
+      "version": "2.42-17",
+      "binary_packages": [
+        "libc-bin",
+        "libc-dev-bin",
+        "libc-gconv-modules-extra:amd64",
+        "libc6-dev:amd64",
+        "libc6:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gmp",
+      "version": "2:6.3.0+dfsg-5",
+      "binary_packages": [
+        "libgmp10:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "gnutls28",
+      "version": "3.8.13-1",
+      "binary_packages": [
+        "libgnutls30t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "grub2",
+      "version": "2.14-2+kali1",
+      "binary_packages": [
+        "grub2-common"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "ipxe",
+      "version": "2.0.0+dfsg-5",
+      "binary_packages": [
+        "ipxe-qemu"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "isl",
+      "version": "0.28-1",
+      "binary_packages": [
+        "libisl23:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "jansson",
+      "version": "2.15.1-1",
+      "binary_packages": [
+        "libjansson4:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "jigit",
+      "version": "1.22-4",
+      "binary_packages": [
+        "libjte2:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "kmod",
+      "version": "34.2-2kali1",
+      "binary_packages": [
+        "libkmod2:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libaio",
+      "version": "0.3.113-9+kali2",
+      "binary_packages": [
+        "libaio1t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libbpf",
+      "version": "1.7.0-1",
+      "binary_packages": [
+        "libbpf1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libbsd",
+      "version": "0.12.2-3",
+      "binary_packages": [
+        "libbsd0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libburn",
+      "version": "1.5.8-1.3",
+      "binary_packages": [
+        "libburn4t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libcacard",
+      "version": "1:2.8.1-2",
+      "binary_packages": [
+        "libcacard0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libcap-ng",
+      "version": "0.9.3-1",
+      "binary_packages": [
+        "libcap-ng0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libedit",
+      "version": "3.1-20260512-1",
+      "binary_packages": [
+        "libedit2:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libexecs",
+      "version": "1.4-2",
+      "binary_packages": [
+        "libexecs1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libffi",
+      "version": "3.7.1-2",
+      "binary_packages": [
+        "libffi8:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libgc",
+      "version": "1:8.2.12-1",
+      "binary_packages": [
+        "libgc1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libidn2",
+      "version": "2.3.8-5",
+      "binary_packages": [
+        "libidn2-0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libisoburn",
+      "version": "1.5.8.pl02-2",
+      "binary_packages": [
+        "libisoburn1t64:amd64",
+        "xorriso"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libisofs",
+      "version": "1.5.8.pl02-1.2",
+      "binary_packages": [
+        "libisofs6t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libjpeg-turbo",
+      "version": "1:3.1.3-4",
+      "binary_packages": [
+        "libjpeg62-turbo:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libmd",
+      "version": "1.2.0-2",
+      "binary_packages": [
+        "libmd0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libnl3",
+      "version": "3.12.0-2",
+      "binary_packages": [
+        "libnl-3-200:amd64",
+        "libnl-route-3-200:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libpng1.6",
+      "version": "1.6.58-1",
+      "binary_packages": [
+        "libpng16-16t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libseccomp",
+      "version": "2.6.1-1",
+      "binary_packages": [
+        "libseccomp2:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libselinux",
+      "version": "3.11-2",
+      "binary_packages": [
+        "libselinux1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libslirp",
+      "version": "4.9.3-1",
+      "binary_packages": [
+        "libslirp0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libtasn1-6",
+      "version": "4.21.0-2",
+      "binary_packages": [
+        "libtasn1-6:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libunistring",
+      "version": "1.4.2-1",
+      "binary_packages": [
+        "libunistring5:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "liburing",
+      "version": "2.15-1",
+      "binary_packages": [
+        "liburing2:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libusb-1.0",
+      "version": "2:1.0.30-1",
+      "binary_packages": [
+        "libusb-1.0-0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libxml2",
+      "version": "2.15.3+dfsg-1",
+      "binary_packages": [
+        "libxml2-16:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "libzstd",
+      "version": "1.5.7+dfsg-4",
+      "binary_packages": [
+        "libzstd1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "linux",
+      "version": "7.0.12-2kali1",
+      "binary_packages": [
+        "linux-libc-dev"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "llvm-toolchain-21",
+      "version": "1:21.1.8-10",
+      "binary_packages": [
+        "clang-21",
+        "libclang-common-21-dev:amd64",
+        "libclang-cpp21",
+        "libclang1-21",
+        "libllvm21:amd64",
+        "lld-21",
+        "llvm-21-linker-tools"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "lvm2",
+      "version": "2.03.31-2",
+      "binary_packages": [
+        "dmsetup",
+        "libdevmapper1.02.1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "lz4",
+      "version": "1.10.0-10",
+      "binary_packages": [
+        "liblz4-1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "mpclib3",
+      "version": "1.3.1-3",
+      "binary_packages": [
+        "libmpc3:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "mpfr4",
+      "version": "4.2.2-3",
+      "binary_packages": [
+        "libmpfr6:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "mtools",
+      "version": "4.0.49-1",
+      "binary_packages": [
+        "mtools"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "nasm",
+      "version": "3.01-1",
+      "binary_packages": [
+        "nasm"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "ncurses",
+      "version": "6.6+20260608-2",
+      "binary_packages": [
+        "libncursesw6:amd64",
+        "libtinfo6:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "ndctl",
+      "version": "85-1",
+      "binary_packages": [
+        "libdaxctl1:amd64",
+        "libndctl6:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "nettle",
+      "version": "3.10.2-1",
+      "binary_packages": [
+        "libhogweed6t64:amd64",
+        "libnettle8t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "nspr",
+      "version": "2:4.39-1",
+      "binary_packages": [
+        "libnspr4:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "nss",
+      "version": "2:3.126-1",
+      "binary_packages": [
+        "libnss3:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "numactl",
+      "version": "2.0.19-1",
+      "binary_packages": [
+        "libnuma1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "openssl",
+      "version": "3.6.3-1",
+      "binary_packages": [
+        "libssl3t64:amd64",
+        "openssl-provider-legacy"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "p11-kit",
+      "version": "0.26.4-1",
+      "binary_packages": [
+        "libp11-kit0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "pcre2",
+      "version": "10.46-1",
+      "binary_packages": [
+        "libpcre2-8-0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "pcsc-lite",
+      "version": "2.5.1-1",
+      "binary_packages": [
+        "libpcsclite1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "pixman",
+      "version": "0.46.4-1",
+      "binary_packages": [
+        "libpixman-1-0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "pmdk",
+      "version": "1.13.1-1.1",
+      "binary_packages": [
+        "libpmem1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "popt",
+      "version": "1.19+dfsg-2",
+      "binary_packages": [
+        "libpopt0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "python3.14",
+      "version": "3.14.6-1",
+      "binary_packages": [
+        "libpython3.14-minimal:amd64",
+        "python3.14-minimal"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "qemu",
+      "version": "1:11.0.3+ds-2",
+      "binary_packages": [
+        "qemu-system-common",
+        "qemu-system-data",
+        "qemu-system-x86"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "rdma-core",
+      "version": "63.0-2",
+      "binary_packages": [
+        "libibverbs1:amd64",
+        "librdmacm1t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "readline",
+      "version": "8.3-4",
+      "binary_packages": [
+        "libreadline8t64:amd64",
+        "readline-common"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "rpcsvc-proto",
+      "version": "1.4.4-1",
+      "binary_packages": [
+        "rpcsvc-proto"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "rust-sequoia-sqv",
+      "version": "1.4.0-1",
+      "binary_packages": [
+        "sqv"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "seabios",
+      "version": "1.17.0-1",
+      "binary_packages": [
+        "seabios"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "sqlite3",
+      "version": "3.53.4-2",
+      "binary_packages": [
+        "libsqlite3-0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "systemd",
+      "version": "261.2-1",
+      "binary_packages": [
+        "libsystemd-shared:amd64",
+        "libsystemd0:amd64",
+        "libudev1:amd64",
+        "systemd"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "tar",
+      "version": "1.35+dfsg-5",
+      "binary_packages": [
+        "tar"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "usbredir",
+      "version": "0.15.0-1",
+      "binary_packages": [
+        "libusbredirparser1t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "util-linux",
+      "version": "2.42.2-2",
+      "binary_packages": [
+        "libblkid1:amd64",
+        "libmount1:amd64",
+        "libuuid1:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "vdeplug4",
+      "version": "4.0.1-5.1",
+      "binary_packages": [
+        "libvdeplug2t64:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "xxhash",
+      "version": "0.8.3-2",
+      "binary_packages": [
+        "libxxhash0:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "xz-utils",
+      "version": "5.8.3-1",
+      "binary_packages": [
+        "liblzma5:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "z3",
+      "version": "4.13.3-1.1",
+      "binary_packages": [
+        "libz3-4:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    },
+    {
+      "name": "zlib",
+      "version": "1:1.3.dfsg+really1.3.2-3",
+      "binary_packages": [
+        "zlib1g:amd64"
+      ],
+      "archive_files": [],
+      "archives_retained": false
+    }
+  ],
   "closure": {
-    "seed_packages": 85,
-    "transitive_packages": 145,
-    "runtime_files": 91,
-    "binary_archives_retained": 37,
+    "seed_packages": [
+      "apt",
+      "bash",
+      "binutils-x86-64-linux-gnu",
+      "clang-21",
+      "dosfstools",
+      "dpkg",
+      "gcc-15-x86-64-linux-gnu",
+      "gdisk",
+      "grub2-common",
+      "libacl1:amd64",
+      "libaio1t64:amd64",
+      "libapt-pkg7.0:amd64",
+      "libatomic1:amd64",
+      "libbinutils:amd64",
+      "libblkid1:amd64",
+      "libbpf1:amd64",
+      "libbsd0:amd64",
+      "libburn4t64:amd64",
+      "libbz2-1.0:amd64",
+      "libc-bin",
+      "libc6:amd64",
+      "libcapstone5:amd64",
+      "libclang-cpp21",
+      "libctf0:amd64",
+      "libdaxctl1:amd64",
+      "libdevmapper1.02.1:amd64",
+      "libedit2:amd64",
+      "libefiboot1t64:amd64",
+      "libefivar1t64:amd64",
+      "libelf1t64:amd64",
+      "libexpat1:amd64",
+      "libfdt1:amd64",
+      "libffi8:amd64",
+      "libfuse3-4:amd64",
+      "libgcc-s1:amd64",
+      "libglib2.0-0t64:amd64",
+      "libgmp10:amd64",
+      "libgnutls30t64:amd64",
+      "libhogweed6t64:amd64",
+      "libibverbs1:amd64",
+      "libidn2-0:amd64",
+      "libisoburn1t64:amd64",
+      "libisofs6t64:amd64",
+      "libjansson4:amd64",
+      "libjpeg62-turbo:amd64",
+      "libjte2:amd64",
+      "libkmod2:amd64",
+      "libllvm21:amd64",
+      "liblz4-1:amd64",
+      "liblzma5:amd64",
+      "libmd0:amd64",
+      "libmount1:amd64",
+      "libndctl6:amd64",
+      "libnettle8t64:amd64",
+      "libnl-3-200:amd64",
+      "libnl-route-3-200:amd64",
+      "libnuma1:amd64",
+      "libp11-kit0:amd64",
+      "libpcre2-8-0:amd64",
+      "libpixman-1-0:amd64",
+      "libpmem1:amd64",
+      "libpng16-16t64:amd64",
+      "libpopt0:amd64",
+      "librdmacm1t64:amd64",
+      "libreadline8t64:amd64",
+      "libsasl2-2:amd64",
+      "libseccomp2:amd64",
+      "libselinux1:amd64",
+      "libsframe3:amd64",
+      "libslirp0:amd64",
+      "libssl3t64:amd64",
+      "libstdc++6:amd64",
+      "libsystemd0:amd64",
+      "libtasn1-6:amd64",
+      "libtinfo6:amd64",
+      "libudev1:amd64",
+      "libunistring5:amd64",
+      "liburing2:amd64",
+      "libuuid1:amd64",
+      "libvdeplug2t64:amd64",
+      "libxml2-16:amd64",
+      "libxxhash0:amd64",
+      "libz3-4:amd64",
+      "libzstd1:amd64",
+      "lld-21",
+      "mtools",
+      "nasm",
+      "ovmf-generic",
+      "python3.14-minimal",
+      "qemu-system-x86",
+      "xorriso",
+      "zlib1g:amd64"
+    ],
+    "seed_package_count": 92,
+    "transitive_packages": 160,
+    "source_packages": 104,
+    "runtime_files": 101,
+    "binary_archives_retained": 41,
     "source_archives_retained": 0,
     "all_runtime_files_owned": true,
     "all_package_dependencies_resolved": true,
+    "all_binary_source_relationships_resolved": true,
     "all_binary_archives_retained": false,
     "all_source_archives_retained": false,
     "offline_rebuild_proved": false
   },
   "generator": {
-    "path": "kernel/gen-dependency-lock.py",
-    "sha256": "33648aae9b0cd45972eca3278b56785daf8385d2b9cff44d42f9c3d3a99c44bb"
+    "path": "kernel/tools/generators/gen-dependency-lock.py",
+    "sha256": "cef1748b7baa5f1dd34eb90590921b3960a3969e5d157e2ef7c2b44e08ef98bf"
   },
   "evidence_ceiling": "exact installed binary, runtime-library, firmware and transitive package SBOM; not an offline rebuild, source archive, signature or supply-chain attestation",
   "weakest_link": "zero package source archives are retained, so package identities cannot yet reconstruct the toolchain offline"
