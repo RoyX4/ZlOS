@@ -113,6 +113,19 @@ extern void console_present(void);
 extern void console_icon(int px, int py, int n, unsigned int rgb);
 extern void console_cube_filled(int cx, int cy, int size, int angle, unsigned int rgb);
 extern void console_cube_clip(int x0, int y0, int x1, int y1);
+extern void console_mesh_filled(int kind, int cx, int cy, int size, int angle, unsigned int rgb);
+extern int  console_mesh_verts(int kind);
+extern int  console_mesh_tris(int kind);
+extern void console_img_draw(int kind, int x, int y, int w, int h, int px, unsigned int rgb);
+extern int  console_img_w(int w, int px);
+extern int  console_img_h(int h, int px);
+extern unsigned console_tar_size(void);
+extern unsigned console_tar_cap(void);
+extern unsigned console_tar_commit(void);
+extern int      console_tar_slot(void);
+extern int      console_tar_self_byte(int i);
+extern int      console_tar_members(void);
+extern unsigned console_tar_payload(void);
 extern int  cpu_brand_byte(int i);
 extern void speaker_on(unsigned freq);
 extern void speaker_off(void);
@@ -2458,6 +2471,29 @@ Value zl_calln(const char *name, int n, ...)
      * no snapshot. See the note where they lived in fb.c. */
     if (streq(name, "cube3d"))    { console_cube_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(unsigned int)(unsigned long long)a[4].num); return zl_nil(); }
     if (streq(name, "cube_clip")) { console_cube_clip((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num); return zl_nil(); }
+    /* mesh3d shares cube_clip - one clip box, one rasteriser. mesh_verts and
+     * mesh_tris are what turn the Renderer's caption from a written figure into
+     * a read one; they walk the same table mesh3d draws from. */
+    if (streq(name, "mesh3d"))    { console_mesh_filled((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(unsigned int)(unsigned long long)a[5].num); return zl_nil(); }
+    if (streq(name, "mesh_verts")) return zl_num((double)console_mesh_verts((int)a[0].num));
+    if (streq(name, "mesh_tris"))  return zl_num((double)console_mesh_tris((int)a[0].num));
+    /* the Image Viewer's three computed pictures, and the source grid it
+     * reports - img_w/img_h are the two figures the stat strip prints, so the
+     * caption is a reading of the same divide the draw used. */
+    if (streq(name, "img_draw"))   { console_img_draw((int)a[0].num,(int)a[1].num,(int)a[2].num,(int)a[3].num,(int)a[4].num,(int)a[5].num,(unsigned int)(unsigned long long)a[6].num); return zl_nil(); }
+    if (streq(name, "img_w"))      return zl_num((double)console_img_w((int)a[0].num,(int)a[1].num));
+    if (streq(name, "img_h"))      return zl_num((double)console_img_h((int)a[0].num,(int)a[1].num));
+    /* THE ARCHIVE. tar_need is what the volume would take, tar_cap the ceiling
+     * the staging buffer imposes - the pane asks both BEFORE it commits, so a
+     * refusal can print the two figures instead of the word "failed".
+     * tar_make returns the bytes actually staged, 0 on refusal. */
+    if (streq(name, "tar_need"))   return zl_num((double)console_tar_size());
+    if (streq(name, "tar_cap"))    return zl_num((double)console_tar_cap());
+    if (streq(name, "tar_make"))   return zl_num((double)console_tar_commit());
+    if (streq(name, "tar_slot"))   return zl_num((double)console_tar_slot());
+    if (streq(name, "tar_self_ch"))return zl_num((double)console_tar_self_byte((int)a[0].num));
+    if (streq(name, "tar_members"))return zl_num((double)console_tar_members());
+    if (streq(name, "tar_pay"))    return zl_num((double)console_tar_payload());
     if (streq(name, "cpu_char"))  return zl_num((double)cpu_brand_byte((int)a[0].num));
     if (streq(name, "emit"))      { zl_putc((char)(int)a[0].num); return zl_nil(); }
     if (streq(name, "sc"))        { console_putc((char)(int)a[0].num); return zl_nil(); }

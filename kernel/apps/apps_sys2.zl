@@ -498,16 +498,56 @@ rd_last = 0 - 1
 # WHICH MODE, and whether it is one this renderer has. rd_wire selects; the
 # rasteriser only fills, so "wireframe" names a path that does not exist yet and
 # the line says so rather than letting the button imply it does.
+# SHORT ENOUGH NOT TO CLIP. The first version returned "  - wireframe not
+# implemented, drawing shaded", which the default window cut to "  - wireframe"
+# - asserting exactly the opposite of what it says. A sentence that becomes a
+# lie when truncated is worse than the shorter true one.
 fn rd_modeline() {
     if rd_wire == 1 { return "  - shaded" }
-    return "  - wireframe not implemented, drawing shaded"
+    return "  - shaded (no wireframe path)"
 }
 
-fn rd_meshline(m) {
-    if m == 0 { return "mesh cube - 12 tris - 8 verts" }
-    if m == 1 { return "mesh pyramid - 6 tris - 5 verts" }
-    if m == 2 { return "mesh octa - 8 tris - 6 verts" }
-    return "mesh cylinder - 44 tris - 24 verts"
+# THE COUNTS ARE READ OFF THE SOLID THAT IS DRAWN, NOT WRITTEN BESIDE IT.
+#
+# This returned four whole sentences - "mesh cylinder - 44 tris - 24 verts" and
+# three like it - for meshes the kernel did not have. The canvas under them was
+# a single flat fill, so a four-way picker changed four figures about four
+# absent objects, in the numeric slot next to two readings that are real probes
+# (rd_gpuline actually asks intel_ok and gpu_present).
+#
+# The figures were not even wrong. 12/8, 6/5, 8/6 and 44/24 are what a cube, a
+# square pyramid, an octahedron and a twelve-sided cylinder have. The fault was
+# that nothing in the tree could DISAGREE with them - which is the whole
+# difference between a figure and a caption.
+#
+# fb3d.c now builds all four and draws them; mesh_tris and mesh_verts walk the
+# same vertex and face tables the rasteriser walks. A face of n indices is n-2
+# triangles, counted the way it is filled. So the caption cannot drift from the
+# picture: change the geometry and both move together, and a mesh that fails to
+# draw reports its own counts rather than a remembered pair.
+fn rd_meshname(m) {
+    if m == 0 { return "cube" }
+    if m == 1 { return "pyramid" }
+    if m == 2 { return "octa" }
+    return "cylinder"
+}
+
+fn rd_meshline_draw(x, y, m, ink) {
+    rdx = x
+    ui_txt(rdx, y, "mesh ", ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw("mesh ", S2_SM, S2_MONO)
+    ui_txt(rdx, y, rd_meshname(m), ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw(rd_meshname(m), S2_SM, S2_MONO)
+    ui_txt(rdx, y, " - ", ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw(" - ", S2_SM, S2_MONO)
+    ui_txtn(rdx, y, mesh_tris(m), ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tnw(mesh_tris(m), S2_SM, S2_MONO)
+    ui_txt(rdx, y, " tris - ", ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tw(" tris - ", S2_SM, S2_MONO)
+    ui_txtn(rdx, y, mesh_verts(m), ink, S2_SM, S2_MONO)
+    rdx = rdx + ui_tnw(mesh_verts(m), S2_SM, S2_MONO)
+    ui_txt(rdx, y, " verts", ink, S2_SM, S2_MONO)
+    return rdx + ui_tw(" verts", S2_SM, S2_MONO) - x
 }
 
 # glInfoText, and it is a real probe rather than a caption.
@@ -542,10 +582,29 @@ fn rd_ui(ax, ay, aw, ah, dm) {
     # cannot change the picture; what it CAN honestly do is state which mode is
     # selected beside the mesh it applies to, and say that one of them is not
     # implemented. That is a smaller claim than the button was making.
-    ui_txt(ox, oy, rd_meshline(rd_mesh), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
-    ui_txt(ox + ui_tw(rd_meshline(rd_mesh), S2_SM, S2_MONO), oy, rd_modeline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
+    rd_mw = rd_meshline_draw(ox, oy, rd_mesh, ui_ink(S2_IK_T6))
+    ui_txt(ox + rd_mw, oy, rd_modeline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
     ui_txt(ox, oy + lh, "-- us/draw - software pipeline", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
     ui_txt(ox, oy + 2 * lh, rd_gpuline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
+
+    # THE SOLID, ON THE CANVAS THAT USED TO BE A FLAT FILL. Only under dm == 1:
+    # rd_ui is called a second time with dm == 0 purely to hit-test the
+    # toolbar, and drawing there would paint the mesh once per click.
+    #
+    # cube_clip is the RASTERISER's own clip and it has to be this canvas. The
+    # window scissor already stops ink reaching the chrome, but a near corner
+    # under perspective projects far outside the box, and clipping a span is
+    # cheaper than discovering it at the screen edge.
+    if dm == 1 {
+        rdcy = oy + 3 * lh + 6 * u
+        rdch = ay + ch - rdcy - 8 * u
+        if rdch > 24 * u {
+            cube_clip(ax, rdcy, ax + aw, rdcy + rdch)
+            rdsz = aw / 5
+            if rdch / 3 < rdsz { rdsz = rdch / 3 }
+            mesh3d(rd_mesh, ax + aw / 2, rdcy + rdch / 2, rdsz, rd_yaw, ui_ink(S2_IK_HI))
+        }
+    }
 
     ty = ay + ah - tbh
     ui_tb(ax, ty, aw, tbh, 1)
@@ -868,6 +927,11 @@ fn fbv_tick(win) {
 cn_run = 1
 cn_scan = 0
 cn_last = 0 - 1
+# HOW DARK A SCANLINE IS. 40/255 on the canvas ground: deep enough to read as a
+# raster at arm's length, shallow enough that text drawn over it later is still
+# text. It is one number and it is here rather than inline so the effect can be
+# tuned without hunting the loop.
+CN_SCAN_A = 40
 
 fn cn_runlabel() { if cn_run == 1 { return "Pause tty" }  return "Resume tty" }
 
@@ -879,6 +943,25 @@ fn cn_ui(ax, ay, aw, ah, dm) {
     hit = 0 - 1
 
     s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))
+    # THE SCANLINES ARE DRAWN. cn_scan had exactly three occurrences in the
+    # tree - its declaration, the pill's own fill kind, and the line that flips
+    # it - so pressing Scanlines changed the colour of the button and nothing
+    # else on the screen. That is the rd_wire signature, one pane over, and it
+    # is the same fix: give the flag a reader outside its own label.
+    #
+    # A raster line is ONE PIXEL EVERY TWO at ui scale 1 and two every four at
+    # scale 2, which is what stepping by 2*u and drawing u gets - a fixed 1 px
+    # line would vanish into a hairline on a scaled display and stop being the
+    # effect it is named for.
+    if dm == 1 {
+        if cn_scan == 1 {
+            cnr = ay
+            while cnr < ay + ch {
+                blend(ax, cnr, aw, u, theme(TH_BG), CN_SCAN_A)
+                cnr = cnr + 2 * u
+            }
+        }
+    }
 
     ui_stat(ax, ay + ch, aw, 84)
     # "CELLS WRITTEN" WAS THE SCREEN'S SIZE, NOT A COUNT. con_cols() * con_rows()
@@ -1062,6 +1145,9 @@ fn ft_ui(ax, ay, aw, ah, dm) {
         ui_txtn(nx, ny, atlas_g(fa_atlas_here()), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
         nx = nx + ui_tnw(atlas_g(fa_atlas_here()), S2_SM, S2_MONO)
         ui_txt(nx, ny, " glyphs - ", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+        # ...AND THE ADVANCE. Removing the literal took its `nx = nx + ...`
+        # with it, so the cell dimensions were overprinted on the word.
+        nx = nx + ui_tw(" glyphs - ", S2_SM, S2_MONO)
         ui_txtn(nx, ny, cell_w(), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
         nx = nx + ui_tnw(cell_w(), S2_SM, S2_MONO)
         ui_txt(nx, ny, "x", ui_ink(S2_IK_T6), S2_SM, S2_MONO)

@@ -475,6 +475,14 @@ echo "built ./exectest      (run: ./exectest)"
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../../src/fs/fs.c
 echo "built ./fstest        (run: ./fstest)"
+
+# The ustar the Archive Manager writes, read back by the SHELL'S OWN tar. A
+# test that parses back the layout its own writer just emitted agrees with
+# itself by construction; `tar -tvf` does not. Same -Wall -Wextra as fstest,
+# for the same reason - this one writes files.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
+    -o tartest tartest.c ../../src/fs/fs.c ../../src/fs/tar.c
+echo "built ./tartest       (run: ./tartest)"
 gcc $HOST_INCLUDES -O2 -no-pie -w -o blocktest blocktest.c
 echo "built ./blocktest     (run: ./blocktest)"
 

@@ -1,0 +1,364 @@
+# PRESSWORK PARITY BACKLOG — round eleven
+
+Thirty-six findings confirmed by the round-eleven fleet against
+`docs/design/presswork-prototype.html`, zero rejected. This file exists because
+the list lived in `/tmp`, and `/tmp` has eaten four prototypes on this box already.
+
+**#23 was already fixed before this list was written.** `rd_modeline` returns
+`"  - shaded (no wireframe path)"`, short enough not to clip, and its comment
+describes the exact truncation the finding reports. The audit read a tree that
+was one commit behind — reproduce before acting.
+
+| # | severity | status | gate | finding |
+|---|---|---|---|---|
+| 1 | invented-figure | **DONE fe0ce88** | — | The Files detail block prints an unconditional green OK verdict swatch for every selected file — nothing is checked |
+| 2 | invented-figure | **FIXED** | probe-mesh + tritest | Renderer's mesh picker selects among four meshes that do not exist and prints their triangle and vertex counts |
+| 3 | invented-figure | **FIXED** | read-only rename | "LARGEST FILES ON RD0" heads a list read from a volume the same file declares does not exist |
+| 4 | invented-figure | **FIXED** | probe-mesh + tritest | Renderer prints four fabricated tri/vert counts for meshes that do not exist |
+| 5 | invented-figure | **OPEN** | OPEN | Syscall trace's argument column is twelve literals, and one contradicts the driver |
+| 6 | invented-figure | **FIXED** | 7ffd155 | The modal's shadow is a written 3/2 multiplier where the authority states 6dp / 14dp |
+| 7 | dead-control | **FIXED** | no gate yet | The Files detail block's "hex" button opens the Hex Viewer on physical RAM at 0x100000, not on the selected file |
+| 8 | dead-control | **DONE 2c298b1** | — | Services draws 19 action pills and only one has a dispatch arm — and five bring-up natives are bound and unused |
+| 9 | dead-control | **FIXED** | probe-image | Image Viewer: three file tabs and four zoom pills light up over a canvas nothing can ever fill — no image decoder exists anywhere in the kernel |
+| 10 | dead-control | **FIXED** | tartest + probe-archive | Archive Manager: "Create archive" writes no archive, "Extract to /tmp" is silently inert, and the toolbar names a file that does not exist |
+| 11 | dead-control | **DONE fe0ce88** | — | Font Atlas: the zoom picker sits over a flat fill and its variable's only reader is its own highlight |
+| 12 | dead-control | **DONE 2c298b1** | — | Services draws 19 start/stop/restart pills; exactly one does anything |
+| 13 | dead-control | **FIXED** | probe-image | Image Viewer's file tabs and zoom pills are clickable and change nothing |
+| 14 | dead-control | **DONE fe0ce88** | — | Font Atlas zoom control has no reader outside its own fill |
+| 15 | dead-control | **FIXED** | no gate yet | Console's Scanlines pill toggles only its own fill |
+| 16 | dead-control | **FIXED** | no gate yet | The Files detail buttons stay live over the empty state, where nothing is drawn |
+| 17 | wrong-behaviour | **FIXED** | probe-lock | The lock sheet is modal to the pointer only — every character typed at its PASSPHRASE well is delivered to the window hidden behind it |
+| 18 | wrong-behaviour | **FIXED** | no gate yet | The Files pane's `hex` button opens a viewer of physical RAM, and the editor three panes away prints the refutation on screen |
+| 19 | wrong-behaviour | **FIXED** | no gate yet | Activities counts and tiles minimised windows; the prototype filters them out |
+| 20 | wrong-behaviour | **OPEN** | — | System Monitor: more cores than rows pushes the heap meter and the whole IOAPIC section off the pane |
+| 21 | wrong-behaviour | **FIXED** | no gate yet | Files empty state prints 'reason not reported' for five reasons fs_why() does report — including the one fs.c added it for |
+| 22 | wrong-visual | **FIXED** | no gate yet | The Font Atlas caption never advances nx past " glyphs - ", so the cell dimensions are overprinted on top of the word |
+| 23 | wrong-visual | **WAS ALREADY DONE** | — | The Renderer's new mode line is clipped to "  - wireframe" on the default window — it asserts the capability the commit added it to deny |
+| 24 | wrong-visual | **FIXED** | no gate yet | The Files detail button row is drawn past the bottom of the client rect — FILES_DETAIL_H reserves less than the block needs |
+| 25 | wrong-visual | **FIXED** | no gate yet | The Network pane fills its selected row with vermilion at 144 design units wide - 48x the sanctioned width |
+| 26 | wrong-visual | **OPEN** | — | Disk Usage draws nine instrument fills in the overprint where every other instrument in the tree uses ZD_STEEL |
+| 27 | wrong-visual | **OPEN** | — | The resize grip is drawn outside the plate's rounded corner, onto the desk |
+| 28 | wrong-visual | **OPEN** | — | The raster strip and the printer's foot are not border-box: each band is 2dp too tall and the field 4dp too short |
+| 29 | wrong-visual | **OPEN** | — | With the knockout switched off, both of the authority's fallback run rules are missing |
+| 30 | wrong-visual | **OPEN** | — | Five motion curves where the authority declares one, justified by a citation of the superseded ds-reference.html |
+| 31 | wrong-visual | **OPEN** | — | The snap preview fills half the screen with vermilion, which the overprint budget forbids |
+| 32 | wrong-visual | **FIXED** | no gate yet | Activities previews are stretched: the tile is sized from the FRAME, the pixels come from the CLIENT |
+| 33 | wrong-visual | **FIXED** | no gate yet | Files detail block overflows its own reservation; the three buttons are clipped by the client edge |
+| 34 | missing-feature | **OPEN** | — | The boot desktop is the SUPERSEDED document's composition: three plates, no overlap, wrong window focused |
+| 35 | missing-feature | **OPEN** | — | The LADDER tab has no controls at all - both of the authority's are absent |
+| 36 | missing-feature | **OPEN** | — | No segmented-control widget exists, so three of the authority's controls have no counterpart |
+
+## Detail
+
+### 1. The Files detail block prints an unconditional green OK verdict swatch for every selected file — nothing is checked
+
+- **severity**: invented-figure
+- **site**: `kernel/src/kernel.zl:7942`
+
+224dc53 added files_detail, and line 7942 is `pw_sw(fdx + fdw - ui_capsw("OK", PW_SM) - 12 * fdu, fdy, "OK", theme(TH_OK))`. pw_sw is documented at kernel.zl:6591 as "---- THE VERDICT SWATCH ----" — a ZD_DOT square in the state colour with the word beside it. It is emitted for every sel >= 0 with no predicate at all: no read, no sum, no fs call.
+
+The commit message for the same change states that crc32 is not drawn because "nothing computes one", and the same session's fd97ddd fixed the identical fault two panes over — apps_sys3.zl:1105 carries the comment "'valid' WAS A FLAG, NOT A CHECK. The Verify pill's whole handler was `s3ar_verified = 1` - no byte was read, nothing was summed". This is that fault again, one commit later, in a detail block that sits under a table of measured facts (fs_bytes, fs_lba, fs_run) so the swatch reads as one more of them. A green OK beside a file whose integrity the machine cannot assess is an invented figure in the strongest form the design system has.
+
+### 2. Renderer's mesh picker selects among four meshes that do not exist and prints their triangle and vertex counts
+
+- **severity**: invented-figure
+- **site**: `kernel/apps/apps_sys2.zl:569`
+
+rd_ui draws a four-way segmented control `cube|pyramid|octa|cylinder` (569) whose hit is applied by rd_apply as `rd_mesh = g - 10` (593). rd_mesh's only reader is rd_meshline (498-503), which prints "mesh cube - 12 tris - 8 verts", "mesh cylinder - 44 tris - 24 verts" and so on. The canvas above it is `s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF1))` (530) — one flat fill. `grep -rn 'mesh\|verts\|vertex' kernel/src/graphics/` returns no geometry, no vertex array and no rasteriser: there are no meshes in this kernel. So the control changes a caption that states triangle and vertex counts for objects that do not exist, in the numeric slot beside two figures that are real reads (rd_gpuline at 511-515 probes intel_ok/gpu_present).
+
+The file already fixed the neighbouring control for exactly this: rd_modeline (495-498) was changed to say "wireframe not implemented, drawing shaded" because "a toggle whose only effect is its own caption is a caption" (536-546). The mesh picker beside it is the same fault, one control to the left, and was left standing.
+
+### 3. "LARGEST FILES ON RD0" heads a list read from a volume the same file declares does not exist
+
+- **severity**: invented-figure
+- **site**: `kernel/apps/apps_sys3.zl:560`
+
+The heading names rd0. Lines 263-266 of the same file say, about a deleted constant, "there is no rd0 to report a right number for". The rows under the heading come from fs_inuse/fs_bytes/fs_ch (571-588), which is the zlfs volume that line 542 mounts and labels "/tmp", while line 470 labels the same volume "rd0, zlfs" in the pane's head. One volume, three names in one window, one of which the file itself says is absent. That is the invented-label version of an invented figure: the number is read and the device it is attributed to is not. The whole section is also structurally absent from the authority - presswork-prototype.html:1854-1876 gives R.disk a head, a composition bar in a well, legend rows, a generations table and two kv rows, with no mount rows and no largest-files list; those come from ds-reference.html, which the file's own header cites at line 243.
+
+### 4. Renderer prints four fabricated tri/vert counts for meshes that do not exist
+
+- **severity**: invented-figure
+- **site**: `kernel/apps/apps_sys2.zl:506`
+
+rd_meshline returns "mesh cube - 12 tris - 8 verts", "mesh pyramid - 6 tris - 5 verts", "mesh octa - 8 tris - 6 verts", "mesh cylinder - 44 tris - 24 verts" (:507-510) as the pane's headline reading. There is no mesh geometry anywhere in this kernel - grep for tris/verts/mesh across kernel/src returns nothing but unrelated comments - and rd_ui draws no geometry at all: the canvas is `s2_ground(...)` (:531) and then three lines of mono overlay. Eight invented integers presented as facts about a model. Worse, the comment added in 08ce7a1 at :540-541 asserts "The renderer draws a filled mesh and has no wireframe path" - the first half is false about the code twelve lines below it, and it is the justification the same commit used for keeping the toggle.
+
+### 5. Syscall trace's argument column is twelve literals, and one contradicts the driver
+
+- **severity**: invented-figure
+- **site**: `kernel/apps/apps_sys3.zl:840`
+
+s3sv_call_arg (:832-845) returns twelve hardcoded strings drawn in the trace table at :884. The header comment at :812-813 claims the table carries "the REAL return of each one in the ok column and a real device figure in the argument column" - the ok column is genuinely read (s3sv_call_ok), the argument column is not read anywhere. And row 7's "i915: BAR0 8 MiB" is not merely unread, it disagrees with this tree's own driver: kernel/src/drivers/display/intel.c:6 documents "BAR0 = 0xE9000000, 16 MB GTTMMADR". 8 MiB is the maximum GGTT *portion* of that BAR (intel.c:494-502), not the BAR. The same column carries "ipv4: 0.0.0.0:0" beside a live ip_live() probe and "ioapic: redir 1" where apic_red() is bound and returns the real redirection entry.
+
+### 6. The modal's shadow is a written 3/2 multiplier where the authority states 6dp / 14dp
+
+- **severity**: invented-figure
+- **site**: `kernel/src/graphics/windowing/wm.c:2778`
+
+chrome_shadow takes ZD_LIFT_DY / ZD_LIFT_BLUR (5 / 13, design.h:336-337, which correctly match `.win.drag { box-shadow: 0 calc(5px * var(--ui)) calc(13px * var(--ui)) var(--zd-lift) }` at proto:643) and then scales them for a modal: `if (modal) { off = off * 3 / 2; soft = soft * 3 / 2; }`. That yields 7dp / 19dp at ui 1. The authority gives the off-plane objects a shadow of their own and it is not the dragged plate's times 1.5: all three carry `box-shadow: 0 calc(6px * var(--ui)) calc(14px * var(--ui)) var(--zd-lift)` - the palette sheet (proto:897), the menu (proto:942) and the toast (proto:965). design.h names those same three as "the three off-plane objects" (design.h:855-856) but exports only ZD_SHADOW_DY/ZD_SHADOW_BLUR aliased to the dragged-plate pair (design.h:865-866), so the 3/2 is a figure written into wm.c rather than read from the document - 7 and 19 appear nowhere in the authority.
+
+### 7. The Files detail block's "hex" button opens the Hex Viewer on physical RAM at 0x100000, not on the selected file
+
+- **severity**: dead-control
+- **site**: `kernel/src/kernel.zl:8325`
+
+224dc53 wired the three new pills at 8323-8326. Row 1 is `if fbn == 1 { return reg_open(APP_HEXV) }` — reg_open takes an app id and nothing else; files_sel is never handed over.
+
+The Hex Viewer has no file binding of any kind. apps_sys2.zl:625 declares `HX_BASE = 0x100000  # where boot.S is loaded; always mapped` and hx_ui:737 reads `addr = HX_BASE + hx_page * hx_pagesz(ah) + r * 16` straight through peek8. Its own comment at 686-690 says so explicitly: "What this pane actually reads is HX_BASE, the physical address boot.S is loaded at, straight through peek8." There is no fs_rd anywhere in apps_sys2.zl.
+
+So a pill sitting in a block headed SELECTED <filename>, beside that file's FULL PATH and EXTENT, opens a window dumping the kernel image. The commit's stated verification — "clicking the hex pill takes the window count 1 -> 2" — measured that a window opened, not that it showed the file. This is the capability half of the mandate: a control implying an ability the machine lacks.
+
+### 8. Services draws 19 action pills and only one has a dispatch arm — and five bring-up natives are bound and unused
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys3.zl:797`
+
+s3sv_units() draws, per unit row, either `restart`+`stop` (state ACTIVE, lines 795-798) or `start` (line 800-801) — ten rows, one or two pills each, nineteen on a boot with nine active units. s3sv_event (903-941) hit-tests exactly one of them: `if row == 6` (929) calls fs_mount() for zlfs.mount. Every other pill falls through to `s3sv_sel = row` (938), which only draws a row highlight. `stop` is drawn with S3_BTN_DANGER — a red destructive-looking control that cannot stop anything.
+
+The source comment at 922-926 defends this ("zlOS cannot restart a driver it never stopped"), and it is wrong about what the machine can do. freestanding/runtime_kernel.c binds every bring-up this pane's rows name: `usb_up` -> xhci_bringup() (1588), `net_up` -> netdev_init() (2169), `smp_go` -> smp_start() (2311), `nv_setup` -> nvme_setup() (2331), `fs_mount` (2585). The Network app already calls net_up() from a click (apps_sys3.zl:1725) for the same device this pane's row 2 refuses to start. So `start` on xhci.service, nvme.service, virtio-net.service and smp.service each has a real, idempotent native behind it and is wired to nothing.
+
+The row-6 arm is also unbounded vertically: it tests cx only (931), so a click anywhere in the right ~50px of the 46-unit row calls fs_mount(), including 20px above and below the pill.
+
+### 9. Image Viewer: three file tabs and four zoom pills light up over a canvas nothing can ever fill — no image decoder exists anywhere in the kernel
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys3.zl:1256`
+
+s3iv_toolbar (1235-1264) draws three file tabs — "gradient.ppm", "plasma.ppm", "mandelbrot.pgm" (1219-1223) — and four zoom pills 1x..4x. s3iv_event (1280-1308) sets s3iv_sel (1292) and s3iv_zoom (1303). Those two globals have three occurrences each across the whole tree: their declaration, the setter, and the `if s3iv_sel == i { k = S3_BTN_PRIMARY }` / `if s3iv_zoom == z` that lights the pill. Nothing else reads either. The canvas is `fill_rgb(ax, ay + S3IV_TB*u, aw, ..., theme(TH_BG))` (1271) — a flat fill.
+
+The pane contradicts itself on screen: click "plasma.ppm", the tab goes primary, and the stat strip twelve pixels below still reads `IMAGE  none loaded` (1275) because ui_statc is passed that literal unconditionally.
+
+The filenames are not this machine's. `grep -rn 'gradient.ppm\|plasma.ppm\|mandelbrot'` finds them only in docs/design/ds-reference.html:4203 and its copy at kernel/tests/refrender/ds.html:4203. There is no PPM/PGM reader, and no image decoder of any kind, in kernel/src. The pane's header comment (1206) cites `ds-reference.html 512-533` — the superseded document — and the authority (presswork-prototype.html:1545-1559) has no Image Viewer among its fourteen apps at all.
+
+### 10. Archive Manager: "Create archive" writes no archive, "Extract to /tmp" is silently inert, and the toolbar names a file that does not exist
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys3.zl:1008`
+
+s3ar_toolbar draws three buttons and a path (1005-1012). The path is the literal `"/tmp/build.tar"` (1011), drawn right-flushed in the toolbar where a target file belongs. Nothing on the volume is called build.tar; nothing in this file writes a tar. It is an invented figure in the same class as the loopback MTU this file's own Network section removed at 1332-1341.
+
+"Create archive" (1166-1177) mounts zlfs if needed and sets `s3ar_open = 1`. That is a view flag: s3ar_draw (1148-1152) switches from the empty state to the grid. No ustar header is emitted, no block is written, no file appears. The primary-styled button labelled with a verb performs no verb.
+
+"Extract to /tmp" is drawn (1010) and has no hit test at all — the toolbar branch falls to `return 0` at 1192, so the click is not even consumed and produces no toast, no repaint, nothing.
+
+### 11. Font Atlas: the zoom picker sits over a flat fill and its variable's only reader is its own highlight
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys2.zl:996`
+
+ft_ui draws the atlas canvas as `s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))` (990) — s2_ground is one fill_rgb (94). No glyph is ever drawn into it. Under it sits a "zoom" label and a four-item segmented control `2x|3x|4x|6x` (996), whose hit is stored by ft_apply as `ft_zoom = g` (1028). ft_zoom has three occurrences in the whole tree: line 963 (declaration), line 996 (passed to ui_seg as the selected index), line 1028 (the setter). Nothing scales, because nothing is drawn.
+
+The note beside it IS read — atlas_g(), cell_w(), cell_h() (1010-1027) — so the pane truthfully says "95 glyphs - 8x16 cell - bitmap atlas" over a canvas showing none of them, with a control offering to magnify them 6x.
+
+This app is also not in the authority. The header cites ds-reference.html 384-400 (958-961); presswork-prototype.html's APPS table (1545-1559) has fourteen apps and no Font Atlas — its type pane (R.type, 1894) is a specimen card and a three-row atlas table with no zoom control at all.
+
+### 12. Services draws 19 start/stop/restart pills; exactly one does anything
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys3.zl:793`
+
+s3sv_units draws a `stop` (DANGER red) + `restart` pill on every ACTIVE row and a `start` pill on every non-active row - 10 rows, 19 pills. s3sv_event (:915-937) has a hit test for exactly one of them: row 6 (zlfs.mount) `start`, which calls fs_mount(). Every other pill falls through to `s3sv_sel = row` at :938 and only selects the unit. The comment at :930-932 states the rule the code breaks: "zlOS cannot restart a driver it never stopped, and a button that pretends to is worse than one that does not claim to" - written directly above eighteen buttons that pretend to. A red `stop` pill on xhci.service asserts this machine can tear down its USB host controller.
+
+### 13. Image Viewer's file tabs and zoom pills are clickable and change nothing
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys3.zl:1216`
+
+s3iv_sel and s3iv_zoom have four occurrences each and every one is the control describing itself: the declaration (:1216-1217), the pill fill kind in s3iv_toolbar (:1245, :1258), and the setter in s3iv_event (:1292, :1303). s3iv_draw's canvas is `fill_rgb(..., theme(TH_BG))` (:1274) unconditionally and the status cell is the literal `"none loaded"` (:1276) whatever tab is lit. So clicking `plasma.ppm` lights a tab for a file that does not exist on this volume - grep for gradient.ppm/plasma.ppm/mandelbrot.pgm across kernel/ returns only this function and the vendored ds.html fixture - and clicking `3x` claims a zoom factor over a blank plate. This is the identical fault to rd_wire, fixed in 08ce7a1 eleven hours earlier in the same tree.
+
+### 14. Font Atlas zoom control has no reader outside its own fill
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys2.zl:963`
+
+ft_zoom occurs three times in the whole tree: `ft_zoom = 1` (:963), the `selected` argument to its own ui_seg (:996), and `ft_apply` (:1028). ft_ui draws the canvas as `s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))` (:987) and never draws a glyph, so 2x/3x/4x/6x scales nothing. Verified by grep: no other file references ft_zoom.
+
+### 15. Console's Scanlines pill toggles only its own fill
+
+- **severity**: dead-control
+- **site**: `kernel/apps/apps_sys2.zl:869`
+
+cn_scan occurs three times: `cn_scan = 0` (:869), the pill kind test in cn_ui (:917), and the flip in cn_apply (:942). cn_ui's VT canvas is `s2_ground(dm, ax, ay, aw, ch, ui_ink(S2_IK_SURF0))` (:880) - one flat fill with no per-row modulation anywhere - so pressing Scanlines changes the button's colour and nothing on screen. Same three-occurrence signature as rd_wire.
+
+### 16. The Files detail buttons stay live over the empty state, where nothing is drawn
+
+- **severity**: dead-control
+- **site**: `kernel/src/kernel.zl:8164`
+
+When fs_ok() == 0, files_draw takes the empty-state branch at 7992 and returns at 8079 — files_detail is never called, so no rule, no kv rows and no buttons appear. But files_btn_at (8164-8182) guards only `if files_sel < 0`, not fs_ok(), and files_event's pointer arm (8323-8326) dispatches on it before anything else. files_sel is only cleared by files_select_first (7794-7805), which is reached from files_refresh (R), a completed delete and a successful format — so it survives a volume going away underneath the pane, which fs.c can do on its own (fs.c:446-447 drops `mounted` on the unrepairable dir_flush path). In that state a click in the bottom-left of the Files client hits three invisible pills: `hex` calls reg_open(APP_HEXV) and opens 06 HEX, and `stat` calls files_stat_say (8187-8191), which toasts 'size, first block and run length are in the detail block' about a detail block that is not on screen. Only `open in editor` is caught downstream, by editor_open_disk's own fs_ok() test at 4540.
+
+### 17. The lock sheet is modal to the pointer only — every character typed at its PASSPHRASE well is delivered to the window hidden behind it
+
+- **severity**: wrong-behaviour
+- **site**: `kernel/src/kernel.zl:12641`
+
+08ce7a1 added `if ov_mode == OV_LOCK { return 1 }` to ov_click (kernel.zl:11907) so the lock no longer dismisses on a press. It did not touch desk_key, and desk_key's only mode-gated block is `if ov_mode == OV_PALETTE {` at 12641. So with OV_LOCK up:
+
+(a) PRINTABLE KEYS FALL THROUGH TO THE FOCUSED APP. desk_key matches nothing for a plain letter and returns 0. wm.c route_key then runs `int target = (m >= 0) ? m : focus_win;` (wm.c:4585) and dispatches the character to the focused window. ov_draw_lock (12246) paints an opaque full-screen TH_BG plate, a well captioned PASSPHRASE and a live vermilion caret at 12295-12297 — there is no buffer behind it, nothing accumulates, and the keystrokes land invisibly in whatever app had focus (the terminal, 04 EDITOR). Before 08ce7a1 any click dismissed the sheet, so the exposure lasted one press; now the sheet persists until Escape.
+
+(b) FOUR KEYS STILL DISMISS IT. `if kcode == KEY_F1_K` (12627) is ungated: F1 sets ov_mode = OV_ACTIVITIES, replacing the lock with live wm_thumb previews of every window. `if kcode == 11` (12695) sets ov_mode = OV_PALETTE — a fully driveable command palette over a locked session. `if kcode == 7` (12705) toggles the desk grid and fires a toast; Alt+1/Alt+2 (12736-12737) switch workspace; KEY_SUPER (12739) calls open_menu(). The comment added at 11897-11906 states "It consumes every press and dismisses on none. Escape is the way out" — true of the pointer, false of the keyboard.
+
+Escape itself is fine and I verified it: KEY_ESC_K (0x101) is >= 0x100 so route_key:4563 offers it as EV_KEY_DOWN, the serial 27 arrives as EV_CHAR and route_key:4566 offers that, and desk_key:12613 takes both and clears ov_mode. The lock can be escaped.
+
+Related: route_key's own comment at 4526 ("AN OVERLAY IS MODAL TO THE KEYBOARD, and the desk says so by consuming") is false for three of the four overlay modes — desk_key consumes ordinary keys for OV_PALETTE only.
+
+### 18. The Files pane's `hex` button opens a viewer of physical RAM, and the editor three panes away prints the refutation on screen
+
+- **severity**: wrong-behaviour
+- **site**: `kernel/src/kernel.zl:8325`
+
+files_detail draws three buttons under the selected file's FULL PATH and EXTENT rows: `open in editor`, `hex`, `stat` (7968-7971). files_event dispatches `hex` as `if fbn == 1 { return reg_open(APP_HEXV) }` (8325). APP_HEXV's body reads `HX_BASE = 0x100000` through peek8 (kernel/apps/apps_sys2.zl:625, 720) — the physical address boot.S is loaded at — and its own well caption says so: "phys 0x100000, the loaded image". It has no file argument and no path anywhere in it. So pressing `hex` for `zlsh.txt` opens a window of kernel image bytes with the file's name nowhere on it.
+
+The same tree already states this is wrong. ed_binary_body prints, centred, on screen: "06 HEX reads memory, not files - it cannot show this one" (kernel.zl:3664), and the comment above it (3636-3641) says sending someone there "would land them on the kernel image and call it their file." Two surfaces in one desktop give opposite answers about the same window.
+
+The measurements needed to fix it are read one row above the button: fs_lba(sel) and fs_run(sel) at 7952-7957.
+
+### 19. Activities counts and tiles minimised windows; the prototype filters them out
+
+- **severity**: wrong-behaviour
+- **site**: `kernel/src/kernel.zl:12044`
+
+`ov_act_n()` (12044-12053) and `ov_act_win(idx)` (12054-12066) walk the z-order and accept a window on the single test `wm_winws(oaw) == wm_ws()`. The authority filters minimised windows twice: showOverview builds its list with `.filter(w => w.ws === S.ws && !w.min)` (presswork-prototype.html:2523-2524) and the subtitle counts `Object.keys(S.wins).filter(k => S.wins[k].ws === S.ws && !S.wins[k].min).length` (2369-2370). Consequences at HEAD: (a) the header figure at 12145 prints that count under the words 'plates on this workspace' (12146) while counting windows that are not on the workspace at all; (b) wm_minimize (wm.c:2288-2296) calls window_surfaces_free, so W->client_px is NULL and wm_thumb returns 0 at wm.c:1929 — the tile renders as a bare plate, which is exactly the 'half printed sheets' failure the prototype's own comment at 2529-2532 and kernel.zl's at 12032-12035 both describe; (c) ov_act_scale's maxw/maxh (12084-12090) are taken over minimised windows too, so an invisible window can shrink every visible tile. wm_min_p is bound (runtime_kernel.c:2241) and this same file already uses it for exactly this class of filter at 11686.
+
+### 20. System Monitor: more cores than rows pushes the heap meter and the whole IOAPIC section off the pane
+
+- **severity**: wrong-behaviour
+- **site**: `kernel/src/kernel.zl:6379`
+
+The core loop at 6379-6381 stops when it runs out of client (`if ly + pw_rowh() > sy + sh - 8 * u { ci = cpu_thr() }`) but does not stop what follows. Lines 6382, 6386, 6387, 6393 and 6394 — `ly = ly + 6 * u`, `sm_meter(... "zl heap" ...)`, `ly = ly + 8 * u`, `pw_sect(... "ioapic lines", apic_pins() ...)` and `sm_irq_head(...)` — all draw unconditionally at an ly that is already past `sy + sh`, so they are clipped away entirely by the client scissor. Only the IRQ row loop (6396-6400) has its own guard, and by then its column head has already been drawn off-screen. With MON_H = 400 (kernel.zl:410) the client is 349 px and about twelve core rows fit; cpu_threads() (cpu.c:177-190) returns the package's logical processor count from CPUID leaf 0x0B, which is 16 or 32 on an ordinary desktop, so on any such machine the memory meter and the entire interrupt table silently vanish and nothing on screen says a row was dropped. kernel.zl:7486-7487 states the rule this violates: 'anything shorter and sys_body says on screen how many rows it had room for rather than quietly truncating.'
+
+### 21. Files empty state prints 'reason not reported' for five reasons fs_why() does report — including the one fs.c added it for
+
+- **severity**: wrong-behaviour
+- **site**: `kernel/src/kernel.zl:8049`
+
+fs.c defines eleven non-OK causes (FS_WHY_NODISK 1 .. FS_WHY_DIRBROKEN 11, fs.c:111-122) and sets all of them (fs.c:446, 531, 592-684). kernel.zl declares only six (449-454: NODISK, UNREADABLE, UNFORMATTED, VERSION, DAMAGED, GEOMETRY). Line 8049's fallback fires for anything that is not one of five of those, so FS_WHY_BLOCKSIZE (6), FS_WHY_MAXFILES (7), FS_WHY_DIRLOAD (9), FS_WHY_DIRENTRY (10) and FS_WHY_DIRBROKEN (11) all print 'the mount was refused - reason not reported' — a false statement about the machine's own knowledge, on the pane whose subject is read figures. DIRBROKEN is the sharp case: fs.c:439-446 carries a comment saying that before its fix 'the Files pane printed "the mount was refused - reason not reported" about a failure this function had just named on the console', and sets fs_why_code = FS_WHY_DIRBROKEN to fix it. The C half landed; the zl half was never written, so the string the comment names is still what the pane prints on that path.
+
+### 22. The Font Atlas caption never advances nx past " glyphs - ", so the cell dimensions are overprinted on top of the word
+
+- **severity**: wrong-visual
+- **site**: `kernel/apps/apps_sys2.zl:1016`
+
+fd97ddd replaced the literal "95 glyphs - " with a measured `atlas_g(fa_atlas_here())` followed by a separate " glyphs - " run, and dropped the `nx = nx + ...` that used to follow it. At HEAD:
+
+  1014  ui_txtn(nx, ny, atlas_g(fa_atlas_here()), ...)
+  1015  nx = nx + ui_tnw(atlas_g(fa_atlas_here()), S2_SM, S2_MONO)
+  1016  ui_txt(nx, ny, " glyphs - ", ...)          <- draws, does not advance
+  1017  ui_txtn(nx, ny, cell_w(), ...)             <- draws at the SAME nx
+
+Every subsequent run is 10 mono cells (80 px at scale 1) to the left of where the measurement at line 1010 placed it. ui_text (uikit.c:284) draws glyphs only — it lays no background — so the runs overstrike rather than replace: cell 0 gets ' ' + '8', cell 1 gets 'g' + 'x', cells 2-3 get 'l','y' + '1','6', cells 4-9 get 'p','h','s',' ','-',' ' + the head of " cell - bitmap atlas". Nine mono cells of superimposed glyph pairs, and the word "glyphs" — the whole point of the change — is destroyed. The right-flush at line 1011 also leaves 10 cells of gap before the right margin, because nw at 1010 correctly includes a width the draw never consumes.
+
+### 23. The Renderer's new mode line is clipped to "  - wireframe" on the default window — it asserts the capability the commit added it to deny
+
+- **severity**: wrong-visual
+- **site**: `kernel/apps/apps_sys2.zl:546`
+
+08ce7a1 added rd_modeline() (501-504) to give rd_wire a reader outside its own caption, and appends it after the mesh line at 546 with no width check. The Renderer opens at sys2_w(APP_REND) = 352 design units (apps_sys2.zl:1080) via `wm_open(..., sys2_w(id) * u, ...)` at 1146. client_of (wm.c:1777) insets by bl = 1 + ZD_FOCUS_BAR (design.h:414 = 3) on the left and b = 2 on the right, so aw = 346 px at ui scale 1.
+
+The text starts at ox = ax + 10*u (532). The default mesh line "mesh cube - 12 tris - 8 verts" is 29 chars; ui_text_w with UI_F_MONO is strlen * fb_cell_w() (uikit.c:279), = 232 px, ending at ax + 242. That leaves 104 px to the client edge at ax + 346 — exactly 13 mono cells at cell_w() 8. The wireframe string "  - wireframe not implemented, drawing shaded" has 13 characters before the space after "wireframe": two spaces, '-', space, then w-i-r-e-f-r-a-m-e.
+
+So with rd_wire == 0 the window reads:
+
+    mesh cube - 12 tris - 8 verts  - wireframe
+
+and "not implemented, drawing shaded" is clipped by wm.c's client scissor and never appears. Every longer mesh is worse: "mesh cylinder - 44 tris - 24 verts" (34 chars) leaves 8 cells and the line reads "  - wire". The disclaimer that was the entire justification for keeping the toggle is unreachable at the shipped window size, and what remains on screen is the false claim it was added to remove. The shaded branch "  - shaded" (10 chars) does fit on the cube but is also clipped on the cylinder.
+
+### 24. The Files detail button row is drawn past the bottom of the client rect — FILES_DETAIL_H reserves less than the block needs
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/kernel.zl:7967`
+
+FILES_DETAIL_H = 116 (kernel.zl:7779) and files_detail_y(cy, ch) returns cy + ch - 116*ui() (7781), so the block is given 116 design units measured back from the client bottom, ay + ah.
+
+files_detail spends them: fdy = detail_y, then +10*fdu (7929), then four `fdy = fdy + pw_kvh()` at 7943, 7948, 7960 and 7965. pw_kvh() is PW_KVH * ui() with PW_KVH = 20 (6485, 6495). Line 7967 then sets fdby = fdy + 4*fdu. The pills are drawn at that y with height ui_pill_h(S3_MD) (apps_sys3.zl:192), which is 2*DP(ZD_PILL_MD_PY) + ui_text_h(UI_MD) (uikit.c:657-662) = 2*6 + 13 = 25 px at scale 1.
+
+  offset used  = 10 + 4*20 + 4 = 94
+  pill bottom  = 94 + 25 = 119
+  reserved     = 116
+
+So the pills overhang ay + ah by 3 px at ui scale 1. At scale 2 (ui_scale_q8 512): pw_kvh 40, pill_h 2*12 + 26 = 50, offset 188, bottom 238 against 232 reserved — 6 px. At q8 = 341 (a 2560-wide panel, fb.c:834) zl's ui() truncates to 1 in every binop (zl_binop truncates both operands to long long, runtime_kernel.c:1289) so the offset stays 94 and reserved stays 116, while ui_pill_h is a C call honouring q8 and returns 2*8 + 17 = 33 — 11 px over.
+
+wm.c sets fb_clip to the client rect before app_draw ("clip 2: NARROWER - client", wm.c:3906), so the bottom of all three pills is sliced flat against the window edge and their chip-end radius is lost. files_btn_at's hit rectangle (8170) spans the full ui_pill_h, so its bottom rows sit outside the client the pill is drawn in.
+
+### 25. The Network pane fills its selected row with vermilion at 144 design units wide - 48x the sanctioned width
+
+- **severity**: wrong-visual
+- **site**: `kernel/apps/apps_sys3.zl:1419`
+
+s3nw's sidebar draws the selected row as rrect(rx, ry, rw, S3NW_ROW * u, 11 * u, theme(TH_ACCENT)) where rw = S3NW_SIDE * u - 14 * u = 144 design units (S3NW_SIDE = 158 at line 1326) and S3NW_ROW = 44. Three things say that is wrong, and all three are in this tree. presswork-prototype.html:793 is the authority: `tr.sel td { background: var(--zd-knock); color: var(--zd-knock-ink) }`. design.h:660 sets ZD_SEL_BAR_W to 3, "== ZD_FOCUS_BAR. vermilion, on the left" - a 3dp bar, not a fill. And the Settings PRESS tab prints the width rule on screen at kernel.zl:10121-10123: vermilion "never fills an area wider than the focus bar except one button per view". The Files pane already got this correction - kernel.zl:8117 draws its selected row with theme(TH_KNOCK) and its comment quotes the same CSS rule - so the fix is a copy of a fix already made two files away. apps_sys3.zl:1079 (Archive Manager) has the identical defect at full client width. Register 08 is one of the fourteen, so this is on screen in a register app while the Settings pane two windows over prints the rule it breaks.
+
+### 26. Disk Usage draws nine instrument fills in the overprint where every other instrument in the tree uses ZD_STEEL
+
+- **severity**: wrong-visual
+- **site**: `kernel/apps/apps_sys3.zl:587`
+
+ui_meter(bx, ry + 9 * u, 84 * u, fs_bytes(slot) * 100 / mx, theme(TH_ACCENT)) draws up to S3DU_ROWS = 7 bars 84 design units wide in vermilion, and s3du_mount's capacity bar at line 310 (sc = theme(TH_ACCENT)) adds two more. A grep for ui_meter across the whole tree returns exactly one call site and it is this one; the System Monitor's own meter (kernel.zl:6057, mcol = theme(TH_STEEL) with TH_WARN over 80%) is the correct implementation of the same widget. The rule is printed by the OS itself: kernel.zl:10105-10107 draws the two-ink table with ZD_STEEL's jobs as "raster columns, meter fills, ruler", and presswork-prototype.html:2218-2220 spells the same row as "raster columns, meter fills, spark bars, ruler regions". Nine vermilion fills in one window is precisely the "generic two accent dark UI" the same pane warns about at kernel.zl:10118.
+
+### 27. The resize grip is drawn outside the plate's rounded corner, onto the desk
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/graphics/windowing/wm.c:3433`
+
+chrome_shell anchors the grip box to the FRAME corner - `int gs = UI_S3(t); int gx = W->x + W->w - gs, gy = W->y + W->h - gs;` (3433-3434) - and then draws three diagonals ending at `gx+gs-1` / `gy+gs-1`, i.e. on the plate's outermost ring row and column (3452). The plate is a rounded rect: chrome_seat draws the panel at (W->x+1, W->y+1, W->w-2, W->h-2) with radius `ri = r-1` (wm.c:2830), so the frame's own corner pixel is outside the shape. Nothing clips: shell_compose clears the shell surface to alpha 0 and lets chrome_shell write into it (wm.c:3572-3579), and fb_line blends straight into whatever pixel it is handed (fb.c:2505-2516). Measured by walking each rule against the panel's corner circle: at ui 1 (r=9, ri=8, gs=12) rules i=1 and i=2 are 3/3 and 6/6 pixels outside, i=3 is 4/9 outside - 13 of 18 grip pixels land on the wallpaper or on the window beneath. At ui 2 (r=18, ri=17, gs=24) it is 22 of 36, again with two of the three rules entirely off-plate. The authority gets this free: `.grip` is `position:absolute; right:0; bottom:0` inside `.win`, which carries `overflow:hidden` and `border-radius: var(--zd-r-plate)` (proto:598-603, 726-727), so the diagonals are clipped by the curve. Two further deviations in the same block: the box is UI_S3 = 12dp where proto:726-727 declares 15dp (there is no ZD_GRIP in design.h - grep returns nothing - so 12 is an uncited spacing step), and the ink is `focused ? t->text_dim : t->surf_7` (wm.c:3444) where proto:2287 strokes ZD_TEXT_INERT in both states, on the same token proto:358-363 reserves for exactly four things, one of which it names as "the resize grip".
+
+### 28. The raster strip and the printer's foot are not border-box: each band is 2dp too tall and the field 4dp too short
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/kernel.zl:482`
+
+The prototype sets `* { box-sizing: border-box }` (proto:325). `#raster { height: var(--zd-strip-h); border-bottom: calc(2px * var(--ui)) solid var(--zd-lit) }` (proto:486-487) is therefore 30dp TOTAL - 28 of ZD_CUT plus the 2dp rule inside it - and `#foot { height: var(--zd-foot-h); border-top: calc(2px * var(--ui)) solid var(--zd-lit) }` (proto:560-562) is 46dp total. zlOS adds the rule on top of the declared height in both bands: draw_strip fills `fill_rgb(sx, 0, sw, sh, TH_CUT)` for the full 30 and then `fill_rgb(sx, sh, sw, RULE_H * u, TH_LIT)` below it (kernel.zl:2219-2220), and draw_foot paints `fill_rgb(fx, fy - RULE_H * u, ..., TH_LIT)` above a full 46 (kernel.zl:2771). field_y() and field_h() encode the same reading (kernel.zl:482, 484), and design.h:450 states ZD_RULE_H as "the 2px ZD_LIT rule under strip / over foot" with nothing saying it is inside the band. Measured: at ui 1 the strip is 32dp against 30 and the foot 48 against 46, and the field is `h-80` against the authority's `h-76`; at ui 2 it is 64/60, 96/92, and `h-160` against `h-152`. This is the identical fault already fixed for `.hdr` (wm.c:2879-2890) and `.sband` (wm.c:1763-1769), in the two elements at the other end of the screen. It is not only cosmetic: wm.c's reserves are the border-box reading - `#define RESERVE_TOP(t) ((t)->strip_h)` (wm.c:338) - so clamp_to_field (wm.c:2378) and the snap/maximise rect (wm.c:4217-4220) place a window's top edge at y=30 while kernel.zl's desk begins at y=32, and every maximised, snapped or dragged-to-top plate covers the strip's 2dp ZD_LIT rule.
+
+### 29. With the knockout switched off, both of the authority's fallback run rules are missing
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/graphics/windowing/wm.c:2834`
+
+ui_knockout_set is a live control (ui.c:481, ui.h:226-234) and ui.c:206-217 remaps the four knockout roles "rule for rule" against `body.nokock`. Two rules were not carried over, and both are in chrome_seat. (1) The struck top run is `focused ? t->knock : t->lit` (wm.c:2834). With the knockout off theme.knock becomes ZD_FOCUS_WASH = 0x47403C (ui.c:208, design.h:205), so the focused plate's top run is drawn 1.3681:1 on the plate instead of ZD_LIT 0x6F6864 at 2.5423:1 - and it is drawn in exactly the same value as the header band immediately beneath it, so it disappears entirely. proto:689 says the opposite in as many words: `body.nokock .win.focus .trun { background: var(--zd-lit); }`. That is the whole point of the rule - once the header is a wash rather than an ink plate, the run has headroom again and must be drawn. (2) The grazed left run starts at `W->y + 1 + ((focused && chrome) ? t->title_h : r)` (wm.c:2836) unconditionally, but proto:690 says `body.nokock .win.focus .lrun { top: var(--zd-r-plate); }` - with no knockout the header is not a different material, so the run belongs to the whole plate. As shipped, switching the knockout off costs the focused window its struck run and the top 28dp (56 at ui 2) of its grazed run.
+
+### 30. Five motion curves where the authority declares one, justified by a citation of the superseded ds-reference.html
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/graphics/windowing/wm.c:1157`
+
+anim_curve maps the timeline onto EASE_LINEAR / EASE_WIN / EASE_STD / EASE_IN_OUT / EASE_OUT (wm.c:1161-1167), and the comment above it defends that spread by citing "ds-reference.html lines 14-20" - the superseded predecessor - and calls one curve for everything "what made every animation feel like the same animation". The authority disagrees explicitly. presswork-prototype.html declares one curve, `--ease: cubic-bezier(0.200, 0.850, 0.300, 1.000)` (proto:209), under a comment that reads "Graphite's three durations, one curve" (proto:203-209), and every transition and animation in the file uses it: proto:456, 602, 609, 612, 658, 663, 815, 846, 966. The durations were already migrated to design.h's three (wm.c:1148-1155) and the header comment there names this exact failure - "intent written down and never connected" - but the curve table beside it was left on the predecessor's scheme. ease.h carries three more citations of the same superseded document at lines 23, 29 and 33.
+
+### 31. The snap preview fills half the screen with vermilion, which the overprint budget forbids
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/graphics/windowing/wm.c:279`
+
+snap_preview_draw paints the whole target rectangle twice in `t->accent` - an inner rrect at alpha 34 and the full rect at alpha 82 (wm.c:280-286). On a half-screen snap that is the largest vermilion area anywhere on the desktop by a wide margin. The authority spends ZD_VERM on exactly four jobs - "the focus bar and register mark, the one primary action per view, the crop marks, the datum mark on the memory ruler" (proto:124-128) - and states the constraint that keeps two inks on warm graphite from reading as decoration: "vermilion never fills an area wider than the focus bar except one button per view" (proto:129-131). wm.c's own chrome section repeats the same rule for the focus bar (wm.c:2894-2904, and again in the palette's selected row). There is no snap preview in the prototype at all - grep for snap/ghost/preview over presswork-prototype.html returns only unrelated matches - so nothing in the authority licenses a fifth vermilion job, let alone the biggest one.
+
+### 32. Activities previews are stretched: the tile is sized from the FRAME, the pixels come from the CLIENT
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/kernel.zl:12182`
+
+`th = idiv(wm_hh(ow2) * sc, 256) + OV_ACT_TH * u` (12182) and `tw = idiv(wm_w(ow2) * sc, 256)` (12181) size the preview rect from wm_hh/wm_w, which are `wm_geometry`'s gw/gh — the FRAME (runtime_kernel.c:2245-2246 -> wm.c:1733-1737, which returns wins[win].w/.h verbatim). Line 12223 then calls `wm_thumb(ow2, tx, ty + OV_ACT_TH * u, tw, th - OV_ACT_TH * u)`, and wm_thumb (wm.c:1925-1958) box-filters `W->client_w x W->client_h` into that rect. client_of (wm.c:1777-1783) subtracts title_h (ZD_TITLE_H = 28, design.h:360), the band (band_h_of, ZD_STATUS_H 20 + 1 rule) and 2 of border, so client_h = frame_h - 51. Every tile is therefore stretched vertically by frame_h/client_h: 400/349 = 14.6 % for the Files window, 360/309 = 16.5 % for the editor. The authority does it the other way round — showOverview at presswork-prototype.html:2538-2540 uses `maxH = max(w.h - 28)` and `tileH = TH + (w.h - 28) * sc0`, i.e. the BODY height, and the clone at 2571-2573 is sized `w.w x (w.h - 28)`. The comment at 12028-12030 claims the tiles 'take each window's OWN aspect'; they take a distorted one. wm_cw/wm_ch are already bound (runtime_kernel.c:1801-1802), so the measurement exists.
+
+### 33. Files detail block overflows its own reservation; the three buttons are clipped by the client edge
+
+- **severity**: wrong-visual
+- **site**: `kernel/src/kernel.zl:7779`
+
+FILES_DETAIL_H = 116 is a written height for a block whose parts are all measured. files_detail (7924-7973) lays out 10*u of lead-in, four rows of pw_kvh() = PW_KVH * ui() = 20*u (7950, 7955, 7961, 7965), 4*u (7967) and then s3_btn, whose height is ui_pill_h(S3_MD) (apps_sys3.zl:190-194). ui_pill_h(UI_MD) = 2 * DP(ZD_PILL_MD_PY) + ui_text_h(UI_MD) (uikit.c:657-662), which at q8 256 is 2*6 + 13 = 25 px: the block needs 10 + 80 + 4 + 25 = 119 in a 116 reservation, so the pills' bottom 3 px are cut off by the client's foot band. It gets worse at scale, because the two halves scale differently: `FILES_DETAIL_H * ui()` goes through zl_binop, which casts both operands to long long before multiplying (runtime_kernel.c:1289-1293), so on a 2560-wide panel (fb.c:834 gives q8 341, ui() = 1.332) it truncates to 116 px while ui_pill_h scales properly to 2*8 + 17 = 33 — 10 + 80 + 4 + 33 = 127 in 116, an 11 px chop. kernel.zl:536-556 and 606-624 already document this exact truncation hazard and the `idiv(N * ui_scale_q8() + 128, 256)` idiom that avoids it.
+
+### 34. The boot desktop is the SUPERSEDED document's composition: three plates, no overlap, wrong window focused
+
+- **severity**: missing-feature
+- **site**: `kernel/src/kernel.zl:13236`
+
+The comment block at 13236-13262 says in capitals "THE BOOT COMPOSITION IS THE REFERENCE'S, EXACTLY. ds-reference.html's initial state opens three windows" and quotes that document's term/files/mon sizes. ds-reference.html is the superseded predecessor. The authority's baseDesktop() (presswork-prototype.html:3033-3050) opens SEVEN: shell/files/mon/log tiled into four quadrants computed from the field size, then regs deliberately laid ACROSS two of them front-most and focused, then hex and net on workspace 2. Its own comment states why: "one plate deliberately laid ACROSS two others, front most and focused, so the knockout and the occlusion edge are both visible without touching anything." HEAD opens three (13264, 13265, 13270), all on ws 1, none overlapping, and hands focus to the shell (13293). So the two signals the whole design argues for - ZD_KNOCK on a focused header and ZD_EDGE_OVER on an occluding edge - are both invisible on the first frame anybody sees, and the BOUNDARY tab describes a boundary the boot desktop never draws. The geometry constants at 404-410 are taken from the prototype's APPS table (each app's default open rect), not from baseDesktop, so they are the right numbers from the wrong table.
+
+### 35. The LADDER tab has no controls at all - both of the authority's are absent
+
+- **severity**: missing-feature
+- **site**: `kernel/src/kernel.zl:9849`
+
+set_ladder_body (9849-9934) draws a well, the 18-row token table, the step table and two kv rows, and calls set_tog_row / set_slider / any control zero times - verified by grep over the function body. The authority's LADDER tab has two controls immediately after the first well: seg('surface ladder', 'ladder', ['presswork','raking']) at presswork-prototype.html:2036 and slider('ui scale', 'ui', 80, 140, ' %') at :2037. Neither exists. The two are different problems and must not be treated as one: the ui-scale slider is a capability this machine HAS most of - fb.c:74 keeps ui_scale_q8 as a file static and fb.c:834-837 derives it from panel width with a 256..768 clamp - but there is no setter anywhere, so nothing can move it. The surface-ladder segment is a capability the machine does NOT have: design.h:54-59 says light/second-ladder is deliberately out of scope, and the only raking values in the tree are the four reference constants ZD_REF_LIT_RAKING / BASE_RAKING / KNOCK_PLATE / WASH_RAKING (design.h:229-232), not six switchable surface rungs.
+
+### 36. No segmented-control widget exists, so three of the authority's controls have no counterpart
+
+- **severity**: missing-feature
+- **site**: `kernel/src/kernel.zl:9443`
+
+set_press_ctl's own comment at 9443-9446 states it: "`raster clock` and `per window timing` are segmented controls this pane has no widget for". Add the LADDER tab's 'surface ladder' and that is three of the authority's twelve controls with no drawable form. set_segbar (9178-9198) is a segmented control and is the right drawing code, but it is hardwired: it loops SET_TABS, calls set_tabname(i), and compares against the global set_tab, so it can only ever draw the tab strip. The authority's segs are presswork-prototype.html:2036, :2187 and :2188. The data behind two of them is already measured here: wake_rate() (kernel.zl:2729) is a real rolling-minute wakeup rate, and wm_appus() is bound and read at 10142, so 'per window timing' could switch a real measured/repaint/off exactly as usOf does at presswork-prototype.html:1606-1610.

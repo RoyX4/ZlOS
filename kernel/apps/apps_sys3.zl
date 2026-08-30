@@ -244,16 +244,22 @@ fn s3_num_r(xr, y, n, c) {
 # diskTop 3776.
 #
 # Per mount: a name, a read-only/read-write flag, a segmented capacity bar and
-# used/total in mono; then "Largest files on rd0" over rows of path + mini bar
+# used/total in mono; then "Largest files on nvme0" over rows of name + mini bar
 # + size.
 #
-# THE DATA IS REAL where the kernel has it. /tmp is zlfs - fs_cap()/fs_free()
-# are block counts and fs_bs() the block size - and the largest-files list
-# walks the real directory (fs_inuse/fs_bytes/fs_ch), so an unmounted volume
-# shows an empty list rather than seven invented paths. /dev/rd0 is the boot
-# image and this kernel exposes no size for it, so its 4 MiB read-only figure
-# is the reference's own constant. That is the ONE number on this screen that
-# is not a live read, and it is named here rather than dressed up.
+# THE DATA IS REAL where the kernel has it. The volume is zlfs on the NVMe
+# namespace - fs_cap()/fs_free() are block counts and fs_bs() the block size -
+# and the largest-files list walks the real directory (fs_inuse/fs_bytes/fs_ch),
+# so an unmounted volume shows an empty list rather than seven invented paths.
+#
+# THE SECOND MOUNT ROW IS GONE AND SO IS ITS NAME. /dev/rd0 was a 4 MiB
+# read-only ramdisk carried over from the superseded document; the constant
+# went at :263 and the NAME survived it in three places - the head, the mount
+# row's "/tmp", and the largest-files heading - so one filesystem answered to
+# three names in one window and one of them was for a device this kernel has
+# never had. zlfs is also FLAT: fs.c has no directories and no "/tmp", so that
+# name could not have been a mount point either. All three now say nvme0,
+# which is what fs.c:214-217 actually reads.
 # ==============================================================================
 S3DU_PAD_X = 16
 S3DU_PAD_Y = 14
@@ -465,14 +471,27 @@ fn s3du_draw(ax, ay, aw, ah) {
     # `rd0, zlfs, 4.0 MiB image  <dot> OK  0 orphan extents`; this says what
     # fs_ok() actually reports, because an unformatted volume is the state this
     # machine boots into and the reference never had one.
+    # ONE VOLUME, ONE NAME. This pane called the same filesystem three things
+    # in one window: "rd0, zlfs" here, "/tmp" on the mount row at :542, and
+    # "LARGEST FILES ON RD0" over the list - while :263-266 of this very file
+    # says, about a constant it deleted, "there is no rd0 to report a right
+    # number for". The rows underneath are real reads (fs_inuse, fs_bytes,
+    # fs_ch); it was only the DEVICE they were attributed to that was invented.
+    #
+    # What the machine actually has: zlfs on the NVMe namespace. fs.c:214-217
+    # binds fsdev_read/write straight to nvme_ready/nvme_blocksize, and fs.c
+    # has no path namespace at all - grep for "/tmp" over it returns nothing,
+    # because zlfs is a FLAT store with no directories to mount anything under.
+    # So "rd0" names a ramdisk that does not exist and "/tmp" names a mount
+    # point that cannot exist. Both are now the one thing that is true.
     ui_caps(x, y, "VOLUME", theme(TH_TEXT_2), T_CAPTION)
     if fs_ok() == 1 {
-        label(x + 62 * u, y, "rd0, zlfs", theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        label(x + 62 * u, y, "nvme0, zlfs", theme(TH_TEXT_HI), T_CAPTION, W_REG)
         ui_dot(x + w - 96 * u, y + 5 * u, theme(TH_OK), 0)
         label_num(x + w - 84 * u, y, fs_n(), theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         label(x + w - 62 * u, y, "files mounted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     } else {
-        label(x + 62 * u, y, "rd0, unformatted", theme(TH_TEXT_HI), T_CAPTION, W_REG)
+        label(x + 62 * u, y, "nvme0, unformatted", theme(TH_TEXT_HI), T_CAPTION, W_REG)
         ui_dot(x + w - 96 * u, y + 5 * u, theme(TH_WARN), 0)
         label(x + w - 84 * u, y, "no volume", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     }
@@ -539,7 +558,7 @@ fn s3du_draw(ax, ay, aw, ah) {
     # this row drew a healthy green volume for a filesystem the kernel had
     # refused to mount. The Files pane three files away prints the refusal and
     # its cause on the same boot.
-    y = s3du_mount(x, y, w, "/tmp", "read-write zlfs", s3du_tmp_used(), s3du_tmp_total(), fs_ok())
+    y = s3du_mount(x, y, w, "nvme0", "read-write zlfs", s3du_tmp_used(), s3du_tmp_total(), fs_ok())
     y = y + S3DU_GAP * u
 
     # THE WRITE PATH AND WHAT PROVES IT. The reference closes on two kv rows,
@@ -557,7 +576,7 @@ fn s3du_draw(ax, ay, aw, ah) {
     s3_mono(x + 78 * u, y, "gen 1-2-3, three cold boots", theme(TH_TEXT))
     y = y + 20 * u
 
-    s3_heading(x, y, "LARGEST FILES ON RD0")
+    s3_heading(x, y, "LARGEST FILES ON NVME0")
     y = y + 19 * u
 
     top = s3du_at_rank(0)
@@ -861,7 +880,7 @@ fn s3sv_call_arg(i) {
     if i == 8 { return "smp: ap trampoline" }
     if i == 9 { return "i2c-hid: descriptor" }
     if i == 10 { return "sched: run queue" }
-    return "/tmp free blocks"
+    return "zlfs free blocks"
 }
 fn s3sv_call_ok(i) {
     if i == 0 { return fs_ok() }
@@ -1015,25 +1034,6 @@ fn s3ar_slot_at(k) {
     }
     return 0 - 1
 }
-fn s3ar_payload() {
-    n = 0
-    i = 0
-    while i < S3DU_SLOTS {
-        if fs_inuse(i) == 1 { n = n + fs_bytes(i) }
-        i = i + 1
-    }
-    return n
-}
-# 1 header block + ceil(size/512) data blocks per member, + 2 zero blocks.
-fn s3ar_blocks() {
-    n = 2
-    i = 0
-    while i < S3DU_SLOTS {
-        if fs_inuse(i) == 1 { n = n + 1 + (fs_bytes(i) + 511) / 512 }
-        i = i + 1
-    }
-    return n
-}
 
 fn s3ar_toolbar(ax, ay, aw) {
     u = ui()
@@ -1042,9 +1042,51 @@ fn s3ar_toolbar(ax, ay, aw) {
     x = ax + 10 * u
     x = x + s3_btn(x, by, "Create archive", S3_BTN_PRIMARY, S3_BOLD) + 7 * u
     x = x + s3_btn(x, by, "Verify", S3_BTN_NEUTRAL, 0) + 7 * u
-    s3_btn(x, by, "Extract to /tmp", S3_BTN_NEUTRAL, 0)
-    s3_mono(ax + aw - 10 * u - s3_mw("/tmp/build.tar"), ay + 10 * u, "/tmp/build.tar", theme(TH_TEXT_DIM))
+    s3_btn(x, by, "Extract", S3_BTN_NEUTRAL, 0)
+    # THE PATH WAS A LITERAL FOR A FILE THAT DID NOT EXIST. "/tmp/build.tar"
+    # was drawn right-flushed where a target belongs, and nothing on the volume
+    # answered to it - zlfs has no directories, so it could not have.
+    #
+    # THE NAME IS DRAWN FROM tar.c's OWN COPY, byte by byte, not from a second
+    # literal here. tar.c skips a member with that name so an archive cannot
+    # contain itself; a toolbar that displayed a name tar.c did not recognise
+    # would make that skip look like it was working while it was not.
+    #
+    # AND IT SAYS WHETHER THE FILE IS THERE. A target line that reads the same
+    # before and after the button is pressed tells the reader nothing about
+    # what the button did, which is how "Create archive" went a whole session
+    # without anyone noticing it created nothing.
+    s3ar_n = tar_self_len()
+    s3ar_slot = tar_slot()
+    s3ar_tail = " - not written yet"
+    if s3ar_slot >= 0 { s3ar_tail = " B on the volume" }
+    s3ar_tw = s3ar_n * cell_w() + s3_mw(s3ar_tail)
+    if s3ar_slot >= 0 { s3ar_tw = s3ar_tw + s3_numw(fs_bytes(s3ar_slot)) + s3_mw("  ") }
+    s3ar_tx = ax + aw - 10 * u - s3ar_tw
+    s3ar_i = 0
+    while s3ar_i < s3ar_n {
+        char_aa(s3ar_tx + s3ar_i * cell_w(), ay + 10 * u, tar_self_ch(s3ar_i), theme(TH_TEXT))
+        s3ar_i = s3ar_i + 1
+    }
+    s3ar_tx = s3ar_tx + s3ar_n * cell_w()
+    if s3ar_slot < 0 {
+        s3_mono(s3ar_tx, ay + 10 * u, s3ar_tail, theme(TH_TEXT_DIM))
+    } else {
+        s3_mono(s3ar_tx, ay + 10 * u, "  ", theme(TH_TEXT_DIM))
+        num_aa(s3ar_tx + s3_mw("  "), ay + 10 * u, fs_bytes(s3ar_slot), theme(TH_TEXT))
+        s3_mono(s3ar_tx + s3_mw("  ") + s3_numw(fs_bytes(s3ar_slot)), ay + 10 * u, s3ar_tail, theme(TH_TEXT_DIM))
+    }
     return 0
+}
+
+# HOW LONG THE OUTPUT NAME IS, asked of the same table it is drawn from.
+fn tar_self_len() {
+    tsl = 0
+    while tsl < 64 {
+        if tar_self_ch(tsl) == 0 { return tsl }
+        tsl = tsl + 1
+    }
+    return 64
 }
 
 fn s3ar_empty(ax, ay, aw, ah) {
@@ -1052,9 +1094,12 @@ fn s3ar_empty(ax, ay, aw, ah) {
     cy = ay + ah / 2 - 40 * u
     icon(ax + aw / 2 - 12 * u, cy, 7, theme(TH_BORDER))
     ty = cy + 44 * u
-    l1 = "No archive open. Create one to pack the source"
-    l2 = "tree into a POSIX ustar file, then open it in the"
-    l3 = "Hex Viewer to read the 512-byte headers."
+    # IT PACKS THE VOLUME, NOT "the source tree". There is no source tree on
+    # this machine; the button reads every other file on the zlfs volume and
+    # writes one ustar back onto it.
+    l1 = "No archive open. Create one to pack every file on"
+    l2 = "the volume into a POSIX ustar, written back as"
+    l3 = "zlfs.tar - then read its headers in the Hex Viewer."
     ui_txt(ax + aw / 2 - ui_tw(l1, S3_MD, 0) / 2, ty, l1, theme(TH_TEXT_DIM), S3_MD, 0)
     ui_txt(ax + aw / 2 - ui_tw(l2, S3_MD, 0) / 2, ty + 19 * u, l2, theme(TH_TEXT_DIM), S3_MD, 0)
     ui_txt(ax + aw / 2 - ui_tw(l3, S3_MD, 0) / 2, ty + 38 * u, l3, theme(TH_TEXT_DIM), S3_MD, 0)
@@ -1111,7 +1156,10 @@ fn s3ar_rows(ax, ay, aw, ah) {
             slot = s3ar_slot_at(k)
             on = 0
             if s3ar_sel == slot { on = 1 }
-            if on == 1 { fill_rgb(ax, ry, aw, S3AR_ROW * u, theme(TH_ACCENT)) }
+            # THE SAME CORRECTION, AT FULL CLIENT WIDTH. proto:793 again -
+            # the selected row is the knockout. This one was worse than the
+            # Network pane's: `aw` is the whole table.
+            if on == 1 { fill_rgb(ax, ry, aw, S3AR_ROW * u, theme(TH_KNOCK)) }
             if on == 0 { if k % 2 == 1 { blend(ax, ry, aw, S3AR_ROW * u, theme(TH_TEXT_HI), 3) } }
             # `oc` was the "valid" ink and went with the fabricated checksum -
             # -Werror=unused-but-set-variable caught the leftover, which is the
@@ -1119,8 +1167,8 @@ fn s3ar_rows(ax, ay, aw, ah) {
             nc = theme(TH_TEXT_HI)
             dc = theme(TH_TEXT_DIM)
             if on == 1 {
-                nc = ui_ink_on(theme(TH_ACCENT))
-                dc = nc
+                nc = theme(TH_KNOCK_INK)
+                dc = theme(TH_KNOCK_INK)  # proto:794 - `td span` too, !important
             }
             ty = ry + 5 * u
             ci = 0
@@ -1162,14 +1210,25 @@ fn s3ar_rows(ax, ay, aw, ah) {
 # B" at runtime, and ui_statn takes an integer. An uppercase key is where the
 # reference already puts its units-ish words, so this reads as designed rather
 # than as a missing suffix.
+# THE ARCHIVE SIZE IS READ FROM THE WRITER, NOT RECOMPUTED BESIDE IT.
+# s3ar_blocks() reimplemented tar.c's padding rule in zl - 1 header block plus
+# ceil(size/512) per member plus two zero blocks - and two implementations of
+# one rule is one rule and one guess. tar_need() is the figure tar_build()
+# actually produces, and it also excludes the archive itself, which the zl copy
+# did not: the strip would have counted zlfs.tar as a member of zlfs.tar.
 fn s3ar_stats(ax, ay, aw) {
-    pay = s3ar_payload()
-    blk = s3ar_blocks()
-    size = blk * 512
+    # THE STRIP CONTRADICTED ITSELF THE MOMENT AN ARCHIVE EXISTED. Both counts
+    # walked every in-use slot in zl, so zlfs.tar became a member of zlfs.tar:
+    # PAYLOAD read 2564 beside an ARCHIVE SIZE of 2560 - a payload larger than
+    # the container - and MEMBERS said 3 for an archive holding 2. tar.c does
+    # the walk now, with the same skip tar_build uses.
+    pay = tar_pay()
+    size = tar_need()
+    blk = size / 512
     over = 0
     if size > 0 { over = 100 - pay * 100 / size }
     ui_stat(ax, ay, aw, s3_stat_min(aw, 5))
-    ui_statn("MEMBERS", s3ar_count(), theme(TH_TEXT))
+    ui_statn("MEMBERS", tar_members(), theme(TH_TEXT))
     ui_statn("ARCHIVE SIZE B", size, theme(TH_TEXT))
     ui_statn("PAYLOAD B", pay, theme(TH_TEXT))
     ui_statn("BLOCK OVERHEAD %", over, theme(TH_ACCENT))   # ds WARN; no zl role
@@ -1204,8 +1263,37 @@ fn s3ar_event(win, ety, ecode, ex, ey) {
         x = 10 * u
         w = s3_btn_w("Create archive", S3_BOLD)
         if cx >= x { if cx < x + w {
+                # IT NOW WRITES THE ARCHIVE. This set `s3ar_open = 1` - a VIEW
+                # flag that switched the pane from its empty state to a grid of
+                # the zlfs directory. No ustar header was emitted, no block was
+                # written, no file appeared. A primary-styled button labelled
+                # with a verb performed no verb.
+                #
+                # EVERY REFUSAL NAMES ITS FIGURES. "Failed" is not a report:
+                # the three ways this can decline are a volume that will not
+                # mount, an archive larger than the staging buffer, and a
+                # volume with no room for the result, and they want different
+                # actions from the reader. The middle one prints both numbers
+                # because the ceiling is a property of this kernel rather than
+                # of the disk, and nobody can guess it.
                 if fs_ok() == 0 { fs_mount() }
-                if s3ar_count() > 0 { s3ar_open = 1 }
+                if fs_ok() == 0 {
+                        note_say2("no volume to archive", "zlfs did not mount - the Files pane prints the cause", 900)
+                        wm_dmg(win)
+                        return 1
+                }
+                if tar_need() > tar_cap() {
+                        note_say2("the archive does not fit the staging buffer", "zlfs has no append, so a tar is built whole in RAM before it is written", 1400)
+                        wm_dmg(win)
+                        return 1
+                }
+                s3ar_wrote = tar_make()
+                if s3ar_wrote == 0 {
+                        note_say2("the archive was not written", "the volume had no room for it - delete something and try again", 1100)
+                } else {
+                        note_say2("zlfs.tar written", "a POSIX ustar of every other file on the volume - open it in the Hex Viewer to read the 512-byte headers", 1400)
+                        s3ar_open = 1
+                }
                 wm_dmg(win)
                 return 1
         }}
@@ -1219,11 +1307,26 @@ fn s3ar_event(win, ety, ecode, ex, ey) {
                 wm_dmg(win)
                 return 1
         }}
-        # "Extract to /tmp" is drawn because it is in the reference's toolbar
-        # and is INERT here, deliberately: zlfs IS /tmp, so extracting an
-        # archive of /tmp back into /tmp would duplicate every member. A
-        # control that changes nothing must not claim a repaint, so this falls
-        # through to `return 0` rather than calling wm_dmg.
+        # EXTRACT HAD NO HIT TEST AT ALL. The comment that used to sit here
+        # said the button was "INERT deliberately" and that falling through to
+        # `return 0` was the honest way to draw a control that changes nothing.
+        # It is not: a pill drawn in the pressable style, over a click the
+        # window never even consumes, is indistinguishable from a broken one.
+        # The Services pane's nineteen pills were the same argument and got the
+        # same correction - say why, out loud, on the press.
+        #
+        # AND THE REASON IS REAL. zlfs is FLAT: there are no directories, so
+        # every member would extract to the name it already has, on top of the
+        # file it was read from. There is nowhere else to put it. That is a
+        # property of this filesystem, not a missing feature, and it is what
+        # the toast says.
+        x = x + w + 7 * u
+        w = s3_btn_w("Extract", 0)
+        if cx >= x { if cx < x + w {
+                note_say2("there is nowhere to extract to", "zlfs is flat - every member would land on the file it was read from", 1200)
+                wm_dmg(win)
+                return 1
+        }}
         return 0
     }
     if s3ar_open == 0 { return 0 }
@@ -1241,20 +1344,38 @@ fn s3ar_event(win, ety, ecode, ex, ey) {
 # 49 - Image Viewer, 520 x 410.  ds-reference.html 512-533, imgTabs 4203,
 # imgZoom 4208, imgStats 4213.
 #
-# THE CANVAS IS BLANK IN THE REFERENCE TOO. ds.html imports seven sibling
-# modules that were never delivered, so loadImage() never runs: state 1263 is
-# `imgPath:null, imgInfo:null, imgScale:3` - no file tab is lit, the 3x zoom
-# pill IS lit, and imgStats collapses to ONE cell reading "none loaded". That
-# is what is reproduced here: the shell exactly, not an invented picture.
+# THE REFERENCE'S CANVAS IS BLANK BY ACCIDENT, AND THAT WAS CLONED AS INTENT.
+# ds.html imports seven sibling modules that were never delivered, so
+# loadImage() never runs: state 1263 is `imgPath:null, imgInfo:null,
+# imgScale:3`. This pane reproduced that exactly - and the result was three
+# file tabs and four zoom pills over one flat fill, with s3iv_sel and s3iv_zoom
+# each having THREE occurrences in the whole tree: the declaration, the setter,
+# and the test that lights the pill. Clicking a tab lit it and the stat strip
+# twelve pixels below still read "none loaded", because that string was passed
+# unconditionally. The pane contradicted itself on screen.
+#
+# A DOCUMENT THAT IS EMPTY BECAUSE ITS AUTHOR'S FILES WERE MISSING IS NOT A
+# SPECIFICATION FOR EMPTINESS. presswork-prototype.html - the current authority
+# - has no Image Viewer among its fourteen apps at all, so nothing here is
+# owed to it either.
+#
+# THE THREE PICTURES ARE COMPUTED, WHICH IS WHY THIS NEEDS NO DECODER. There is
+# no PPM reader, no PGM reader and no image decoder of any kind in kernel/src -
+# and a gradient, a plasma and a Mandelbrot set do not want one. imgen.c makes
+# all three from integers.
+#
+# THE EXTENSIONS ARE GONE WITH THE FILES. "gradient.ppm" claims something on a
+# volume; grep found those three names only in ds-reference.html:4203 and its
+# copy. They are named for what they are now.
 # ==============================================================================
 S3IV_TB = 34
-s3iv_sel  = 0 - 1                     # ds imgPath: null - no tab is active
+s3iv_sel  = 0                         # a picture IS loaded now - the first one
 s3iv_zoom = 3                         # ds imgScale: 3
 
 fn s3iv_tab_name(i) {
-    if i == 0 { return "gradient.ppm" }
-    if i == 1 { return "plasma.ppm" }
-    return "mandelbrot.pgm"
+    if i == 0 { return "gradient" }
+    if i == 1 { return "plasma" }
+    return "mandelbrot"
 }
 fn s3iv_zoom_name(z) {
     if z == 1 { return "1x" }
@@ -1304,10 +1425,22 @@ fn s3iv_draw(ax, ay, aw, ah) {
     fill_rgb(ax, ay, aw, ah, theme(TH_PANEL))
     s3iv_toolbar(ax, ay, aw)
     sh = s3_stat_h()
-    # the canvas: #07080a and empty, exactly as the reference renders it
-    fill_rgb(ax, ay + S3IV_TB * u, aw, ah - S3IV_TB * u - sh, theme(TH_BG))
-    ui_stat(ax, ay + ah - sh, aw, s3_stat_min(aw, 1))
-    ui_statc("IMAGE", "none loaded", theme(TH_TEXT_DIM))
+    s3iv_cy = ay + S3IV_TB * u
+    s3iv_ch = ah - S3IV_TB * u - sh
+    # THE GROUND IS STILL DRAWN FIRST. The picture is a whole number of zoom
+    # blocks wide and the canvas is not, so there is a margin of up to px-1 on
+    # two edges - it has to be the canvas colour rather than whatever the last
+    # frame left there.
+    fill_rgb(ax, s3iv_cy, aw, s3iv_ch, theme(TH_BG))
+    img_draw(s3iv_sel, ax, s3iv_cy, aw, s3iv_ch, s3iv_zoom, theme(TH_ACCENT))
+    # EVERY FIGURE HERE IS THE ONE THE DRAW USED. img_w and img_h are the same
+    # divide imgen.c does to size its source grid, so the strip cannot report a
+    # picture of a different size from the one on the canvas above it - which
+    # is exactly what "IMAGE  none loaded" was doing under three lit tabs.
+    ui_stat(ax, ay + ah - sh, aw, s3_stat_min(aw, 3))
+    ui_statc("IMAGE", s3iv_tab_name(s3iv_sel), theme(TH_TEXT))
+    ui_statn("SOURCE PIXELS", img_w(aw, s3iv_zoom) * img_h(s3iv_ch, s3iv_zoom), theme(TH_TEXT))
+    ui_statn("ZOOM", s3iv_zoom, theme(TH_TEXT_DIM))
     ui_stat_end()
     return 0
 }
@@ -1450,10 +1583,21 @@ fn s3nw_sidebar(ax, ay, ah) {
         rw = S3NW_SIDE * u - 14 * u
         nc = theme(TH_TEXT)              # ds #c4c9cf (ZD_TEXT_2); no zl role
         sc = theme(TH_TEXT_DIM)
+        # SELECTION IS THE KNOCKOUT, NOT VERMILION. This filled 144 design
+        # units - S3NW_SIDE 158 less 14 of gutter - with TH_ACCENT. The
+        # authority names the selected row's ground directly: `tr.sel td {
+        # background: var(--zd-knock); color: var(--zd-knock-ink) }`
+        # (proto:793), and it spends vermilion on four jobs only, under the
+        # rule "vermilion never fills an area wider than the focus bar except
+        # one button per view" (proto:129-131). 144 is 48x ZD_SEL_BAR_W.
+        #
+        # The Files pane was corrected to exactly this at kernel.zl:8145 and
+        # the Settings PRESS tab PRINTS THE RULE ON SCREEN at kernel.zl:10121 -
+        # so at HEAD one window states the budget while another two break it.
         if s3nw_sel == i {
-            rrect(rx, ry, rw, S3NW_ROW * u, 11 * u, theme(TH_ACCENT))
-            nc = ui_ink_on(theme(TH_ACCENT))
-            sc = nc
+            rrect(rx, ry, rw, S3NW_ROW * u, 11 * u, theme(TH_KNOCK))
+            nc = theme(TH_KNOCK_INK)
+            sc = theme(TH_KNOCK_INK)     # proto:794 - `td span` too, !important
         }
         # ABSENT IS NOT THE SAME AS DOWN. s3nw_present was written to say so
         # and then never called, so the loopback row - a device this kernel does

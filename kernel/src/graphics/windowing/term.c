@@ -390,6 +390,19 @@ static const struct cmd table[] = {
      * for the reason the comment above gives: a pane that cannot be put on
      * screen cannot be checked against the reference. This one was missed. */
     { "font",     221 }, { "atlas",    221 },
+    /* AND NEITHER DID THE RENDERER. Same gap, same reason it went unnoticed:
+     * `cube` and `3d` at :352 open the CUBE APP, which is a different window,
+     * so a grep for a 3D word found one and stopped. The Renderer's canvas was
+     * a flat fill for as long as nothing could type its way to it. */
+    { "render",   222 }, { "mesh",     222 },
+    /* AND NEITHER DID THE IMAGE VIEWER. Three of this register's panes had no
+     * word between them; each was found only when something needed to be
+     * checked against the reference and there was no way to put it on screen.
+     * That is the cost of the gap, and it is why they are being closed as they
+     * are found rather than "later". */
+    { "image",    223 }, { "img",      223 },
+    /* The Archive Manager, the fourth. */
+    { "archive",  224 }, { "tar",      224 },
     { "sysmon",   219 }, { "monitor",  219 },
     { "settings", 220 }, { "prefs",    220 },
     { "mouse",   120 }, { "snake",   103 },

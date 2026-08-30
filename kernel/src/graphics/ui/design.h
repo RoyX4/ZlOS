@@ -408,6 +408,13 @@
 #define ZD_R_BOLT    0
 #define ZD_R_CHIP    2
 #define ZD_R_INSET   4
+/* THE RESIZE GRIP'S BOX. `.grip { width: calc(15px * var(--ui)); height:
+ * calc(15px * var(--ui)) }` at proto:726-727. wm.c used UI_S3 - 12dp, a
+ * spacing step with no citation behind it - because this token did not exist.
+ * A grip drawn three design pixels small is not a disaster; a grip whose size
+ * is a spacing step is a size nobody can check. */
+#define ZD_GRIP     15
+
 #define ZD_R_PLATE   9
 
 /* the vermilion focus bar. 3dp is the shipped value and it is a slider. */

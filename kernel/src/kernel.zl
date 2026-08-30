@@ -446,12 +446,27 @@ R_CHIP_D    = 2                    # design.h ZD_R_CHIP - the button and chip ra
 # WHY NOTHING IS MOUNTED. fs_ok() answers yes or no; fs_mount_impl answers no
 # from ten different places, and the Files pane used to print one sentence for
 # all ten - then offer to format on it.
+# ALL ELEVEN, NOT SIX. This copied six of fs.c's eleven causes and the pane
+# below then printed "the mount was refused - reason not reported" for the
+# other five - a false statement about the machine's own knowledge, on the one
+# window whose whole subject is read figures.
+#
+# FS_WHY_DIRBROKEN is the sharp one. fs.c:439-446 carries a comment saying that
+# before ITS fix the Files pane printed exactly that sentence "about a failure
+# this function had just named on the console", and sets the code to stop it.
+# The C half landed; this half was never written, so the string that comment
+# names is still what the pane printed on that path.
 FS_WHY_NODISK      = 1             # fs.c FS_WHY_NODISK
 FS_WHY_UNREADABLE  = 2             # fs.c FS_WHY_UNREADABLE
 FS_WHY_UNFORMATTED = 3             # fs.c FS_WHY_UNFORMATTED
 FS_WHY_VERSION     = 4             # fs.c FS_WHY_VERSION
 FS_WHY_DAMAGED     = 5             # fs.c FS_WHY_DAMAGED
+FS_WHY_BLOCKSIZE   = 6             # fs.c FS_WHY_BLOCKSIZE
+FS_WHY_MAXFILES    = 7             # fs.c FS_WHY_MAXFILES
 FS_WHY_GEOMETRY    = 8             # fs.c FS_WHY_GEOMETRY
+FS_WHY_DIRLOAD     = 9             # fs.c FS_WHY_DIRLOAD
+FS_WHY_DIRENTRY    = 10            # fs.c FS_WHY_DIRENTRY
+FS_WHY_DIRBROKEN   = 11            # fs.c FS_WHY_DIRBROKEN
 
 # THE MODULE GRID. ZD_GRID_COLS / ROWS / MARGIN / GUTTER, and there is no
 # ui_metric for them because they are not a widget metric - they are the desk's
@@ -5790,6 +5805,9 @@ fn run_command(cmd, arg) {
     if cmd == 219 { if wm_run() == 0 { return needs_wm("the monitor") }  return reopen_mon() }
     if cmd == 220 { if wm_run() == 0 { return needs_wm("settings") }  return reg_open(APP_SETTINGS) }
     if cmd == 221 { if wm_run() == 0 { return needs_wm("the font atlas") }  return reg_open(45) }
+    if cmd == 222 { if wm_run() == 0 { return needs_wm("the renderer") }  return reg_open(APP_REND) }
+    if cmd == 223 { if wm_run() == 0 { return needs_wm("the image viewer") }  return reg_open(APP_IMG) }
+    if cmd == 224 { if wm_run() == 0 { return needs_wm("the archive manager") }  return reg_open(APP_ARCH) }
     if cmd == 206 {
         if wm_run() == 0 { return needs_wm("the lock sheet") }
         ov_mode = OV_LOCK
@@ -6250,6 +6268,14 @@ fn sm_irq_row(rx, ry, rw, irq) {
     return ry + pw_rowh()
 }
 
+# THE ONE FLOOR THE MONITOR'S LEFT COLUMN STOPS AT.
+#
+# `sy + sh - 8 * u` was written out at each of the three places that tested it,
+# and the two places that should have tested it did not - which is exactly how
+# the heap meter and the whole interrupt table came to be drawn past the client
+# edge and scissored away. One expression, one name, five readers.
+fn sm_core_floor(sy, sh, u) { return sy + sh - 8 * u }
+
 fn sm_core_head(hx, hy, hw) {
     hy2 = hy + (pw_headh() - ui_th(PW_SM)) / 2
     ui_caps(pw_colx(hx, hw, 0) + pw_cellpx(), hy2, "core", theme(TH_TEXT_DIM), PW_SM)
@@ -6376,26 +6402,73 @@ fn sysmon_body(sx, sy, sw, sh) {
     # the section head, once, where it cannot be read as four measurements.
     ly = pw_sect(lx, ly, colw, "cores", smp_jobs(), " band wakes")
     ly = sm_core_head(lx, ly, colw)
+    # THE LOOP STOPPED AND NOTHING ELSE DID.
+    #
+    # This ran out of client and set `ci = cpu_thr()` to end - correctly - and
+    # then the five statements after it drew UNCONDITIONALLY at an ly already
+    # past `sy + sh`. The zl heap meter, the ioapic section head, the IRQ
+    # column head and the IRQ rows were all emitted below the client rect and
+    # scissored away by the compositor, so on a machine with more cores than
+    # rows the memory meter and the WHOLE interrupt table vanished and nothing
+    # on screen said a row had been dropped.
+    #
+    # THIS IS NOT A HYPOTHETICAL MACHINE. MON_H is 400 and about twelve core
+    # rows fit; cpu_threads() reads the package's logical processor count from
+    # CPUID leaf 0x0B, which is 16 or 32 on an ordinary desktop. QEMU is run
+    # here with -smp 4, which is exactly why no probe in this tree ever saw it.
+    #
+    # kernel.zl:7486-7487 already states the rule: "anything shorter and
+    # sys_body says on screen how many rows it had room for rather than quietly
+    # truncating". The count is drawn, and the sections below it get the room
+    # back - `sm_shown` is what the loop actually reached, so the line cannot
+    # claim a number the loop did not draw.
+    sm_shown = 0
+    sm_stop = 0
     ci = 0
     while ci < cpu_thr() {
-        if ly + pw_rowh() > sy + sh - 8 * u { ci = cpu_thr() } else { ly = sm_core_row(lx, ly, colw, ci)  ci = ci + 1 }
+        if sm_stop == 1 { ci = cpu_thr() } else {
+            if ly + pw_rowh() > sm_core_floor(sy, sh, u) { sm_stop = 1 } else {
+                ly = sm_core_row(lx, ly, colw, ci)
+                sm_shown = sm_shown + 1
+                ci = ci + 1
+            }
+        }
+    }
+    if sm_shown < cpu_thr() {
+        num_aa(lx, ly + 2 * u, sm_shown, theme(TH_WARN))
+        ui_txt(lx + s3_numw(sm_shown), ly + 2 * u, " of ", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        sm_ofx = lx + s3_numw(sm_shown) + ui_tw(" of ", PW_SM, PW_MONO)
+        num_aa(sm_ofx, ly + 2 * u, cpu_thr(), theme(TH_TEXT_2))
+        ui_txt(sm_ofx + s3_numw(cpu_thr()), ly + 2 * u, " cores - the pane is too short", theme(TH_TEXT_DIM), PW_SM, PW_MONO)
+        ly = ly + pw_rowh()
     }
     ly = ly + 6 * u
     # NAMED FOR ITS SCOPE. The reference's meter says "memory" and reads as
     # machine RAM; heap_cap() is the fixed 64 MiB zl heap. Metering one and
     # labelling it the other is how a true number tells a false thing.
-    ly = sm_meter(lx, ly, colw, "zl heap", heap_used(), heap_cap())
+    # AND EVERYTHING BELOW ASKS FIRST. Each of these used to draw whatever ly
+    # had become; now each is gated on there being room for it, so a pane that
+    # runs out stops at a section boundary instead of emitting the rest into
+    # the scissor.
+    if ly + pw_rowh() <= sm_core_floor(sy, sh, u) {
+        ly = sm_meter(lx, ly, colw, "zl heap", heap_used(), heap_cap())
+    }
     ly = ly + 8 * u
 
     # apic_pins(), NOT THE LITERAL 16. This said 16 while apic_ioapic_pins()
     # already existed, already bound, reading the version register's
     # max-redirection-entry field at init. A written figure standing directly in
     # front of a read one, in the pane whose entire subject is read figures.
-    ly = pw_sect(lx, ly, colw, "ioapic lines", apic_pins(), " routable")
-    ly = sm_irq_head(lx, ly, colw)
+    sm_irq_room = 0
+    if ly + 3 * pw_rowh() <= sm_core_floor(sy, sh, u) { sm_irq_room = 1 }
+    if sm_irq_room == 1 {
+        ly = pw_sect(lx, ly, colw, "ioapic lines", apic_pins(), " routable")
+        ly = sm_irq_head(lx, ly, colw)
+    }
     qi = 0
     while qi < 16 {
-        if ly + pw_rowh() > sy + sh - 8 * u { qi = 16 } else {
+        if sm_irq_room == 0 { qi = 16 }
+        if ly + pw_rowh() > sm_core_floor(sy, sh, u) { qi = 16 } else {
             if apic_red(qi) != 0 { ly = sm_irq_row(lx, ly, colw, qi) }
             qi = qi + 1
         }
@@ -6417,7 +6490,7 @@ fn sysmon_body(sx, sy, sw, sh) {
     ry2 = sm_win_head(rx2, ry2, colw)
     wi = 0
     while wi < wm_n() {
-        if ry2 + pw_rowh() > sy + sh - 8 * u { wi = wm_n() } else { ry2 = sm_win_row(rx2, ry2, colw, wi)  wi = wi + 1 }
+        if ry2 + pw_rowh() > sm_core_floor(sy, sh, u) { wi = wm_n() } else { ry2 = sm_win_row(rx2, ry2, colw, wi)  wi = wi + 1 }
     }
     return 0
 }
@@ -7777,12 +7850,20 @@ fn files_list_top(cy) { return cy + 62 * ui() + ui_colhead_h() }
 # under its table; this pane had none of it and gave the whole client to the
 # list. One owner, because the list's row count and the block's origin are the
 # same subtraction from opposite ends.
-FILES_DETAIL_H = 116
+# DERIVED, NOT GUESSED. This was 116 and the block spends more: 10dp of lead,
+# four kv rows at PW_KVH each, 4dp before the pills, the pill's own height, and
+# a foot margin. At 116 the three buttons were drawn past the bottom of the
+# client rect and clipped by it - a button row half off its own pane.
+#
+# Written as the sum so that changing a row count or PW_KVH moves the
+# reservation with it, rather than leaving a constant that was right once.
+fn files_detail_h() { return 10 + 4 * PW_KVH + 4 + FILES_PILL_H + 10 }
+FILES_PILL_H = 22                  # ui_pill_h(S3_MD) in design units
 
-fn files_detail_y(cy, ch) { return cy + ch - FILES_DETAIL_H * ui() }
+fn files_detail_y(cy, ch) { return cy + ch - files_detail_h() * ui() }
 
 fn files_list_rows(ch) {
-    flr = idiv(ch - 104 * ui() - FILES_DETAIL_H * ui() - ui_colhead_h(), FILES_ROW * ui())
+    flr = idiv(ch - 104 * ui() - files_detail_h() * ui() - ui_colhead_h(), FILES_ROW * ui())
     if flr < 1 { return 1 }
     return flr
 }
@@ -8060,13 +8141,33 @@ fn files_draw(ax, ay, aw, ah) {
         files_why = fs_why()
         files_ok_to_format = 0
         if files_why == FS_WHY_UNFORMATTED { files_ok_to_format = 1 }
-        if files_why == FS_WHY_NODISK { label(files_ex, files_ey + 52 * files_u, "no disk - the NVMe controller did not come ready", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-        if files_why == FS_WHY_UNFORMATTED { label(files_ex, files_ey + 52 * files_u, "the disk is present and unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-        if files_why == FS_WHY_DAMAGED { label(files_ex, files_ey + 52 * files_u, "the volume is DAMAGED, not empty. nothing was read", theme(TH_WARN), T_CAPTION, W_BOLD) }
-        if files_why == FS_WHY_UNREADABLE { label(files_ex, files_ey + 52 * files_u, "the superblock could not be read", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-        if files_why == FS_WHY_VERSION { label(files_ex, files_ey + 52 * files_u, "an on-disk version this build refuses to mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-        if files_why == FS_WHY_GEOMETRY { label(files_ex, files_ey + 52 * files_u, "the volume geometry does not fit this disk", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
-        if files_ok_to_format == 0 { if files_why != FS_WHY_NODISK { if files_why != FS_WHY_DAMAGED { if files_why != FS_WHY_UNREADABLE { if files_why != FS_WHY_VERSION { if files_why != FS_WHY_GEOMETRY { label(files_ex, files_ey + 52 * files_u, "the mount was refused - reason not reported", theme(TH_TEXT_DIM), T_CAPTION, W_REG) } } } } } }
+        # ELEVEN ARMS AND ONE FALLBACK, COUNTED BY A FLAG. The fallback used to
+        # be a five-deep nest of `!=` tests, which is how five of the eleven
+        # causes came to be missing from it without anyone noticing: the nest
+        # named the causes it EXCLUDED, so a cause nobody had written an arm
+        # for was silently included in "not reported". A flag names the causes
+        # that were HANDLED instead, so a new fs.c code shows up as an honest
+        # unhandled reason rather than a wrong sentence.
+        files_said = 0
+        if files_why == FS_WHY_NODISK { label(files_ex, files_ey + 52 * files_u, "no disk - the NVMe controller did not come ready", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_UNFORMATTED { label(files_ex, files_ey + 52 * files_u, "the disk is present and unformatted", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_DAMAGED { label(files_ex, files_ey + 52 * files_u, "the volume is DAMAGED, not empty. nothing was read", theme(TH_WARN), T_CAPTION, W_BOLD)  files_said = 1 }
+        if files_why == FS_WHY_UNREADABLE { label(files_ex, files_ey + 52 * files_u, "the superblock could not be read", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_VERSION { label(files_ex, files_ey + 52 * files_u, "an on-disk version this build refuses to mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_GEOMETRY { label(files_ex, files_ey + 52 * files_u, "the volume geometry does not fit this disk", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        # The five fs.c reports that this pane used to answer with silence.
+        # Each sentence is fs.c's own, shortened to the caption measure: the
+        # console and the pane must not describe the same refusal differently.
+        if files_why == FS_WHY_BLOCKSIZE { label(files_ex, files_ey + 52 * files_u, "the volume's block size is not this disk's", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_MAXFILES { label(files_ex, files_ey + 52 * files_u, "the directory holds a count this kernel does not expect", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_DIRLOAD { label(files_ex, files_ey + 52 * files_u, "the directory blocks could not be read", theme(TH_TEXT_DIM), T_CAPTION, W_REG)  files_said = 1 }
+        if files_why == FS_WHY_DIRENTRY { label(files_ex, files_ey + 52 * files_u, "a directory entry points outside the data area", theme(TH_WARN), T_CAPTION, W_BOLD)  files_said = 1 }
+        # NOT A REFUSED MOUNT - AN UNMOUNT. fs.c:439-446 drops `mounted` after
+        # a directory it could not repair, so this volume WAS open and is now
+        # closed on purpose. Saying "refused" about it would misdescribe both
+        # the moment and the disk.
+        if files_why == FS_WHY_DIRBROKEN { label(files_ex, files_ey + 52 * files_u, "the directory is inconsistent - unmounted rather than written to", theme(TH_WARN), T_CAPTION, W_BOLD)  files_said = 1 }
+        if files_said == 0 { label(files_ex, files_ey + 52 * files_u, "the mount was refused - reason not reported", theme(TH_TEXT_DIM), T_CAPTION, W_REG) }
         ui_caps(files_ex, files_ey + 82 * files_u, "R", theme(TH_TEXT_2), T_CAPTION)
         label(files_ex + 78 * files_u, files_ey + 82 * files_u, "retry the mount", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
         # SHIFT F IS NOT DRAWN UNLESS THE DISK IS ACTUALLY BLANK. Offering an
@@ -8340,9 +8441,29 @@ fn files_event(win, ety, ecode, ex, ey) {
             # dispatch arm is the dead-control fault this session has spent its
             # length removing, and adding three more while doing it would be a
             # poor joke.
-            fbn = files_btn_at(win, ex, ey)
+            # The buttons are only live when the block that draws them is. With
+            # no selection files_detail draws a single line and no pills, and
+            # the hit test used to answer for them anyway - a click on empty
+            # ground opening the editor.
+            fbn = 0 - 1
+            if files_sel >= 0 { fbn = files_btn_at(win, ex, ey) }
             if fbn == 0 { files_open_selected()  return 1 }
-            if fbn == 1 { return reg_open(APP_HEXV) }
+            # THE HEX PILL CANNOT SHOW THIS FILE, and now says so instead of
+            # opening something else. reg_open takes an app id and nothing
+            # else - files_sel was never handed over - and the Hex Viewer has
+            # no file binding of ANY kind: HX_BASE is 0x100000, where boot.S is
+            # loaded, and it reads straight through peek8. So "hex" on a file
+            # opened a viewer of PHYSICAL RAM, which looks like the file's bytes
+            # to anyone who does not know the pane.
+            #
+            # Wrong content under a right-looking label is worse than no button:
+            # the reader has no way to tell. The viewer still opens - the
+            # reference has the pill and memory is worth looking at - and the
+            # toast says what is on screen.
+            if fbn == 1 {
+                note_say2("06 HEX reads memory, not files", "it is showing physical RAM from 0x100000 - zlfs has no mapping into the viewer", 900)
+                return reg_open(APP_HEXV)
+            }
             if fbn == 2 { return files_stat_say() }
             files_hit = files_mouse_slot(win, ey)
             if files_hit >= 0 {
@@ -12061,12 +12182,33 @@ OV_ACT_HEAD = 34                   # the surface's header
 
 # How many windows the overview will show: open, on this workspace. The register
 # counts differently (it counts APPS with a row), so this walks the z-order.
+# A MINIMISED WINDOW IS NOT IN THE OVERVIEW, and the authority says so twice:
+# showOverview builds its list with `.filter(w => w.ws === S.ws && !w.min)`
+# (presswork-prototype.html:2523-2524) and the subtitle counts the same
+# predicate (:2369-2370).
+#
+# THIS TOOK MINIMISED WINDOWS THREE WAYS AND EACH ONE SHOWED. The header prints
+# this count under the words "plates on this workspace"; wm_minimize calls
+# window_surfaces_free (wm.c:2288-2296), so W->client_px is NULL, wm_thumb
+# returns 0 (wm.c:1929) and the tile renders as a BARE PLATE - the "half
+# printed sheets" failure the prototype's own comment at :2529 and this file's
+# at 12032 both describe; and ov_act_scale takes maxw/maxh over the minimised
+# ones too, so a window nobody can see shrinks every tile that is visible.
+#
+# wm_min_p is already bound and this file already uses it for exactly this
+# class of filter at 11770. Both helpers get the arm, because a count that
+# disagrees with the list it heads is worse than either being wrong alone.
+fn ov_act_shows(w) {
+    if wm_winws(w) != wm_ws() { return 0 }
+    if wm_min_p(w) == 1 { return 0 }
+    return 1
+}
 fn ov_act_n() {
     oan = 0
     oai = 0
     while oai < wm_n() {
         oaw = wm_zat(oai)
-        if wm_winws(oaw) == wm_ws() { oan = oan + 1 }
+        if ov_act_shows(oaw) == 1 { oan = oan + 1 }
         oai = oai + 1
     }
     return oan
@@ -12076,7 +12218,7 @@ fn ov_act_win(idx) {
     oaj = 0
     while oaj < wm_n() {
         oaw2 = wm_zat(oaj)
-        if wm_winws(oaw2) == wm_ws() {
+        if ov_act_shows(oaw2) == 1 {
             if oas == idx { return oaw2 }
             oas = oas + 1
         }
@@ -12098,13 +12240,29 @@ fn ov_act_win(idx) {
 # because the alternative is a second layout that diverges the first time one is
 # edited - the fault this file has now found in Settings, the browser, the
 # catalogue and the Files list. Same gx0, same gy0, same cols, same sc.
+# THE TILE IS SIZED FROM WHAT IS ACTUALLY BLITTED INTO IT.
+#
+# This measured wm_w / wm_hh, which are wm_geometry's gw/gh - the FRAME. The
+# tile is then filled by wm_thumb, which box-filters client_w x client_h
+# (wm.c:1925-1958). client_of subtracts ZD_TITLE_H 28, the status band's 21 and
+# 2 of border, so client_h is frame_h - 51 and every preview came out stretched
+# VERTICALLY by frame_h/client_h - 14.6% for the Files window, 16.5% for the
+# editor. The comment at 12028 claims the tiles take each window's own aspect;
+# they took a distorted one.
+#
+# The authority sizes from the body for the same reason: showOverview uses
+# `maxH = max(w.h - 28)` and `tileH = TH + (w.h - 28) * sc0` (:2538-2540), and
+# the clone it puts inside is `w.w x (w.h - 28)` (:2571-2573).
+#
+# wm_cw / wm_ch were already bound (runtime_kernel.c:1805-1806) - the
+# measurement existed, and the wrong one was being read.
 fn ov_act_scale(gw, gh, cols, rows, n) {
     oas_maxw = 1
     oas_maxh = 1
     oas_i = 0
     while oas_i < n {
-        oas_w = wm_w(ov_act_win(oas_i))
-        oas_h = wm_hh(ov_act_win(oas_i))
+        oas_w = wm_cw(ov_act_win(oas_i))
+        oas_h = wm_ch(ov_act_win(oas_i))
         if oas_w > oas_maxw { oas_maxw = oas_w }
         if oas_h > oas_maxh { oas_maxh = oas_h }
         oas_i = oas_i + 1
@@ -12138,8 +12296,12 @@ fn ov_act_tile_at(cx, cy) {
         oat_w2 = ov_act_win(oat_i)
         oat_c = oat_i - idiv(oat_i, oat_cols) * oat_cols
         oat_r = idiv(oat_i, oat_cols)
-        oat_tw = idiv(wm_w(oat_w2) * oat_sc, 256)
-        oat_th = idiv(wm_hh(oat_w2) * oat_sc, 256) + OV_ACT_TH * oat_u
+        # THE HIT RECT IS THE DRAWN RECT, term for term. The draw moved to the
+        # client measurement; a hit test still asking for the frame would place
+        # every tile's clickable box a stretch away from the tile - which is
+        # the class of split this whole helper exists to prevent.
+        oat_tw = idiv(wm_cw(oat_w2) * oat_sc, 256)
+        oat_th = idiv(wm_ch(oat_w2) * oat_sc, 256) + OV_ACT_TH * oat_u
         oat_tx = oat_gx0 + oat_c * (oat_cw + OV_ACT_GAP * oat_u) + idiv(oat_cw - oat_tw, 2)
         oat_ty = oat_gy0 + oat_r * (oat_ch + OV_ACT_GAP * oat_u)
         if cx >= oat_tx {
@@ -12181,8 +12343,8 @@ fn ov_draw_activities(u) {
     maxh = 1
     oi = 0
     while oi < n {
-        ow = wm_w(ov_act_win(oi))
-        oh = wm_hh(ov_act_win(oi))
+        ow = wm_cw(ov_act_win(oi))
+        oh = wm_ch(ov_act_win(oi))
         if ow > maxw { maxw = ow }
         if oh > maxh { maxh = oh }
         oi = oi + 1
@@ -12198,8 +12360,11 @@ fn ov_draw_activities(u) {
         ow2 = ov_act_win(oi)
         c = oi - idiv(oi, cols) * cols
         r = idiv(oi, cols)
-        tw = idiv(wm_w(ow2) * sc, 256)
-        th = idiv(wm_hh(ow2) * sc, 256) + OV_ACT_TH * u
+        # THE SAME CLIENT MEASUREMENT THE SCALE WAS TAKEN FROM. wm_thumb fills
+        # this rect with client pixels, so the rect has to have the client's
+        # aspect or the picture is stretched to fit a frame that is not in it.
+        tw = idiv(wm_cw(ow2) * sc, 256)
+        th = idiv(wm_ch(ow2) * sc, 256) + OV_ACT_TH * u
         tx = gx0 + c * (cw + OV_ACT_GAP * u) + (cw - tw) / 2
         ty = gy0 + r * (ch + OV_ACT_GAP * u)
         # the plate, its struck edge and its groove - a tile is a plate
@@ -12638,6 +12803,20 @@ fn desk_key(kcode, kmods) {
             return 1
         }
     }
+    # THE LOCK OWNS THE KEYBOARD, NOT JUST THE POINTER.
+    #
+    # ov_click was given an OV_LOCK arm so a press no longer dismisses the
+    # sheet - and desk_key was not, so every printable key still fell straight
+    # through to the focused app. Type at the PASSPHRASE well and the
+    # characters landed in whatever window was behind it: the shell ran them,
+    # the editor inserted them. A lock that stops the mouse and forwards the
+    # keyboard is not modal, it is a screensaver with a caret.
+    #
+    # Escape is handled above this line and therefore still works, which is the
+    # half that has to keep working: making a surface swallow the keyboard is
+    # exactly how you lock someone out of their own machine, and probe-lock
+    # presses Escape for that reason.
+    if ov_mode == OV_LOCK { return 1 }
     # F1 IS ACTIVITIES, which is what the context menu says it is. A menu that
     # advertises a key the system does not answer is a picture of a menu, so the
     # row and the binding land together.

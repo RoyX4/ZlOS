@@ -252,6 +252,23 @@
 #define HI_DOM     0x05000000UL  /* browser.c    - document, tree, CSS, runs */
 #define HI_DOM_END 0x06000000UL  /* +16 MiB                                  */
 
+/* THE ARCHIVE STAGING BUFFER, and it is here because 96..128 MiB was the one
+ * gap in this chain wide enough to take it without moving a neighbour.
+ *
+ * WHY A CONTIGUOUS BUFFER AT ALL. zlfs has no append and no seek -
+ * fs_write(idx, src, bytes) takes a pointer and a length and writes the whole
+ * file - so a streamed tar is not expressible against this filesystem. The
+ * archive is staged whole and written once, which makes this a HARD CEILING on
+ * what the Archive Manager can produce. tar_size() is public precisely so the
+ * pane can refuse before it commits, and name both figures when it does.
+ *
+ * 4 MiB is not a guess about disks; it is what fits here with the same slack
+ * every other region in this chain carries. A volume whose contents exceed it
+ * gets a refusal that prints the two numbers, which is a better answer than a
+ * truncated archive that lists clean and extracts short. */
+#define HI_TAR     0x06000000UL  /* tar.c        - ustar staging            */
+#define HI_TAR_END 0x06400000UL  /* +4 MiB                                  */
+
 #define HI_BACK   0x08000000UL   /* fb.c         - the back buffer          */
 /* THE AP STACKS, and this region is why BACK_LIMIT is 40 MiB and not 48.
  *
@@ -331,8 +348,11 @@ _Static_assert(HI_NET   < HI_NET_END, "the network arena is inverted");
 _Static_assert(HI_NET_END <= HI_DOM,
                "virtio_net.c's rings have grown into the browser's storage");
 _Static_assert(HI_DOM   < HI_DOM_END, "the browser storage region is inverted");
-_Static_assert(HI_DOM_END <= HI_BACK,
-               "the browser's storage has grown into fb.c's back buffer");
+_Static_assert(HI_DOM_END <= HI_TAR,
+               "the browser storage region runs into the archive staging buffer");
+_Static_assert(HI_TAR   < HI_TAR_END, "the archive staging buffer is inverted");
+_Static_assert(HI_TAR_END <= HI_BACK,
+               "the archive staging buffer runs into the back buffer");
 _Static_assert(HI_IMG   < HI_BACK,  "high-RAM map out of order: img >= back");
 /* HI_APSTK WAS IN THE MAP AND NOT IN THE CHAIN, which is two of the three
  * things "ADDING A REGION" asks for and therefore a hole. Caught by a review

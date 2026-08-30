@@ -3441,27 +3441,65 @@ static void chrome_shell(int win, int focused)
      * it does not compete with the close box, which is the only other thing on
      * a window frame that does something. */
     {
-        int gs = UI_S3(t);
-        int gx = W->x + W->w - gs, gy = W->y + W->h - gs;
-        int step = gs / 4;
+        /* ZD_GRIP, NOT UI_S3. `.grip` is 15dp square (proto:726-727); UI_S3 is
+         * 12 and is a spacing step with nothing behind it - there was no
+         * ZD_GRIP to read, so a number that was nearly right got used. */
+        int gs = UI_DP(t, ZD_GRIP);
         /* theme.surf_7 is ZD_TEXT_INERT, 2.5213:1 on the plate - STRUCTURE
          * ONLY, and the grip is structure rather than a glyph, which is why it
          * is allowed the rung that must never carry text. It used to take
          * theme.title_off when unfocused; under PRESSWORK title_off IS the
          * plate, so that grip would have been drawn base-on-base and vanished
          * entirely. A remapped token turning a mark invisible is exactly the
-         * failure mode a role-based palette is supposed to make findable. */
-        unsigned ink = focused ? t->text_dim : t->surf_7;
+         * failure mode a role-based palette is supposed to make findable.
+         *
+         * ONE INK IN BOTH STATES. proto:2287 strokes var(--zd-text-inert) and
+         * has no focused variant; `focused ? text_dim : surf_7` brightened the
+         * grip on the focused plate, which is the plate whose focus is already
+         * carried by a knocked-out header and a 3dp bar. A third focus signal
+         * on the corner is the budget PRESSWORK spends elsewhere. */
+        unsigned ink = t->surf_7;
+
+        /* THE GRIP WAS DRAWN OUTSIDE THE PLATE IT BELONGS TO.
+         *
+         * It anchored to the FRAME corner - W->x + W->w - gs - and the plate is
+         * a rounded rect one pixel inside that, drawn by chrome_seat at
+         * (W->x+1, W->y+1, W->w-2, W->h-2) with radius r-1. The frame's own
+         * corner pixel is OUTSIDE the shape, nothing clips, and fb_line blends
+         * into whatever pixel it is handed. Walked against the corner circle at
+         * ui 1: thirteen of eighteen grip pixels landed on the wallpaper or on
+         * the window underneath.
+         *
+         * The authority gets the clip for free - `.grip` sits inside `.win`,
+         * which carries overflow:hidden and border-radius (proto:598-603) - and
+         * this renderer has a RECTANGULAR scissor and no rounded one. So the
+         * box is moved instead of clipped: its bottom-right is placed where the
+         * corner's own diagonal meets the arc, and a square extending up-left
+         * from a point ON the arc is entirely inside it, because every step
+         * up-left moves toward the centre.
+         *
+         * 181/256 is 1/sqrt(2) to four places (0.70703 against 0.70711), which
+         * is where the diagonal crosses a circle of radius ri. */
+        int ri = r - 1; if (ri < 0) ri = 0;
+        int px1 = W->x + W->w - 2, py1 = W->y + W->h - 2;   /* the plate's last pixel */
+        int inset = ri - (ri * 181) / 256;
+        int gx1 = px1 - inset, gy1 = py1 - inset;
+        int gx = gx1 - gs + 1, gy = gy1 - gs + 1;
         /* Three rules PARALLEL TO THE CORNER'S DIAGONAL, stepping inward. The
          * first attempt drew them all at the same offset with different
          * lengths, which merges into a single L-bracket - it renders, and it
          * reads as a border artefact rather than as a grip. Only looking at it
-         * showed that. */
-        if (step > 0)
-            for (int i = 1; i <= 3; i++) {
-                int d = i * step;
-                fb_line(gx + gs - d, gy + gs - 1, gx + gs - 1, gy + gs - d, ink);
-            }
+         * showed that.
+         *
+         * THE THREE OFFSETS ARE THE AUTHORITY'S, not a quarter-step ladder.
+         * proto:2288 draws `M14 5 L5 14  M14 9 L9 14  M14 1 L1 14` in a 15-unit
+         * box: the rules meet the box's right and bottom edges at 1, 5 and 9.
+         * The old i*gs/4 ladder put them at 4, 8 and 12 - a different mark. */
+        for (int i = 0; i < 3; i++) {
+            int k = UI_DP(t, 1 + 4 * i);
+            if (k >= gs) continue;
+            fb_line(gx + k, gy1, gx1, gy + k, ink);
+        }
     }
 }
 
