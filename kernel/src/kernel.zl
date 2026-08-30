@@ -11893,6 +11893,18 @@ fn ov_click(cx, cy, down) {
         wm_raise(ovw)
         return 1
     }
+    # A LOCK YOU CLICK AWAY IS NOT A LOCK. Every other overlay dismisses on a
+    # click off its plate, and this one inherited that through the fall-through
+    # at the bottom - so a single press on any pixel, the passphrase well
+    # included, unlocked the session. That is not a weak lock, it is a picture
+    # of one.
+    #
+    # It consumes every press and dismisses on none. Escape is the way out and
+    # the sheet says so - and now says the other half too, that there is no
+    # authentication behind it. A field with a caret implies a secret is being
+    # checked; this one is not, and the surface should not let the reader think
+    # otherwise.
+    if ov_mode == OV_LOCK { return 1 }
     if ov_mode == OV_PALETTE {
         if ov_pal_in_sheet(cx, cy) == 0 { return ov_close_overlay() }
         ovp = ov_pal_row_at(cx, cy)
@@ -12284,7 +12296,7 @@ fn ov_draw_lock(u) {
     fill_rgb(lx + 110 * u, by + 5 * u, 2 * u, cell_h(), theme(TH_ACCENT))
     by = by + 32 * u
     ui_caps(lx + 13 * u, by, "ESC", theme(TH_TEXT_2), T_CAPTION)
-    label(lx + 46 * u, by, "dismiss", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
+    label(lx + 46 * u, by, "dismiss - this lock has no authentication behind it", theme(TH_TEXT_DIM), T_CAPTION, W_REG)
     return 0
 }
 

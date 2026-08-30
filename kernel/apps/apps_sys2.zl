@@ -495,6 +495,14 @@ rd_wire = 1
 rd_yaw = 0
 rd_last = 0 - 1
 
+# WHICH MODE, and whether it is one this renderer has. rd_wire selects; the
+# rasteriser only fills, so "wireframe" names a path that does not exist yet and
+# the line says so rather than letting the button imply it does.
+fn rd_modeline() {
+    if rd_wire == 1 { return "  - shaded" }
+    return "  - wireframe not implemented, drawing shaded"
+}
+
 fn rd_meshline(m) {
     if m == 0 { return "mesh cube - 12 tris - 8 verts" }
     if m == 1 { return "mesh pyramid - 6 tris - 5 verts" }
@@ -522,7 +530,20 @@ fn rd_ui(ax, ay, aw, ah, dm) {
     lh = ui_mono_h(S2_PANEL_TERM)
     ox = ax + 10 * u
     oy = ay + 9 * u
+    # THE MODE IS PRINTED, so the toggle has a reader outside itself.
+    #
+    # rd_wire had exactly four occurrences in the tree: its declaration, its own
+    # label, the pill's fill kind, and the line that flips it. Every one of them
+    # was the control describing itself - pressing it changed the word on the
+    # button and nothing else in the system. A toggle whose only effect is its
+    # own caption is a caption.
+    #
+    # The renderer draws a filled mesh and has no wireframe path, so the switch
+    # cannot change the picture; what it CAN honestly do is state which mode is
+    # selected beside the mesh it applies to, and say that one of them is not
+    # implemented. That is a smaller claim than the button was making.
     ui_txt(ox, oy, rd_meshline(rd_mesh), ui_ink(S2_IK_T6), S2_SM, S2_MONO)
+    ui_txt(ox + ui_tw(rd_meshline(rd_mesh), S2_SM, S2_MONO), oy, rd_modeline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
     ui_txt(ox, oy + lh, "-- us/draw - software pipeline", ui_ink(S2_IK_T6), S2_SM, S2_MONO)
     ui_txt(ox, oy + 2 * lh, rd_gpuline(), ui_ink(S2_IK_DIM), S2_SM, S2_MONO)
 
