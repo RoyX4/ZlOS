@@ -4356,37 +4356,20 @@ SNAKE_Y = 0x02000200
 # it ended with "press any key" - the phrase this rewrite exists to delete. It
 # is three functions now and none of them loops.
 #
-#   snake_draw(x, y, w, h)   repaint the board. POSITION-PURE: every coordinate
-#                            comes from the x,y passed in, so the window can be
-#                            anywhere and the board follows it.
-#   snake_key(code)          steer. Returns 1 if it handled the key.
-#   snake_step()             advance ONE cell if it is time. Returns 1 if the
-#                            state changed, which is what asks for a repaint.
+# THE FUNCTIONS AND THE STATE THIS PARAGRAPH DESCRIBED ARE GONE. It named
+# snake_draw / snake_key / snake_step and was followed by twelve globals -
+# s_len, s_dx, s_dy, s_fx, s_fy, s_score, s_alive, s_seed, s_gw, s_gh, s_next,
+# s_died - plus SNAKE_CELL, SNAKE_RATE and SNAKE_MAX. Every one of them had
+# exactly ONE mention in the whole tree: its own declaration.
 #
-# The body was already in raw memory (SNAKE_X/SNAKE_Y, one byte per coordinate)
-# which is why the brief names this the right first conversion: there is no
-# array to hoist, only the scalars below.
-
-SNAKE_CELL = 16                 # one grid cell, in pixels
-SNAKE_RATE = 10                 # ticks between steps, at 100 Hz - 100 ms
-# SNAKE_X has exactly 512 bytes before SNAKE_Y begins. The old code grew slen
-# without limit, so a long enough snake wrote its own X coordinates through the
-# start of its Y array - the same class of collision as the AP stacks in fb.c,
-# on a smaller scale. 400 leaves real headroom and is still a very long snake.
-SNAKE_MAX  = 400
-
-s_len   = 0
-s_dx    = 1
-s_dy    = 0
-s_fx    = 0
-s_fy    = 0
-s_score = 0
-s_alive = 0
-s_seed  = 1
-s_gw    = 10
-s_gh    = 10
-s_next  = 0
-s_died  = 0
+# The game that ships is sn_draw / sn_event at :7673, on sn_gw, sn_gh, sn_len,
+# sn_dx, sn_dy, sn_fx, sn_fy, sn_score - a complete parallel set of names. This
+# block is its predecessor, kept alive only by the comment above it, which read
+# as documentation for the live game and described a dead one.
+#
+# SNAKE_X and SNAKE_Y STAY. They are the body's raw memory and the live game
+# pokes them at :7718; they are also check-memmap.sh's anchors and ruler_zl's
+# origin. Only the state that nothing reads goes.
 
 
 # Size the board from the CLIENT AREA it was given, once, when the window
@@ -11368,7 +11351,15 @@ shell_win = 0 - 1
 # the shell inside a session would re-enter, call wm_init() - which clears the
 # whole window table, including the shell you typed into - and then run a
 # second frame loop nested inside the first.
-wm_live = 0
+# wm_live WAS HERE, AND IT WAS NEVER READ. One mention in the whole tree: its
+# own declaration. The paragraph above describes a real re-entrancy hazard and
+# sat directly on top of it, which reads as "this variable is the guard".
+#
+# IT IS NOT, AND THE HAZARD IS COVERED ANYWAY. wm_session's first line is
+# `if wm_run() == 1 { "the compositor is already the desktop - you are in it"
+# return 0 }` at :13943. That is the guard. Checked before deleting, because a
+# variable that looks like a guard and a guard that exists elsewhere are two
+# different findings and only one of them is a bug.
 # EVERY OPEN WINDOW, which is what the theme sites actually need.
 #
 # wm_damage_win_all damages the SHELL and nothing else - four of its callers
@@ -11708,10 +11699,50 @@ fn ov_pal_run(k) {
         if desk_grid_on == 1 { note_say2("desk grid on", "12 x 8 module, ruled to the field margin", 800) } else { note_say2("desk grid off", "crop marks and the slug stay - they have their own switches now", 800) }
         return 1
     }
-    # What is left really is absent: rows 7, 8, 13 and 15 name a dmesg filter,
-    # a modeset, an occlusion-edge switch and a second ladder, none of which
-    # this kernel has. Saying so is still better than swallowing the key.
-    note_say("that row names something this machine cannot do yet", 400)
+    # THREE OF THE FOUR ROWS THIS COMMENT CALLED IMPOSSIBLE WERE REACHABLE.
+    #
+    # It said: "rows 7, 8, 13 and 15 name a dmesg filter, a modeset, an
+    # occlusion-edge switch and a second ladder, none of which this kernel
+    # has." Checked, one at a time, rather than believed:
+    #
+    #   7   kl_filter EXISTS and kl_shown READS it (apps_sys2.zl:219-225) -
+    #       "the reference's filter, verbatim". It had no setter anywhere in
+    #       the tree, so the feature was implemented and unreachable, and this
+    #       row is the route the authority itself gives it (proto:1528).
+    #   13  ui_over / ui_over_on are bound and the BOUNDARY tab already toggles
+    #       them. The switch was not missing; this row just did not call it.
+    #   15  the surface ladder now has a control, and its honest answer is that
+    #       the second ladder is out of scope - so the row can give the same
+    #       answer instead of a generic one.
+    #   8   modeset IS genuinely absent, and is the only one left.
+    #
+    # A WRONG "not supported" IS NEVER TESTED, because nobody tries what they
+    # have been told is missing. That is what kept three of these dark.
+    if i == 7 {
+        ov_close_overlay()
+        kl_filter = (kl_filter + 1) % 3
+        if wm_run() == 1 { reg_open(APP_KLOG) }
+        if kl_filter == 0 { note_say2("dmesg: all levels", "every record in the ring", 900) }
+        if kl_filter == 1 { note_say2("dmesg --level warn", "info suppressed - warnings and errors only", 900) }
+        if kl_filter == 2 { note_say2("dmesg --level err", "errors only", 900) }
+        wm_damage(0, 0, px_w(), px_h())
+        return 1
+    }
+    if i == 13 {
+        ov_close_overlay()
+        ui_over(1 - ui_over_on())
+        if ui_over_on() == 1 { note_say2("occlusion edge on", "a plate over another gets the lighter ring", 800) } else { note_say2("occlusion edge off", "every plate takes the plain ZD_CUT ring", 800) }
+        wm_damage_theme()
+        return 1
+    }
+    if i == 15 {
+        ov_close_overlay()
+        return seg_pick(SEG_LADDER, 1)
+    }
+    # Row 8, and only row 8. modeset is a mode change this kernel does not
+    # expose, and naming the one that is really absent is worth more than a
+    # sentence that covered four and was right about one.
+    note_say2("modeset is not exposed", "the display mode is settled at boot and there is no setter", 700)
     return 1
 }
 
@@ -14099,9 +14130,15 @@ term_c0 = 0
 term_c1 = 0
 term_r0 = 5
 term_r1 = 20
-mon_open = 1                             # is each window open (1) or closed (0)?
-ab_open = 1
-focus_win = 1                            # 0 = terminal, 1 = monitor, 2 = about
+# mon_open, ab_open AND focus_win WERE HERE - the pre-compositor window model,
+# one mention each. Their comments said "is each window open (1) or closed (0)"
+# and "0 = terminal, 1 = monitor, 2 = about", which is the three-window desktop
+# wm.c replaced. wm_open_p and wm_focus answer both questions now.
+#
+# focus_win was the worst of the three: wm.c has a static of the SAME NAME
+# meaning something different (a slot index), and :11236 cites it as
+# `wm.c: focus_win = i`. A zl global shadowing a C static by name, holding a
+# stale meaning, is a trap for the next reader of either.
 # Do not accept whatever mode the bootloader happened to hand us. We have our
 # own modesetting driver, so ASK THE HARDWARE for a proper resolution - the
 # same thing a real OS does at startup. Try progressively smaller modes until

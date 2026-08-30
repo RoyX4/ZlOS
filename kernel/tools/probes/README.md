@@ -59,6 +59,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-railcover.py`
 - `probe-resize.py`
 - `probe-run.py`
+- `probe-seg.py`
 - `probe-shellbtn.py`
 - `probe-shot.py`
 - `probe-smp.py`

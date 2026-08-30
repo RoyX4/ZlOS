@@ -17,13 +17,23 @@ then reads a DIFFERENT WINDOW: 'per window timing' selects which column the
 System Monitor's window table prints, exactly as usOf does at
 presswork-prototype.html:1606-1610, and the monitor is open at boot.
 
-    measured -> repaint changes the monitor    the column follows the segment
-    ...and the bar itself changed              the picked rung is knocked out
-    off empties the column                     and neither reading is drawn
+    the PRESS tab was actually reached  0.3454   or the rest is about another tab
+    the bar itself changed              0.3050   the picked rung is knocked out
+    the column HEAD followed            0.0656   and the monitor followed it
 
-To see it fail, drop the `if set_us == 1` arm from sm_win_row: the first figure
-falls to the order of 0.0000 while the second stays where it is, and the split
-says the control moved but nothing followed it.
+THE HEAD, NOT THE COLUMN. The first version read the table's VALUES and got
+0.0079 - which proves nothing, because APP US is a live measurement that
+differs between any two screendumps whether the control moved or not. The head
+reads "app us" or "kpx" and changes only when set_us does.
+
+AND THE MONITOR IS READ WITH NOTHING ON TOP OF IT. Settings opens at 188,71
+660 wide and the monitor's client is 188,489 634x343 - covered completely. The
+before-shot is taken before Settings exists and the after-shot once Ctrl+W has
+closed it.
+
+To see it fail, make sm_win_head ignore set_us and always print "app us": the
+tab is still reached and the bar still moves, and the third figure falls to
+0.0000 - which is the split that says the control moved and nothing followed.
 """
 import os, sys, subprocess, tempfile, time
 sys.path.insert(0, "/home/roy/Documents/repos/zl-linux-presswork/kernel/tools/probes")
@@ -75,21 +85,43 @@ try:
         wins[int(m.group(1))] = [int(g) for g in m.groups()[1:]]
     if not wins:
         print("no wm: win lines - cannot locate the monitor"); raise SystemExit(1)
-    # The System Monitor is the boot window whose client is MON_W x MON_H
-    # (424 x 400 design units). Picked by size rather than by slot, so a
-    # change to the boot order does not silently point this at the shell.
-    mon = None
-    for k, v in wins.items():
-        if abs(v[6] - 424) <= 8:
-            mon = v
+    # THE MONITOR IS SLOT 2, and the width is a CHECK rather than the search.
+    #
+    # The first version looked for a 424-wide client because that number is in
+    # an old comment; MON_W is 640 (kernel.zl:409) and the client is 634 after
+    # the chrome, so it matched nothing and the probe said so instead of
+    # picking the wrong window. The boot composition creates shell, files, then
+    # monitor - kernel.zl:13563-13570 - so slot 2 is the monitor, and asserting
+    # the width catches a reordering rather than silently measuring the shell.
+    mon = wins.get(2)
     if mon is None:
-        print("no 424-wide client among", [(k, v[6], v[7]) for k, v in wins.items()]); raise SystemExit(1)
+        print("no slot 2 among", sorted(wins)); raise SystemExit(1)
+    if abs(mon[6] - 634) > 8:
+        print("slot 2 is %d wide, expected the monitor's 634" % mon[6]); raise SystemExit(1)
     mcx, mcy, mcw, mch = mon[4], mon[5], mon[6], mon[7]
     print("monitor client at %d,%d %dx%d" % (mcx, mcy, mcw, mch))
-    # the window table is the right column's lower half
-    COL = (mcx + mcw // 2, mcy + mch // 2, mcw // 2 - 4, mch // 2 - 8)
+    # THE COLUMN HEAD, NOT THE COLUMN.
+    #
+    # The first version read the table's VALUES and reported 0.0079 - which
+    # proves nothing, because APP US is a live measurement that changes between
+    # any two screendumps whether the control moved or not. The HEAD is the
+    # discriminator: it reads "app us" or "kpx" and changes only when set_us
+    # does. Located from kernel/shots/monitor-us.png, which this probe writes.
+    COL = (mcx + mcw // 2 + 4, mcy + 145, mcw // 2 - 10, 14)
 
     A = os.path.join(tmp, "a.ppm"); B = os.path.join(tmp, "b.ppm"); C = os.path.join(tmp, "c.ppm")
+    D = os.path.join(tmp, "d.ppm")
+    # THE MONITOR IS READ BEFORE SETTINGS EXISTS, AND AGAIN AFTER IT IS CLOSED.
+    #
+    # reopen_settings opens at desk_x(120), desk_y(40), 660 x 720 - measured on
+    # the boot desktop that is 188,71 and 660 wide, and the monitor's client is
+    # 188,489 634x343. Settings covers it completely. The first version of this
+    # probe read a band "in the monitor" while Settings was on top of it and
+    # reported 0.0000 for a column that had changed - a figure about the wrong
+    # window, which is the same fault as measuring a spin and calling it a
+    # picker.
+    qmp.screendump(D)
+    a_col = band(D, *COL)
     ser.send("settings\r"); time.sleep(2.6)
     ser.drain(1.0)
     tail = ser.buf
@@ -114,16 +146,31 @@ try:
     bodyy  = tabrow + (SET_TABROW + SET_R2 + SET_STACK) * ui
     bodyx  = scx + SET_PADX * ui
     bodyw  = scw - 2 * SET_PADX * ui
-    # the PRESS tab is the last of four; click near the strip's right end
-    click(qmp, bodyx + 200 * ui, segy + SET_SEGH * ui // 2)
-    time.sleep(1.4)
+    # THE PRESS TAB IS THE LAST OF FOUR, and the first attempt at this landed
+    # in the ONE-PIXEL GAP between BOUNDARY and PRESS - seg_at returned -1,
+    # correctly, and the probe went on to report two figures about a tab it had
+    # never reached. Read off kernel/shots/settings-press.png, which this probe
+    # writes every run: PRESS spans bodyx+204..bodyx+252.
+    #
+    # And the reach is CHECKED rather than assumed: the strip is read before
+    # and after, and a click that changed nothing stops the run instead of
+    # producing figures that describe the wrong pane.
+    TAB = (bodyx, segy, 280 * ui, SET_SEGH * ui)
+    qmp.screendump(C)
+    pre_tab = band(C, *TAB)
+    click(qmp, bodyx + 228 * ui, segy + SET_SEGH * ui // 2)
+    time.sleep(1.6)
     qmp.screendump(A)
+    moved = diff(pre_tab, band(A, *TAB))
+    if moved < 0.02:
+        print("...it was not - every figure below would be about the wrong tab")
+        raise SystemExit(1)
     W, H, _ = rd(A)
     print("booted %dx%d" % (W, H))
     # row 6 is `per window timing`; the bar is right-flushed in the row
     rowy = bodyy + 6 * SET_ROWH * ui
     BAR = (bodyx + bodyw - 200 * ui, rowy, 200 * ui, SET_ROWH * ui)
-    a_bar, a_col = band(A, *BAR), band(A, *COL)
+    a_bar = band(A, *BAR)
     try:
         from PIL import Image
         Wp, Hp, pxs = rd(A)
@@ -137,8 +184,21 @@ try:
     click(qmp, bodyx + bodyw - 200 * ui + 130 * ui, rowy + SET_ROWH * ui // 2)
     time.sleep(1.6)
     qmp.screendump(B)
-    b_bar, b_col = band(B, *BAR), band(B, *COL)
+    b_bar = band(B, *BAR)
+    print("the PRESS tab was actually reached: %.4f" % moved)
     print("the bar itself changed         : %.4f" % diff(a_bar, b_bar))
-    print("the monitor's column followed  : %.4f" % diff(a_col, b_col))
+    # ...and now get Settings out of the way. Ctrl+W is wm.c's close (:4575).
+    ser.send("\x17"); time.sleep(2.0)
+    qmp.screendump(C)
+    c_col = band(C, *COL)
+    print("the column HEAD followed        : %.4f" % diff(a_col, c_col))
+    try:
+        from PIL import Image
+        Wp, Hp, pxs = rd(C)
+        Image.frombytes("RGB", (Wp, Hp), pxs[:Wp*Hp*3]).crop(
+            (mcx - 6, mcy - 34, mcx + mcw + 6, mcy + mch + 6)).save(
+            "/home/roy/Documents/repos/zl-linux-presswork/kernel/shots/monitor-us.png")
+    except Exception as e:
+        print("frame not written (%s)" % e)
 finally:
     p.terminate()
