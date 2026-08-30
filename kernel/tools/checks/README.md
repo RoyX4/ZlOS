@@ -28,6 +28,8 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-appids.py`
 - `check-boot-prereqs.py`
 - `check-build-contract.py`
+- `check-dead-state-selftest.sh`
+- `check-dead-state.py`
 - `check-dma.sh`
 - `check-elf-permissions.py`
 - `check-header-mirror-selftest.sh`
@@ -46,6 +48,7 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-version.py`
 - `check-zl-calls.sh`
 - `check-zlcalls.py`
+- `dead-state-baseline.txt`
 - `qemu-crash-selftest.sh`
 - `qemu-crash.sh`
 - `test-real-xhci.sh`

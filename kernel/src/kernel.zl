@@ -11705,10 +11705,10 @@ fn ov_pal_run(k) {
     # occlusion-edge switch and a second ladder, none of which this kernel
     # has." Checked, one at a time, rather than believed:
     #
-    #   7   kl_filter EXISTS and kl_shown READS it (apps_sys2.zl:219-225) -
-    #       "the reference's filter, verbatim". It had no setter anywhere in
-    #       the tree, so the feature was implemented and unreachable, and this
-    #       row is the route the authority itself gives it (proto:1528).
+    #   7   kl_filter EXISTED and kl_shown READ it, which is exactly what made
+    #       it look reachable - and it was not. See the arm below: the whole
+    #       chain under it was dead, and this row was wired into it before that
+    #       was checked. A reader is not a route.
     #   13  ui_over / ui_over_on are bound and the BOUNDARY tab already toggles
     #       them. The switch was not missing; this row just did not call it.
     #   15  the surface ladder now has a control, and its honest answer is that
@@ -11718,13 +11718,30 @@ fn ov_pal_run(k) {
     #
     # A WRONG "not supported" IS NEVER TESTED, because nobody tries what they
     # have been told is missing. That is what kept three of these dark.
+    # ROW 7 WAS WIRED TO A DEAD ISLAND, BY ME, IN THE COMMIT THAT CELEBRATED
+    # FINDING ONE.
+    #
+    # kl_filter existed and kl_shown READ it, which is what made it look
+    # reachable. But kl_shown was called only by kl_count, kl_count was called
+    # by nothing, and kl_kind - the classifier under all of it - keyed off the
+    # ROW INDEX of the fourteen fixed rows the pane stopped drawing when it was
+    # rewritten to read term.c's real ring. Nine functions, every caller of
+    # each one itself dead. Setting kl_filter changed nothing on screen.
+    #
+    # AND THERE IS NOTHING TO FILTER BY. This kernel's console has exactly two
+    # level emitters, ok_line and info_line at kernel.zl:3261-3272; there is no
+    # WARN and no ERROR anywhere in it. A `--level warn` over a log with no warn
+    # level shows an empty pane whatever the filter does.
+    #
+    # So the row says the real reason. Giving the console a warn level - and
+    # tagging the sites that already report a degraded condition in prose, "no
+    # xHCI", "no NVMe", "no LPSS" - is the fix, and it is a change to the
+    # kernel's printing rather than to this row. It is in
+    # docs/design/PRESSWORK-BACKLOG.md.
     if i == 7 {
         ov_close_overlay()
-        kl_filter = (kl_filter + 1) % 3
         if wm_run() == 1 { reg_open(APP_KLOG) }
-        if kl_filter == 0 { note_say2("dmesg: all levels", "every record in the ring", 900) }
-        if kl_filter == 1 { note_say2("dmesg --level warn", "info suppressed - warnings and errors only", 900) }
-        if kl_filter == 2 { note_say2("dmesg --level err", "errors only", 900) }
+        note_say2("this log has no levels to filter", "ok_line and info_line are the only two emitters - there is no warn or error record to keep", 1400)
         wm_damage(0, 0, px_w(), px_h())
         return 1
     }

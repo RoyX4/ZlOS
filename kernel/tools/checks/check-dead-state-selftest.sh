@@ -108,7 +108,12 @@ build_world "$tmp/stale" \
     "$ALIVE = 1
 fn zz_alive_reader() { return $ALIVE }" \
     "$ALIVE"
-check "a stale baseline entry fails" "$tmp/stale" 1 "alive again"
+# The substring is "wired up" and not "alive again" because the guard now
+# distinguishes the two ways a baseline entry goes stale - deleted, or given a
+# reader - and this case is the second. It said "alive again" until the guard's
+# message got more precise, which is this selftest going stale against a change
+# in the thing it tests, caught on the next run.
+check "a stale baseline entry fails" "$tmp/stale" 1 "wired up"
 
 echo
 if [ "$fail" -eq 0 ]; then

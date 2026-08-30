@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-08-30 — feat: check-dead-state - the search that found fifteen dead globals, kept (cb9b634)
+
+`design/presswork` · 6 files changed, 501 insertions(+)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 2 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>6 file(s)</summary>
+
+- `.github/workflows/gates.yml`
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `kernel/tools/checks/check-dead-state-selftest.sh`
+- `kernel/tools/checks/check-dead-state.py`
+- `kernel/tools/checks/dead-state-baseline.txt`
+
+</details>
+
 ## 2026-08-30 — chore: journal and TODO ride-along (541e217)
 
 `design/presswork` · 2 files changed, 18 insertions(+), 32 deletions(-)

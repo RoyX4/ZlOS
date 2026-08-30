@@ -128,109 +128,8 @@ fn s2_strip_h(aw, n, minw) {
 # filters select on what this machine really did at boot. The timestamps are
 # fixed, as the reference's are - nothing records a per-subsystem boot time.
 # ==============================================================================
-KL_N = 14
 KL_MAXCOL = 200                    # term.c TERM_COLS
 KL_SUBMAX = 16                     # a colon past here is prose, not a prefix
-kl_filter = 0                       # 0 all, 1 warnings, 2 errors
-
-fn kl_time(i) {
-    if i == 0 { return 2 }
-    if i == 1 { return 11 }
-    if i == 2 { return 17 }
-    if i == 3 { return 34 }
-    if i == 4 { return 48 }
-    if i == 5 { return 63 }
-    if i == 6 { return 95 }
-    if i == 7 { return 140 }
-    if i == 8 { return 182 }
-    if i == 9 { return 214 }
-    if i == 10 { return 260 }
-    if i == 11 { return 298 }
-    if i == 12 { return 331 }
-    return 372
-}
-
-# THE SUBSYSTEM IS ITS OWN COLUMN, as the reference has it. It was already in
-# the data - every message below began "gdt: ", "apic: ", "nvme: " - so this
-# splits a compound field rather than inventing one, and kl_msg drops the prefix
-# it no longer has to carry.
-fn kl_sub(i) {
-    if i == 0 { return "multiboot" }
-    if i == 1 { return "gdt" }
-    if i == 2 { return "idt" }
-    if i == 3 { return "cpu" }
-    if i == 4 { return "apic" }
-    if i == 5 { return "smp" }
-    if i == 6 { return "pci" }
-    if i == 7 { return "fb" }
-    if i == 8 { return "xhci" }
-    if i == 9 { return "input" }
-    if i == 10 { return "nvme" }
-    if i == 11 { return "virtio-net" }
-    if i == 12 { return "rtc" }
-    return "wm"
-}
-
-# The reference's level word: OK / WARN / FAIL, beside a dot of the matching
-# colour. kl_kind is 0 info, 1 warning, 2 error.
-fn kl_level(i) {
-    k = kl_kind(i)
-    if k == 1 { return "WARN" }
-    if k == 2 { return "FAIL" }
-    return "OK"
-}
-
-fn kl_msg(i) {
-    if i == 0 { return "entry, 32-bit protected mode" }
-    if i == 1 { return "flat 4 GiB code and data segments" }
-    if i == 2 { return "256 gates, PIC remapped to 0x20" }
-    if i == 3 { return "cpuid leaves read, features latched" }
-    if i == 4 { return "local APIC enabled" }
-    if i == 5 { return "application processors started" }
-    if i == 6 { return "configuration space enumerated" }
-    if i == 7 { return "linear framebuffer mapped, no blitter" }
-    if i == 8 { return "usb host controller claimed" }
-    if i == 9 { return "keyboard and pointer attached" }
-    if i == 10 { return "namespace 1 identified" }
-    if i == 11 { return "link negotiated" }
-    if i == 12 { return "cmos clock read" }
-    return "compositor up, desktop composed"
-}
-
-# 0 info, 1 warning, 2 error - the reference's 'i' / 'w' / 'e'.
-fn kl_kind(i) {
-    if i == 4 { if apic_on() != 0 { return 0 }  return 1 }
-    if i == 5 { if smp_n() > 1 { return 0 }  return 1 }
-    if i == 6 { if pci_count() > 0 { return 0 }  return 2 }
-    if i == 8 { if usb_ok() != 0 { return 0 }  return 1 }
-    if i == 10 { if nv_ok() != 0 { return 0 }  return 1 }
-    if i == 11 { if net_ok() != 0 { return 0 }  return 1 }
-    if i == 12 { if rtc_ok() != 0 { return 0 }  return 1 }
-    return 0
-}
-
-fn kl_kindcol(k) {
-    if k == 2 { return ui_ink(S2_IK_BAD) }
-    if k == 1 { return ui_ink(S2_IK_WARN) }
-    return ui_ink(S2_IK_INFO)
-}
-
-# The reference's filter, verbatim: all, or k !== 'i', or k === 'e'.
-fn kl_shown(i) {
-    if kl_filter == 0 { return 1 }
-    k = kl_kind(i)
-    if kl_filter == 1 { if k != 0 { return 1 }  return 0 }
-    if k == 2 { return 1 }
-    return 0
-}
-
-fn kl_count() {
-    n = 0
-    i = 0
-    while i < KL_N { n = n + kl_shown(i)  i = i + 1 }
-    return n
-}
-
 # THE REFERENCE'S LAYOUT, not a mono dump. R.log in the prototype is a header
 # line, a four-column table, a rule, a detail well and a band - and the level is
 # a WORD beside a coloured dot rather than the message being tinted, which is
@@ -239,12 +138,6 @@ fn kl_count() {
 # Columns are the reference's percentages: time 13, level 14, subsys 12, message
 # 61. Time is right-aligned, as the reference marks it with `r: 1`.
 # The cell modes: size in the low byte, 256 right-aligns, 512 is the mono face.
-KL_M_NUM  = 768                    # S2_SM + right + mono - the time column
-KL_M_MONO = 512                    # S2_SM + mono        - the subsystem
-KL_M_LVL  = 0                      # S2_SM, left - the level word, past its dot                    # S2_SM + mono        - the subsystem
-KL_C_TIME = 13
-KL_C_LVL  = 14
-KL_C_SUB  = 12
 
 # ---- THE LOG IS READ NOW, NOT WRITTEN ---------------------------------------
 #
@@ -443,18 +336,6 @@ fn kl_ui(ax, ay, aw, ah, dm) {
     if shown < kl_lines() { ui_txt(tx, ty, " lines, newest last", theme(TH_TEXT_DIM), S2_SM, 0) } else { ui_txt(tx, ty, " lines", theme(TH_TEXT_DIM), S2_SM, 0) }
     return kl_hit
 }
-
-# how many rows are warnings or worse - the head's `M warn`
-fn kl_warns() {
-    kw = 0
-    ki = 0
-    while ki < KL_N {
-        if kl_kind(ki) != 0 { kw = kw + 1 }
-        ki = ki + 1
-    }
-    return kw
-}
-
 kl_sel_row = 0
 # HOW FAR BACK FROM THE NEWEST LINE THE VIEW SITS. 0 is the tail.
 kl_scroll = 0

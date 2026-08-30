@@ -28,17 +28,19 @@ FILES_BUF
 UM_RADIUS
 UM_SCALE_Q8
 
-# ---- the Kernel Log's column metrics ---------------------------------------
-# Six constants naming the log table's four columns - the time column's width
-# and the three text roles. If the table lays its columns out with literals
-# instead, that is the one-fact-many-copies shape this repo has removed four
-# times already.
-KL_M_NUM
-KL_M_MONO
-KL_M_LVL
-KL_C_TIME
-KL_C_SUB
-KL_C_LVL
+# ---- the Kernel Log's column metrics: RETIRED ------------------------------
+# Six constants naming a FOUR-column table the pane stopped drawing when it was
+# rewritten to read term.c's real ring. Following them found a closed island of
+# nine dead functions - kl_time, kl_sub, kl_level, kl_msg, kl_kind, kl_kindcol,
+# kl_shown, kl_count, kl_warns - where every caller of each was itself dead.
+# All fifteen are gone; these six lines went with them.
+
+# ---- orphaned BY that removal ----------------------------------------------
+# Two semantic ink roles whose only reader was kl_kindcol. Same class as the
+# console colours below: a family with an unused member. Listed the moment the
+# check reported them, which is what a baseline is for.
+S2_IK_BAD
+S2_IK_INFO
 
 # ---- theme slots with no reader --------------------------------------------
 # Indices into the C theme table. The gradient pairs (WALL_TOP/BOT,

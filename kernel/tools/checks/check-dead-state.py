@@ -197,15 +197,29 @@ def main():
 
     fresh = [(n, w) for n, w in dead if n not in baseline]
     known = [(n, w) for n, w in dead if n in baseline]
+    # A BASELINE ENTRY GOES STALE TWO WAYS, and they are not the same news.
+    # The name was DELETED - the good outcome, and what happened to the six
+    # KL_* constants when the kernel log's dead island went - or it gained a
+    # READER, which is also good but means somebody wired it up. Saying "alive
+    # again" about a deleted name sends the reader looking for a caller that
+    # does not exist.
     gone = sorted(baseline - {n for n, w in dead})
+    gone_deleted = [n for n in gone if n not in decls]
+    gone_wired = [n for n in gone if n in decls]
 
     for name, where in known:
         print("  known-dead  %s:%d  %s"
               % (os.path.relpath(where, KERNEL), at(name, where), name))
-    if gone:
-        print("\n  BASELINE IS STALE - these are no longer dead, drop them "
-              "from dead-state-baseline.txt:")
-        for n in gone:
+    if gone_deleted:
+        print("\n  BASELINE IS STALE - these no longer exist at all. Deleted, "
+              "which is the point.\n  Drop them from dead-state-baseline.txt:")
+        for n in gone_deleted:
+            print("    %s" % n)
+    if gone_wired:
+        print("\n  BASELINE IS STALE - these are declared AND read now, so "
+              "somebody wired them up.\n  Drop them from "
+              "dead-state-baseline.txt:")
+        for n in gone_wired:
             print("    %s" % n)
 
     if fresh:
@@ -224,7 +238,8 @@ def main():
     # describing a tree that no longer exists.
     if gone:
         print("\ndead-state: FAIL - the baseline names %d thing(s) that are "
-              "alive again" % len(gone))
+              "no longer dead (%d deleted, %d wired up)"
+              % (len(gone), len(gone_deleted), len(gone_wired)))
         return 1
 
     print("\ndead-state: PASS - %d module-level names, %d known dead and "

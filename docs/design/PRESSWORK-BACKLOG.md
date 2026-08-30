@@ -91,6 +91,42 @@ still absent.** The widget exists for it now; the readings do not. This kernel
 counts composites, and drawing a rung for a clock nothing counts would be the
 dead control this whole round has been removing.
 
+## THE KERNEL LOG HAS NO LEVELS, AND THAT IS THE REAL WORK
+
+The authority's log table has FOUR columns - `time 13%`, `level 14%`,
+`subsys 12%`, `message 61%` (proto R.log) - and zlOS draws TWO,
+`ui_grid("120|*")` over `subsys|message`. The six constants that named the
+authority's four columns were still in the file, read by nothing.
+
+Following them found a **closed island of nine dead functions** - `kl_time`,
+`kl_sub`, `kl_level`, `kl_msg`, `kl_kind`, `kl_kindcol`, `kl_shown`,
+`kl_count`, `kl_warns` - where every caller of each was itself dead. The pane
+was rewritten to read term.c's real 160-row ring and the entire fourteen-fixed-
+row implementation was left behind, under a comment reading "THE LOG IS READ
+NOW, NOT WRITTEN" that sat on top of it.
+
+`kl_kind` was the sharpest of them: it classified rows **by index** - `i == 4`
+is apic, `i == 5` is smp - which were the old table's positions. Applied to the
+real ring, line 4 is not apic.
+
+**THE FILTER CANNOT BE MADE REAL WITHOUT GIVING THE CONSOLE A LEVEL.** This
+kernel has exactly two level emitters, `ok_line` and `info_line`
+(kernel.zl:3261-3272). There is no WARN and no ERROR anywhere in it, so
+`--level warn` over this log shows an empty pane whatever the filter does. The
+lines that DO report a degraded condition - "no xHCI", "no NVMe", "no LPSS",
+"no BIOS", "no heap", "no scheduler" - are printed as prose.
+
+The fix, and it is a change to the kernel's PRINTING rather than to the pane:
+
+1. add `warn_line` beside `ok_line` and `info_line`
+2. tag the sites that already report a degraded condition
+3. give the log its `level` column, reading the tag off the line
+4. then the filter has something to filter, and `time` and `subsys` can come
+   from the line too - `kl_colon` already splits the `subsys: message` prefix
+
+Until then the palette's `dmesg --level warn` row says why it cannot, which is
+what it does now.
+
 ## FOUND WHILE FIXING, NOT BY THE FLEET
 
 Three things the round-eleven list did not contain, found by walking the tree
