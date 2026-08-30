@@ -2888,6 +2888,7 @@ APP_CUBE    = 9
 APP_ANIM    = 10
 APP_MOUSE   = 11
 APP_EDIT    = 12
+APP_CATALOG = 13                    # ds.html's complete 53-app launcher
 
 # Which window each app is in, or -1. An app that is already open is FOCUSED
 # rather than opened twice - wm.c would happily give you a second Snake, and
@@ -3564,7 +3565,7 @@ fn reopen_about() {
 # A modal takes every event and a click outside dismisses it - both already in
 # route_mouse. Restoring what was underneath is a repaint of the damage it
 # leaves, which needs no saved bitmap at all.
-MENU_ROWS = 8
+MENU_ROWS = 9
 menu_win = 0 - 1
 
 fn menu_label(idx) {
@@ -3575,6 +3576,7 @@ fn menu_label(idx) {
     if idx == 4 { return "3D Cube" }
     if idx == 5 { return "Paint" }
     if idx == 6 { return "Editor" }
+    if idx == 7 { return "All Applications" }
     return "Halt"
 }
 
@@ -3583,7 +3585,12 @@ fn menu_pick(idx) {
     if idx == 1 { return open_snake() }
     if idx == 2 { return reopen_mon() }
     if idx == 3 { return reopen_about() }
-    if idx == 7 { wm_stop()  return 0 }
+    if idx == 7 {
+        u = ui()
+        wm_open(APP_CATALOG, "Applications", 80 * u, 70 * u, 720 * u, 500 * u)
+        return 0
+    }
+    if idx == 8 { wm_stop()  return 0 }
     raise_shell()
     if idx == 4 { run_command(118, 0) }
     if idx == 5 { run_command(100, 0) }

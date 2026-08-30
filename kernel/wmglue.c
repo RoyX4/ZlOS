@@ -74,10 +74,21 @@ extern Value zl_fn_desk_key(Value, Value) __attribute__((weak));
  * settings_draw. 6 is the first free id. */
 #define APP_SETTINGS 6
 
+/* The ds.html app collection lives in C for the same reason Settings does:
+ * it is built out of the C widget/pixel APIs that zl cannot call yet. Weak
+ * keeps the existing compositor harnesses linkable without the collection. */
+extern int  refapps_is_managed(int) __attribute__((weak));
+extern void refapps_draw(int,int,int,int,int,int) __attribute__((weak));
+extern int  refapps_event(int,int,int,int,int,int) __attribute__((weak));
+extern int  refapps_tick(int,int) __attribute__((weak));
+
 /* ---- the shims ------------------------------------------------------------ */
 static void glue_draw(int app, int x, int y, int w, int h, int focused)
 {
     if (app == APP_SETTINGS) { settings_draw(app, x, y, w, h, focused); return; }
+    if (refapps_is_managed && refapps_is_managed(app)) {
+        refapps_draw(app, x, y, w, h, focused); return;
+    }
     if (!zl_fn_app_draw) return;
     zl_fn_app_draw(zl_num(app), zl_num(x), zl_num(y),
                    zl_num(w), zl_num(h), zl_num(focused));
@@ -86,6 +97,8 @@ static void glue_draw(int app, int x, int y, int w, int h, int focused)
 static int glue_event(int app, int win, int type, int code, int x, int y)
 {
     if (app == APP_SETTINGS) return settings_event(app, win, type, code, x, y);
+    if (refapps_is_managed && refapps_is_managed(app))
+        return refapps_event(app, win, type, code, x, y);
     if (!zl_fn_app_event) return 0;
     Value r = zl_fn_app_event(zl_num(app), zl_num(win), zl_num(type),
                               zl_num(code), zl_num(x), zl_num(y));
@@ -94,6 +107,8 @@ static int glue_event(int app, int win, int type, int code, int x, int y)
 
 static int glue_tick(int app, int win)
 {
+    if (refapps_is_managed && refapps_is_managed(app))
+        return refapps_tick(app, win);
     if (!zl_fn_app_tick) return 0;
     Value r = zl_fn_app_tick(zl_num(app), zl_num(win));
     return r.type == V_NUM && r.num != 0.0;
@@ -131,7 +146,7 @@ int wm_bind_zl(void)
      * app_event, exactly as the conditional did. */
     wm_hooks(glue_draw,
              glue_event,
-             zl_fn_app_tick  ? glue_tick  : 0,
+             (zl_fn_app_tick || refapps_is_managed) ? glue_tick : 0,
              zl_fn_desk_draw ? glue_desk  : 0);
     if (zl_fn_desk_click) wm_desk_click(glue_desk_click);
     if (zl_fn_desk_key)   wm_desk_key(glue_desk_key);
