@@ -14,12 +14,21 @@
  * and "agree with ourselves" were the same statement, and the gate could not
  * catch a colour someone invented: it only caught the two copies drifting.
  *
- * The desktop is now being cloned from a real external artifact,
- * docs/design/ds-reference.html, and the chain has three links:
+ * The desktop is cloned from a real external artifact and the chain has three
+ * links. THE ARTIFACT IS NOW docs/design/presswork-prototype.html - PRESSWORK's
+ * running, self-verifying prototype - and it was ds-reference.html, which is the
+ * PREDECESSOR design and describes a palette this kernel no longer has:
  *
- *   1. ds-reference.html   the artifact. Not ours, not editable to suit.
+ *   1. presswork-prototype.html  the artifact. Not ours, not editable to suit.
  *   2. kernel/src/graphics/ui/design.h     every token, measured out of link 1.
  *   3. ui.c / settings.c   roles, each naming a token from link 2.
+ *
+ * That re-anchoring is not bookkeeping. Left pointed at ds-reference.html this
+ * gate failed on every PRESSWORK token, and the only ways to make it green
+ * again would have been to delete it or to put the lime palette back - which
+ * is exactly how a gate ends up holding a design in place after the design has
+ * moved. A gate anchored to the wrong document is worse than no gate: it
+ * argues, with evidence, for the wrong answer.
  *
  * LINK 1->2 IS THE ONE THAT MATTERS and it is the one that did not exist
  * before: every colour token in design.h must occur LITERALLY in the
@@ -48,6 +57,8 @@ void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb)
 { (void)x;(void)y;(void)w;(void)h;(void)r;(void)rgb; }
 void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a)
 { (void)x;(void)y;(void)w;(void)h;(void)r;(void)rgb;(void)a; }
+void fb_box(int x, int y, int w, int h, unsigned int rgb)
+{ (void)x;(void)y;(void)w;(void)h;(void)rgb; }
 void fb_text_prop(int px, int py, const char *s, unsigned int fg)
 { (void)px;(void)py;(void)s;(void)fg; }
 int  fb_text_prop_w(const char *s) { (void)s; return 0; }
@@ -153,10 +164,20 @@ static int zl_duplicates_theme(const char *zl, const struct token *toks, int n_t
         if (sscanf(p, "rgb(%d, %d, %d)", &r, &g, &b) != 3) continue;
         if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) continue;
         unsigned v = ((unsigned)r << 16) | ((unsigned)g << 8) | (unsigned)b;
+        /* COUNT OCCURRENCES, NOT (literal, token) PAIRS. This used to n++
+         * inside the token loop, so one rgb() literal scored once per token
+         * that happened to hold that value. Under the predecessor's palette
+         * every token was a distinct colour and the two counts agreed;
+         * PRESSWORK aliases deliberately - ZD_ACCENT, ZD_VERM and
+         * ZD_ACCENT_ALT_3 are all #E8734F - so a single planted duplicate
+         * scored 3 and the control asserting `== 1` failed while the scanner
+         * was working. The question is "how many literals in kernel.zl
+         * duplicate a theme colour", and that is one number per literal. */
         for (int i = 0; i < n_toks; i++)
             if (toks[i].rgb == v) {
                 if (n == 0) { *dup = v; *which = toks[i].name; }
                 n++;
+                break;
             }
     }
     return n;
@@ -167,6 +188,31 @@ static int zl_duplicates_theme(const char *zl, const struct token *toks, int n_t
  * the reference; the NAME is carried so a failure says which token is invented
  * rather than just printing a number. */
 static const struct token TOKENS[] = {
+    /* the eight-rung surface ladder, which is the design's one structural
+     * decision - the minimum step is 1.1682:1 so a knockout has a rung */
+    { "ZD_CUT",         ZD_CUT         }, { "ZD_WELL",        ZD_WELL        },
+    { "ZD_VOID",        ZD_VOID        }, { "ZD_BASE",        ZD_BASE        },
+    { "ZD_RAISE",       ZD_RAISE       }, { "ZD_FLOAT",       ZD_FLOAT       },
+    { "ZD_LITSOFT",     ZD_LITSOFT     }, { "ZD_LIT",         ZD_LIT         },
+    /* the boundary colours and the knockout */
+    { "ZD_EDGE_OVER",   ZD_EDGE_OVER   }, { "ZD_KNOCK",       ZD_KNOCK       },
+    { "ZD_KO_EDGE",     ZD_KO_EDGE     }, { "ZD_KNOCK_INK",   ZD_KNOCK_INK   },
+    { "ZD_KNOCK_INK2",  ZD_KNOCK_INK2  }, { "ZD_GRID",        ZD_GRID        },
+    /* the ink ramp - four rungs and a fifth that must never carry a glyph */
+    { "ZD_TEXT_0",      ZD_TEXT_0      }, { "ZD_TEXT_1",      ZD_TEXT_1      },
+    { "ZD_TEXT_2",      ZD_TEXT_2      }, { "ZD_TEXT_3",      ZD_TEXT_3      },
+    { "ZD_TEXT_INERT",  ZD_TEXT_INERT  },
+    /* the two inks, and ink that goes ON the overprint */
+    { "ZD_STEEL",       ZD_STEEL       }, { "ZD_STEEL_BR",    ZD_STEEL_BR    },
+    { "ZD_VERM",        ZD_VERM        }, { "ZD_VERM_BR",     ZD_VERM_BR     },
+    { "ZD_INK_ON",      ZD_INK_ON      },
+    /* state, wired to state and never to the accent */
+    { "ZD_OK",          ZD_OK          }, { "ZD_WARN",        ZD_WARN        },
+    { "ZD_BAD",         ZD_BAD         }, { "ZD_BAD_INK",     ZD_BAD_INK     },
+    /* THE ALIASES ARE CHECKED TOO, and that is the point of listing them.
+     * design.h keeps the predecessor's names pointing at PRESSWORK rungs so no
+     * call site broke; if one of them is ever re-pointed at an invented colour
+     * this catches it in the same breath as a new token. */
     { "ZD_SURF_0",      ZD_SURF_0      }, { "ZD_SURF_1",      ZD_SURF_1      },
     { "ZD_SURF_2",      ZD_SURF_2      }, { "ZD_SURF_3",      ZD_SURF_3      },
     { "ZD_SURF_4",      ZD_SURF_4      }, { "ZD_SURF_5",      ZD_SURF_5      },
@@ -175,20 +221,58 @@ static const struct token TOKENS[] = {
     { "ZD_SURF_CARD",   ZD_SURF_CARD   }, { "ZD_SURF_HEAD",   ZD_SURF_HEAD   },
     { "ZD_SURF_GAME",   ZD_SURF_GAME   }, { "ZD_SURF_BODY",   ZD_SURF_BODY   },
     { "ZD_SURF_BAR_OFF",ZD_SURF_BAR_OFF},
-    { "ZD_TEXT_0",      ZD_TEXT_0      }, { "ZD_TEXT_1",      ZD_TEXT_1      },
-    { "ZD_TEXT_2",      ZD_TEXT_2      }, { "ZD_TEXT_3",      ZD_TEXT_3      },
     { "ZD_TEXT_4",      ZD_TEXT_4      }, { "ZD_TEXT_5",      ZD_TEXT_5      },
     { "ZD_TEXT_6",      ZD_TEXT_6      },
     { "ZD_ACCENT",      ZD_ACCENT      }, { "ZD_ACCENT_BR",   ZD_ACCENT_BR   },
     { "ZD_ACCENT_LINK", ZD_ACCENT_LINK }, { "ZD_ACCENT_PALE", ZD_ACCENT_PALE },
-    { "ZD_OK",          ZD_OK          }, { "ZD_BAD",         ZD_BAD         },
-    { "ZD_WARN",        ZD_WARN        }, { "ZD_BAD_SOFT",    ZD_BAD_SOFT    },
+    { "ZD_BAD_SOFT",    ZD_BAD_SOFT    },
     { "ZD_INK_DARK",    ZD_INK_DARK    }, { "ZD_INK_LIGHT",   ZD_INK_LIGHT   },
+    { "ZD_TITLE_INK",     ZD_TITLE_INK     },
+    { "ZD_TITLE_INK_KO",  ZD_TITLE_INK_KO  },
     { "ZD_TITLE_INK_OFF", ZD_TITLE_INK_OFF },
+    { "ZD_WINCTL_INK",    ZD_WINCTL_INK    },
+    { "ZD_WINCTL_RULE",   ZD_WINCTL_RULE   },
+    { "ZD_CLOSE_HOVER_BG",  ZD_CLOSE_HOVER_BG  },
     { "ZD_CLOSE_HOVER_INK", ZD_CLOSE_HOVER_INK },
+    { "ZD_RING_FOCUS",    ZD_RING_FOCUS    },
+    { "ZD_WALL_100",      ZD_WALL_100      },
+    { "ZD_WALL_GLOW",     ZD_WALL_GLOW     },
     { "ZD_ACCENT_ALT_1", ZD_ACCENT_ALT_1 }, { "ZD_ACCENT_ALT_2", ZD_ACCENT_ALT_2 },
     { "ZD_ACCENT_ALT_3", ZD_ACCENT_ALT_3 }, { "ZD_ACCENT_ALT_4", ZD_ACCENT_ALT_4 },
 };
+
+/* ---- THE THREE TOKENS THAT ARE NOT LITERALLY IN THE PROTOTYPE --------------
+ * Every exemption is named, and the list is checked for STALENESS in both
+ * directions: a name here that HAS become literal fails the gate, so an
+ * exemption cannot outlive its reason. That is the shape gen_icons.py's
+ * OFF_AXIS_OK uses and it is the shape every exemption list in this tree
+ * should use - an unchecked allowlist is where invented colours go to hide.
+ *
+ *   ZD_LIFT      the prototype writes it `#0000008C`, RGB plus alpha in one
+ *                8-digit token. The scanner deliberately refuses a 6-digit
+ *                prefix of a longer hex run - that refusal is itself asserted
+ *                below - so #000000 cannot be found and must not be forced.
+ *                The alpha half is ZD_LIFT_A, 0x8C == 140, and it agrees.
+ *   ZD_WALL_0    the desk's two gradient stops. The prototype computes them
+ *   ZD_WALL_42   with color-mix() in sRGB and never writes either down; the
+ *                kernel cannot use those numbers anyway, because fb.c blends
+ *                in LINEAR light and the same visual stop is a different byte
+ *                there. They are derived through fb.c's own gamma tables, and
+ *                the derivation - not a literal - is what makes them right. */
+struct exempt { const char *name; unsigned rgb; };
+static const struct exempt EXEMPT[] = {
+    { "ZD_LIFT",    ZD_LIFT    },
+    { "ZD_WALL_0",  ZD_WALL_0  },
+    { "ZD_WALL_42", ZD_WALL_42 },
+};
+#define N_EXEMPT ((int)(sizeof EXEMPT / sizeof EXEMPT[0]))
+
+static int is_exempt(unsigned rgb)
+{
+    for (int i = 0; i < N_EXEMPT; i++) if (EXEMPT[i].rgb == rgb) return 1;
+    return 0;
+}
+
 #define N_TOKENS ((int)(sizeof TOKENS / sizeof TOKENS[0]))
 
 /* ---- the roles, as data ---------------------------------------------------
@@ -200,27 +284,45 @@ struct role { const char *what; const char *token; unsigned want; size_t off; };
 #define F(name) offsetof(struct ui_theme, name)
 
 static const struct role ROLES[] = {
-    { "desktop background", "ZD_SURF_0",       ZD_SURF_0,       F(bg)             },
-    { "window body",        "ZD_SURF_3",       ZD_SURF_3,       F(panel)          },
-    { "control face",       "ZD_SURF_4",       ZD_SURF_4,       F(panel_hi)       },
+    { "desktop background", "ZD_VOID",         ZD_VOID,         F(bg)             },
+    { "window body",        "ZD_BASE",         ZD_BASE,         F(panel)          },
+    { "control face",       "ZD_RAISE",        ZD_RAISE,        F(panel_hi)       },
     { "primary text",       "ZD_TEXT_1",       ZD_TEXT_1,       F(text)           },
-    { "secondary text",     "ZD_TEXT_4",       ZD_TEXT_4,       F(text_dim)       },
-    { "the accent",         "ZD_ACCENT",       ZD_ACCENT,       F(accent)         },
-    { "hairline border",    "ZD_SURF_6",       ZD_SURF_6,       F(border)         },
+    { "secondary text",     "ZD_TEXT_3",       ZD_TEXT_3,       F(text_dim)       },
+    { "the overprint",      "ZD_VERM",         ZD_VERM,         F(accent)         },
+    { "the groove",         "ZD_CUT",          ZD_CUT,          F(border)         },
     { "destructive",        "ZD_BAD",          ZD_BAD,          F(danger)         },
-    { "focused title top",  "ZD_SURF_TABS",    ZD_SURF_TABS,    F(title)          },
-    { "focused title bot",  "ZD_SURF_TABS",    ZD_SURF_TABS,    F(title_bot)      },
-    { "unfocused title",    "ZD_SURF_BAR_OFF", ZD_SURF_BAR_OFF, F(title_off)      },
-    { "unfocused title bot","ZD_SURF_BAR_OFF", ZD_SURF_BAR_OFF, F(title_off_bot)  },
+    /* all four title roles are the plate at rest; focus is the knockout, and
+     * that is a decision rather than four copies of a missing one */
+    { "focused title top",  "ZD_BASE",         ZD_BASE,         F(title)          },
+    { "focused title bot",  "ZD_BASE",         ZD_BASE,         F(title_bot)      },
+    { "unfocused title",    "ZD_BASE",         ZD_BASE,         F(title_off)      },
+    { "unfocused title bot","ZD_BASE",         ZD_BASE,         F(title_off_bot)  },
     { "emphasis text",      "ZD_TEXT_0",       ZD_TEXT_0,       F(text_hi)        },
     { "healthy",            "ZD_OK",           ZD_OK,           F(ok)             },
-    { "chrome hairline",    "ZD_SURF_2",       ZD_SURF_2,       F(chrome_line)    },
+    { "chrome hairline",    "ZD_CUT",          ZD_CUT,          F(chrome_line)    },
+    /* PRESSWORK's own roles. These are the grammar the twenty-nine above
+     * cannot express - a boundary is a colour, and focus is a value
+     * inversion - so a wrong one here is a wrong DEPTH, not a wrong tint. */
+    { "the struck run",     "ZD_LIT",          ZD_LIT,          F(lit)            },
+    { "the grazed run",     "ZD_LITSOFT",      ZD_LITSOFT,      F(litsoft)        },
+    { "boundary under overlap","ZD_EDGE_OVER", ZD_EDGE_OVER,    F(edge_over)      },
+    { "THE KNOCKOUT",       "ZD_KNOCK",        ZD_KNOCK,        F(knock)          },
+    { "reversed out of it", "ZD_KNOCK_INK",    ZD_KNOCK_INK,    F(knock_ink)      },
+    { "secondary on it",    "ZD_KNOCK_INK2",   ZD_KNOCK_INK2,   F(knock_ink2)     },
+    { "the knockout's foot","ZD_KO_EDGE",      ZD_KO_EDGE,      F(ko_edge)        },
+    { "the ruled desk grid","ZD_GRID",         ZD_GRID,         F(grid)           },
+    { "instruments only",   "ZD_STEEL",        ZD_STEEL,        F(steel)          },
+    { "ink on the overprint","ZD_INK_ON",      ZD_INK_ON,       F(ink_on)         },
+    /* STRUCTURE ONLY - the scrollbar thumb, the resize grip, the switch knob.
+     * It is 2.02:1 on ZD_RAISE and must never form a letter. */
+    { "structure, never ink","ZD_TEXT_INERT",  ZD_TEXT_INERT,   F(surf_7)         },
 };
 #define N_ROLES ((int)(sizeof ROLES / sizeof ROLES[0]))
 
 int main(void)
 {
-    char *html = slurp("../../../docs/design/ds-reference.html");
+    char *html = slurp("../../../docs/design/presswork-prototype.html");
     char *zl   = slurp("../../src/kernel.zl");
     char *set  = slurp("../../src/graphics/ui/settings.c");
 
@@ -230,16 +332,30 @@ int main(void)
     printf("palette - the chain from the reference to the pixels\n\n");
 
     /* ---- link 1 -> 2 : every token is IN the artifact ---------------------- */
-    printf("  design.h -> ds-reference.html\n");
+    printf("  design.h -> presswork-prototype.html\n");
     int invented = 0;
-    for (int i = 0; i < N_TOKENS; i++)
-        if (!ref_has_colour(html, TOKENS[i].rgb)) {
-            printf("    #%06X  %-22s NOT IN THE REFERENCE\n",
-                   TOKENS[i].rgb, TOKENS[i].name);
-            invented++;
+    for (int i = 0; i < N_TOKENS; i++) {
+        if (ref_has_colour(html, TOKENS[i].rgb)) continue;
+        if (is_exempt(TOKENS[i].rgb)) continue;
+        printf("    #%06X  %-22s NOT IN THE PROTOTYPE\n",
+               TOKENS[i].rgb, TOKENS[i].name);
+        invented++;
+    }
+    printf("    %d tokens checked, %d exempt by name, %d not found\n\n",
+           N_TOKENS, N_EXEMPT, invented);
+    ok(invented == 0,
+       "every colour in design.h occurs literally in the prototype");
+    /* THE EXEMPTION LIST'S OWN STALENESS CHECK. An allowlist nobody re-reads
+     * is how an invented colour survives a redesign: the entry outlives the
+     * reason, and the next person reads it as permission. */
+    int stale = 0;
+    for (int i = 0; i < N_EXEMPT; i++)
+        if (ref_has_colour(html, EXEMPT[i].rgb)) {
+            printf("    #%06X  %-22s IS in the prototype - drop the exemption\n",
+                   EXEMPT[i].rgb, EXEMPT[i].name);
+            stale++;
         }
-    printf("    %d tokens checked, %d not found\n\n", N_TOKENS, invented);
-    ok(invented == 0, "every colour in design.h occurs literally in the reference");
+    ok(stale == 0, "no exemption has outlived its reason");
 
     /* ---- link 2 -> 3 : every role holds the token it claims ---------------- */
     printf("\n  design.h -> ui.c\n");
@@ -276,17 +392,23 @@ int main(void)
      * that it finds a colour that IS there, refuses one that is not, and
      * does not match a six-digit prefix of a longer run of hex. */
     printf("\n");
-    ok(ref_has_colour(html, 0xB8E838),
-       "control: the reference scanner finds #b8e838, which is in the file");
+    /* THE CONTROL COLOUR HAD TO CHANGE TOO, and it is worth saying why: this
+     * used to look for #b8e838, the predecessor's lime, and #b8e838 is not in
+     * the PRESSWORK prototype at all. A negative control that quietly stops
+     * being positive turns into a second failing assertion nobody reads. */
+    ok(ref_has_colour(html, ZD_VERM),
+       "control: the scanner finds #e8734f, the overprint, which is in the file");
+    ok(!ref_has_colour(html, 0xB8E838),
+       "control: it refuses #b8e838 - the predecessor's lime is really gone");
     ok(!ref_has_colour(html, 0x123456),
-       "control: it refuses #123456, which is not");
+       "control: ...and refuses #123456, which was never in any of them");
     /* The scanner's job is to find #b8e838 and NOT to find it inside a longer
      * run of hex such as an 8-digit #rrggbbaa. Asserted against a synthetic
      * string, because the real reference happens to contain the bare form too
      * and so cannot distinguish the two behaviours. */
-    ok(!ref_has_colour("border:1px solid #b8e8380a;", 0xB8E838),
+    ok(!ref_has_colour("box-shadow: 0 5px 13px #0000008C;", 0x000000),
        "control: it does not match a six-digit prefix of a longer hex run");
-    ok(ref_has_colour("border:1px solid #b8e838;", 0xB8E838),
+    ok(ref_has_colour("box-shadow: 0 5px 13px #000000;", 0x000000),
        "control: ...but it does match the same colour when it stands alone");
     ok(!settings_names_token(set, "ZD_NO_SUCH_TOKEN"),
        "control: the settings scanner reports a missing token rather than true");
@@ -300,7 +422,7 @@ int main(void)
     {
         static const char planted[] =
             "fn theme(role) { return ui_color(role) }\n"
-            "MY_ACCENT = rgb(184, 232, 56)\n";     /* == ZD_ACCENT #b8e838 */
+            "MY_ACCENT = rgb(232, 115, 79)\n";    /* == ZD_ACCENT #E8734F */
         unsigned pv = 0; const char *pn = NULL;
         ok(zl_duplicates_theme(planted, TOKENS, N_TOKENS, &pv, &pn) == 1
            && pv == ZD_ACCENT,
@@ -311,8 +433,8 @@ int main(void)
          * once. Without the second half of this, "skip comments" could be
          * implemented as "skip everything" and every check above would pass. */
         static const char mixed[] =
-            "# MY_ACCENT = rgb(184, 232, 56) would be a duplicate\n"
-            "MY_ACCENT = rgb(184, 232, 56)\n";
+            "# MY_ACCENT = rgb(232, 115, 79) would be a duplicate\n"
+            "MY_ACCENT = rgb(232, 115, 79)\n";
         unsigned mv = 0; const char *mn = NULL;
         ok(zl_duplicates_theme(mixed, TOKENS, N_TOKENS, &mv, &mn) == 1,
            "control: a commented duplicate is ignored, a real one beside it is not");

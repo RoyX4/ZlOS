@@ -1436,14 +1436,41 @@ int main(void)
         ok("fragmented visibility hits the bounded full-damage fallback",
            wm_region_fragmentation_probe());
 
+        /* THIS ASSERTION HAD TO BE NARROWED, and the narrowing is the point.
+         *
+         * PRESSWORK gives a plate two ring colours: ZD_CUT normally and
+         * ZD_EDGE_OVER where it sits ON another window, because a darker edge
+         * tops out at 1.4723:1 on the plate and cannot carry "which one is on
+         * top". So a window's ring colour is a function of whether anything
+         * VISIBLE BELOW IT intersects, and wm.c's shell_state_key now carries
+         * that bit.
+         *
+         * `under` is (120,140,360,260) and `over` is (240,220,360,260) - they
+         * overlap. The old single move went straight to (620,300), which ENDS
+         * the overlap, so `over`'s ring genuinely changes and its cached shell
+         * genuinely must be rebuilt. The assertion was asserting that a
+         * correct rebuild does not happen.
+         *
+         * It is now two moves, which between them pin the mechanism from both
+         * sides: a move that preserves the overlap must rebuild NOTHING, and a
+         * move that ends it MUST rebuild - otherwise a stale ZD_EDGE_OVER ring
+         * survives on a window that is no longer over anything, which is a
+         * defect no test would catch and which looks very nearly right. */
         unsigned int shell_builds = wm_retained_shell_builds();
         draw_calls[1] = draw_calls[2] = 0;
-        wm_move(over, 620, 300);
+        wm_move(over, 300, 260);           /* still overlapping `under` */
         frame();
         ok("moving an unchanged window causes zero app redraws",
            draw_calls[1] == 0 && draw_calls[2] == 0);
-        ok("moving unchanged windows causes zero shell/shadow rebuilds",
+        ok("a move that keeps the overlap causes zero shell/shadow rebuilds",
            wm_retained_shell_builds() == shell_builds);
+        draw_calls[1] = draw_calls[2] = 0;
+        wm_move(over, 620, 300);           /* ...and now it ends */
+        frame();
+        ok("control: a move that ENDS the overlap does rebuild the shell",
+           wm_retained_shell_builds() > shell_builds);
+        ok("...and still redraws no app",
+           draw_calls[1] == 0 && draw_calls[2] == 0);
         int ux, uy, uw, uh;
         wm_client(under, &ux, &uy, &uw, &uh);
         ok("the exposed retained client remains pixel-correct",
