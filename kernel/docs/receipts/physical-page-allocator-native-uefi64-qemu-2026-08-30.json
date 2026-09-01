@@ -5,9 +5,9 @@
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "0a8ac39771a2d125b73d17aa4fdbac12fa25ea9fd5f0e5ce5c814dc940041e2e"
+    "sha256": "b755af72b3eaae3e1a2f228fcc76a439a430833094098813ecc72931da0a40e8"
   },
-  "boot_log_sha256": "5b7651f4402138d78a2f596c7377cebb6852739391116667b919981ab6a751da",
+  "boot_log_sha256": "54418540b3bd3b0b93ac1fd6561135d77cabcb13a8e1301232b563228170365c",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -43,7 +43,7 @@
   },
   "consumer_receipt": {
     "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-    "sha256": "df4e7bd41e389433c2ba5ee37cd55822de81319a83a1a48c7ae510c42143f640",
+    "sha256": "84faf6af2d3a21d16de5af37a068c4ad63126069a2912d3fc7599e15b833a92c",
     "assertions": [
       "process-frame-reclamation",
       "anonymous-reserve-commit-release",
@@ -56,8 +56,8 @@
       "id": "bounded-firmware-map-admission",
       "managed_floor_bytes": 335544320,
       "managed_limit_bytes": 1073741824,
-      "admitted_pages": 168176,
-      "free_pages_after_selftest": 168176,
+      "admitted_pages": 168175,
+      "free_pages_after_selftest": 168175,
       "firmware_conventional_memory_only": true,
       "fixed_zlos_region_excluded": true
     },

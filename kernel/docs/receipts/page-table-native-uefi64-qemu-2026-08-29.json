@@ -5,10 +5,10 @@
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "0a8ac39771a2d125b73d17aa4fdbac12fa25ea9fd5f0e5ce5c814dc940041e2e"
+    "sha256": "b755af72b3eaae3e1a2f228fcc76a439a430833094098813ecc72931da0a40e8"
   },
-  "boot_log_sha256": "5b7651f4402138d78a2f596c7377cebb6852739391116667b919981ab6a751da",
-  "boot_journal_sha256": "375032e5e572255aee88b7050bbed8dbeb3d22feaca447769000a44bc72f7d8c",
+  "boot_log_sha256": "54418540b3bd3b0b93ac1fd6561135d77cabcb13a8e1301232b563228170365c",
+  "boot_journal_sha256": "e5cefb29260eb609cd8805a4103e2e49df0477719976d9e99b6b711014d22269",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
