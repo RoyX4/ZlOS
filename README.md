@@ -1,6 +1,16 @@
-# zl-linux — the zl language, and an operating system written in it
+# zlOS — one system, one language
 
-Two things live here.
+![zlOS running its Presswork desktop in QEMU](docs/evidence/presswork-boot-depth.png)
+
+**zlOS** is an experimental x86 operating system written in **zl**, its own
+self-hosting systems language. This repository contains both the language
+toolchain and the operating system built with it.
+
+Start with the concise [GitHub project overview](.github/README.md), the
+evidence-bound [project status](docs/PROJECT-STATUS.md), or the
+[current execution roadmap](docs/EXECUTION-ROADMAP.md).
+
+Two tightly connected systems live here:
 
 > **Complete 2026-08-30 zl-linux topology closure:**
 > [`docs/evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md`](docs/evidence/integration/WHOLE-TOPOLOGY-CLOSURE-2026-08-30.md)
