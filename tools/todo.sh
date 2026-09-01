@@ -113,7 +113,10 @@ while IFS= read -r f; do
     [ -z "$f" ] && continue
     git ls-files --error-unmatch "$f" >/dev/null 2>&1 || { echo "- [ ] \`$f\`"; missing=$((missing+1)); }
 done <<LIST
-$(git ls-files '*.md' | xargs grep -ohE '\b(kernel|docs|tools|examples|tests)/[A-Za-z0-9_./-]+\.(c|h|zl|sh)\b' 2>/dev/null | sort -u | while read -r r; do [ -e "$r" ] && echo "$r"; done)
+$(git ls-files '*.md' | xargs grep -ohE '\b(kernel|docs|tools|examples|tests)/[A-Za-z0-9_./-]+\.(c|h|zl|sh)\b' 2>/dev/null | sort -u | while read -r r; do
+    # Existing ignored build outputs are generated artifacts, not missing source.
+    [ -e "$r" ] && ! git check-ignore -q "$r" && echo "$r"
+done)
 LIST
 [ "$missing" -eq 0 ] && echo "_none — every file the docs describe is tracked._"
 echo

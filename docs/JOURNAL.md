@@ -7,6 +7,29 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-09-01 — docs: rebuild GitHub project front door (17c5d7e)
+
+`main` · 7 files changed, 320 insertions(+), 27 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>7 file(s)</summary>
+
+- `.github/CONTRIBUTING.md`
+- `.github/ISSUE_TEMPLATE.md`
+- `.github/README.md`
+- `.github/SECURITY.md`
+- `LICENSE-STATUS.md`
+- `README.md`
+- `docs/GITHUB-PRESENTATION.md`
+
+</details>
+
 ## 2026-08-31 — Merge pull request #11 from RoyX4/codex/fix-nightly-efi-evidence-2026-08-31 (a3cdaf1)
 
 `main` · 13 files changed, 248 insertions(+), 169 deletions(-)
