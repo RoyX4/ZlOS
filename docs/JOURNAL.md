@@ -7,6 +7,24 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-09-01 — fix: ignore generated outputs in TODO inventory (9c6ad99)
+
+`main` · 2 files changed, 27 insertions(+), 1 deletion(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>2 file(s)</summary>
+
+- `docs/JOURNAL.md`
+- `tools/todo.sh`
+
+</details>
+
 ## 2026-09-01 — docs: rebuild GitHub project front door (17c5d7e)
 
 `main` · 7 files changed, 320 insertions(+), 27 deletions(-)
