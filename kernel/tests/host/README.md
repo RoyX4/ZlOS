@@ -93,11 +93,13 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `parsestat.c`
 - `pmmtest.c`
 - `pngtest.c`
+- `processlifecycletest.c`
 - `processmemorytest.c`
 - `retest.c`
 - `rtctest.c`
 - `run-all.sh`
 - `runtest.c`
+- `schedulerpolicytest.c`
 - `settingstest.c`
 - `systest.c`
 - `tartest.c`
@@ -114,6 +116,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `tritest.c`
 - `uitest.c`
 - `user-syscalls-test.sh`
+- `userprocessservicetest.c`
 - `walltest.c`
 - `wmbench.c`
 - `wmshot.c`
