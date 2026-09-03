@@ -57,6 +57,17 @@ jobs:
       - name: prove the hosted runner contract
         run: bash gates/run-land-gate-hosted.sh doctor
 
+      - name: install the exact AX201 host-test fixture
+        run: |
+          ax201_fixture="$RUNNER_TEMP/iwlwifi-QuZ-a0-hr-b0-77.ucode"
+          curl -fsSL \
+            'https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20260519/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode' \
+            -o "$ax201_fixture"
+          echo '69ca0913ccca609dedff5e30b1d478482487fa14ad6b7be079f8cc856ac26cac  '"$ax201_fixture" \
+            | sha256sum -c -
+          install -Dm0644 "$ax201_fixture" \
+            /lib/firmware/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode
+
       - name: bind the dependency archive key to this runner
         id: prepare
         run: bash gates/run-land-gate-hosted.sh prepare
