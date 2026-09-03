@@ -1,13 +1,16 @@
 # zlOS 64-bit user process ABI
 
-**Status (2026-08-30): implemented as a bounded preemptive multi-process
-ABI.** The UEFI64 path has two process objects, each with its own PML4, PID, RX
+**Status (2026-09-03): implemented as a bounded persistent preemptive multi-process
+ABI.** The UEFI64 path has two process objects, each with its own PML4, PID,
+generation-tagged internal identity, RX
 code page, guarded RW/NX user stack, guarded two-page supervisor RW/NX
 TSS-selected kernel stack, saved register
 frame, handle table and 32-page anonymous-memory window. The inherited kernel map is supervisor-only; user
-copies validate the complete range; faults kill only the offender. `/system/user.bin`
-can be loaded from zlfs with the `userexec` command; it is not linked into the
-kernel.
+copies validate the complete range; faults kill only the offender. A fixed
+two-slot kernel service selects exact lifecycle handles with bounded round robin
+and runs one preemptible process turn per desktop or text work-loop call.
+`/system/user.bin` can be loaded from zlfs with `userexec`; its bytes are not
+linked into the kernel.
 
 This is deliberately not advertised as POSIX. It is the smallest stable seam
 that supports a real isolated file-backed program without importing pathname,
@@ -44,7 +47,7 @@ the target gate covers zero, 25, the sign bit and all bits set.
 |---:|---|---|---|
 | 1 | write console byte | `RBX=byte` | 0 |
 | 2 | get PID | none | PID |
-| 3 | exit | none | does not return to user code |
+| 3 | exit | `RBX=signed status` | does not return to user code |
 | 4 | validate readable range | `RBX=ptr RCX=len` | 0 or `-1` |
 | 5 | time | none | 100 Hz monotonic tick |
 | 6 | yield | none | 0 after another runnable process may run |
@@ -86,6 +89,32 @@ volumes use copy-on-write data plus dual checksummed directory generations, so
 this avoids inventing partial-write semantics the flat namespace does not
 promise. Explicit syscall 14 is the durability boundary.
 
+## Process identity and termination custody
+
+Each live process has an internal 64-bit handle containing its bounded slot and
+a nonzero generation. Reusing a reaped slot increments the generation. A slot
+whose generation is exhausted is permanently retired instead of wrapping, so an
+old handle cannot name a replacement. PID remains the human-facing label and
+current IPC selector, but PID lookup resolves through the lifecycle table and
+accepts only the exact runnable handle stored by that process object.
+
+Runnable, exited and faulted are distinct lifecycle states. A normal exit keeps
+the signed status supplied in `RBX`; a fault keeps the exact vector, error code
+and address. Resource teardown happens before identity reap. The table also
+refuses to reap a parent while a live child still names that exact parent
+generation. The host lifecycle test covers capacity, duplicate PID refusal,
+parent-only observation and reap, exact exit/fault records, generation
+exhaustion, stale-handle rejection and slot reuse.
+
+The current native-UEFI QEMU receipt executes generation reuse, preserves exit
+status `-7`, keeps GP fault `(vector 13, error 0, address 0)` distinct from
+sibling exit status `7`, and requires final identity reclamation after resource
+teardown. The persistent service uses those exact handles as scheduler owners
+and fail-stops if lifecycle and policy state disagree. This is QEMU functional
+evidence, not physical-hardware proof. There is not yet a userspace
+process-handle syscall, a general spawn/wait/cancellation ABI, persistent
+parent/child authority or concurrent PID-reuse test.
+
 ## Proof and remaining boundary
 
 `verify-efi.sh` proves the normal entry/return path and hostile cases: `cli`
@@ -117,8 +146,18 @@ are eight PMM-owned frames per fixed process slot. Host tests force allocation
 to fail at every short-pool boundary and require byte-for-byte ownership and
 accounting rollback. Native UEFI allocates two disjoint sets, repeatedly
 replaces them across the process probes, then releases both and requires the
-exact pre-process PMM baseline. This is bounded lifecycle proof, not yet a
-persistent spawn/reap service or concurrent PID-reuse proof.
+exact pre-process PMM baseline. Final teardown must also leave every lifecycle
+slot empty while retaining its generation history.
+
+The persistent service then admits two exact lifecycle handles. Four separate
+kernel work-loop calls produce round-robin trace `ST12`: each process writes one
+byte and yields on its first turn, then writes one byte and exits with statuses
+11 and 22 on its second. The gate observes both terminal records, detaches both
+scheduler owners, reaps both lifecycle identities and restores the exact PMM
+baseline. The coordinator host test also injects runner failure, policy
+corruption, lifecycle-policy drift, stale generations, mid-turn reap and counter
+saturation. This is bounded kernel-owned persistence, not a userspace
+spawn/wait/process-handle ABI.
 
 Each fixed process owner has a 16-page quota because replacement acquires a
 complete eight-page successor before releasing the predecessor. Each anonymous
@@ -162,10 +201,21 @@ the owner queue, and closes every owned window on exit or fault. The EFI gate
 opens a real WM window, presents `Ring3 window`, injects/polls key `W` through
 the same bounded queue, closes it and proves no owner leak remains.
 
+The desktop command route is also QEMU-observed rather than inferred. Its probe
+creates a four-byte external `/system/user.bin` through Files and the disk-backed
+editor, confirms the file through `ls`, starts PID 1000 with `userexec`, observes
+the intentionally invalid image as a contained fault with `userps`, reaps slot 1
+and then observes an empty table. That fixture proves external file loading,
+command dispatch, fault custody and reap; it deliberately does not claim a
+successful application workload. The
+[GitHub-hosted gate](../../../../docs/evidence/hosted-user-process-gate-2026-09-03.md)
+repeated this exact route under Ubuntu QEMU TCG and retained its six-assertion
+receipt separately from physical-hardware evidence.
+
 Still not complete process infrastructure: the anonymous window is fixed and
 has no virtual-area allocator, demand-fault commit, file mapping, shared memory
-or concurrent teardown protocol. The two-slot test scheduler is not
-a persistent desktop spawn/reap service; the window ABI does not yet expose
+or concurrent teardown protocol. The persistent scheduler remains fixed at two
+slots and has no userspace process-management or cancellation ABI. The window ABI does not yet expose
 pixel buffers, resize/configure events or clipboard; and no zl interpreter runs
 as a user process. Memory accounting is not yet unified beyond these PMM-owned
 fixed and anonymous frames. Those are separate gates; this document does not
