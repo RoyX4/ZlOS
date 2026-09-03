@@ -27,6 +27,11 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}
     steps:
+      - name: bootstrap Git before checkout
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates git
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
