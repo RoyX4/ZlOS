@@ -620,23 +620,26 @@ OVERRIDES = {
                    ("implementation", "kernel/tests/host/test-run-receipt.json"),
                    ("implementation", "kernel/boot/gdt64.c"),
                    ("implementation", "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"),
-                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json")),
+                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                   ("implementation", "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json")),
                ("python3 kernel/tools/run/run-host-tests.py --run --selftest",
                 "kernel/tools/checks/verify-efi.sh",
-                "kernel/tools/probes/probe-user-process.py --no-build"),
+                "kernel/tools/probes/probe-user-process.py --no-build",
+                "kernel/tools/probes/probe-user-process-exit.py --no-build"),
                ("kernel/tests/host/test-run-receipt.json", "kernel/zlOS-usb.img",
                 "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json",
+                "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"),
                ("two unique PML4 roots", "separate user and TSS kernel stacks",
                 "AB12 context resume", "supervisor mapping fault",
                 "all-or-nothing eight-frame acquisition", "replacement and final reclamation",
-                "persistent external-file spawn, contained fault and reap"),
+                "persistent external-file spawn, normal exit, contained fault and reap"),
                ("fixed two-process service",
                 "teardown is not exercised under concurrent service load",
                 "no userspace spawn/wait/process-handle ABI",
                 "no concurrent PID-reuse receipt",
                 "no current physical-hardware receipt"),
-               "current host and native-UEFI64 QEMU receipts prove failure-atomic owned frames, two disjoint address spaces, persistent kernel-owned spawn/reap and exact reclamation; userspace authority, concurrent teardown/PID reuse and physical proof remain open"),
+               "current host and native-UEFI64 QEMU receipts prove failure-atomic owned frames, two disjoint address spaces, successful external execution, persistent kernel-owned spawn/reap and exact reclamation; userspace authority, concurrent teardown/PID reuse and physical proof remain open"),
     "KR-006": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/src/arch/x86/usermode.c"),
                    ("implementation", "kernel/src/arch/x86/idt.c"),
@@ -743,19 +746,22 @@ OVERRIDES = {
                    ("implementation", "kernel/src/arch/x86/usermode.c"),
                    ("implementation", "kernel/src/arch/x86/idt.c"),
                    ("implementation", "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"),
-                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json")),
+                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                   ("implementation", "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json")),
                ("kernel/tools/checks/verify-efi.sh",
-                "kernel/tools/probes/probe-user-process.py --no-build"),
+                "kernel/tools/probes/probe-user-process.py --no-build",
+                "kernel/tools/probes/probe-user-process-exit.py --no-build"),
                ("kernel/zlOS-usb.img",
                 "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json",
+                "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"),
                ("offender vector 13", "sibling trace K and independent exit",
-                "kernel remains alive", "external invalid image faulted and was reaped while desktop remained live"),
+                "kernel remains alive", "external invalid image faulted and was reaped while desktop remained live",
+                "external valid image exited normally and was reaped while desktop remained live"),
                ("only a bounded two-process service is covered",
                 "fault-vector and malformed-frame coverage is incomplete",
-                "no successful persistent application workload receipt",
                 "no current physical-hardware receipt"),
-               "one current QEMU probe proves a GP-faulted process does not stop its sibling or kernel; general malformed-state and desktop-continuity proof remain open"),
+               "current QEMU probes prove a GP-faulted process does not stop its sibling or kernel and contrast that with a successful external workload; general malformed-state and physical proof remain open"),
     "KR-036": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/src/arch/x86/user_syscalls.json"),
                    ("implementation", "kernel/src/arch/x86/user_syscalls_generated.h"),
@@ -799,21 +805,24 @@ OVERRIDES = {
                    ("implementation", "kernel/tests/host/schedulerpolicytest.c"),
                    ("implementation", "kernel/tests/host/userprocessservicetest.c"),
                    ("implementation", "kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json"),
-                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json")),
+                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                   ("implementation", "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json")),
                ("kernel/tests/host/processlifecycletest",
                 "kernel/tests/host/schedulerpolicytest",
                 "kernel/tests/host/userprocessservicetest",
                 "kernel/tools/checks/verify-efi.sh",
-                "kernel/tools/probes/probe-user-process.py --no-build"),
+                "kernel/tools/probes/probe-user-process.py --no-build",
+                "kernel/tools/probes/probe-user-process-exit.py --no-build"),
                ("kernel/zlOS-usb.img",
                 "kernel/tests/host/test-run-receipt.json",
                 "kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json",
-                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json",
+                "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"),
                ("separate PML4 and kernel stacks", "cooperative AB12 resume",
                 "timer-preempted non-yielding PQ loops",
                 "faulted-process sibling survival", "126-check bounded policy",
                 "105-check lifecycle-policy coordinator", "persistent ST12 kernel-turn service",
-                "external-file spawn, fault observation and reap command route"),
+                "external-file spawn, normal exit, fault observation and reap command routes"),
                ("the persistent Ring-3 service has exactly two fixed process slots",
                 "no general priority or deadline contract beyond bounded round robin",
                 "no per-CPU run-queue ownership or process migration",
@@ -827,17 +836,21 @@ OVERRIDES = {
                    ("implementation", "kernel/tests/host/processlifecycletest.c"),
                    ("implementation", "kernel/src/core/user_process_service.c"),
                    ("implementation", "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"),
-                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json")),
+                   ("implementation", "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                   ("implementation", "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json")),
                ("kernel/tests/host/processlifecycletest",
                 "kernel/tests/host/userprocessservicetest",
                 "kernel/tools/checks/verify-efi.sh",
-                "kernel/tools/probes/probe-user-process.py --no-build"),
+                "kernel/tools/probes/probe-user-process.py --no-build",
+                "kernel/tools/probes/probe-user-process-exit.py --no-build"),
                ("kernel/tests/host/test-run-receipt.json", "kernel/zlOS-usb.img",
                 "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"),
+                "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json",
+                "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"),
                ("signed exit status -7 retained", "exact GP vector/error/address retained",
                 "parent-only observation and child-safe reap", "terminal scheduler detach before reap",
-                "external fault observed then reaped through desktop commands"),
+                "external fault observed then reaped through desktop commands",
+                "external normal exit status 37 observed then reaped through desktop commands"),
                ("no userspace wait syscall or process-handle ABI",
                 "parent/child authority is host-proved but not exposed as a target service",
                 "no concurrent PID-reuse or cancellation receipt",
@@ -1543,6 +1556,69 @@ def validate_user_process_command_receipt(receipt: dict, build_identity: str,
         raise ValueError("user-process command receipt hides its known gaps")
 
 
+def validate_user_process_exit_receipt(receipt: dict, build_identity: str,
+                                       evidence_root: Path) -> None:
+    if receipt.get("schema") != \
+            "zlos.user-process-exit-native-uefi64-qemu-receipt.v1" \
+            or receipt.get("result") != \
+            "PASS_EXTERNAL_FILE_SPAWN_EXIT_OBSERVE_REAP" \
+            or receipt.get("route") != "native-uefi64" \
+            or receipt.get("build_identity") != build_identity:
+        raise ValueError("user-process exit receipt is absent, failed or foreign")
+    identified = [receipt.get("artifact", {}), receipt.get("probe", {})]
+    identified.extend(receipt.get("implementation", []))
+    required = {
+        "kernel/zlOS-usb.img",
+        "kernel/tools/probes/probe-user-process-exit.py",
+        "kernel/tests/host/zlfsseed.c",
+        "kernel/src/fs/fs.c",
+        "freestanding/runtime_kernel.c",
+        "kernel/src/kernel.zl",
+        "kernel/src/arch/x86/usermode.c",
+        "kernel/src/core/process_lifecycle.c",
+        "kernel/src/core/scheduler_policy.c",
+        "kernel/src/core/user_process_service.c",
+    }
+    if {row.get("path") for row in identified} != required or any(
+            digest(evidence_root / row["path"]) != row.get("sha256")
+            for row in identified):
+        raise ValueError("user-process exit source or artifact identity drifted")
+    fixture = receipt.get("fixture", {})
+    expected_hex = (
+        "bb52000000b801000000cd80"
+        "bb33000000b801000000cd80"
+        "bb21000000b801000000cd80"
+        "bb25000000b803000000cd80"
+        "0f0b"
+    )
+    if fixture != {
+            "path": "/system/user.bin",
+            "bytes": 50,
+            "sha256": hashlib.sha256(bytes.fromhex(expected_hex)).hexdigest(),
+            "content_hex": expected_hex,
+            "created_through":
+                "host instrument linked to the shipping zlfs implementation",
+            "expected_output": "R3!",
+            "expected_exit_status": 37,
+            }:
+        raise ValueError("user-process normal-exit fixture drifted")
+    if receipt.get("assertions") != [
+            "external /system/user.bin exists as exact raw x86-64 bytes",
+            "userexec admitted pid 1000",
+            "the external program emitted R3! through three Ring-3 syscalls",
+            "userps retained normal exit status 37",
+            "userreap released slot 1",
+            "userps reported an empty table after reap",
+            ]:
+        raise ValueError("user-process normal-exit observations drifted")
+    if len(receipt.get("serial_transcript_sha256", "")) != 64:
+        raise ValueError("user-process exit transcript identity is absent")
+    gaps = receipt.get("known_gaps", [])
+    if len(gaps) != 4 or not any("physical" in gap for gap in gaps) \
+            or not any("process-handle" in gap for gap in gaps):
+        raise ValueError("user-process exit receipt hides its known gaps")
+
+
 def validate_feature_status_value(value: dict) -> None:
     if value.get("schema") != "zlos.feature-status.v1" \
             or value.get("result") != "PASS_WITH_OPEN_GAPS":
@@ -1634,6 +1710,9 @@ def build(evidence_root: Path) -> dict:
     user_process_command_receipt = json.loads((
         evidence_root / "kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json"
     ).read_text())
+    user_process_exit_receipt = json.loads((
+        evidence_root / "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"
+    ).read_text())
     host_receipt = json.loads((
         evidence_root / "kernel/tests/host/test-run-receipt.json"
     ).read_text())
@@ -1668,6 +1747,9 @@ def build(evidence_root: Path) -> dict:
     )
     validate_user_process_command_receipt(
         user_process_command_receipt, joined["build_identity"], evidence_root
+    )
+    validate_user_process_exit_receipt(
+        user_process_exit_receipt, joined["build_identity"], evidence_root
     )
     if joined.get("counts", {}).get("decision_records") != len(decisions["records"]) \
             or joined.get("open_gaps", {}).get("decision_legacy_semantics_open") \
@@ -2086,6 +2168,21 @@ def selftest(value: dict, evidence_root: Path) -> None:
     else:
         raise ValueError(
             "feature-status selftest mutation escaped: invented-user-process-command-fixture"
+        )
+    user_process_exit_receipt = json.loads((
+        evidence_root /
+        "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"
+    ).read_text())
+    user_process_exit_receipt["fixture"]["expected_exit_status"] = 0
+    try:
+        validate_user_process_exit_receipt(
+            user_process_exit_receipt, value["build_identity"], evidence_root
+        )
+    except ValueError:
+        caught.append("invented-user-process-exit-status")
+    else:
+        raise ValueError(
+            "feature-status selftest mutation escaped: invented-user-process-exit-status"
         )
     print("feature-status selftest: caught " + ", ".join(caught))
 

@@ -269,7 +269,7 @@ def main():
 
         qtype(qmp, "userps\n", settle=key_settle)
         check("invalid user bytes faulted only their Ring-3 process",
-              transcript.expect("slot 1: pid 1000 faulted; ready to reap",
+              transcript.expect("slot 1: pid 1000 faulted on vector 6; ready to reap",
                                 args.step_timeout))
 
         qtype(qmp, "userreap 1\n", settle=key_settle)

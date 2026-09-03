@@ -76,6 +76,8 @@ REQUIRED_SNIPPETS = (
     'python3 tools/probes/probe-run.py --no-build',
     'run "persistent user-process command QEMU"',
     'python3 tools/probes/probe-user-process.py --no-build',
+    'run "normal-exit user-process command QEMU"',
+    'python3 tools/probes/probe-user-process-exit.py --no-build',
     'run "page-table QEMU receipt check"',
     'run "physical allocator QEMU receipt check"',
     'run "application evidence registry write"',
@@ -237,6 +239,14 @@ def selftest(source: str) -> None:
     )
     expect_failure(
         source.replace(
+            'run "normal-exit user-process command QEMU"',
+            '# removed normal-exit user-process command gate',
+            1,
+        ),
+        "deleted-normal-exit-user-process-command-gate",
+    )
+    expect_failure(
+        source.replace(
             'run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest\n'
             '# The frame benchmark can occupy the host long enough for another task to\n'
             '# resume. Admit the independently measured build distribution separately.\n'
@@ -284,6 +294,7 @@ def selftest(source: str) -> None:
         "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
         "deleted-final-graph-rebind, deleted-physical-allocator-receipt-check, "
         "deleted-rail-gate, deleted-user-process-command-gate, "
+        "deleted-normal-exit-user-process-command-gate, "
         "deleted-double-fault-gate, "
         "deleted-synchronized-network-fetch, "
         "restored-network-command-race, masked-final-exit and masked-child-failure"

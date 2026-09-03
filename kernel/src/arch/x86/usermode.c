@@ -1364,6 +1364,23 @@ int user64_service_state(int index)
     return index >= 0 && index < U64_PROCS ? (int)procs64[index].state : -22;
 }
 
+int user64_service_termination_code(int index)
+{
+    if (index < 0 || index >= U64_PROCS) return -22;
+    struct process64 *process = &procs64[index];
+    if (!process->lifecycle_handle) return -2;
+    struct process_lifecycle_snapshot snapshot;
+    if (process_lifecycle_snapshot(&proc_lifecycle,
+                                   process->lifecycle_handle,
+                                   &snapshot) != PROCESS_LIFECYCLE_OK)
+        return -5;
+    if (snapshot.termination.kind == PROCESS_LIFECYCLE_TERMINATION_EXIT)
+        return snapshot.termination.exit_status;
+    if (snapshot.termination.kind == PROCESS_LIFECYCLE_TERMINATION_FAULT)
+        return (int)snapshot.termination.fault_vector;
+    return -11;
+}
+
 int user64_service_last_failure(void) { return proc_service_last_error; }
 
 int user64_service_reap(int index)

@@ -125,6 +125,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `x509test.c`
 - `xhcitest.c`
 - `zladdrs.sh`
+- `zlfsseed.c`
 - `zllog_e2e_test.py`
 - `zllogtest.c`
 

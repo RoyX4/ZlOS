@@ -4991,8 +4991,14 @@ fn run_command(cmd, arg) {
             if us > 0 {
                 put("    slot ")  put(ui + 1)  put(": pid ")  put(user_pid(ui))
                 if us == 1 { print(" runnable") }
-                if us == 2 { print(" exited; ready to reap") }
-                if us == 3 { print(" faulted; ready to reap") }
+                if us == 2 {
+                    put(" exited with status ")  put(user_term_code(ui))
+                    print("; ready to reap")
+                }
+                if us == 3 {
+                    put(" faulted on vector ")  put(user_term_code(ui))
+                    print("; ready to reap")
+                }
                 un = un + 1
             }
             ui = ui + 1

@@ -77,7 +77,8 @@
       "browsershot",
       "parsestat",
       "wmbench",
-      "wmshot"
+      "wmshot",
+      "zlfsseed"
     ],
     "manual-hardware": [
       "intel_probe",

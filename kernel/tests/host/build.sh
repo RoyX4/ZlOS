@@ -533,6 +533,12 @@ gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../../src/fs/fs.c
 echo "built ./fstest        (run: ./fstest)"
 
+# Build exact QEMU fixture disks through the shipping zlfs implementation.
+# This is an instrument consumed by target probes, not a standalone pass gate.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DFS_HOSTTEST \
+    -o zlfsseed zlfsseed.c ../../src/fs/fs.c
+echo "built ./zlfsseed      (instrument: seed a disposable zlfs image)"
+
 # The ustar the Archive Manager writes, read back by the SHELL'S OWN tar. A
 # test that parses back the layout its own writer just emitted agrees with
 # itself by construction; `tar -tvf` does not. Same -Wall -Wextra as fstest,
