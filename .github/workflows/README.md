@@ -30,6 +30,7 @@ Continuous integration, boot, documentation, and scheduled workflows.
 - `docs.yml`
 - `full-closure.yml`
 - `gates.yml`
+- `kernel-host.yml`
 - `nightly.yml`
 - `review.yml`
 

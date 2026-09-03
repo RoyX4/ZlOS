@@ -33,6 +33,7 @@ REQUIRED_SNIPPETS = (
     'run "build graph check"',
     'run "source snapshot write"',
     'run "source snapshot check"',
+    'run "kernel raw"',
     'run "kernel ELF permissions"',
     'run "SOURCES recovery selftest"',
     'run "SOURCES coverage"',
@@ -125,6 +126,8 @@ REQUIRED_SNIPPETS = (
     'run "906 partial closure write"',
     'run "906 partial closure check"',
     'run "906 master program"',
+    'resource admission stayed blocked for $((waits * 30)) seconds',
+    'await_guard || exit 2',
 )
 
 OPTIONAL_AUTHORITY = re.compile(
@@ -132,7 +135,7 @@ OPTIONAL_AUTHORITY = re.compile(
 )
 OPTIONAL_BOOT = re.compile(r'\[ -x "\$WT/kernel/\$g" \] \|\| continue')
 HOST_BUILD_BENCHMARK_GUARD = re.compile(
-    r'run "host benchmark receipt".*?until guard; do sleep 30; done\s*'
+    r'run "host benchmark receipt".*?await_guard \|\| exit 2\s*'
     r'run "host build benchmark receipt"',
     re.S,
 )
@@ -210,6 +213,10 @@ def selftest(source: str) -> None:
         "deleted-boot-route",
     )
     expect_failure(
+        source.replace('run "kernel raw"', '# removed raw build', 1),
+        "deleted-raw-build-before-permission-check",
+    )
+    expect_failure(
         source.replace(
             'run "final build graph artifact rebind check"',
             '# removed final graph rebind check',
@@ -250,13 +257,21 @@ def selftest(source: str) -> None:
             'run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest\n'
             '# The frame benchmark can occupy the host long enough for another task to\n'
             '# resume. Admit the independently measured build distribution separately.\n'
-            'until guard; do sleep 30; done\n'
+            'await_guard || exit 2\n'
             'run "host build benchmark receipt"',
             'run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest\n'
             'run "host build benchmark receipt"',
             1,
         ),
         "deleted-host-build-benchmark-guard",
+    )
+    expect_failure(
+        source.replace(
+            'resource admission stayed blocked for $((waits * 30)) seconds',
+            'resource admission waits forever',
+            1,
+        ),
+        "deleted-bounded-resource-admission",
     )
     expect_failure(
         source.replace(
@@ -292,10 +307,12 @@ def selftest(source: str) -> None:
     print(
         "land-gate selftest: caught deleted-verifier, optional-verifier, "
         "missing-SOURCES, deleted-generated-data-classification, deleted-boot-route, "
+        "deleted-raw-build-before-permission-check, "
         "deleted-final-graph-rebind, deleted-physical-allocator-receipt-check, "
         "deleted-rail-gate, deleted-user-process-command-gate, "
         "deleted-normal-exit-user-process-command-gate, "
         "deleted-double-fault-gate, "
+        "deleted-bounded-resource-admission, "
         "deleted-synchronized-network-fetch, "
         "restored-network-command-race, masked-final-exit and masked-child-failure"
     )

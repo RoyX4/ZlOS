@@ -39,11 +39,12 @@ run() {                       # run <label> <dir> <cmd...>
   echo "=== $label ==="
   local out rc
   out=$( cd "$dir" && "$@" 2>&1 ); rc=$?
-  echo "$out" | tail -25
   if [ $rc -ne 0 ]; then
+    echo "$out"
     echo ">>> FAIL ($label) exit=$rc"
     FAIL=$((FAIL+1))
   else
+    echo "$out" | tail -25
     echo ">>> ok ($label)"
   fi
   return 0
@@ -62,6 +63,19 @@ guard() {
   if [ "$mem" -lt 3000 ]; then echo "available memory ${mem}MB < 3000 — waiting"; return 1; fi
   if pgrep '^qemu-system' >/dev/null; then echo "a qemu is already running — waiting"; return 1; fi
   return 0
+}
+
+await_guard() {
+  local waits=0 limit=120
+  [ "$GATE_MODE" = "github-hosted" ] && limit=10
+  until guard; do
+    waits=$((waits+1))
+    if [ "$waits" -ge "$limit" ]; then
+      echo "resource admission stayed blocked for $((waits * 30)) seconds" >&2
+      return 2
+    fi
+    sleep 30
+  done
 }
 
 echo "gate: $WT @ $(git rev-parse --short HEAD)"
@@ -114,6 +128,7 @@ run "source snapshot check" "$WT/kernel" python3 tools/generators/gen-source-sna
 run "kernel 32-bit"    "$WT/kernel"        ./build.sh
 run "kernel 64-bit"    "$WT/kernel"        ./build64.sh
 run "kernel EFI"       "$WT/kernel"        ./buildefi.sh
+run "kernel raw"       "$WT/kernel"        ./tools/images/mkdisk.sh
 run "kernel ELF permissions" "$WT/kernel" python3 tools/checks/check-elf-permissions.py --selftest
 run "SOURCES recovery selftest" "$WT/kernel" ./tools/checks/verify-sources.sh --selftest-recovery
 run "SOURCES coverage" "$WT/kernel" ./tools/checks/verify-sources.sh
@@ -131,11 +146,11 @@ run "host test inventory write" "$WT/kernel" \
 run "host test inventory check" "$WT/kernel" \
     python3 tools/generators/gen-test-inventory.py --check --selftest
 run "host tests execute" "$WT/kernel" python3 tools/run/run-host-tests.py --run --selftest
-until guard; do sleep 30; done
+await_guard || exit 2
 run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest
 # The frame benchmark can occupy the host long enough for another task to
 # resume. Admit the independently measured build distribution separately.
-until guard; do sleep 30; done
+await_guard || exit 2
 run "host build benchmark receipt" "$WT/kernel" \
     python3 tools/run/run-build-benchmark.py --run --selftest
 
@@ -227,7 +242,7 @@ for g in tools/images/mkiso.sh verify.sh tools/checks/verify-iso.sh \
          tools/checks/verify-64.sh tools/checks/verify-efi.sh \
          tools/checks/verify-raw.sh tools/checks/verify-disk.sh \
          tools/checks/verify-clock.sh tools/checks/verify-net.sh; do
-  until guard; do sleep 30; done
+  await_guard || exit 2
   run "boot: $g" "$WT/kernel" "./$g"
 done
 
@@ -238,38 +253,38 @@ done
 # routes without rebuilding between probes, regenerate the join, and only then
 # promote the exact artifact/route registry.
 run "final canonical ISO" "$WT/kernel" ./tools/images/mkiso.sh
-until guard; do sleep 30; done
+await_guard || exit 2
 run "CPU fault capture QEMU" "$WT/kernel" python3 tools/checks/verify-crash.py --run \
     --route bios32 --fault ud2 --no-build --selftest
-until guard; do sleep 30; done
+await_guard || exit 2
 run "CPU fault capture native UEFI64 QEMU" "$WT/kernel" \
     python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault ud2 --no-build --selftest
-until guard; do sleep 30; done
+await_guard || exit 2
 run "CPU GP error-code capture native UEFI64 QEMU" "$WT/kernel" \
     python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault gp --no-build --selftest
-until guard; do sleep 30; done
+await_guard || exit 2
 run "CPU double-fault IST capture native UEFI64 QEMU" "$WT/kernel" \
     python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault double-fault --no-build --selftest
-until guard; do sleep 30; done
+await_guard || exit 2
 run "app routes QEMU" "$WT/kernel" python3 tools/probes/probe-app-routes.py --no-build \
     --receipt docs/receipts/app-routes-qemu-2026-08-22.json
-until guard; do sleep 30; done
+await_guard || exit 2
 run "rail register QEMU" "$WT/kernel" python3 tools/probes/probe-rail.py --no-build
-until guard; do sleep 30; done
+await_guard || exit 2
 run "47-app lifecycle QEMU" "$WT/kernel" python3 tools/probes/probe-app-lifecycle.py --no-build \
     --receipt docs/receipts/app-lifecycle-qemu-2026-08-22.json
-until guard; do sleep 30; done
+await_guard || exit 2
 run "Run route QEMU" "$WT/kernel" python3 tools/probes/probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
-until guard; do sleep 30; done
+await_guard || exit 2
 run "persistent user-process command QEMU" "$WT/kernel" \
     python3 tools/probes/probe-user-process.py --no-build \
     --receipt docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json
-until guard; do sleep 30; done
+await_guard || exit 2
 run "normal-exit user-process command QEMU" "$WT/kernel" \
     python3 tools/probes/probe-user-process-exit.py --no-build \
     --receipt docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json
-until guard; do sleep 30; done
+await_guard || exit 2
 run "page-table QEMU receipt check" "$WT/kernel" \
     python3 tools/checks/write-page-table-receipt.py --check --selftest
 run "physical allocator QEMU receipt check" "$WT/kernel" \
@@ -299,7 +314,7 @@ run "final build graph artifact rebind check" "$WT/kernel" \
 # visual receipt inside the same gate. Require two idle observations here too,
 # because the preceding QEMU probe can leave a helper settling briefly.
 sleep 3
-until guard; do sleep 30; done
+await_guard || exit 2
 run "current visual receipt write" "$WT/kernel" \
     python3 tools/run/run-visual-receipt.py --run --selftest
 run "visual golden registry write" "$WT/kernel" \

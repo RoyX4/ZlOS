@@ -1,15 +1,11 @@
 name: hosted full closure
 
 # The complete sequential landing gate on a disposable Kali runner. This is
-# intentionally manual in the final form because it hydrates about 1.5 GiB of
-# exact binary/source archives and runs every host and QEMU evidence lane.
-# The feature-branch push trigger exists only to prove the workflow before it
-# reaches main; it is removed after that first remote proof.
+# intentionally manual because it hydrates about 1.5 GiB of exact binary/source
+# archives and runs every host and QEMU evidence lane.
 
 on:
   workflow_dispatch:
-  push:
-    branches: [codex/persistent-user-scheduler]
 
 permissions:
   contents: read
@@ -110,4 +106,5 @@ jobs:
             kernel/docs/receipts/
             kernel/docs/evidence/current-visuals-2026-08-29/
             kernel/metadata/
+            kernel/tests/host/test-run-receipt.json
           if-no-files-found: warn
