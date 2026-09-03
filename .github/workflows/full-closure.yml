@@ -25,6 +25,7 @@ jobs:
     defaults:
       run:
         shell: bash
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,6 +82,7 @@ jobs:
       - name: record generated evidence state
         if: always()
         run: |
+          cd "$GITHUB_WORKSPACE"
           git status --short > hosted-full-closure-status.txt
           git diff --stat > hosted-full-closure-diffstat.txt
 

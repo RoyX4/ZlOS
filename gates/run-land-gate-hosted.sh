@@ -84,6 +84,9 @@ prepare() {
   verify_runner
   "$WT/kernel/tools/checks/verify-sources.sh" --selftest-recovery
   "$WT/kernel/tools/checks/verify-sources.sh" --recover-only
+  if [ ! -x "$WT/compile" ]; then
+    (cd "$WT" && ./build.sh)
+  fi
   python3 "$WT/kernel/tools/generators/gen-build-identity.py" --write --selftest
   python3 "$WT/kernel/tools/generators/gen-dependency-lock.py" --write --selftest
   local lock_sha

@@ -69,6 +69,8 @@ HOSTED_LAUNCHER_REQUIREMENTS = (
     'GATE_TIMEOUT=5h',
     "verify-sources.sh\" --selftest-recovery",
     "verify-sources.sh\" --recover-only",
+    '[ ! -x "$WT/compile" ]',
+    '(cd "$WT" && ./build.sh)',
     "tools/generators/gen-build-identity.py\" --write --selftest",
     "tools/generators/gen-dependency-lock.py\" --write --selftest",
     '--hydrate --cache-root "$CACHE_BASE" --selftest',
