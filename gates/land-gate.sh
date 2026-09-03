@@ -243,6 +243,10 @@ until guard; do sleep 30; done
 run "Run route QEMU" "$WT/kernel" python3 tools/probes/probe-run.py --no-build \
     --receipt docs/receipts/run-qemu-2026-08-22.json
 until guard; do sleep 30; done
+run "persistent user-process command QEMU" "$WT/kernel" \
+    python3 tools/probes/probe-user-process.py --no-build \
+    --receipt docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json
+until guard; do sleep 30; done
 run "page-table QEMU receipt check" "$WT/kernel" \
     python3 tools/checks/write-page-table-receipt.py --check --selftest
 run "physical allocator QEMU receipt check" "$WT/kernel" \

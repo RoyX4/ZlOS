@@ -461,6 +461,7 @@ static const struct cmd table[] = {
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "perf",     13 },                         /* raw percentile samples */
     { "userexec", 14 }, { "ring3", 14 },       /* /system/user.bin */
+    { "userps", 130 }, { "userreap", 131 },
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
     /* 82 is 'R'. Lower-case 'r' (114) is already reboot, and the exec track
      * needs a code run_command dispatches on that nothing else claims. */

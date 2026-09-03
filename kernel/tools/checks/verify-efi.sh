@@ -172,6 +172,13 @@ else
         grep -E "syscall ABI:" "$LOG" | tail -2 | sed 's/^/          /'
         fail=1
     fi
+    if grep -q "process lifecycle generation reuse rejected the stale handle and retained exact exit custody" "$LOG"; then
+        echo "  ok    process slot reuse advances generation and preserves signed exit custody"
+    else
+        echo "  FAIL  generation-safe process identity proof missing or failed"
+        grep -E "process lifecycle generation|generation/exit custody" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
     if grep -q "anonymous memory: M <- reserve/commit zero-fill, cross-page copy and release passed" "$LOG"; then
         echo "  ok    Ring-3 anonymous pages reserve, commit zeroed frames, cross a page and release"
     else
@@ -221,6 +228,20 @@ else
         grep -E "process memory accounting" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
+    if grep -q "process lifecycle slots reaped with generation history retained" "$LOG"; then
+        echo "  ok    process identities reap only after resources and retain generation history"
+    else
+        echo "  FAIL  process identity teardown proof missing or failed"
+        grep -E "process lifecycle slots reaped|process lifecycle final teardown" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "persistent service scheduled ST12 across four kernel turns; exact exit custody reaped" "$LOG"; then
+        echo "  ok    persistent Ring-3 service returned across four fair kernel turns and reaped exact exits"
+    else
+        echo "  FAIL  persistent user-process service proof missing or failed"
+        grep -E "persistent service scheduled|persistent user-process service" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
     if grep -q "PIT preempted two non-yielding Ring-3 loops PQ" "$LOG"; then
         echo "  ok    timer preemption switches non-yielding Ring-3 processes"
     else
@@ -233,6 +254,13 @@ else
     else
         echo "  FAIL  sibling process fault-isolation proof missing or failed"
         grep -E "sibling|GP-faulted" "$LOG" | tail -3 | sed 's/^/          /'
+        fail=1
+    fi
+    if grep -q "process lifecycle retained exact GP-fault custody and independent sibling exit" "$LOG"; then
+        echo "  ok    fault records remain distinct from the sibling's signed exit status"
+    else
+        echo "  FAIL  process fault/exit custody proof missing or failed"
+        grep -E "process lifecycle retained exact|process lifecycle fault/exit" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
     if grep -q "lower stack guard PF error 6 at exact address; sibling G exited" "$LOG"; then

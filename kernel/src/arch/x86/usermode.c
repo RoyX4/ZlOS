@@ -469,6 +469,8 @@ typedef unsigned char u8_64;
 
 #include "core/process_memory.h"
 #include "core/anon_memory.h"
+#include "core/process_lifecycle.h"
+#include "core/user_process_service.h"
 
 #define U64_PROCESS_FRAME_LIMIT (2U * PROCESS_MEMORY_PAGE_COUNT)
 #define U64_ANON_FRAME_LIMIT ANON_MEMORY_PAGE_COUNT
@@ -486,8 +488,10 @@ struct ipc64_message {
 struct process64 {
     u32 pid;
     u32 state;                 /* 0 empty, 1 runnable/running, 2 exited, 3 fault */
+    process_lifecycle_handle lifecycle_handle;
     u64 cr3, user_base, user_stack_top, kernel_stack_top;
     u32 calls, fault_vector;
+    int exit_status;
     u32 fault_error;
     u32 bad_pointer_refused;
     u64 fault_address;
@@ -503,6 +507,14 @@ struct process64 {
 static struct process64 procs64[U64_PROCS];
 static struct process64 *proc64;
 static int proc64_index;
+static struct process_lifecycle_slot proc_lifecycle_slots[U64_PROCS];
+static struct process_lifecycle_table proc_lifecycle;
+static int proc_lifecycle_initialized;
+static struct scheduler_policy_slot proc_scheduler_slots[U64_PROCS];
+static struct user_process_service proc_service;
+static int proc_service_initialized;
+static int proc_service_last_error;
+static u32 proc_service_next_pid = 1000;
 static u8_64 proc_io[U64_PROCS][U64_IO_MAX];
 static u32 proc_kstack_last_used[U64_PROCS];
 static u32 proc_kstack_high_water[U64_PROCS];
@@ -609,16 +621,51 @@ static int process64_release_anonymous(struct process64 *process)
     return anon_memory_destroy(&process->anonymous) == ANON_MEMORY_OK;
 }
 
+static int process64_lifecycle_ready(void)
+{
+    if (!proc_lifecycle_initialized) {
+        if (process_lifecycle_init(&proc_lifecycle, proc_lifecycle_slots,
+                                   U64_PROCS) != PROCESS_LIFECYCLE_OK)
+            return 0;
+        proc_lifecycle_initialized = 1;
+    }
+    return process_lifecycle_check(&proc_lifecycle) == PROCESS_LIFECYCLE_OK;
+}
+
+static int process64_release_identity(struct process64 *process)
+{
+    if (!process->lifecycle_handle) return 1;
+    struct process_lifecycle_snapshot snapshot;
+    int status = process_lifecycle_snapshot(
+        &proc_lifecycle, process->lifecycle_handle, &snapshot);
+    if (status != PROCESS_LIFECYCLE_OK) return 0;
+    if (snapshot.state == PROCESS_LIFECYCLE_RUNNABLE &&
+        process_lifecycle_exit(&proc_lifecycle, process->lifecycle_handle,
+                               -125) != PROCESS_LIFECYCLE_OK)
+        return 0;
+    if (process_lifecycle_reap(&proc_lifecycle, snapshot.parent,
+                               process->lifecycle_handle) !=
+        PROCESS_LIFECYCLE_OK)
+        return 0;
+    process->lifecycle_handle = PROCESS_LIFECYCLE_INVALID_HANDLE;
+    return 1;
+}
+
 static int process64_release_slot(int index)
 {
     if (index < 0 || index >= U64_PROCS) return 0;
+    if (!process64_lifecycle_ready()) return 0;
     struct process64 *process = &procs64[index];
-    if (!process_memory_ready(&process->memory))
-        return process->memory.acquired == 0 &&
-               process64_anonymous_uninitialized(&process->anonymous);
-    if (!process64_release_anonymous(process)) return 0;
-    userwin_close_owner((int)process->pid);
-    if (process_memory_release(&process->memory) != PROCESS_MEMORY_OK) return 0;
+    if (process_memory_ready(&process->memory)) {
+        if (!process64_release_anonymous(process)) return 0;
+        userwin_close_owner((int)process->pid);
+        if (process_memory_release(&process->memory) != PROCESS_MEMORY_OK)
+            return 0;
+    } else if (process->memory.acquired != 0 ||
+               !process64_anonymous_uninitialized(&process->anonymous)) {
+        return 0;
+    }
+    if (!process64_release_identity(process)) return 0;
     process->pid = 0;
     process->state = 0;
     process->cr3 = 0;
@@ -631,6 +678,7 @@ static int process64_release_slot(int index)
 static int process64_prepare(int index, u32 pid)
 {
     if (index < 0 || index >= U64_PROCS) return 0;
+    if (!process64_lifecycle_ready()) return 0;
     u64 blob_bytes = (u64)(user64_blob_end - user64_blob);
     if (!blob_bytes || blob_bytes > PMM_PAGE_BYTES) return 0;
     u64 old = cr3_read64();
@@ -699,14 +747,20 @@ static int process64_prepare(int index, u32 pid)
         kstack_high[i] = U64_KSTACK_FILL;
     }
 
-    if (process_memory_ready(&procs64[index].memory) &&
-        (!process64_release_anonymous(&procs64[index]) ||
-         process_memory_release(&procs64[index].memory) != PROCESS_MEMORY_OK)) {
+    if (!process64_release_slot(index)) {
+        anon_memory_destroy(&next_anonymous);
         process_memory_release(&next);
         return 0;
     }
-    if (procs64[index].state && procs64[index].pid)
-        userwin_close_owner((int)procs64[index].pid);
+    process_lifecycle_handle lifecycle_handle = 0;
+    if (process_lifecycle_create_at(&proc_lifecycle, (unsigned int)index, pid,
+                                    PROCESS_LIFECYCLE_INVALID_HANDLE,
+                                    &lifecycle_handle) !=
+        PROCESS_LIFECYCLE_OK) {
+        anon_memory_destroy(&next_anonymous);
+        process_memory_release(&next);
+        return 0;
+    }
     proc_kstack_last_used[index] = 0;
 
     proc64_index = index;
@@ -714,11 +768,13 @@ static int process64_prepare(int index, u32 pid)
     proc64->memory = next;
     proc64->anonymous = next_anonymous;
     proc64->pid = pid; proc64->state = 1;
+    proc64->lifecycle_handle = lifecycle_handle;
     proc64->cr3 = (u64)pml4 & U64_ADDR;
     proc64->user_base = base;
     proc64->user_stack_top = base + 3 * 4096ULL;
     proc64->kernel_stack_top = base + 6 * 4096ULL;
     proc64->calls = 0; proc64->fault_vector = 0; proc64->fault_error = 0;
+    proc64->exit_status = 0;
     proc64->fault_address = 0; proc64->bad_pointer_refused = 0;
     proc64->started = proc64->has_frame = 0;
     for (int i = 0; i < U64_HANDLES; i++) proc64->handles[i] = 0;
@@ -767,6 +823,44 @@ static int process64_kernel_stack_contract(int index)
            (pt[4] & mask) == first &&
            (pt[5] & mask) == second &&
            procs64[index].kernel_stack_top == procs64[index].user_base + 6 * 4096ULL;
+}
+
+static int process64_lifecycle_contract(int index)
+{
+    if (index < 0 || index >= U64_PROCS) return 0;
+    const struct process64 *process = &procs64[index];
+    struct process_lifecycle_snapshot snapshot;
+    if (process_lifecycle_snapshot(&proc_lifecycle,
+                                   process->lifecycle_handle,
+                                   &snapshot) != PROCESS_LIFECYCLE_OK ||
+        snapshot.handle != process->lifecycle_handle ||
+        snapshot.id != process->pid || snapshot.state != process->state)
+        return 0;
+    if (process->state == PROCESS_LIFECYCLE_RUNNABLE)
+        return snapshot.termination.kind ==
+               PROCESS_LIFECYCLE_TERMINATION_NONE;
+    if (process->state == PROCESS_LIFECYCLE_EXITED)
+        return snapshot.termination.kind ==
+                   PROCESS_LIFECYCLE_TERMINATION_EXIT &&
+               snapshot.termination.exit_status == process->exit_status;
+    if (process->state == PROCESS_LIFECYCLE_FAULTED)
+        return snapshot.termination.kind ==
+                   PROCESS_LIFECYCLE_TERMINATION_FAULT &&
+               snapshot.termination.fault_vector == process->fault_vector &&
+               snapshot.termination.fault_error == process->fault_error &&
+               snapshot.termination.fault_address == process->fault_address;
+    return 0;
+}
+
+static int process64_lifecycle_empty(void)
+{
+    if (process_lifecycle_check(&proc_lifecycle) != PROCESS_LIFECYCLE_OK)
+        return 0;
+    for (int i = 0; i < U64_PROCS; i++)
+        if (proc_lifecycle_slots[i].state != PROCESS_LIFECYCLE_EMPTY ||
+            proc_lifecycle_slots[i].id || proc_lifecycle_slots[i].parent)
+            return 0;
+    return 1;
 }
 
 /* Complete-range validation happens before the first byte is touched. */
@@ -835,9 +929,15 @@ static int user64_open_handle(int idx)
 
 static struct process64 *process64_pid(u32 pid)
 {
-    for (int i = 0; i < U64_PROCS; i++)
-        if (procs64[i].state == 1 && procs64[i].pid == pid) return &procs64[i];
-    return 0;
+    process_lifecycle_handle handle = 0;
+    if (process_lifecycle_find_runnable(&proc_lifecycle, pid, &handle) !=
+        PROCESS_LIFECYCLE_OK)
+        return 0;
+    unsigned int encoded = (unsigned int)handle;
+    if (!encoded || encoded > U64_PROCS) return 0;
+    struct process64 *process = &procs64[encoded - 1U];
+    return process->state == 1 && process->pid == pid &&
+           process->lifecycle_handle == handle ? process : 0;
 }
 
 static u64 user64_finish(u64 nr, unsigned operation_id, u64 value)
@@ -884,7 +984,13 @@ u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
     }
     if (nr == U64_SYS_GETPID) U64_RETURN(proc64->pid);
     if (nr == U64_SYS_EXIT) {
+        int exit_status = (int)(u32)arg1;
+        if (process_lifecycle_exit(&proc_lifecycle,
+                                   proc64->lifecycle_handle,
+                                   exit_status) != PROCESS_LIFECYCLE_OK)
+            U64_RETURN(U64_EIO);
         userwin_close_owner((int)proc64->pid);
+        proc64->exit_status = exit_status;
         user64_exited = 1; proc64->state = 2;
         u64 result = user64_finish(nr, operation_id, 0);
         zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, proc64->pid,
@@ -1047,10 +1153,14 @@ u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
 int user64_is_running(void) { return user64_running; }
 void user64_mark_fault(u32 vector, u32 error, u64 address)
 {
+    u64 fault_address = vector == 14 ? address : 0;
     user64_faulted = 1; user64_running = 0;
     userwin_close_owner((int)proc64->pid);
+    (void)process_lifecycle_fault(&proc_lifecycle,
+                                  proc64->lifecycle_handle,
+                                  vector, error, fault_address);
     proc64->state = 3; proc64->fault_vector = vector;
-    proc64->fault_error = error; proc64->fault_address = address;
+    proc64->fault_error = error; proc64->fault_address = fault_address;
 }
 
 int user_has_exited(void) { return user64_exited; }
@@ -1125,6 +1235,163 @@ static int user64_step(int index)
     return proc64->state == 3 ? -(int)proc64->fault_vector : (int)proc64->state;
 }
 
+static int process64_service_index(process_lifecycle_handle handle)
+{
+    unsigned int encoded = (unsigned int)handle;
+    if (!encoded || encoded > U64_PROCS) return -1;
+    int index = (int)(encoded - 1U);
+    return procs64[index].lifecycle_handle == handle ? index : -1;
+}
+
+static int process64_service_step(
+    void *context, process_lifecycle_handle handle,
+    user_process_service_u64 *elapsed_ticks)
+{
+    (void)context;
+    if (!elapsed_ticks) return -1;
+    int index = process64_service_index(handle);
+    if (index < 0 || procs64[index].state != PROCESS_LIFECYCLE_RUNNABLE ||
+        !process64_lifecycle_contract(index))
+        return -1;
+    u32 before = idt_ticks();
+    user64_preempt_on = 1;
+    (void)user64_step(index);
+    user64_preempt_on = 0;
+    *elapsed_ticks = (u32)(idt_ticks() - before);
+    return process64_lifecycle_contract(index) ? 0 : -1;
+}
+
+static int process64_service_ready(void)
+{
+    if (!process64_lifecycle_ready()) return 0;
+    if (!proc_service_initialized) {
+        if (user_process_service_init(
+                &proc_service, &proc_lifecycle, proc_scheduler_slots,
+                U64_PROCS, process64_service_step, 0) !=
+            USER_PROCESS_SERVICE_OK)
+            return 0;
+        proc_service_initialized = 1;
+    }
+    return user_process_service_check(&proc_service) ==
+           USER_PROCESS_SERVICE_OK;
+}
+
+static int process64_service_has_owners(void)
+{
+    if (!proc_service_initialized) return 0;
+    for (int i = 0; i < U64_PROCS; i++)
+        if (proc_scheduler_slots[i].state != SCHEDULER_POLICY_EMPTY)
+            return 1;
+    return 0;
+}
+
+static u32 process64_service_allocate_pid(void)
+{
+    for (unsigned int attempt = 0; attempt <= U64_PROCS; attempt++) {
+        u32 candidate = proc_service_next_pid;
+        proc_service_next_pid = candidate == 0x7fffffffU ? 1U : candidate + 1U;
+        int used = 0;
+        for (int i = 0; i < U64_PROCS; i++)
+            if (proc_lifecycle_slots[i].state != PROCESS_LIFECYCLE_EMPTY &&
+                proc_lifecycle_slots[i].id == candidate)
+                used = 1;
+        if (!used) return candidate;
+    }
+    return 0;
+}
+
+int user64_service_spawn_default_file(void)
+{
+    static const char name[] = "/system/user.bin";
+    if (!fs_mounted()) return -1;
+    int file = fs_find(name);
+    if (file < 0) return -2;
+    u32 bytes = fs_size(file);
+    if (!bytes || bytes > U64_IO_MAX) return -3;
+    if (!process64_service_ready()) return -5;
+
+    int index = -1;
+    for (int i = 0; i < U64_PROCS; i++)
+        if (!procs64[i].state && !procs64[i].lifecycle_handle) {
+            index = i;
+            break;
+        }
+    if (index < 0) return -28;
+    if (fs_read(file, proc_io[index], bytes) != (int)bytes) return -4;
+    u32 pid = process64_service_allocate_pid();
+    if (!pid || !user64_load_process(index, pid, proc_io[index], bytes))
+        return -5;
+    if (user_process_service_admit(&proc_service,
+                                   procs64[index].lifecycle_handle) !=
+        USER_PROCESS_SERVICE_OK) {
+        (void)process64_release_slot(index);
+        return -5;
+    }
+    proc_service_last_error = 0;
+    return (int)pid;
+}
+
+int user64_service_work(void)
+{
+    if (!proc_service_initialized) return 0;
+    process_lifecycle_handle dispatched = 0;
+    int status = user_process_service_work(&proc_service, idt_ticks(),
+                                           &dispatched);
+    if (status == USER_PROCESS_SERVICE_E_IDLE) return 0;
+    if (status == USER_PROCESS_SERVICE_OK) {
+        proc_service_last_error = 0;
+        return 1;
+    }
+    proc_service_last_error = status;
+    return status;
+}
+
+int user64_service_count(void)
+{
+    int count = 0;
+    for (int i = 0; i < U64_PROCS; i++)
+        if (procs64[i].state) count++;
+    return count;
+}
+
+int user64_service_pid(int index)
+{
+    return index >= 0 && index < U64_PROCS ? (int)procs64[index].pid : -22;
+}
+
+int user64_service_state(int index)
+{
+    return index >= 0 && index < U64_PROCS ? (int)procs64[index].state : -22;
+}
+
+int user64_service_last_failure(void) { return proc_service_last_error; }
+
+int user64_service_reap(int index)
+{
+    if (index < 0 || index >= U64_PROCS) return -22;
+    struct process64 *process = &procs64[index];
+    if (!process->lifecycle_handle) return -2;
+    struct process_lifecycle_snapshot snapshot;
+    int status = process_lifecycle_observe(
+        &proc_lifecycle, PROCESS_LIFECYCLE_INVALID_HANDLE,
+        process->lifecycle_handle, &snapshot);
+    if (status == PROCESS_LIFECYCLE_E_PENDING) return -11;
+    if (status != PROCESS_LIFECYCLE_OK) return -5;
+
+    struct scheduler_policy_snapshot policy;
+    status = scheduler_policy_snapshot(&proc_service.scheduler,
+                                       process->lifecycle_handle, &policy);
+    if (status == SCHEDULER_POLICY_OK) {
+        if (user_process_service_detach_terminal(
+                &proc_service, process->lifecycle_handle) !=
+            USER_PROCESS_SERVICE_OK)
+            return -5;
+    } else if (status != SCHEDULER_POLICY_E_NOT_FOUND) {
+        return -5;
+    }
+    return process64_release_slot(index) ? 0 : -5;
+}
+
 static int user64_run_probe(const u8_64 *code, u32 bytes)
 {
     if (!user64_load_process(0, 1, code, bytes)) return -1;
@@ -1152,6 +1419,10 @@ int user64_run_default_file(void)
 
 void user_selftest(void)
 {
+    if (process64_service_has_owners()) {
+        up("  ring 3 selftest refused: persistent process slots are still owned\n");
+        return;
+    }
     for (int i = 0; i < U64_PROCS; i++)
         if (!process64_release_slot(i)) {
             up("  process frame cleanup refused before selftest\n");
@@ -1173,6 +1444,14 @@ void user_selftest(void)
     }
     up(" <- iretq/int80/iretq, "); upu(proc64->calls);
     up(" syscalls, process exited, kernel alive\n");
+    process_lifecycle_handle first_lifecycle_handle = proc64->lifecycle_handle;
+    struct process_lifecycle_snapshot first_lifecycle_snapshot;
+    int first_lifecycle_custody = process64_lifecycle_contract(0) &&
+        process_lifecycle_snapshot(&proc_lifecycle, first_lifecycle_handle,
+                                   &first_lifecycle_snapshot) ==
+            PROCESS_LIFECYCLE_OK &&
+        first_lifecycle_snapshot.state == PROCESS_LIFECYCLE_EXITED &&
+        first_lifecycle_snapshot.termination.exit_status == -7;
 
     /* Unknown syscall IDs must have one unsigned behavior. This Ring-3 image
      * probes zero, the first gap, the sign bit and all bits set; each result
@@ -1191,10 +1470,21 @@ void user_selftest(void)
         0x0f,0x0b
     };
     int unknown_result = user64_run_probe(unknown_syscalls, sizeof unknown_syscalls);
+    struct process_lifecycle_snapshot stale_snapshot;
+    int generation_reuse = first_lifecycle_custody &&
+        process_lifecycle_snapshot(&proc_lifecycle, first_lifecycle_handle,
+                                   &stale_snapshot) ==
+            PROCESS_LIFECYCLE_E_STALE &&
+        first_lifecycle_handle != proc64->lifecycle_handle &&
+        process64_lifecycle_contract(0);
     if (unknown_result == 0 && proc64->state == 2)
         up("  syscall ABI: zero/gap/sign-bit/max refused with ENOSYS\n");
     else
         up("  syscall ABI: unknown-number ENOSYS gate FAILED\n");
+    if (generation_reuse)
+        up(" <- process lifecycle generation reuse rejected the stale handle and retained exact exit custody\n");
+    else
+        up(" <- process lifecycle generation/exit custody FAILED\n");
 
     /* Ring 3 reserves two pages without mappings, commits zero-filled PMM
      * frames, crosses the page boundary through copy validation, releases
@@ -1336,7 +1626,7 @@ void user_selftest(void)
     static const u8_64 sibling_fault[] = { 0xfa, 0x0f, 0x0b };
     static const u8_64 sibling_alive[] = {
         0xb8,1,0,0,0, 0xbb,'K',0,0,0, 0xcd,0x80,
-        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+        0xbb,7,0,0,0, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
     };
     int f_ok = user64_load_process(0, 3, sibling_fault, sizeof sibling_fault);
     int s_ok = user64_load_process(1, 4, sibling_alive, sizeof sibling_alive);
@@ -1353,6 +1643,13 @@ void user_selftest(void)
         up(" <- one process GP-faulted; its sibling ran and exited\n");
     else
         up(" <- sibling fault isolation FAILED\n");
+    if (f_ok && s_ok && process64_lifecycle_contract(0) &&
+        process64_lifecycle_contract(1) && procs64[0].fault_vector == 13 &&
+        procs64[0].fault_error == 0 && procs64[0].fault_address == 0 &&
+        procs64[1].exit_status == 7)
+        up(" <- process lifecycle retained exact GP-fault custody and independent sibling exit\n");
+    else
+        up(" <- process lifecycle fault/exit custody FAILED\n");
 
     /* Write into the intentionally absent page directly below the user stack.
      * A genuine guard hit is a non-present user write (#PF error 0x6), with CR2
@@ -1552,7 +1849,7 @@ void user_selftest(void)
     int released = 1;
     for (int i = 0; i < U64_PROCS; i++)
         released &= process64_release_slot(i);
-    int accounts = released;
+    int accounts = released && process64_lifecycle_empty();
     unsigned long anonymous_high_water = 0;
     for (int i = 0; i < U64_PROCS; i++) {
         struct pmm_owner_account fixed = {0};
@@ -1576,12 +1873,79 @@ void user_selftest(void)
     }
     accounts &= anonymous_high_water >= 2;
     if (accounts && pmm_used_pages() == process_frame_baseline && !pmm_check()) {
+        up(" <- process lifecycle slots reaped with generation history retained\n");
         up(" <- process memory accounting: fixed/anonymous quotas and owner totals passed\n");
         up(" <- process-owned page tables/code/stacks reclaimed; PMM baseline restored\n");
     } else {
+        up(" <- process lifecycle final teardown FAILED\n");
         up(" <- process memory accounting FAILED\n");
         up(" <- process frame reclamation FAILED\n");
     }
+
+    /* The persistent service must return to its caller after every turn, not
+     * hide a bounded loop inside one diagnostic. Two processes each yield
+     * once and exit on their next independently scheduled turn. */
+    static const u8_64 service_a[] = {
+        0xb8,1,0,0,0, 0xbb,'S',0,0,0, 0xcd,0x80,
+        0xb8,6,0,0,0, 0xcd,0x80,
+        0xb8,1,0,0,0, 0xbb,'1',0,0,0, 0xcd,0x80,
+        0xbb,11,0,0,0, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    static const u8_64 service_b[] = {
+        0xb8,1,0,0,0, 0xbb,'T',0,0,0, 0xcd,0x80,
+        0xb8,6,0,0,0, 0xcd,0x80,
+        0xb8,1,0,0,0, 0xbb,'2',0,0,0, 0xcd,0x80,
+        0xbb,22,0,0,0, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int service_ready = process64_service_ready();
+    int service_a_ok = service_ready &&
+        user64_load_process(0, 31, service_a, sizeof service_a);
+    int service_b_ok = service_a_ok &&
+        user64_load_process(1, 32, service_b, sizeof service_b);
+    process_lifecycle_handle service_a_handle =
+        service_a_ok ? procs64[0].lifecycle_handle : 0;
+    process_lifecycle_handle service_b_handle =
+        service_b_ok ? procs64[1].lifecycle_handle : 0;
+    int service_admitted = service_b_ok &&
+        user_process_service_admit(&proc_service, service_a_handle) ==
+            USER_PROCESS_SERVICE_OK &&
+        user_process_service_admit(&proc_service, service_b_handle) ==
+            USER_PROCESS_SERVICE_OK;
+    user64_sched_trace_n = 0;
+    user64_sched_trace_on = 1;
+    int service_turns = service_admitted;
+    for (int i = 0; i < 4 && service_turns; i++)
+        service_turns &= user64_service_work() == 1;
+    user64_sched_trace_on = 0;
+    struct scheduler_policy_snapshot service_a_policy;
+    struct scheduler_policy_snapshot service_b_policy;
+    int service_terminal = service_turns &&
+        user64_sched_trace_n == 4 &&
+        user64_sched_trace[0] == 'S' && user64_sched_trace[1] == 'T' &&
+        user64_sched_trace[2] == '1' && user64_sched_trace[3] == '2' &&
+        process64_lifecycle_contract(0) &&
+        process64_lifecycle_contract(1) &&
+        procs64[0].state == PROCESS_LIFECYCLE_EXITED &&
+        procs64[0].exit_status == 11 &&
+        procs64[1].state == PROCESS_LIFECYCLE_EXITED &&
+        procs64[1].exit_status == 22 &&
+        scheduler_policy_snapshot(&proc_service.scheduler, service_a_handle,
+                                  &service_a_policy) == SCHEDULER_POLICY_OK &&
+        scheduler_policy_snapshot(&proc_service.scheduler, service_b_handle,
+                                  &service_b_policy) == SCHEDULER_POLICY_OK &&
+        service_a_policy.state == SCHEDULER_POLICY_EXITED &&
+        service_b_policy.state == SCHEDULER_POLICY_EXITED &&
+        proc_service.work_calls == 4;
+    int service_reaped = service_terminal &&
+        user64_service_reap(0) == 0 && user64_service_reap(1) == 0 &&
+        user64_service_count() == 0 && !process64_service_has_owners() &&
+        process64_lifecycle_empty() &&
+        user_process_service_check(&proc_service) == USER_PROCESS_SERVICE_OK &&
+        pmm_used_pages() == process_frame_baseline && !pmm_check();
+    if (service_reaped)
+        up(" <- persistent service scheduled ST12 across four kernel turns; exact exit custody reaped\n");
+    else
+        up(" <- persistent user-process service FAILED\n");
 }
 
 __asm__(
@@ -1593,7 +1957,7 @@ __asm__(
     "  .byte 0xb8,1,0,0,0, 0xcd,0x80\n"
     "  .byte 0xb8,5,0,0,0, 0xcd,0x80\n"
     "  .byte 0xb8,6,0,0,0, 0xcd,0x80\n"
-    "  .byte 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b\n"
+    "  .byte 0xbb,0xf9,0xff,0xff,0xff, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b\n"
     ".globl user64_blob_end\n"
     "user64_blob_end:\n"
     ".globl user64_anon_probe\n"

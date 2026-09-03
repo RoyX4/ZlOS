@@ -3436,7 +3436,9 @@ fn help_typed() {
     print("    cpu               the processor: CPUID, topology, caches, TSC clock")
     print("    nvme              NVMe disk - identify, then write and read a block back")
     print("    sched             multitasking - three tasks running beside the shell")
-    print("    userexec          run /system/user.bin isolated in 64-bit Ring 3")
+    print("    userexec          start /system/user.bin in persistent 64-bit Ring 3")
+    print("    userps            list persistent Ring-3 process slots")
+    print("    userreap N        release a finished Ring-3 process slot")
     print("    smp               wake the other CPU cores with INIT/STARTUP IPIs")
     print("    usbstor           USB mass storage - SCSI over USB, read a sector")
     print("    diag              flight recorder status (USB or RAM-only)")
@@ -4960,19 +4962,71 @@ fn run_command(cmd, arg) {
             color(C_RED)  print("    no positively identified zlfs volume")
             color(C_GREY) return 0
         }
-        ur = user_file()
-        if ur == 0 {
-            color(C_GREEN) print("    /system/user.bin exited; desktop alive")
+        ur = user_spawn()
+        if ur > 0 {
+            color(C_GREEN)
+            put("    started /system/user.bin as pid ")  print(ur)
+            color(C_GREY)
+            print("    use userps to observe it and userreap N after exit/fault")
         } else {
             color(C_RED)
             if ur == 0 - 2 { print("    /system/user.bin does not exist") } else {
                 if ur == 0 - 3 { print("    image must be 1..4096 raw x86-64 bytes") } else {
-                    put("    process refused/faulted: ")  print(ur)
+                    if ur == 0 - 28 { print("    both persistent process slots are owned") } else {
+                        put("    process admission failed: ")  print(ur)
+                    }
                 }
             }
         }
         color(C_GREY)
         return 0
+    }
+    if cmd == 130 {
+        color(C_CYAN)  print("  persistent Ring-3 processes")
+        color(C_GREY)
+        ui = 0
+        un = 0
+        while ui < 2 {
+            us = user_state(ui)
+            if us > 0 {
+                put("    slot ")  put(ui + 1)  put(": pid ")  put(user_pid(ui))
+                if us == 1 { print(" runnable") }
+                if us == 2 { print(" exited; ready to reap") }
+                if us == 3 { print(" faulted; ready to reap") }
+                un = un + 1
+            }
+            ui = ui + 1
+        }
+        if un == 0 { print("    empty") }
+        uf = user_fail()
+        if uf != 0 {
+            color(C_RED)  put("    scheduler fail-stop status: ")  print(uf)
+            color(C_GREY)
+        }
+        return un
+    }
+    if cmd == 131 {
+        color(C_CYAN)  print("  reap Ring-3 process")
+        color(C_GREY)
+        if arg < 1 {
+            color(C_RED)  print("    choose slot 1 or 2")
+            color(C_GREY) return 0 - 22
+        }
+        if arg > 2 {
+            color(C_RED)  print("    choose slot 1 or 2")
+            color(C_GREY) return 0 - 22
+        }
+        ur = user_reap(arg - 1)
+        if ur == 0 {
+            color(C_GREEN)  put("    released slot ")  print(arg)
+        } else {
+            color(C_RED)
+            if ur == 0 - 11 { print("    process is still runnable") } else {
+                put("    reap refused: ")  print(ur)
+            }
+        }
+        color(C_GREY)
+        return ur
     }
     if cmd == 202 {                       # wifi - safe AX201 transport inventory
         color(C_CYAN)  print("  Intel AX201 Wi-Fi transport")
@@ -14321,7 +14375,7 @@ fn wm_session() {
         wm_report(wi)
         wi = wi + 1
     }
-    while wm_run() == 1 { wm_frame()  blk_work()  dhcp_work()  idle() }
+    while wm_run() == 1 { wm_frame()  blk_work()  dhcp_work()  user_work()  idle() }
     con_mute(0)
     return 0
 }
@@ -14705,7 +14759,7 @@ last_blink = 0 - 1
 if wm_boot == 1 {
     # One block of writeback per wake, outside wm_frame: filesystem mutations
     # in an input callback only dirty WB RAM and never wait on NVMe there.
-    while wm_run() == 1 { wm_frame()  blk_work()  dhcp_work()  idle() }
+    while wm_run() == 1 { wm_frame()  blk_work()  dhcp_work()  user_work()  idle() }
     con_mute(0)                          # the halting message goes on screen
     running = 0
 }
@@ -14721,6 +14775,7 @@ while running == 1 {
     got = 0
     while got == 0 {
         dhcp_work()
+        user_work()
         tk = ticks()
 
         # clock + text-cursor blink
