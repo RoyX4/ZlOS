@@ -28,6 +28,7 @@ Continuous integration, boot, documentation, and scheduled workflows.
 - `boot.yml`
 - `desktop-shot.yml`
 - `docs.yml`
+- `full-closure.yml`
 - `gates.yml`
 - `nightly.yml`
 - `review.yml`

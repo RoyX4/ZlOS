@@ -14,6 +14,7 @@ VERIFY_NET = Path(__file__).resolve().parent / "verify-net.sh"
 REQUIRED_SNIPPETS = (
     'run "mandatory boot prerequisites"',
     'run "contained gate launcher contract"',
+    'run "hosted gate launcher contract"',
     'python3 tools/checks/check-land-gate.py --selftest',
     'run "QEMU crash classifier"',
     'run "wrapper inventory write"',

@@ -5,18 +5,31 @@
 # tree that did not link gated green.
 #
 # Do not invoke this file directly. `run-land-gate-contained.sh start` is the
-# only supported entry point on the four-core development machine. It gives
-# the gate its own resource-bounded cgroup and preserves the desktop.
+# supported entry point on the four-core development machine. A disposable
+# GitHub-hosted runner may use `run-land-gate-hosted.sh`; self-hosted runners
+# are deliberately rejected so this path cannot silently consume Roy's PC.
 
 set -u
+WT="${1:-$(git rev-parse --show-toplevel)}"
+WT=$(cd "$WT" && pwd) || exit 2
 cgroup_path=$(awk -F: '$1 == "0" { print $3 }' /proc/$$/cgroup)
-if [ "${ZLOS_CONTAINED_GATE:-}" != "1" ] || \
-   [[ "$cgroup_path" != *"/zlos-master-land-gate.service" ]]; then
+if [ "${ZLOS_CONTAINED_GATE:-}" = "1" ] && \
+   [[ "$cgroup_path" == *"/zlos-master-land-gate.service" ]]; then
+  GATE_MODE=contained-local
+elif [ "${ZLOS_HOSTED_GATE:-}" = "1" ] && \
+     [ "${GITHUB_ACTIONS:-}" = "true" ] && \
+     [ "${CI:-}" = "true" ] && \
+     [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ] && \
+     [ "${RUNNER_OS:-}" = "Linux" ] && \
+     [ -n "${GITHUB_RUN_ID:-}" ] && \
+     [ "${ZLOS_HOSTED_GATE_RUN_ID:-}" = "$GITHUB_RUN_ID" ] && \
+     [ "${ZLOS_HOSTED_GATE_WORKSPACE:-}" = "$WT" ]; then
+  GATE_MODE=github-hosted
+else
   echo "land-gate: refusing unrestricted execution" >&2
-  echo "use: gates/run-land-gate-contained.sh start" >&2
+  echo "use the contained local or GitHub-hosted launcher" >&2
   exit 2
 fi
-WT="${1:-$(git rev-parse --show-toplevel)}"
 cd "$WT" || exit 2
 
 FAIL=0
@@ -42,13 +55,17 @@ guard() {
   mem=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
   # The 2026-08-24 desktop freeze had no surviving OOM or panic record. Guard
   # both load and memory without pretending either was the sole cause.
-  if awk "BEGIN{exit !($la > 3.0)}"; then echo "load $la > 3.0 — waiting"; return 1; fi
+  if [ "$GATE_MODE" = "contained-local" ] && \
+     awk "BEGIN{exit !($la > 3.0)}"; then
+    echo "load $la > 3.0 — waiting"; return 1
+  fi
   if [ "$mem" -lt 3000 ]; then echo "available memory ${mem}MB < 3000 — waiting"; return 1; fi
   if pgrep '^qemu-system' >/dev/null; then echo "a qemu is already running — waiting"; return 1; fi
   return 0
 }
 
 echo "gate: $WT @ $(git rev-parse --short HEAD)"
+echo "mode: $GATE_MODE"
 echo "load: $(cut -d' ' -f1-3 /proc/loadavg)   avail: $(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)MB"
 
 # Individual boot scripts remain useful on reduced developer machines and may
@@ -59,6 +76,8 @@ run "mandatory boot prerequisites" "$WT/kernel" \
     python3 tools/checks/check-boot-prereqs.py --selftest
 run "contained gate launcher contract" "$WT/gates" \
     python3 check-contained-gate.py --selftest
+run "hosted gate launcher contract" "$WT/gates" \
+    bash -n run-land-gate-hosted.sh
 run "landing authority closure" "$WT/kernel" \
     python3 tools/checks/check-land-gate.py --selftest
 run "QEMU crash classifier" "$WT/kernel" \

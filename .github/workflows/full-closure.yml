@@ -1,0 +1,103 @@
+name: hosted full closure
+
+# The complete sequential landing gate on a disposable Kali runner. This is
+# intentionally manual in the final form because it hydrates about 1.5 GiB of
+# exact binary/source archives and runs every host and QEMU evidence lane.
+# The feature-branch push trigger exists only to prove the workflow before it
+# reaches main; it is removed after that first remote proof.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/persistent-user-scheduler]
+
+permissions:
+  contents: read
+
+jobs:
+  closure:
+    name: all 906-feature evidence lanes except physical hardware
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    container:
+      image: kalilinux/kali-rolling:latest
+      options: --cpus 2 --memory 6g --memory-swap 8g --pids-limit 384
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install the measured Kali toolchain
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            ca-certificates curl git build-essential gcc-multilib \
+            clang llvm lld nasm binutils \
+            qemu-system-x86 ovmf \
+            mtools dosfstools gdisk parted \
+            xorriso grub-pc-bin grub-efi-amd64-bin \
+            python3 python3-pil imagemagick \
+            procps coreutils util-linux tar zstd
+          printf '%s\n' \
+            'Types: deb deb-src' \
+            'URIs: http://http.kali.org/kali' \
+            'Suites: kali-rolling' \
+            'Components: main contrib non-free non-free-firmware' \
+            'Signed-By: /usr/share/keyrings/kali-archive-keyring.gpg' \
+            > /etc/apt/sources.list.d/kali.sources
+
+      - name: prove the hosted runner contract
+        run: bash gates/run-land-gate-hosted.sh doctor
+
+      - name: bind the dependency archive key to this runner
+        id: prepare
+        run: bash gates/run-land-gate-hosted.sh prepare
+
+      - name: restore the exact dependency archive
+        id: archive-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/zlos-dependency-cache
+          key: zlos-kali-dependency-archive-${{ steps.prepare.outputs.dependency-lock-sha256 }}
+
+      - name: hydrate and verify binary plus source custody
+        run: bash gates/run-land-gate-hosted.sh hydrate
+
+      - name: retain the exact dependency archive off the laptop
+        if: steps.archive-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/zlos-dependency-cache
+          key: zlos-kali-dependency-archive-${{ steps.prepare.outputs.dependency-lock-sha256 }}
+
+      - name: run the complete sequential landing gate
+        run: |
+          set -o pipefail
+          bash gates/run-land-gate-hosted.sh gate 2>&1 | tee hosted-full-closure.log
+
+      - name: record generated evidence state
+        if: always()
+        run: |
+          git status --short > hosted-full-closure-status.txt
+          git diff --stat > hosted-full-closure-diffstat.txt
+
+      - name: retain hosted proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-full-closure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            hosted-full-closure.log
+            hosted-full-closure-status.txt
+            hosted-full-closure-diffstat.txt
+            docs/program/FEATURE-STATUS.json
+            docs/program/FEATURE-STATUS.md
+            docs/program/PARTIAL-CLOSURE.json
+            docs/program/PARTIAL-CLOSURE.md
+            kernel/docs/receipts/
+            kernel/docs/evidence/current-visuals-2026-08-29/
+            kernel/metadata/
+          if-no-files-found: warn
