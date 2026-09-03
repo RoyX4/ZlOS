@@ -166,6 +166,10 @@ def main():
     parser.add_argument("--receipt", default=DEFAULT_RECEIPT)
     args = parser.parse_args()
 
+    accelerated = os.access("/dev/kvm", os.R_OK | os.W_OK)
+    key_settle = 0.12 if accelerated else 0.8
+    focus_settle = 0.5 if accelerated else 5.0
+
     if not args.no_build:
         build(True)
 
@@ -183,7 +187,8 @@ def main():
 
     def check(label, passed, detail=""):
         state = "ok  " if passed else "FAIL"
-        print(f"  {state}  {label}{('   ' + detail) if detail else ''}")
+        print(f"  {state}  {label}{('   ' + detail) if detail else ''}",
+              flush=True)
         if not passed:
             failures.append(label)
 
@@ -213,24 +218,30 @@ def main():
         shell = tuple(int(value) for value in match.groups())
         check("native UEFI desktop reported the terminal rectangle", True)
 
-        qtype(qmp, ".\n")
+        qtype(qmp, ".\n", settle=key_settle)
         check("mount command reached the graphical terminal",
               transcript.expect("zlfs on NVMe", args.step_timeout))
         check("blank NVMe was formatted and mounted as zlfs",
               transcript.expect("mounted:", args.step_timeout))
 
-        qtype(qmp, "filemgr\n")
-        transcript.discard_pending()
+        qtype(qmp, "filemgr\n", settle=key_settle)
+        transcript.discard_pending(focus_settle)
 
-        qtype(qmp, "n")
-        qtype(qmp, NAME + "\n")
+        qtype(qmp, "n", settle=key_settle)
+        qtype(qmp, NAME + "\n", settle=key_settle)
         editor_open = transcript.expect("wm:lifecycle v=1 event=open", args.step_timeout)
         editor_is_app = transcript.expect(" app=12 ", args.step_timeout) if editor_open else False
+        editor_ready = transcript.expect(
+            "wm:lifecycle v=1 event=ready", args.step_timeout
+        ) if editor_is_app else False
+        editor_ready_app = transcript.expect(
+            " app=12 ", args.step_timeout
+        ) if editor_ready else False
         check("Files created the external image and opened the disk editor",
-              editor_open and editor_is_app)
+              editor_open and editor_is_app and editor_ready and editor_ready_app)
 
-        qtype(qmp, BODY)
-        transcript.discard_pending()
+        qtype(qmp, BODY, settle=key_settle)
+        transcript.discard_pending(focus_settle)
         qmp.sendkey("esc")
         editor_close = transcript.expect("wm:lifecycle v=1 event=close", args.step_timeout)
         editor_close_app = transcript.expect(" app=12 ", args.step_timeout) if editor_close else False
@@ -244,28 +255,28 @@ def main():
         sx, sy, sw, sh = shell
         click(qmp, sx + min(80, max(8, sw // 3)), sy + min(80, max(8, sh // 3)),
               width, height)
-        transcript.discard_pending()
+        transcript.discard_pending(focus_settle)
 
-        qtype(qmp, "ls\n")
+        qtype(qmp, "ls\n", settle=key_settle)
         check("external image is present in zlfs",
               transcript.expect(NAME, args.step_timeout))
         check("external image has the expected four bytes",
               transcript.expect("4 bytes", args.step_timeout))
 
-        qtype(qmp, "userexec\n")
+        qtype(qmp, "userexec\n", settle=key_settle)
         check("userexec admitted an external file-backed process",
               transcript.expect("started /system/user.bin as pid 1000", args.step_timeout))
 
-        qtype(qmp, "userps\n")
+        qtype(qmp, "userps\n", settle=key_settle)
         check("invalid user bytes faulted only their Ring-3 process",
               transcript.expect("slot 1: pid 1000 faulted; ready to reap",
                                 args.step_timeout))
 
-        qtype(qmp, "userreap 1\n")
+        qtype(qmp, "userreap 1\n", settle=key_settle)
         check("userreap released the exact terminal slot",
               transcript.expect("released slot 1", args.step_timeout))
 
-        qtype(qmp, "userps\n")
+        qtype(qmp, "userps\n", settle=key_settle)
         check("process table is empty after reap",
               transcript.expect("persistent Ring-3 processes", args.step_timeout) and
               transcript.expect("empty", args.step_timeout))
