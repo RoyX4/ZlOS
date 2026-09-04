@@ -514,6 +514,7 @@ static struct scheduler_policy_slot proc_scheduler_slots[U64_PROCS];
 static struct user_process_service proc_service;
 static int proc_service_initialized;
 static int proc_service_last_error;
+static int proc_service_reap_stage;
 static u32 proc_service_next_pid = 1000;
 static u8_64 proc_io[U64_PROCS][U64_IO_MAX];
 static u32 proc_kstack_last_used[U64_PROCS];
@@ -1385,9 +1386,11 @@ int user64_service_last_failure(void) { return proc_service_last_error; }
 
 int user64_service_reap(int index)
 {
+    proc_service_reap_stage = 0;
     if (index < 0 || index >= U64_PROCS) return -22;
     struct process64 *process = &procs64[index];
     if (!process->lifecycle_handle) return -2;
+    proc_service_reap_stage = 1;
     struct process_lifecycle_snapshot snapshot;
     int status = process_lifecycle_observe(
         &proc_lifecycle, PROCESS_LIFECYCLE_INVALID_HANDLE,
@@ -1395,10 +1398,12 @@ int user64_service_reap(int index)
     if (status == PROCESS_LIFECYCLE_E_PENDING) return -11;
     if (status != PROCESS_LIFECYCLE_OK) return -5;
 
+    proc_service_reap_stage = 2;
     struct scheduler_policy_snapshot policy;
     status = scheduler_policy_snapshot(&proc_service.scheduler,
                                        process->lifecycle_handle, &policy);
     if (status == SCHEDULER_POLICY_OK) {
+        proc_service_reap_stage = 3;
         if (user_process_service_detach_terminal(
                 &proc_service, process->lifecycle_handle) !=
             USER_PROCESS_SERVICE_OK)
@@ -1406,7 +1411,10 @@ int user64_service_reap(int index)
     } else if (status != SCHEDULER_POLICY_E_NOT_FOUND) {
         return -5;
     }
-    return process64_release_slot(index) ? 0 : -5;
+    proc_service_reap_stage = 4;
+    if (!process64_release_slot(index)) return -5;
+    proc_service_reap_stage = 5;
+    return 0;
 }
 
 static int user64_run_probe(const u8_64 *code, u32 bytes)
@@ -1958,7 +1966,9 @@ void user_selftest(void)
     /* Cleanup is part of the diagnostic contract, including on a failed
      * assertion. Never strand its test processes for the command service. */
     int service_a_reaped = service_a_ok && user64_service_reap(0) == 0;
+    int service_a_reap_stage = proc_service_reap_stage;
     int service_b_reaped = service_b_ok && user64_service_reap(1) == 0;
+    int service_b_reap_stage = proc_service_reap_stage;
     int service_reaped = service_terminal && service_a_reaped &&
         service_b_reaped &&
         user64_service_count() == 0 && !process64_service_has_owners() &&
@@ -1967,8 +1977,15 @@ void user_selftest(void)
         pmm_used_pages() == process_frame_baseline && !pmm_check();
     if (service_reaped)
         up(" <- persistent service scheduled ST12 across four kernel turns; exact exit custody reaped\n");
-    else
+    else {
         up(" <- persistent user-process service FAILED\n");
+        up("  service diagnostics: terminal="); upu((u32)service_terminal);
+        up(" reap-a="); upu((u32)service_a_reaped);
+        up(" stage-a="); upu((u32)service_a_reap_stage);
+        up(" reap-b="); upu((u32)service_b_reaped);
+        up(" stage-b="); upu((u32)service_b_reap_stage);
+        up(" remaining="); upu((u32)user64_service_count()); up("\n");
+    }
 }
 
 __asm__(

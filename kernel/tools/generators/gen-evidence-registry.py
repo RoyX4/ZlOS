@@ -586,7 +586,7 @@ def build() -> dict:
             or pmm_assertions[0].get("free_pages_after_selftest") != \
                 pmm_assertions[0].get("admitted_pages") \
             or pmm_assertions[1].get("wrong_owner_refused_without_mutation") is not True \
-            or pmm_assertions[2].get("host_exhaustion_observed") is not True \
+            or pmm_assertions[3].get("host_exhaustion_observed") is not True \
             or pmm_assertions[4].get("frames_per_process") != 8 \
             or pmm_assertions[4].get("two_processes_disjoint") is not True \
             or pmm_assertions[4].get("failure_atomic_acquire") is not True \
