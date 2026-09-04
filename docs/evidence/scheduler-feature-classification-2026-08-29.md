@@ -43,7 +43,7 @@ QEMU run records four assertions:
 | cooperative context resume | two separate PML4/kernel-stack contexts produce `AB12` and exit independently |
 | timer preemption | two non-yielding Ring 3 loops are interrupted at least twice and produce `PQ` |
 | fault containment | one process takes vector 13 while its sibling produces `K` and exits |
-| persistent service | four separate kernel work calls produce fair trace `ST12`, retain exits 11/22, detach both scheduler owners, reap both identities and restore the PMM baseline |
+| persistent service | four separate cooperative kernel work calls produce round-robin trace `ST12`, retain exits 11/22, detach both scheduler owners, reap both identities and restore the PMM baseline; the separate `PQ` assertion proves timer preemption |
 
 The command-route receipt separately creates an external four-byte
 `/system/user.bin` through Files and the editor, starts PID 1000, observes its

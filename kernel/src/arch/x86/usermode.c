@@ -515,6 +515,7 @@ static struct user_process_service proc_service;
 static int proc_service_initialized;
 static int proc_service_last_error;
 static int proc_service_reap_stage;
+static int proc_service_preemptible = 1;
 static u32 proc_service_next_pid = 1000;
 static u8_64 proc_io[U64_PROCS][U64_IO_MAX];
 static u32 proc_kstack_last_used[U64_PROCS];
@@ -1255,7 +1256,7 @@ static int process64_service_step(
         !process64_lifecycle_contract(index))
         return -1;
     u32 before = idt_ticks();
-    user64_preempt_on = 1;
+    user64_preempt_on = proc_service_preemptible;
     (void)user64_step(index);
     user64_preempt_on = 0;
     *elapsed_ticks = (u32)(idt_ticks() - before);
@@ -1908,8 +1909,8 @@ void user_selftest(void)
     }
 
     /* The persistent service must return to its caller after every turn, not
-     * hide a bounded loop inside one diagnostic. Two processes each yield
-     * once and exit on their next independently scheduled turn. */
+     * hide a bounded loop inside one diagnostic. This exact four-turn oracle
+     * is cooperative; timer preemption is exercised independently above. */
     static const u8_64 service_a[] = {
         0xb8,1,0,0,0, 0xbb,'S',0,0,0, 0xcd,0x80,
         0xb8,6,0,0,0, 0xcd,0x80,
@@ -1939,9 +1940,11 @@ void user_selftest(void)
             USER_PROCESS_SERVICE_OK;
     user64_sched_trace_n = 0;
     user64_sched_trace_on = 1;
+    proc_service_preemptible = 0;
     int service_turns = service_admitted;
     for (int i = 0; i < 4 && service_turns; i++)
         service_turns &= user64_service_work() == 1;
+    proc_service_preemptible = 1;
     user64_sched_trace_on = 0;
     struct scheduler_policy_snapshot service_a_policy;
     struct scheduler_policy_snapshot service_b_policy;
@@ -1976,7 +1979,7 @@ void user_selftest(void)
         user_process_service_check(&proc_service) == USER_PROCESS_SERVICE_OK &&
         pmm_used_pages() == process_frame_baseline && !pmm_check();
     if (service_reaped)
-        up(" <- persistent service scheduled ST12 across four kernel turns; exact exit custody reaped\n");
+        up(" <- persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped\n");
     else {
         up(" <- persistent user-process service FAILED\n");
         up("  service diagnostics: terminal="); upu((u32)service_terminal);

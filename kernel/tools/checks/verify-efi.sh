@@ -235,8 +235,8 @@ else
         grep -E "process lifecycle slots reaped|process lifecycle final teardown" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
-    if grep -q "persistent service scheduled ST12 across four kernel turns; exact exit custody reaped" "$LOG"; then
-        echo "  ok    persistent Ring-3 service returned across four fair kernel turns and reaped exact exits"
+    if grep -q "persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped" "$LOG"; then
+        echo "  ok    persistent Ring-3 service returned across four cooperative kernel turns and reaped exact exits"
     else
         echo "  FAIL  persistent user-process service proof missing or failed"
         grep -E "persistent service scheduled|persistent user-process service" "$LOG" | tail -3 | sed 's/^/          /'
