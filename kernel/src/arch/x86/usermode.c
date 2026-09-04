@@ -1915,6 +1915,7 @@ void user_selftest(void)
         0xbb,22,0,0,0, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
     };
     int service_ready = process64_service_ready();
+    u64 service_work_before = proc_service.work_calls;
     int service_a_ok = service_ready &&
         user64_load_process(0, 31, service_a, sizeof service_a);
     int service_b_ok = service_a_ok &&
@@ -1952,7 +1953,8 @@ void user_selftest(void)
                                   &service_b_policy) == SCHEDULER_POLICY_OK &&
         service_a_policy.state == SCHEDULER_POLICY_EXITED &&
         service_b_policy.state == SCHEDULER_POLICY_EXITED &&
-        proc_service.work_calls == 4;
+        proc_service.work_calls >= service_work_before &&
+        proc_service.work_calls - service_work_before == 4;
     int service_reaped = service_terminal &&
         user64_service_reap(0) == 0 && user64_service_reap(1) == 0 &&
         user64_service_count() == 0 && !process64_service_has_owners() &&
