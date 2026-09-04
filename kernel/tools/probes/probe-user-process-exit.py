@@ -184,6 +184,11 @@ def main():
         if not passed:
             print(transcript[-2500:])
             return 1
+        if "persistent user-process service FAILED" in transcript:
+            print("  FAIL  boot-time persistent process service self-check", flush=True)
+            print(transcript[-2500:])
+            return 1
+        print("  ok    boot-time persistent process service self-check", flush=True)
 
         qtype(qmp, ".\n", settle=key_settle)
         expect(serial, "preseeded zlfs volume mounted", "mounted:")

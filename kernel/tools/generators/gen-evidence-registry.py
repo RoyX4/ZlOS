@@ -577,18 +577,21 @@ def build() -> dict:
                 input_path("tests/host/test-run-receipt.json")) \
             or pmm.get("host_receipt", {}).get("target") != "pmmtest" \
             or pmm.get("host_receipt", {}).get("checks", 0) < 80 \
-            or len(pmm_assertions) != 4 \
+            or [row.get("id") for row in pmm_assertions] != [
+                "bounded-firmware-map-admission", "typed-owner-release",
+                "exact-owner-accounting-and-quota", "zero-reuse-and-exhaustion",
+                "typed-process-and-anonymous-consumer"] \
             or pmm_assertions[0].get("managed_floor_bytes") != 320 * 1024 * 1024 \
             or pmm_assertions[0].get("managed_limit_bytes") != 1024 * 1024 * 1024 \
             or pmm_assertions[0].get("free_pages_after_selftest") != \
                 pmm_assertions[0].get("admitted_pages") \
             or pmm_assertions[1].get("wrong_owner_refused_without_mutation") is not True \
             or pmm_assertions[2].get("host_exhaustion_observed") is not True \
-            or pmm_assertions[3].get("frames_per_process") != 8 \
-            or pmm_assertions[3].get("two_processes_disjoint") is not True \
-            or pmm_assertions[3].get("failure_atomic_acquire") is not True \
-            or pmm_assertions[3].get("target_baseline_restored") is not True \
-            or len(pmm.get("known_gaps", [])) != 6:
+            or pmm_assertions[4].get("frames_per_process") != 8 \
+            or pmm_assertions[4].get("two_processes_disjoint") is not True \
+            or pmm_assertions[4].get("failure_atomic_acquire") is not True \
+            or pmm_assertions[4].get("target_baseline_restored") is not True \
+            or len(pmm.get("known_gaps", [])) != 7:
         raise ValueError("physical allocator evidence is missing or overpromoted")
     if hardware.get("result") != "READY_FOR_PHYSICAL_EXECUTION_WITHOUT_RECEIPTS" \
             or hardware.get("physical_status") != "NOT_RUN" \

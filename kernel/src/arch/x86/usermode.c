@@ -1955,8 +1955,12 @@ void user_selftest(void)
         service_b_policy.state == SCHEDULER_POLICY_EXITED &&
         proc_service.work_calls >= service_work_before &&
         proc_service.work_calls - service_work_before == 4;
-    int service_reaped = service_terminal &&
-        user64_service_reap(0) == 0 && user64_service_reap(1) == 0 &&
+    /* Cleanup is part of the diagnostic contract, including on a failed
+     * assertion. Never strand its test processes for the command service. */
+    int service_a_reaped = service_a_ok && user64_service_reap(0) == 0;
+    int service_b_reaped = service_b_ok && user64_service_reap(1) == 0;
+    int service_reaped = service_terminal && service_a_reaped &&
+        service_b_reaped &&
         user64_service_count() == 0 && !process64_service_has_owners() &&
         process64_lifecycle_empty() &&
         user_process_service_check(&proc_service) == USER_PROCESS_SERVICE_OK &&
