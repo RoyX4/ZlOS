@@ -35,6 +35,7 @@ Deterministic static, host, image, and boot verification entry points.
 - `check-header-mirror-selftest.sh`
 - `check-header-mirror.py`
 - `check-himap.sh`
+- `check-isr-sse.sh`
 - `check-land-gate.py`
 - `check-memmap-mirror-selftest.sh`
 - `check-memmap-mirror.py`

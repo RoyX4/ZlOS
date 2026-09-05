@@ -29,6 +29,12 @@ _none — every file the docs describe is tracked._
 
 _none open._
 
+## Open pull requests
+
+- [ ] #14 fix: preserve pending documentation during generation  `codex/cleanup-todo-atomic`
+- [ ] #13 feat: add bounded sleep for persistent user processes  `codex/process-sleep`
+- [ ] #12 feat: add persistent bounded user process service  `codex/persistent-user-scheduler`
+
 ---
 
 <!-- BEGIN HAND-WRITTEN -->

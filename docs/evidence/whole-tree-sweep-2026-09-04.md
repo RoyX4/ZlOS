@@ -81,7 +81,7 @@ returns.
 | I2 MEDIUM | Device-supplied `wMaxPacketSize` (up to 1024) was the DMA permit length for 256/64-byte buffers. | `xhci.c` | - |
 | I3 MEDIUM | `xhci_port_reset`'s "pure delay" was `wait_bit` on an impossible mask and logged an ERROR xHCI timeout on every successful reset. | `xhci.c` | - |
 | W1 HIGH | JS parser depth guard covered `(` and `{` only; ~1,500 `[` or a run of `!` in a `<script>` overflowed the 256 KiB stack at parse time. Old parser: SIGSEGV under `ulimit -s 256`; new: 58/58. | `web/js.c` | `jstest` six `deep()` cases |
-| U1 MEDIUM | Six `uitest` checks passed the VALUE to `oknum` instead of a condition (any nonzero answer was green; a knob not drawn at all passed "sits at inset 1"). | `tests/host/uitest.c` | the checks themselves |
+| U1 MEDIUM | Six `uitest` checks passed the VALUE to `oknum` instead of a condition (any nonzero answer was green; a knob not drawn at all passed "sits at inset 1"). | `kernel/tests/host/uitest.c` | the checks themselves |
 | U2 MEDIUM | Snake body length unbounded; the 513th segment's shift wrote `SNAKE_X[512]` = `SNAKE_Y[0]`. | `kernel.zl` | - |
 | U3 MEDIUM | `fill_mem`/`copy_mem` took any count; -1 was 2^64 bytes. Refused past 4 MiB. | `freestanding/runtime_kernel.c` | - |
 | U4 LOW | `SNAP_WINDOWS` was a second copy of `WM_MAX`. | `graphics/ui/snap.c` | compile |
@@ -111,14 +111,14 @@ returns.
 | P2 MEDIUM | Calculator: a second `=` zeroed the result; HEX/OCTAL/BINARY rows drew garbage glyphs for a negative value (`-5 % 16` is -5 in kernel arithmetic). | `apps_system.zl` | - |
 | P3 MEDIUM | Sokoban recorded moves only while the undo record had room, so after 512 moves an undo walked back the wrong move (crate left in place, shown on the host harness). Oldest entry now dropped. | `apps/apps_games4.zl` | `games4_rules` |
 | P4 MEDIUM | The keyboard tester logged a wheel-down notch as type "-" code 65535 (signed notch packed into an unsigned field). | `apps/apps_utils.zl` | - |
-| P5 MEDIUM | The two zl rule harnesses (244 checks over the games) were documented with a cwd that cannot resolve their imports and were wired into nothing. `run-all.sh` runs them from `kernel/apps`. | `tests/host/run-all.sh` | themselves |
+| P5 MEDIUM | The two zl rule harnesses (244 checks over the games) were documented with a cwd that cannot resolve their imports and were wired into nothing. `run-all.sh` runs them from `kernel/apps`. | `kernel/tests/host/run-all.sh` | themselves |
 | P6 LOW | Connect Four dropped a piece on a click anywhere in the column, caption and status bar included; `cat_draw` and `s3du_mount` wrote through to the text shell's `crow`/`ccol`/`tk` globals; Settings opened 660 wide from one route and 720 from the other. | `apps_games1.zl`, `apps_registry.zl`, `apps_sys3.zl`, `kernel.zl` | - |
-| T1 HIGH | The three tests this sweep added were not in `test-policy.json`, so `run-host-tests.py` (the landing gate's runner) never executed them and the inventory check was red. | `tests/host/test-policy.json` | `gen-test-inventory.py --check` |
-| T2 HIGH | `check-isr-sse.sh` was blind past the first call level: under `-mcmodel=large` a call is `movabs; call *%rax` and the callee's name is only a relocation, which a plain `objdump -d` body never shows. Rewritten to read relocations, root at every `__attribute__((interrupt))` function plus the ring-0 timer dispatcher, walk three levels, skip data symbols; a two-level cross-TU plant now runs first. | `tools/checks/check-isr-sse.sh` | its own plants |
+| T1 HIGH | The three tests this sweep added were not in `test-policy.json`, so `run-host-tests.py` (the landing gate's runner) never executed them and the inventory check was red. | `kernel/tests/host/test-policy.json` | `gen-test-inventory.py --check` |
+| T2 HIGH | `check-isr-sse.sh` was blind past the first call level: under `-mcmodel=large` a call is `movabs; call *%rax` and the callee's name is only a relocation, which a plain `objdump -d` body never shows. Rewritten to read relocations, root at every `__attribute__((interrupt))` function plus the ring-0 timer dispatcher, walk three levels, skip data symbols; a two-level cross-TU plant now runs first. | `kernel/tools/checks/check-isr-sse.sh` | its own plants |
 | T3 MEDIUM | `verify-iso.sh` and `verify-64.sh` printed `skip` (no colon, which no skip detector matches) for the UEFI leg and ended "gate green" after booting half their routes. Now `skip:` and red. | `verify-iso.sh`, `verify-64.sh` | - |
 | T4 MEDIUM | Three contract checkers were substring tests: the authority commented out still passed. Comments are stripped first. `check-ram.sh` was wired to nothing and red on four false positives (a `--version` probe on the next physical line, a route tuple, a dict key); fixed and in the landing gate with `check-dma.sh` and `wguard.sh`, which nothing ran either. | `gates/check-contained-gate.py`, `check-land-gate.py`, `check-build-contract.py`, `check-ram.sh`, `land-gate.sh` | their selftests |
-| T5 MEDIUM | `tlstest` printed a skip and returned 0 when openssl was missing; the inventory classes it a gate, so a box with no openssl recorded PASS. Red now. | `tests/host/tlstest.c` | - |
-| T6 LOW | `run-all.sh` never ran `jmptest32` (announced on a shared line); the reverse-SOURCES sweep matched bare basenames. | `tests/host/build.sh`, `land-gate.sh` | - |
+| T5 MEDIUM | `tlstest` printed a skip and returned 0 when openssl was missing; the inventory classes it a gate, so a box with no openssl recorded PASS. Red now. | `kernel/tests/host/tlstest.c` | - |
+| T6 LOW | `run-all.sh` never ran `jmptest32` (announced on a shared line); the reverse-SOURCES sweep matched bare basenames. | `kernel/tests/host/build.sh`, `land-gate.sh` | - |
 
 Still open from that wave: `zllogtest.c`, `zllog_e2e_test.py` and `dpll_test.c` exist and nothing builds or runs them (`gen-test-inventory.py` enumerates `.sh` only); the `--write` then `--check` pairs in the landing gate prove determinism, not that the committed registry was current; hardware skips roll up to a green label; CI boots four of nine routes; the docs-versus-tree corrections are in the same commit (see `GUARDS-THAT-DID-NOT-GUARD.md` §6 and the per-file dated corrections).
 
@@ -191,8 +191,8 @@ Final sequential chain on the finished branch (logs under
 
 | gate | result |
 |---|---|
-| `kernel/build.sh`, `build64.sh`, `buildefi.sh`, `tools/images/mkdisk.sh` | all exit 0 (the app manifest regenerated first) |
-| `tools/run/run-host-tests.py --run --selftest` (the landing gate's runner) | `PASS: commands_executed 74, failed 0, not-run 12, passed 69, skipped-hardware 3, targets 84` |
+| `kernel/build.sh`, `build64.sh`, `buildefi.sh`, `kernel/tools/images/mkdisk.sh` | all exit 0 (the app manifest regenerated first) |
+| `kernel/tools/run/run-host-tests.py --run --selftest` (the landing gate's runner) | `PASS: commands_executed 74, failed 0, not-run 12, passed 69, skipped-hardware 3, targets 84` |
 | `kernel/tests/host/run-all.sh` | `64 passed, 0 failed, 0 NOT BUILT, 13 skipped` (was 58/0/0/13 at the start of the day: three new C tests, the two zl rule harnesses, jmptest32) |
 | `./run_tests.sh` (language, self-host, freestanding, and its own BIOS / raw-bootloader / native-EFI QEMU gates) | exit 0, 78 ok/match lines, 0 FAIL |
 | `./verify_selfhost.sh`, `./verify_fmt.sh` | PASS (fixpoint gen1 == gen2; 175 files, 0 fail, NUL case included) |
@@ -210,7 +210,7 @@ No physical ThinkPad boot was performed.
 
 - Physical ThinkPad boot. Nothing here proves A2, A3, D1-D5 or I1-I3 on the
   laptop; the fake-BAR harness the display reviewer built is in a scratch
-  directory and should become `kernel/tests/host/modeset_fake.c`.
+  directory and should become a host test under `kernel/tests/host/` (a fake-BAR modeset harness).
 - Intel: PTE save/restore in teardown (only relocation landed); PSR restore
   order in teardown (suspected); `intel_dpll_program_*` and the AUX stack
   are still ungated - the CLAUDE.md table now says so.
