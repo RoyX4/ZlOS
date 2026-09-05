@@ -16,6 +16,13 @@ Run `python3 tools/test_todo.py` for the isolated failure-recovery checks, also
 run by the docs workflow. See the
 [cleanup repair receipt](../docs/evidence/TODO-ATOMIC-REPAIR-2026-09-05.md).
 
+`install-hooks.sh` generates a post-commit hook that skips automatic refresh
+when either managed document already has pending changes, including untracked
+files. It also skips when Git cannot report their state. Run
+`python3 tools/test_hooks.py` for disposable-repository and linked-worktree
+checks. Linked worktrees share installed hooks; changing the installer source
+does not replace an existing shared installation.
+
 ## Directory documentation
 
 `directory-docs.py` creates and verifies the eight-part documentation capsule in

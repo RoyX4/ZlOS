@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
-# install-hooks.sh - install the git hooks. Run once per clone or worktree.
+# install-hooks.sh - install the git hooks once per clone; worktrees share them.
 #
 #     tools/install-hooks.sh
 #
-# GitHub branch protection needs Pro on a private repo, so `main` cannot be
-# server-side gated here. This is the local substitute: the fast gates run
-# before a push, and a push that would go red is stopped before it leaves the
-# machine.
-#
-# It is deliberately only the FAST gates (~1 min, no emulator). A pre-push hook
-# that boots QEMU four times is a hook people uninstall.
+# Local preflight supplements hosted CI. It includes toolchain rebuilding and
+# the language gate, which can build and boot a kernel in QEMU. It is not a
+# metadata-only check; use hosted verification when the local machine is busy.
 #
 # Bypass when you mean to:  git push --no-verify
 
@@ -30,10 +26,10 @@ set -uo pipefail
 root=$(git rev-parse --show-toplevel)
 [ -x "$root/tools/preflight.sh" ] || exit 0
 
-echo "pre-push: running the fast gates (git push --no-verify to skip)"
+echo "pre-push: running repository preflight, including build/QEMU checks (git push --no-verify to skip)"
 if ! "$root/tools/preflight.sh"; then
     echo
-    echo "pre-push: BLOCKED - the fast gates are not clean."
+    echo "pre-push: BLOCKED - repository preflight is not clean."
     echo "  fix, or push anyway with:  git push --no-verify"
     exit 1
 fi
@@ -63,6 +59,17 @@ cd "$root" || exit 0
 [ -n "${ZL_HOOK_RUNNING:-}" ] && exit 0
 export ZL_HOOK_RUNNING=1
 
+# Existing pending files may belong to another agent or an unfinished edit.
+# Preserve them together; a successful commit is not ownership of their bytes.
+if ! pending=$(git status --porcelain --untracked-files=all -- docs/JOURNAL.md TODO.md); then
+    echo "post-commit: could not read pending documentation; refresh skipped." >&2
+    exit 0
+fi
+if [ -n "$pending" ]; then
+    echo "post-commit: preserving pending docs/JOURNAL.md or TODO.md; refresh skipped."
+    exit 0
+fi
+
 tools/journal.sh HEAD >/dev/null 2>&1
 tools/todo.sh        >/dev/null 2>&1
 docs=$(tools/doc-check.sh 2>&1)
@@ -87,8 +94,9 @@ chmod +x "$hooks_dir/post-commit"
 echo "installed: $hooks_dir/pre-push"
 echo "           $hooks_dir/post-commit"
 echo
-echo "  pre-push    runs tools/preflight.sh (~1 min, no emulator)"
+echo "  pre-push    runs tools/preflight.sh (includes build/QEMU work)"
 echo "              bypass with: git push --no-verify"
-echo "  post-commit appends to docs/JOURNAL.md, regenerates TODO.md, and warns"
+echo "  post-commit preserves pending managed docs; otherwise it appends to"
+echo "              docs/JOURNAL.md, regenerates TODO.md, and warns"
 echo "              if the docs stopped matching the tree. Never commits for you;"
 echo "              the refresh rides along with your next commit."
