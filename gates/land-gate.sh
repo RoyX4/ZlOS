@@ -285,6 +285,10 @@ run "normal-exit user-process command QEMU" "$WT/kernel" \
     python3 tools/probes/probe-user-process-exit.py --no-build \
     --receipt docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json
 await_guard || exit 2
+run "sleeping user-process command QEMU" "$WT/kernel" \
+    python3 tools/probes/probe-user-process-exit.py --no-build --sleep \
+    --receipt docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json
+await_guard || exit 2
 run "page-table QEMU receipt check" "$WT/kernel" \
     python3 tools/checks/write-page-table-receipt.py --check --selftest
 run "physical allocator QEMU receipt check" "$WT/kernel" \

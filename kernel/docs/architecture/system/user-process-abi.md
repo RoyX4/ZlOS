@@ -40,8 +40,8 @@ complete range before the kernel touches the first byte.
 The admitted number set is ABI version 1 in `user_syscalls.json` and the kernel
 consumes its generated header. The generator requires unique, ordered,
 positive numbers below the sign bit and rejects an undeclared gap in the
-current 1..24 range. Any unsigned value outside that set returns `-ENOSYS`;
-the target gate covers zero, 25, the sign bit and all bits set.
+current 1..25 range. Any unsigned value outside that set returns `-ENOSYS`;
+the target gate covers zero, 26, the sign bit and all bits set.
 
 | nr | operation | arguments | result |
 |---:|---|---|---|
@@ -69,6 +69,23 @@ the target gate covers zero, 25, the sign bit and all bits set.
 | 22 | anonymous reserve | `RBX=first-page RCX=page-count` | virtual base or negative errno |
 | 23 | anonymous commit | `RBX=first-page RCX=page-count` | 0 or negative errno |
 | 24 | anonymous release | `RBX=first-page RCX=page-count` | 0 or negative errno |
+| 25 | bounded sleep | `RBX=ticks RCX=0 RDX=0` | 0 after the process becomes eligible at its deadline |
+
+Sleep accepts 1 through `0x7fffffff` ticks (100 Hz), measured from the syscall's
+current tick. Zero, wider or ambiguous delays and nonzero reserved arguments
+return `-EINVAL` without yielding. Only a process currently dispatched by the
+persistent service may sleep; diagnostic processes outside that service receive
+`-EAGAIN`. The exact lifecycle handle owns the request. Its saved user register
+frame resumes at the instruction after `int 0x80`; waiting consumes no dispatch
+turns or charged run ticks. Deadline eligibility is wrap-safe and does not
+promise immediate execution, real-time latency, suspend semantics or cancellation.
+
+The host service checks cover tick wrap, maximum delay, sibling progress,
+unchanged idle output, exact runtime accounting and stale identity rejection.
+The added native-UEFI QEMU oracle exercises the Ring-3 syscall and resume path
+using injected scheduler timestamps. It must observe the `LSW` trace, independent
+exit statuses 33 and 44, no dispatch before the deadline and exact frame
+reclamation. This is not a wall-clock wake-latency or physical-hardware claim.
 
 Each process has exactly 32 anonymous page slots beginning at PTE 6. Reserve
 changes only the typed virtual state and consumes no physical frame. Commit

@@ -28,6 +28,7 @@
     {"number": 21, "constant": "U64_SYS_WIN_CLOSE", "name": "window-close"},
     {"number": 22, "constant": "U64_SYS_ANON_RESERVE", "name": "anonymous-reserve"},
     {"number": 23, "constant": "U64_SYS_ANON_COMMIT", "name": "anonymous-commit"},
-    {"number": 24, "constant": "U64_SYS_ANON_RELEASE", "name": "anonymous-release"}
+    {"number": 24, "constant": "U64_SYS_ANON_RELEASE", "name": "anonymous-release"},
+    {"number": 25, "constant": "U64_SYS_SLEEP", "name": "sleep"}
   ]
 }
