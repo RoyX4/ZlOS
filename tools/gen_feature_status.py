@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import copy
 import hashlib
 import json
@@ -1218,9 +1219,18 @@ def validate_pmm_receipt(receipt: dict, build_identity: str,
     host = receipt.get("host_receipt", {})
     if host.get("target") != "pmmtest" or host.get("checks", 0) < 80:
         raise ValueError("physical allocator host target binding drifted")
-    gaps = receipt.get("known_gaps", [])
-    if len(gaps) != 7 or not any("consumer" in gap for gap in gaps) \
-            or not any("physical" in gap for gap in gaps):
+    # The hashed receipt writer owns this contract. Read its literal declaration
+    # without executing code from an evidence directory or matching prose words.
+    writer = ast.parse((evidence_root /
+                       "kernel/tools/checks/write-pmm-receipt.py").read_text())
+    declarations = [node.value for node in writer.body
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name) and target.id == "KNOWN_GAPS"
+                        for target in node.targets)]
+    expected_gaps = ast.literal_eval(declarations[0]) if len(declarations) == 1 else ()
+    if not isinstance(expected_gaps, tuple) or len(expected_gaps) != 7 \
+            or not all(isinstance(gap, str) and gap for gap in expected_gaps) \
+            or receipt.get("known_gaps") != list(expected_gaps):
         raise ValueError("physical allocator receipt hides its open gaps")
 
 
