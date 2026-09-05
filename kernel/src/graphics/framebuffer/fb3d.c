@@ -23,9 +23,16 @@ extern void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb);
 /* an optional clip rectangle: the cube can project a near corner far past its
  * window under perspective, so the caller sets this to the viewport interior
  * and every filled span is clamped to it - no poking over the title bar. */
-static int cl_x0 = 0, cl_y0 = 0, cl_x1 = 1000000, cl_y1 = 1000000;
+/* Default clip is +-64K, not a million: nothing further off-screen changes a
+ * pixel, and every product below (`(x1 - x0) * (yy - y0)`, edge()) is int
+ * arithmetic that overflowed for hostile vertices (UBSan, 2026-09-04). The
+ * saturation helpers keep every coordinate this file computes with inside
+ * that range whatever the caller passes. */
+#define F3_LIM 8192     /* (2 * 8192)^2 * 2 < 2^31: the edge functions stay in int */
+static int cl_x0 = -F3_LIM, cl_y0 = -F3_LIM, cl_x1 = F3_LIM, cl_y1 = F3_LIM;
+static int f3_sat(int v) { return v > F3_LIM ? F3_LIM : (v < -F3_LIM ? -F3_LIM : v); }
 void fb3d_set_clip(int x0, int y0, int x1, int y1)
-{ cl_x0 = x0; cl_y0 = y0; cl_x1 = x1; cl_y1 = y1; }
+{ cl_x0 = f3_sat(x0); cl_y0 = f3_sat(y0); cl_x1 = f3_sat(x1); cl_y1 = f3_sat(y1); }
 
 /* ---- fixed-point trig (copied from fb.c; its isin/icos are static there) ----
  * Bhaskara I's sine approximation, returned scaled by 1024 so the caller can
@@ -59,13 +66,21 @@ static unsigned int shade_rgb(unsigned int rgb, int bright)
  * The half-open test (yy in [min,max)) counts each edge once and stops shared
  * vertices from being double-counted. fb_fill_px clips to the screen, so no
  * bounds checking is needed here. */
-static void fill_poly(const int *xs, const int *ys, int n, unsigned int rgb)
+static void fill_poly(const int *xs_in, const int *ys_in, int n, unsigned int rgb)
 {
+    int xs[8], ys[8];
+    if (n > 8) n = 8;
+    if (n < 3) return;
+    for (int i = 0; i < n; i++) { xs[i] = f3_sat(xs_in[i]); ys[i] = f3_sat(ys_in[i]); }
     int ymin = ys[0], ymax = ys[0];
     for (int i = 1; i < n; i++) {
         if (ys[i] < ymin) ymin = ys[i];
         if (ys[i] > ymax) ymax = ys[i];
     }
+    /* rows outside the clip were skipped INSIDE the loop, so a vertex at
+     * INT_MAX made `yy <= ymax` never false; clamp the range first */
+    if (ymin < cl_y0) ymin = cl_y0;
+    if (ymax > cl_y1) ymax = cl_y1;
     for (int yy = ymin; yy <= ymax; yy++) {
         int xi[8];
         int m = 0;
@@ -135,9 +150,9 @@ static void fill_poly(const int *xs, const int *ys, int n, unsigned int rgb)
 
 /* Twice the signed area of (a, b, c): positive for one winding, negative for
  * the other, zero when the three are collinear. */
-static int edge(int ax, int ay, int bx, int by, int px, int py)
+static long long edge(int ax, int ay, int bx, int by, int px, int py)
 {
-    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    return (long long)(bx - ax) * (py - ay) - (long long)(by - ay) * (px - ax);
 }
 
 /* One triangle, flat colour. Any winding - the sign is normalised here so
@@ -145,6 +160,8 @@ static int edge(int ax, int ay, int bx, int by, int px, int py)
  * fixed winding that back-face culling has already used for something else. */
 void fb3d_tri(int x0, int y0, int x1, int y1, int x2, int y2, unsigned int rgb)
 {
+    x0 = f3_sat(x0); y0 = f3_sat(y0); x1 = f3_sat(x1);
+    y1 = f3_sat(y1); x2 = f3_sat(x2); y2 = f3_sat(y2);
     if (edge(x0, y0, x1, y1, x2, y2) < 0) {
         int t;
         t = x1; x1 = x2; x2 = t;

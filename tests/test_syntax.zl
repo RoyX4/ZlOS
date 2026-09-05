@@ -669,6 +669,17 @@ check("equal contents, different lists", [1, [2, 3]] == [1, [2, 3]], true)
 check("different contents",              [1, [2, 3]] == [1, [2, 4]], false)
 check("different lengths",               [1, 2] == [1, 2, 3],        false)
 
+# ---------------------------------------------------- F-13 (2026-09-04)
+# parser.c used `is_text` instead of `is_sym` to recognise a closing `}` or
+# `]` in three positions (the end of a block, the end of a bare `return`,
+# and the end of a list literal). is_text only compares the token's TEXT,
+# not its TYPE, so a STRING literal whose contents happen to be exactly
+# "}" or "]" was mistaken for the closing punctuation itself, and parsing
+# ended early with a syntax error one token too soon.
+fn rb() { return "}" }
+check("brace string", rb(), "}")
+check("bracket list", len(["]"]), 1)
+
 report()
 
 # ========================================================== BUGS, NOW FIXED
@@ -791,8 +802,12 @@ report()
 #      print(3 in "abc")              -> runtime error: has needs two strings
 #      print(1 < 2 < 3)               -> runtime error: this operator needs numbers
 #      undefined += 1                 -> runtime error: 'undefined' doesn't exist yet
-#      fn f(a, b) { return a - b }  print(f(3))  -> 'b' doesn't exist yet
-#                                        (arity is never checked at the call)
+#      fn f(a, b) { return a - b }  print(f(3))  -> runtime error:
+#                                        f expects 2 arguments, got 1
+#                                        (F-4, 2026-09-04: arity IS now
+#                                        checked at the call, in interp,
+#                                        compilel and nativegen - see
+#                                        run_tests.sh's refusal block)
 # And one that is not clean, already on file in test_math.zl: `n %= 0` dies with
 # 0xC0000094 (integer divide by zero), the same crash as the `%` operator.
 #

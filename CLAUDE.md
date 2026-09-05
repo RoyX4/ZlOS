@@ -31,7 +31,8 @@ touching any `zl-linux-*` worktree.
 `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`. Done
 2026-08-19; kept for method, not for work.
 
-**`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is five checks in this tree that
+**`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is nineteen checks (five original, fourteen
+more in its §6 from the 2026-09-04 sweep) in this tree that
 reported green while checking nothing, each with the command that establishes
 it — including the `-w` claim this file used to make (below), a `check-memmap.sh`
 discovery sweep that reads no C at all, and why a gate in this shared checkout
@@ -51,7 +52,7 @@ the brief says there are **two** fixed-address maps and there were **five**
 `intel.c` was writing its EDID inside `fb.c`'s blur arena); a full CSS string
 arena refused rules **without setting `css_overflowed()`**, invisible until
 `MAX_SELS` moved; and `memmap-guard-test.sh` was scoring 10/12, having gone
-stale when the AP stacks were inserted. `hosttest/parsestat.c` is the
+stale when the AP stacks were inserted. `kernel/tests/host/parsestat.c` is the
 measuring instrument, committed this time.
 
 `kernel/docs/evidence/browser-render-run.md` is the record of the run that produced the
@@ -89,10 +90,14 @@ area:
 - `kernel/docs/evidence/overnight-2026-08-18.md` — one page covering the descriptor-pointer
   bug that made the 64-bit boot layout-sensitive, why three green gates missed it,
   and what is still open.
-- `docs/design/ci-and-agent-pipeline.md` — **design only, not built.** Why the
-  gates belong on GitHub Actions rather than this box, the per-PR desktop
-  screenshot `wmshot` already makes possible, and why every agent needs a zl
-  brief before its review findings are worth reading.
+- `docs/design/ci-and-agent-pipeline.md` — the design for the GitHub Actions
+  pipeline: why the gates belong there rather than on this box, the per-PR
+  desktop screenshot `wmshot` already makes possible, and why every agent needs
+  a zl brief before its review findings are worth reading. **Corrected
+  2026-09-04:** this line used to say "design only, not built" (the design
+  doc's own first line still does; it predates the workflows). They exist:
+  `ls .github/workflows` → `boot.yml desktop-shot.yml docs.yml gates.yml
+  nightly.yml review.yml`.
 
 **Never put a pointer through `unsigned long` in the EFI build.** `buildefi.sh`
 targets `x86_64-unknown-windows`, which is LLP64: `unsigned long` is 4 bytes
@@ -144,7 +149,7 @@ guard catches a planted defect, `-w` is shown to still silence it, and the real
 source set is clean under it. Two seconds, no QEMU. Run it before touching that
 flag line.
 
-Note the guard is **EFI-only**. `idt.c:465`'s `(u64)&idt` warns on the 32-bit
+Note the guard is **EFI-only**. `idt.c:873`'s `(u64)&idt` warns on the 32-bit
 gcc build and is *correct* — that is the widening direction, and it is the
 fixed form of the bug above. Do not "fix" it back.
 
@@ -166,8 +171,8 @@ hazards that can damage hardware.
 `zlfmt` (built by `build.sh`, source `src/tools/zlfmt.c`) rewrites leading whitespace and
 strips trailing whitespace. **Every other byte is copied from the original
 buffer.** Do not "improve" it into an AST pretty-printer without first reading
-`docs/design/design_tooling.md` §3: `src/frontend/lexer.c:272-273` throws
-comments away and `src/frontend/lexer.c:88` truncates token text at 128 bytes,
+`docs/design/design_tooling.md` §3: `src/frontend/lexer.c:355` throws
+comments away and `src/frontend/lexer.h:10` (`MAX_TEXT`) truncates token text at 128 bytes,
 so a formatter that rebuilds
 source from tokens or the tree deletes every comment in the corpus and silently
 corrupts long string literals. Both hazards are impossible by construction
@@ -250,25 +255,36 @@ gate, wait for the expected output, never for a fixed wall-clock time.**
 `kernel/src/drivers/display/intel.c` drives the real panel on the test laptop (ThinkPad X1 Carbon
 Gen 8, CML-U 8086:9B41). Two rules:
 
-1. **MOST write paths are gated behind `lt_armed`, and four are not.** Measured
-   2026-08-19, because the blanket version of this sentence was wrong and it is
-   the sentence people rely on:
+1. **MOST write paths are gated behind `lt_armed`, and these are not.**
+   Re-measured 2026-09-04 against a RAM-backed fake BAR (every row below is a
+   write that landed with `lt_armed = 0`); the 2026-08-19 table listed four
+   ungated functions and missed the rest, and its `intel.c:4075` citation was
+   stale:
 
-   | function | `lt_armed`? | reachable from |
-   |---|---|---|
-   | `intel_plane_setup` | yes | — |
-   | `intel_gamma_ramp` | yes | — |
-   | `intel_cursor_enable` | **no** | zl builtin `cur_on` |
-   | `intel_cursor_move` | **no** | zl builtin `cur_move` |
-   | `intel_cursor_disable` | **no** | zl builtin `cur_off` |
-   | `intel_set_surface` | **no** | the modeset sequence, `intel.c:4075` |
+   | function | `lt_armed`? | writes | reachable from |
+   |---|---|---|---|
+   | `intel_set_surface` | **no** | PLANE_STRIDE/OFFSET/SURF | the modeset (armed context); no zl binding |
+   | `intel_ggtt_map` / `_map_range` | **no** | GGTT PTEs | zl `ggtt_map`; `intel_bringup_panel` before arming; `gpuring.c`, `gpucursor.c` |
+   | `gmbus_read_edid` | **no** | GMBUS0/1/5 | zl `edid_read` (one site in `kernel.zl`) |
+   | `intel_cursor_enable/move/disable` | **no** | CUR_CTL/BASE/POS | zl `cur_on/cur_move/cur_off` |
+   | `intel_backlight_set` | **no** | BLC_PWM_DUTY | zl `bl_set` |
+   | `intel_flip` | **no** | PLANE_SURF | zl `gpu_flip` |
+   | `intel_dpll_program_dp` | **no** | DPLL_CTRL1 | no caller anywhere |
+   | `intel_dpll_program_hdmi` | **no** | DPLL_CFGCR1/2, DPLL_CTRL1 | `dpll_test.c` only |
+   | `dc_states_off`, `aux_mutex_*`, `aux_xfer_locked` | **no** | DC_STATE_EN, DP_AUX_MUTEX/CTL/DATA | every `intel_dpcd_read/write` caller (caps, EDID-over-AUX, `intel_port_connected`, PSR sink query, ext-port probe) |
+   | everything else that calls `mmio_w` | yes | | armed only by `intel_bringup_panel`, `intel_shutdown_panel`, `intel_probe.c`, `dpll_test.c` |
 
    `mmio_w` itself is **not** gated either — it writes whenever `mmio` is set.
-   So the three cursor functions write display registers with no gate at all,
-   and a zl program can reach every one of them. Nothing in the kernel calls
-   them, so gating them would break nothing; `intel_set_surface` is different,
-   it has a real internal caller inside the modeset, and adding a gate there
-   needs someone who knows whether that path runs armed.
+   `kernel.zl` today calls `edid_read` once and `cur_*`, `bl_set`, `gpu_flip`,
+   `ggtt_map` never, but all are registered builtins, so any in-kernel zl
+   program can reach every one of them. The AUX stack being ungated is what
+   lets the host harness talk to the panel with i915 live; whether that is
+   allowed unarmed is a decision nobody has written down.
+
+   Since 2026-09-04 `intel_bringup_panel` places its GGTT window past
+   `PLANE_SURFLIVE` instead of over it, and a bring-up that fails before plan
+   step 27 restores PSR/backlight and leaves the firmware's pipe, port and panel
+   running instead of tearing them down (the only console on the laptop).
 
    **Write paths are gated behind `lt_armed` and most have never executed.**
    "The code exists" is not "the code works" — check for an actual caller, and
@@ -319,7 +335,11 @@ git ls-files -z | git check-ignore --no-index --stdin -z -v
 
 As of the `browsershot.ppm` / `wmshot.ppm` removal that command returns only two
 entries, both `.ultra/STATE.md` and `.ultra/TENSIONS.md` matching `.ultra/` in
-`~/.gitignore_global`. Those come from the machine's global ignore file, not
+`~/.gitignore_global`. **Corrected 2026-09-04:** re-run today it returns nine
+entries, all `.ultra/*.md` (`AGENTS CLAUDE README RULES SOP STATUS TENSIONS TODO
+VALUES`), every one matching `.ultra/` in `~/.gitignore_global:2`;
+`.ultra/STATE.md` is not tracked. With `-v` it also prints 455 *negation*
+matches from `kernel/.gitignore:18-24` — re-includes, not ignores. Those come from the machine's global ignore file, not
 from this repo, and are expected — **leave them alone.** No tracked file matches
 a rule in any of the repo's own `.gitignore`s.
 
@@ -329,23 +349,30 @@ repo's own `kernel/.gitignore` line `hosttest/*.ppm`, rewritten on every
 `./wmshot` and `./browsershot` run.
 
 **The command only finds tracked files that some ignore rule already matches.**
-A build output nobody ever wrote a pattern for is invisible to it. `kernel/.gitignore`'s
-hosttest section is a hand-maintained allowlist, one line per binary, and it is
-still incomplete: `hosttest/inputtest_feel`, `hosttest/inputtest_hid`,
-`hosttest/wmbench` and `hosttest/wmtest_feel` are tracked, unlisted, and
-rewritten by `./build.sh` on every run. `git ls-files kernel/tests/host/ | grep -v '\.c$'`
-is the check that actually catches those.
+A build output nobody ever wrote a pattern for is invisible to it. **Corrected
+2026-09-04:** this paragraph used to say `kernel/.gitignore`'s hosttest section
+was a per-binary allowlist with four tracked, unlisted binaries
+(`inputtest_feel`, `inputtest_hid`, `wmbench`, `wmtest_feel`). Today
+`kernel/.gitignore:17-24` is `tests/host/*` plus
+`!tests/host/*.{c,h,sh,py,zl,md,json}` — an extension allowlist, so a new binary
+is ignored without a new line — and
+`git ls-files kernel/tests/host/ | grep -vE '\.(c|h|sh|py|zl|md|json|txt)$'`
+returns nothing. That command is still the check to re-run.
 
 All four build scripts that emit generated C write under `kernel/_gen*.c`
 (`build.sh`/`mkdisk.sh` → `_gen.c`, `build64.sh` → `_gen64.c`, `buildefi.sh` →
 `_genefi.c`) and each `cp`s over its output unconditionally, so no committed
 copy is ever an input to a build.
 
-Same for the two `.ppm`s: `hosttest/wmshot.c:204` and `hosttest/browsershot.c:76`
-default their output path to `wmshot.ppm` / `browsershot.ppm` and truncate it.
-Nothing reads them back — `probe-shot.py` and `probe-drag.py` are the only
-`.ppm` readers in the tree and both open a QEMU `screendump` they just wrote
-into a temp dir.
+Same for the two `.ppm`s: `kernel/tests/host/wmshot.c:280` and
+`kernel/tests/host/browsershot.c:79` default their output path to `wmshot.ppm` /
+`browsershot.ppm` and truncate it. Nothing reads them back. **Corrected
+2026-09-04:** this used to say `probe-shot.py` and `probe-drag.py` were the only
+`.ppm` readers; `grep -ln P6 $(grep -rl '\.ppm' --include=*.py .)` finds 13
+scripts that parse a PPM (`exercise.py`, `gen-visual-registry.py`,
+`probe-{snake,files,apps,smp,run,edit,urlbar,edit-viewport,overlay-click,term,files-click}.py`)
+plus those two, and every one reads a QEMU `screendump` it just took, never
+these files.
 
 `font_aa.c`, `font_sub.c`, `font8x16.c`, `icons.c` and `icons_rgb.c` are also
 generated (by `gen_*.py` / `mkfont.py`) but are **deliberately tracked** — no

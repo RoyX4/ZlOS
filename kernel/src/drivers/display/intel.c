@@ -613,6 +613,12 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
     if (gfx_page >= ggtt / 8u) return 0;      /* past the end of the table */
 
     volatile u32 *pte = (volatile u32 *)(mmio + (uptr)GGTT_OFFSET + (uptr)gfx_page * 8u);
+    /* HIGH DWORD FIRST. Between two 32-bit stores the entry is visible to
+     * the GPU; low-with-PRESENT first left {new low | P, OLD high} for a
+     * moment, and firmware/i915 entries do carry bits 39:32 (measured
+     * GGTT[0x01F40] = 00000001 20C00001). Clear the high half before the
+     * low half publishes the entry. (2026-09-04) */
+    pte[1] = 0;
     pte[0] = (phys_addr & 0xFFFFF000u) | 1u;  /* address | present */
     /* The high dword carries physical address bits 39:32, and this driver
      * always writes zero - which is correct ONLY because phys_addr is a u32, so
@@ -629,7 +635,6 @@ int intel_ggtt_map(u32 gfx_page, u32 phys_addr)
      * unclaimed, so the first allocator that hands out an address up there is
      * still fine (1 GiB < 4 GiB) and the first one that goes past 4 GiB is not.
      * Widening phys_addr to u64 is what it would take to lift it. */
-    pte[1] = 0;
     return 1;
 }
 
@@ -2471,20 +2476,28 @@ int intel_ddi_program_buf_trans(int port, int swing, int pre)
 
 static void set_drive(int port, int lanes, const int *swing, const int *pre)
 {
-    u8 v[4];
-    for (int i = 0; i < 4; i++) {
-        int sw = i < lanes ? swing[i] : 0;
-        int pe = i < lanes ? pre[i] : 0;
-        v[i] = (u8)((sw & 3) | ((pe & 3) << 3));
-        if (sw >= 3) v[i] |= DP_MAX_SWING_REACHED;
-        if (pe >= 3) v[i] |= (1 << 5);
+    /* ONE LEVEL FOR THE WHOLE PORT (plan step 40d; GEN9-S40b/S40c). The
+     * transmitter has a single buffer-translation select for all lanes, so
+     * the sink must be told the level every lane will actually get: the
+     * maximum any lane asked for, with pre-emphasis capped at 3 and swing
+     * cut back so the pair stays inside the table (swing + pre <= 3). The
+     * previous version wrote each lane's own request to the sink and drove
+     * the hardware from lane 0's - a mismatch on any sink whose lanes
+     * disagree, and an out-of-table pair (2,2) on the sink side. */
+    int sw = 0, pe = 0;
+    for (int i = 0; i < lanes && i < 4; i++) {
+        if (swing[i] > sw) sw = swing[i];
+        if (pre[i]   > pe) pe = pre[i];
     }
+    if (pe > 3) pe = 3;
+    if (sw > 3) sw = 3;
+    if (sw > 3 - pe) sw = 3 - pe;
+    u8 lvl = (u8)((sw & 3) | ((pe & 3) << 3));
+    if (sw >= 3) lvl |= DP_MAX_SWING_REACHED;
+    if (pe >= 3) lvl |= (1 << 5);
+    u8 v[4] = { lvl, lvl, lvl, lvl };
     intel_dpcd_write(port, DPCD_TRAINING_LANE0, v, lanes);
-    /* and the transmitter side: select the buffer translation entry that
-     * corresponds to the swing/pre-emphasis the sink asked for. Lane 0's
-     * request drives the selection, which is what the hardware supports -
-     * DDI_BUF_CTL has one entry select for the whole port, not per lane. */
-    intel_ddi_program_buf_trans(port, swing[0], pre[0]);
+    intel_ddi_program_buf_trans(port, sw, pe);
 }
 
 static void tp_ctl_pattern(int port, u32 pattern, int enhanced)
@@ -2495,13 +2508,16 @@ static void tp_ctl_pattern(int port, u32 pattern, int enhanced)
 }
 
 /* ---- clock recovery ---------------------------------------------------- */
-static int train_clock_recovery(int port, int lanes)
+static int train_clock_recovery(int port, int lanes, int enhanced)
 {
     int swing[4] = {0,0,0,0}, pre[4] = {0,0,0,0};
     int prev_swing = -1, same_voltage = 0;
     lt_cr_attempts = 0;
 
-    tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_PAT1, 1);
+    /* `enhanced` is whatever the port was enabled with: DP_TP_CTL's
+     * enhanced-framing bit must not change while the DDI is enabled (4.3
+     * #8/#20), and this used to force it to 1 for every sink (GEN9-S40g). */
+    tp_ctl_pattern(port, DP_TP_CTL_LINK_TRAIN_PAT1, enhanced);
     u8 pat = DP_TRAIN_PAT_1 | DP_SCRAMBLING_DISABLE;
     if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &pat, 1)) return 0;
     set_drive(port, lanes, swing, pre);
@@ -2550,12 +2566,12 @@ static int train_clock_recovery(int port, int lanes)
 }
 
 /* ---- channel equalisation ---------------------------------------------- */
-static int train_channel_eq(int port, int lanes, int tps3)
+static int train_channel_eq(int port, int lanes, int tps3, int enhanced)
 {
     u32 hw_pat = tps3 ? DP_TP_CTL_LINK_TRAIN_PAT3 : DP_TP_CTL_LINK_TRAIN_PAT2;
     u8  dp_pat = (u8)((tps3 ? DP_TRAIN_PAT_3 : DP_TRAIN_PAT_2) | DP_SCRAMBLING_DISABLE);
 
-    tp_ctl_pattern(port, hw_pat, 1);
+    tp_ctl_pattern(port, hw_pat, enhanced);
     if (!intel_dpcd_write(port, DPCD_TRAINING_PATTERN, &dp_pat, 1)) return 0;
     lt_eq_attempts = 0;
 
@@ -2607,8 +2623,8 @@ int intel_link_train(int port, int rate_idx, int lanes, int tps3, int enhanced)
     if (!intel_dpcd_write(port, DPCD_LINK_BW_SET, &bw, 1)) return 0;
     if (!intel_dpcd_write(port, DPCD_LANE_COUNT_SET, &lc, 1)) return 0;
 
-    if (!train_clock_recovery(port, lanes)) return 0;
-    if (!train_channel_eq(port, lanes, tps3)) return 0;
+    if (!train_clock_recovery(port, lanes, enhanced)) return 0;
+    if (!train_channel_eq(port, lanes, tps3, enhanced)) return 0;
 
     /* done: stop the pattern at both ends and let real pixels flow.
      *
@@ -4173,8 +4189,13 @@ int intel_modeset_run_ex(int port, int dry)
      * 33 cursor blocks and a 13-block cursor watermark are what firmware
      * programs for this panel. */
     MS_STEP(53, "watermarks + DDB split", intel_ddb_split(33, WM_ENABLE | 13u));
+    /* The PLANE's bytes per pixel, not the LINK's: the surface is XRGB8888
+     * (32 bpp) while ms_bpp is the 24-bit link format. Passing 24 gave 43
+     * blocks against firmware's 41 - a 2-block margin the source comment
+     * ("38 at 20 us") had computed with 32 bpp. intel_probe.c already passes
+     * 32; the modeset now agrees with it. (measured 2026-09-04) */
     MS_STEP(53, "plane watermark L0",
-               intel_wm_set_level(0, intel_wm_compute_level0(ms_hactive, (u32)ms_bpp,
+               intel_wm_set_level(0, intel_wm_compute_level0(ms_hactive, 32u,
                                                              ms_pixel_khz, 0)));
     MS_STEP(54, "TRANS_DDI_FUNC_CTL",
                intel_trans_ddi_ctl_write(lanes, ms_bpp, ms_phsync, ms_pvsync));
@@ -4454,6 +4475,26 @@ uptr intel_bringup_panel(void)
     if (bytes64 + skip > ssize) return 0;
 
     u32 pages = (bytes + 4095u) / 4096u;
+
+    /* DO NOT MAP OVER THE FIRMWARE'S SCANOUT. These PTEs are written before
+     * anything is armed and were never restored, so if the GOP framebuffer's
+     * GGTT window overlapped [1 MiB, 1 MiB + bytes) the loader console was
+     * re-pointed at our stolen pages the instant the map ran - before any
+     * modeset step, and permanently after a failed one (measured 2026-09-04
+     * on a fake BAR: 3600 PTEs rewritten with PLANE_SURFLIVE inside them).
+     * Read where the live plane scans from and place our window past it. */
+    {
+        u32 live = intel_surface() & 0xFFFFF000u;    /* PLANE_SURFLIVE, page */
+        u32 live_end = live + bytes;                  /* same mode, same size */
+        if (live_end < live) live_end = 0xFFFFFFFFu;
+        if (gfx < live_end && live < gfx + bytes) {
+            u32 moved = (live_end + 0xFFFFFu) & ~0xFFFFFu;   /* next MiB up */
+            if (moved < live_end) return 0;
+            gfx = moved;
+        }
+        u32 ggtt = intel_ggtt_size();                 /* table bytes, 8/page */
+        if (!ggtt || (gfx >> 12) > ggtt / 8u - pages) return 0;
+    }
     if (!intel_ggtt_map_range(gfx >> 12, stolen + skip, (int)pages)) return 0;
 
     if (!intel_modeset_set_fb(gfx, stride)) return 0;
@@ -4461,9 +4502,22 @@ uptr intel_bringup_panel(void)
     intel_link_train_arm(1);
     int ok = intel_modeset_run(0);
     if (!ok) {
+        int at = intel_modeset_failed_at();
         zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
-                  4u, 4u /* modeset */, (unsigned)intel_modeset_failed_at());
-        (void)intel_modeset_teardown(0);
+                  4u, 4u /* modeset */, (unsigned)at);
+        /* A FAILURE BEFORE STEP 27 HAS NOT TOUCHED THE PIPE, PORT OR PANEL
+         * POWER - only DC states, PSR, power-well requests, DBUF and the PPS
+         * delay registers. Running the full teardown from there disabled
+         * the FIRMWARE's plane, transcoder, port and panel: a black screen
+         * on the only console the laptop has, in exactly the case where the
+         * user needs to read "bring-up FAILED at step N". Put back what was
+         * saved and leave the firmware's display running. (2026-09-04) */
+        if (at > 0 && at < 27) {
+            intel_psr_restore();
+            intel_backlight_restore();
+        } else {
+            (void)intel_modeset_teardown(0);
+        }
         intel_link_train_arm(0);
         return 0;
     }

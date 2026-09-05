@@ -4516,9 +4516,12 @@ SNAKE_Y = 0x02000200
 # the window when you drag it instead of staying where the pixels were.
 # It starts exactly where the zl low block ends, and that IS a dependency, not a
 # coincidence: move ZL_LOW_END and this has to move with it or it lands inside
-# the block. So it is declared as a mirror and check-memmap-mirror.py enforces
-# it. Beyond here, 15 MiB to HI_IMG 0x03000000 is undeclared spare.
-PAINT_BUF = 0x02100000  # memmap.h ZL_LOW_END - starts where the zl low block ends
+# the block. It USED to be declared as a mirror of memmap.h's ZL_LOW_END;
+# since 2026-09-04 that span runs to HI_IMG (0x03000000), because this buffer
+# and the game boards at 0x02200000+ had been placed above the old 33 MiB end
+# and so outside every assert and the EFI fixed-memory witness. PAINT_BUF is
+# now inside the zl low block, which is where a zl-owned buffer belongs.
+PAINT_BUF = 0x02100000  # 33 MiB: just past the original zl low block
 PAINT_MAX = 2000
 
 p_col  = 2
@@ -5087,7 +5090,14 @@ fn run_command(cmd, arg) {
         color(C_GREY)
         return 0
     }
-    if cmd == 102 { color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0 }
+    if cmd == 102 {
+        # fib is naive recursion on a 256 KiB kernel stack with no depth guard,
+        # and term.c saturates the typed argument at 2^31-1: `fib 45` freezes
+        # the desktop for minutes and a big enough n overflows the stack into
+        # whatever sits below it. 40 is ~330 M calls; refuse past it. (2026-09-04)
+        if arg > 40 { color(C_GREY)  print("  fib: n must be 40 or less")  return 0 }
+        color(C_WHITE)  put("  ")  print(fib(arg))  color(C_GREY)  return 0
+    }
     if cmd == 115 { color(C_WHITE)  put("  ")  print(sum_squares(arg))  color(C_GREY)  return 0 }
     if cmd == 116 {                      # t - uptime from the timer IRQ
         color(C_GREY)  put("  uptime: ")
@@ -5734,7 +5744,7 @@ fn run_command(cmd, arg) {
         # and unformatted" over a mounted, freshly formatted disk - and the only
         # way to clear it was to move the window. Caught by screenshotting after
         # a successful format and reading the pane rather than the terminal.
-        if files_win >= 0 { if wm_is_open(files_win) == 1 { files_refresh()  wm_dmg(files_win) } }
+        if files_win >= 0 { if win_is(files_win, APP_FILES) == 1 { files_refresh()  wm_dmg(files_win) } }
         return 0
     }
     # ; - the real time, off the CMOS clock. The header draws this too, but the
@@ -7724,7 +7734,7 @@ fn syspane_measure() {
 
 fn open_syspane() {
     op_u = ui()
-    if syspane_win >= 0 { if wm_open_p(syspane_win) == 1 {
+    if syspane_win >= 0 { if win_is(syspane_win, APP_SYSPANE) == 1 {
         wm_setfocus(syspane_win)  wm_raise(syspane_win)  return 1
     }}
     syspane_measure()
@@ -7745,7 +7755,7 @@ fn open_syspane() {
 
 fn open_typepane() {
     ot_u = ui()
-    if typepane_win >= 0 { if wm_open_p(typepane_win) == 1 {
+    if typepane_win >= 0 { if win_is(typepane_win, APP_TYPEPANE) == 1 {
         wm_setfocus(typepane_win)  wm_raise(typepane_win)  return 1
     }}
     # proto:1559 gives register 14 the rect p[340, 180, 560, 400]. The tree
@@ -7890,7 +7900,10 @@ fn sn_step() {
     if nhx == sn_fx {
         if nhy == sn_fy {
             sn_score = sn_score + 1
-            sn_len = sn_len + 1
+            # SNAKE_X is a 512-byte page and SNAKE_Y starts right after it:
+            # the 513th segment's shift writes X[512] == Y[0], the head's y.
+            # The grid clamp below bounds the board, not the body. (2026-09-04)
+            if sn_len < 512 { sn_len = sn_len + 1 }
             sn_fx = sn_rand(sn_gw)
             sn_fy = sn_rand(sn_gh)
         }
@@ -8561,7 +8574,7 @@ fn files_event(win, ety, ecode, ex, ey) {
             # which is this line, so this is the only entrance to that loss.
             if files_delete == files_sel {
                 if edit_win >= 0 {
-                    if wm_open_p(edit_win) == 1 {
+                    if win_is(edit_win, APP_EDIT) == 1 {
                         if files_sel == ed_slot {
                             note_say2("that file is open in 04 EDITOR", "close the editor first - deleting it now would hand its slot to the next new file", 900)
                             files_delete = 0 - 1
@@ -11461,6 +11474,19 @@ fn wm_report(w) {
 # typed into the first app, which dropped it. Asking for an app that is already
 # open DOES focus and raise it, because that is the only way to get to it from
 # the keyboard, and Alt+Tab cycles the rest.
+# A stored window id is a SLOT NUMBER, and wm_open hands the lowest free
+# slot to the next opener. Closebox / Ctrl+W never told zl, so after
+# "open Snake, close it, open Paint", `snake_win` named Paint's slot and
+# wm_open_p said it was open: typing `snake` focused Paint and Snake never
+# came back (16 sites, found 2026-09-04). Open AND still ours, or not ours.
+fn win_is(w, id) {
+    if w < 0 { return 0 }
+    if wm_open_p(w) != 1 { return 0 }
+    if wm_app(w) != id { return 0 }
+    return 1
+}
+
+
 fn open_app(cmd, arg) {
     oa_u = ui()
     # WHO HAD FOCUS BEFORE. wm_open() focuses the window it just opened
@@ -11469,18 +11495,23 @@ fn open_app(cmd, arg) {
     # you type goes to the app you started with the first one and is dropped.
     oa_f = wm_focus()
     if cmd == 103 {
-        if snake_win >= 0 { if wm_open_p(snake_win) == 1 {
+        if snake_win >= 0 { if win_is(snake_win, APP_SNAKE) == 1 {
                 wm_setfocus(snake_win)  wm_raise(snake_win)  return 1
         }}
         snake_win = wm_open(APP_SNAKE, "Snake", 120 * oa_u, 70 * oa_u, 420 * oa_u, 360 * oa_u)
         if snake_win < 0 { return 0 }
-        sn_reset(wm_cw(snake_win), wm_ch(snake_win))
+        # No sn_reset here: it took the client size in PIXELS as the board in
+        # CELLS (head at cell ~209 of a ~52-cell client, food visible 1.5% of
+        # the time), and sn_draw then never re-seeded because sn_ready was
+        # already 1. The rail path (open_snake) lets sn_draw seed on first
+        # paint; the typed command now does the same. (2026-09-04)
+        sn_ready = 0
         if oa_f >= 0 { wm_setfocus(oa_f) }
         wm_report(snake_win)
         return 1
     }
     if cmd == 100 {
-        if paint_win >= 0 { if wm_open_p(paint_win) == 1 {
+        if paint_win >= 0 { if win_is(paint_win, APP_PAINT) == 1 {
                 wm_setfocus(paint_win)  wm_raise(paint_win)  return 1
         }}
         paint_win = wm_open(APP_PAINT, "Paint", 20 * oa_u, 230 * oa_u, 280 * oa_u, 160 * oa_u)
@@ -11490,7 +11521,7 @@ fn open_app(cmd, arg) {
         return 1
     }
     if cmd == 118 {
-        if cube_win >= 0 { if wm_open_p(cube_win) == 1 {
+        if cube_win >= 0 { if win_is(cube_win, APP_CUBE) == 1 {
                 wm_setfocus(cube_win)  wm_raise(cube_win)  return 1
         }}
         cube_win = wm_open(APP_CUBE, "3D", 310 * oa_u, 60 * oa_u, 160 * oa_u, 160 * oa_u)
@@ -11500,7 +11531,7 @@ fn open_app(cmd, arg) {
         return 1
     }
     if cmd == 97 {
-        if anim_win >= 0 { if wm_open_p(anim_win) == 1 {
+        if anim_win >= 0 { if win_is(anim_win, APP_ANIM) == 1 {
                 wm_setfocus(anim_win)  wm_raise(anim_win)  return 1
         }}
         anim_win = wm_open(APP_ANIM, "zlOS", 480 * oa_u, 60 * oa_u, 160 * oa_u, 160 * oa_u)
@@ -11510,7 +11541,7 @@ fn open_app(cmd, arg) {
         return 1
     }
     if cmd == 105 {
-        if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+        if edit_win >= 0 { if win_is(edit_win, APP_EDIT) == 1 {
                 edit_prev_focus = oa_f
                 wm_setfocus(edit_win)  wm_raise(edit_win)  return 1
         }}
@@ -11530,7 +11561,7 @@ fn open_app(cmd, arg) {
         return 1
     }
     if cmd == 77 {
-        if files_win >= 0 { if wm_open_p(files_win) == 1 {
+        if files_win >= 0 { if win_is(files_win, APP_FILES) == 1 {
                 wm_setfocus(files_win)  wm_raise(files_win)  return 1
         }}
         files_win = wm_open(APP_FILES, "Files", desk_x(FILES_X), desk_y(FILES_Y), FILES_W * oa_u, FILES_H * oa_u)
@@ -11541,7 +11572,7 @@ fn open_app(cmd, arg) {
         return 1
     }
     if cmd == 120 {
-        if mouse_win >= 0 { if wm_open_p(mouse_win) == 1 {
+        if mouse_win >= 0 { if win_is(mouse_win, APP_MOUSE) == 1 {
                 wm_setfocus(mouse_win)  wm_raise(mouse_win)  return 1
         }}
         mouse_win = wm_open(APP_MOUSE, "Pointer", 310 * oa_u, 230 * oa_u, 160 * oa_u, 160 * oa_u)
@@ -11554,7 +11585,7 @@ fn open_app(cmd, arg) {
 }
 
 fn open_disk_editor(slot) {
-    if edit_win >= 0 { if wm_open_p(edit_win) == 1 {
+    if edit_win >= 0 { if win_is(edit_win, APP_EDIT) == 1 {
             note_say("close the current editor first", 300)
             wm_setfocus(edit_win)
             wm_raise(edit_win)
@@ -13326,7 +13357,7 @@ snake_win = 0 - 1
 fn open_snake() {
     u = ui()
     if snake_win >= 0 {
-        if wm_open_p(snake_win) == 1 {
+        if win_is(snake_win, APP_SNAKE) == 1 {
             wm_setfocus(snake_win)
             wm_raise(snake_win)
             return 0
@@ -13761,7 +13792,7 @@ fn create_shell_window() {
 
 fn raise_shell() {
     if shell_win >= 0 {
-        if wm_open_p(shell_win) == 1 {
+        if win_is(shell_win, APP_SHELL) == 1 {
             wm_setfocus(shell_win)
             wm_raise(shell_win)
             return 0
@@ -13800,7 +13831,7 @@ fn desk_r(w) { return field_x() + field_w() - w }
 
 fn reopen_browser() {
     u = ui()
-    if browser_win >= 0 { if wm_open_p(browser_win) == 1 { wm_setfocus(browser_win)  wm_raise(browser_win)  return 0 } }
+    if browser_win >= 0 { if win_is(browser_win, APP_BROWSER) == 1 { wm_setfocus(browser_win)  wm_raise(browser_win)  return 0 } }
     browser_win = wm_open(APP_BROWSER, "Browser", field_x() + (field_w() - 800 * u) / 2, desk_y(220), 800 * u, 440 * u)   # float ok - a centring offset, not an index; the name ends in "win"
     wm_setfocus(browser_win)
     wm_raise(browser_win)
@@ -13808,28 +13839,30 @@ fn reopen_browser() {
 }
 fn reopen_settings() {
     u = ui()
-    if settings_win >= 0 { if wm_open_p(settings_win) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
+    if settings_win >= 0 { if win_is(settings_win, APP_SETTINGS) == 1 { wm_setfocus(settings_win)  wm_raise(settings_win)  return 0 } }
     # 660 x 720 dp, and both numbers are the CONTENT's, not a taste. 660 is
     # what the widest mono line in the pane needs: 67 characters at cell_w
     # plus the well's 8dp padding either side, plus the body's 9dp margins,
     # plus the plate's 1px ring and the focus bar's gutter. A narrower window
     # ellipsises a paragraph that is an argument. 720 is the prototype's own
     # settings window height; the body scrolls past it either way.
-    settings_win = wm_open(APP_SETTINGS, "Settings", desk_x(120), desk_y(40), 660 * u, 720 * u)
+    # 720 wide, the same as reg_open's route in apps_registry.zl: one window,
+    # one size - this was 660 here and 720 there (one-fact-two-copies)
+    settings_win = wm_open(APP_SETTINGS, "Settings", desk_x(120), desk_y(40), 720 * u, 720 * u)
     wm_setfocus(settings_win)
     wm_raise(settings_win)
     return 0
 }
 fn reopen_mon() {
     u = ui()
-    if mon_win >= 0 { if wm_open_p(mon_win) == 1 { wm_setfocus(mon_win)  wm_raise(mon_win)  return 0 } }
+    if mon_win >= 0 { if win_is(mon_win, APP_MONITOR) == 1 { wm_setfocus(mon_win)  wm_raise(mon_win)  return 0 } }
     mon_win = wm_open(APP_MONITOR, "System Monitor", desk_r(MON_W * u + 16 * u), desk_y(16), MON_W * u, MON_H * u)
     wm_setfocus(mon_win)
     return 0
 }
 fn reopen_about() {
     u = ui()
-    if about_win >= 0 { if wm_open_p(about_win) == 1 { wm_setfocus(about_win)  wm_raise(about_win)  return 0 } }
+    if about_win >= 0 { if win_is(about_win, APP_ABOUT) == 1 { wm_setfocus(about_win)  wm_raise(about_win)  return 0 } }
     about_win = wm_open(APP_ABOUT, "About", desk_r(AB_W * u + 16 * u), desk_y(16) + (MON_H + 16) * u, AB_W * u, AB_H * u)
     wm_setfocus(about_win)
     return 0
@@ -13840,7 +13873,7 @@ fn reopen_about() {
 # one, and it is the same shape as the other four.
 fn reopen_files() {
     u = ui()
-    if files_win >= 0 { if wm_open_p(files_win) == 1 { wm_setfocus(files_win)  wm_raise(files_win)  return 0 } }
+    if files_win >= 0 { if win_is(files_win, APP_FILES) == 1 { wm_setfocus(files_win)  wm_raise(files_win)  return 0 } }
     files_win = wm_open(APP_FILES, "Files", desk_x(FILES_X), desk_y(FILES_Y), FILES_W * u, FILES_H * u)
     wm_setfocus(files_win)
     wm_raise(files_win)
@@ -13912,7 +13945,7 @@ menu_bx = 0
 menu_by = 0
 fn open_menu() {
     u = ui()
-    if menu_win >= 0 { if wm_open_p(menu_win) == 1 { wm_close_fx(menu_win)  menu_win = 0 - 1  return 0 } }
+    if menu_win >= 0 { if win_is(menu_win, APP_MENU) == 1 { wm_close_fx(menu_win)  menu_win = 0 - 1  return 0 } }
     mh = MENU_ROWS * (ui_metric(UM_ROW_H) + ui_metric(UM_GAP)) + 2 * ui_metric(UM_PAD) + ui_metric(UM_TITLE_H)
     # AGAINST THE RAIL, NOT AGAINST THE DOCK. The menu used to sit 8 dp above
     # the dock at x=10, which is under the rail now. It hangs off the rail's
@@ -14762,27 +14795,32 @@ while running == 1 {
 
             present()          # push this frame's changes out in one blit
 
-            ch = key_get()
-            if ch > 0 {
-                if is_digit(ch) == true {
+            # sh_ch / sh_r, not ch / r: a top-level assignment makes the name a
+            # GLOBAL, and every `r = ...` / `ch = ...` inside any function then
+            # writes through to it (27 and 11 functions do). Measured
+            # 2026-09-04: a row loop over `r` calling ac_rand() ran 51 times
+            # instead of 6 once a global `r` existed. Shell-only names here.
+            sh_ch = key_get()
+            if sh_ch > 0 {
+                if is_digit(sh_ch) == true {
                     cursor(crow, ccol, 0, C_CURSOR)
-                    color(C_WHITE)  put(ch - 48)
+                    color(C_WHITE)  put(sh_ch - 48)
                     ccol = ccol + 1
                     last_blink = 0 - 1                  # force a redraw at the new spot
-                    pending = pending * 10 + (ch - 48)
+                    pending = pending * 10 + (sh_ch - 48)
                 } else {
-                    if ch > 32 {
+                    if sh_ch > 32 {
                         cursor(crow, ccol, 0, C_CURSOR)
                         print("")
                         draw_status("working")
-                        term_submit(ch, pending, 1)
-                        r = run_command(ch, pending)
-                        term_complete(ch, r)
+                        term_submit(sh_ch, pending, 1)
+                        sh_r = run_command(sh_ch, pending)
+                        term_complete(sh_ch, sh_r)
                         pending = 0
                         got = 1
                         last_sec = 0 - 1                # clock lost to the redraw
                         draw_status("ready")
-                        if r == 1 { running = 0 }
+                        if sh_r == 1 { running = 0 }
                     }
                 }
             }

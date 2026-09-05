@@ -361,8 +361,13 @@ static void parse_headers(void)
     while (i < resp_len && resp[i] != ' ') i++;
     while (i < resp_len && resp[i] == ' ') i++;
     status_code = 0;
-    while (i < resp_len && resp[i] >= '0' && resp[i] <= '9')
-        status_code = status_code * 10 + (resp[i++] - '0');
+    /* three digits is the whole of HTTP; more is a hostile status line, and
+     * without the cap `status_code * 10` overflows int on it (UB, which the
+     * UBSan fuzz build trips on). Stop counting, keep skipping digits. */
+    while (i < resp_len && resp[i] >= '0' && resp[i] <= '9') {
+        if (status_code < 1000) status_code = status_code * 10 + (resp[i] - '0');
+        i++;
+    }
 
     /* then each header line until the blank one */
     while (i < resp_len) {

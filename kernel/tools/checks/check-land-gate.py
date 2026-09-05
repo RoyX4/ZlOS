@@ -136,10 +136,15 @@ HOST_BUILD_BENCHMARK_GUARD = re.compile(
 def failures(source: str, verify_net: str | None = None) -> list[str]:
     if verify_net is None:
         verify_net = VERIFY_NET.read_text()
+    # a mandatory invocation that survives only inside a `#` comment is not
+    # an invocation (every snippet passed commented out, 2026-09-04)
+    code = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
     errors = [
         f"missing mandatory invocation: {snippet}"
         for snippet in REQUIRED_SNIPPETS
-        if snippet not in source
+        if snippet not in code
     ]
     if OPTIONAL_AUTHORITY.search(source):
         errors.append("kernel authority is hidden behind an existence guard")
@@ -171,6 +176,11 @@ def selftest(source: str) -> None:
     expect_failure(
         source.replace('run "build input identity"', '# removed identity gate', 1),
         "deleted-verifier",
+    )
+    # the invocation kept verbatim but commented out is the same defect
+    expect_failure(
+        source.replace('run "build input identity"', '# run "build input identity"', 1),
+        "commented-out-verifier",
     )
     expect_failure(
         source.replace(

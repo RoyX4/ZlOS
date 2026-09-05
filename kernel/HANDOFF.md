@@ -7,7 +7,8 @@
 > for the complete product program. This file preserves measured hardware and
 > implementation history, so later sections intentionally retain dated claims
 > and reversals. T-8 in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md) records
-> the metadata chain that cannot currently regenerate as one build identity.
+> the metadata chain that could not regenerate as one build identity when this
+> notice was written; it is CLOSED there (`TENSIONS.md:165`, checked 2026-09-04).
 
 **QEMU segfaults on this box, and until 2026-08-27 every gate blamed the
 kernel for it.** Four crashes that day, all at the same binary offset
@@ -16,8 +17,10 @@ qemu-xhci + usb-storage + usb-kbd + usb-mouse under OVMF. If a boot gate fails
 with "the kernel never started", check for `CRASH QEMU ITSELF crashed` above it
 before bisecting anything:
 [`../docs/evidence/qemu-segfaults-2026-08-27.md`](../docs/evidence/qemu-segfaults-2026-08-27.md).
-`kernel/tools/checks/qemu-crash.sh` is the single detector; all eight landing boot gates
-source it and it REPORTS rather than deciding, because a teardown crash after
+`kernel/tools/checks/qemu-crash.sh` is the single detector; seven of the eight landing
+boot gates source it (**corrected 2026-09-04:** this said all eight —
+`grep -c qemu-crash tools/checks/verify-net.sh` → 0; the other seven do) and it
+REPORTS rather than deciding, because a teardown crash after
 the markers landed does not unprove the boot.
 
 **The previously unwatched 64-bit BIOS+GRUB route is green and mandatory now.**
@@ -64,6 +67,10 @@ historical coverage gap are recorded in
 [`docs/mp00-decision-ledger-2026-08-24.md`](docs/mp00-decision-ledger-2026-08-24.md).
 It normalizes 19 high-impact records and indexes all 47 legacy labels without
 pretending the remaining 42 labels already have normalized semantics.
+**Corrected 2026-09-04:** the ledger has since been regenerated —
+`kernel/metadata/decision-ledger.json` now carries 20 records and normalized
+`legacy_semantics` for all 47 labels (see the EV-026 paragraph at the end of
+this file).
 
 The generated EV-027 unreleased changelog, compatibility facts, migrations,
 known defects and recovery paths are recorded in
@@ -76,7 +83,8 @@ The generated EV-028 read-only provenance model and self-contained evidence-room
 HTML are recorded in
 [`docs/mp00-provenance-viewer-2026-08-24.md`](docs/mp00-provenance-viewer-2026-08-24.md).
 They expose exact origin, licenses, signatures, tests, health, 9 artifacts, 62
-apps, 17 security claims and 17 changes. This is host-static, not a booted zlOS
+apps (64 in today's `provenance-viewer.json`; 2026-09-04), 17 security claims
+and 17 changes. This is host-static, not a booted zlOS
 app or signed/live portal.
 
 The corrected reference-app registry and Maze pointer-route receipt is
@@ -96,7 +104,8 @@ physical-unverified claims so one route can never promote another by name.
 
 The exact top-level boot order is generated into
 [`docs/init-registry-truth-2026-08-23.md`](docs/init-registry-truth-2026-08-23.md).
-It binds 16 initialization stages and their dependencies/fallbacks to all six
+It binds 16 initialization stages (18 in today's `init-registry.json`;
+2026-09-04) and their dependencies/fallbacks to all six
 promoted QEMU routes without pretending that route readiness is physical or
 stage-specific provider proof.
 
@@ -109,7 +118,9 @@ are bound separately in
 The exact declared-input to logical-object to artifact reachability graph is
 [`docs/mp00-build-graph-2026-08-24.md`](docs/mp00-build-graph-2026-08-24.md).
 
-The exact dated 123-file build-input closure is reconstructable from the
+The exact dated 123-file build-input closure (162 files in today's
+`build-identity.json`, generated dirty on `fable/whole-tree-sweep`; 2026-09-04)
+is reconstructable from the
 deterministic archive described in
 [`docs/mp00-source-snapshot-2026-08-24.md`](docs/mp00-source-snapshot-2026-08-24.md).
 It is local and unsigned; it is not an off-host or whole-repository backup.
@@ -121,8 +132,9 @@ blocked rather than silently treating local files as permission to redistribute.
 
 The dated joined front door for the MP-00 receipt set is
 [`docs/mp00-evidence-registry-2026-08-23.md`](docs/mp00-evidence-registry-2026-08-23.md).
-It is not a current projection: its upstream registries disagree on build
-identity and regeneration fails closed under T-8. The dated verifier-canary,
+It is not a current projection: when written, its upstream registries disagreed
+on build identity and regeneration failed closed under T-8 (closed since — see
+`../docs/PROJECT-STATUS.md`; 2026-09-04). The dated verifier-canary,
 failure-injection and hostile-corpus boundary is
 [`docs/mp00-adversarial-registry-2026-08-23.md`](docs/mp00-adversarial-registry-2026-08-23.md).
 The dated frame-performance receipt and its open regressions are
@@ -336,11 +348,12 @@ Read this first in a new session. Everything below is verified, not remembered.
 > records. Its older narrative is **stale on five checkable points**, each
 > corrected in that audit with a command: it
 > says nothing in the kernel arms `lt_armed`
-> (`src/drivers/display/intel.c:4232` does, reachable from
-> `src/kernel.zl:1395`); it says there is no VBT parser (there is, and
+> (`src/drivers/display/intel.c:4502` `intel_link_train_arm(1)` inside
+> `intel_bringup_panel` does, reachable from `src/kernel.zl:5146` `panel_up()`;
+> lines re-grepped 2026-09-04); it says there is no VBT parser (there is, and
 > `intel_bringup_panel` calls `intel_vbt_find()`);
-> it says `src/graphics/framebuffer/fb.c` has no clipping (lines 763-798 are the
-> scissor, with four callers); it describes a boot fork `src/kernel.zl` no
+> it says `src/graphics/framebuffer/fb.c` has no clipping (lines 943-959 are the
+> scissor as of 2026-09-04, with four callers); it describes a boot fork `src/kernel.zl` no
 > longer has; and it carries a
 > northstar percentage its own source retracted.
 
@@ -428,7 +441,8 @@ verified current state:
   Sampled/late frames also retain damage-rectangle count and exact pixel area
   alongside the existing five phase timings.
 
-Current host evidence, rerun 2026-08-22: `tools/test_zllog.py` is **15/15**;
+Current host evidence, rerun 2026-08-22: `tools/test_zllog.py` is **15/15** (16
+test methods in the file on 2026-09-04, not re-run);
 `tests/host/zllog_e2e_test.py` is **5/5** across real shipping-writer containment,
 rotation, mismatched identity, torn super/slot metadata and automatic recovery
 from a transient MSC initialization failure; a fresh standalone
@@ -899,6 +913,11 @@ run for real.
 
 ## Still true, and the thing to fix next
 
+> **Stale since `panel_up` (checked 2026-09-04):** `intel_bringup_panel`
+> (`intel.c`, reached from `kernel.zl`'s `panel_up()` on the `P` diagnostic)
+> arms `lt_armed` and runs the whole modeset. The paragraph below describes
+> the tree before that landed and is kept as history.
+
 **Nothing in the kernel ever arms `lt_armed`.** Only `tests/host/dpll_test.c` and
 `tests/host/intel_probe.c` call `intel_link_train_arm()`. Every write path in
 `src/drivers/display/intel.c` is unreachable from zlOS itself — the driver reads the display
@@ -1003,6 +1022,9 @@ success and failure paths both.
 
 ### Still true
 
+> **No longer true (checked 2026-09-04):** `intel_bringup_panel` arms it from
+> `kernel.zl`'s `panel_up()`. Kept as history.
+
 **Nothing in the kernel arms `lt_armed`.** This runs from the host harness only.
 zlOS itself still cannot light the panel — the driver can, and is proven to, but
 the kernel has no caller. That is now the single thing between this and zlOS
@@ -1031,7 +1053,9 @@ interesting phases are blocked behind a parser and a grind:
 ```
 
 State measured rather than remembered: **one port, one pipe, one panel, one mode,
-polled.** 42 `*_A` registers, no VBT parser, no HDMI port bring-up (the DPLL
+polled.** 42 `*_A` registers, no VBT parser (**corrected 2026-09-04:**
+`intel_vbt_find()` is defined at `intel.c:4658` and called from
+`intel_bringup_panel` at `intel.c:4442`), no HDMI port bring-up (the DPLL
 clock math exists and is verified), and zero hotplug or interrupt code.
 
 ## What is actually a wall: `docs/concepts/what-is-actually-impossible.md`
@@ -1055,7 +1079,9 @@ under test.** That document re-grades the whole board against that bar. Summary:
 - **Highest impressive-per-remaining-work item on the whole board:** zlOS booting
   the ThinkPad from `raw_boot.asm`, lighting its own panel at 2560×1440 through
   its own modeset, drawing its own desktop — no GRUB, no Linux, no blob. Blocked
-  on **one missing caller**: nothing in the kernel arms `lt_armed`.
+  on **one missing caller**: nothing in the kernel arms `lt_armed`. (**Corrected
+  2026-09-04:** `intel_bringup_panel` arms it at `intel.c:4502`, reached from
+  `kernel.zl:5146` `panel_up()`; the remaining gate is the physical boot.)
 
 ## The three "what about…" questions, answered: `docs/concepts/beyond-the-kernel.md`
 
@@ -1063,7 +1089,10 @@ Other languages on zlOS, the internet, and rewriting the C in zl. Asked and
 measured 2026-08-17. Short version:
 
 - **Other languages** — no heap, no ELF loader, no per-process address space
-  (all four cores share one CR3, `src/arch/x86/smp.c:129`), and
+  (all four cores share one CR3, `src/arch/x86/smp.c:129`) — **corrected
+  2026-09-04:** `src/core/heap.c` is in `SOURCES` and the native UEFI64 path has
+  two CR3-owned process slots (2026-08-22 note near the top of this file);
+  `smp.c:129` is now `ap_slots_live` — and
   `fs_save`/`fs_load` is a RAM
   slot array, not a filesystem. Cheapest real win is hosting **zl's own
   interpreter** (1,900 lines) on zlOS; highest leverage is a **WASM interpreter**
@@ -1092,14 +1121,17 @@ measured 2026-08-17. Short version:
     **~3,800 to "zlOS printed my SSID list"**. An ESP32 over UART is ~400 lines
     if you just want the network stack unblocked now.
   - Still true: **USB tethering or a USB NIC** is the shortest path to packets,
-    and `src/drivers/input/xhci.c:1709 configure_bulk()` is why.
+    and `src/drivers/input/xhci.c:2981 configure_bulk()` is why.
 - **A browser** — **BUILT, and the estimate below was wrong in both directions.**
   It fetches `http://example.com/` by name off the real internet and renders it.
-  ~4,657 lines across `browser.c html.c layout.c http.c tcp.c net.c dns.c
-  virtio_net.c`, all in `SOURCES`, all gated. Not ~13,200 + ~10k — and **the
-  gate was not a heap**: there is none, and no design constraint was relaxed to
-  get here. `kernel/docs/browser-status.md` is the measured account, including
-  what it refuses (HTTPS, JavaScript, CSS beyond the built-in stylesheet) and
+  ~4,657 lines (8,930 by `wc -l` on 2026-09-04) across `browser.c html.c
+  layout.c http.c tcp.c net.c dns.c virtio_net.c`, all in `SOURCES`, all gated. Not ~13,200 + ~10k — and **the
+  gate was not a heap**: there was none then (`src/core/heap.c` exists now;
+  2026-09-04), and no design constraint was relaxed to get here. `kernel/docs/browser-status.md` is the measured account, including
+  what it refused then (HTTPS, JavaScript, CSS beyond the built-in stylesheet —
+  **corrected 2026-09-04:** `net/tls.c`, `net/x509.c` and `web/js.c` are in
+  `SOURCES`, and `browser-status.md`'s top records HTTPS and a bounded JS
+  interpreter landing) and
   the two regressions the merge cost it. The reasoning below was right that
   "unbounded" describes a Chrome-compatible browser and not a document one;
   it was wrong about the price and about the blocker.
@@ -1118,7 +1150,8 @@ measured 2026-08-17. Short version:
 - **C → zl** — the blocker is the compiler, not the kernel. The kernel builds
   with `compile`, the backend the root README marks **ARCHIVED**. Current tree:
   `sizeof(Value)` is now 16 B, but builtins still dispatch through a
-  **644-entry strcmp chain**, and every number is a `double` so **64-bit BARs
+  **644-entry strcmp chain** (831 `streq(name, …)` entries in
+  `freestanding/runtime_kernel.c` on 2026-09-04), and every number is a `double` so **64-bit BARs
   and DMA addresses are not representable** — the project's own recurring bug class.
   `compilel` emits real `i64`… until you use a bitwise operator, at which point
   the return type degrades to `double` and every operand is boxed and dispatched
@@ -1147,6 +1180,9 @@ Recovery: `sudo systemctl start lightdm`.
 ## The desktop is the boot state now (2026-08-18)
 
 `src/kernel.zl` ends in `if wm_avail() == 0 { ...text shell... } else { wm_session() }`.
+(**Corrected 2026-09-04:** that fork is no longer the file's tail — the file
+ends in `diag_done()`; the framebuffer check is `if wm_avail() == 0 { return 0 }`
+at `kernel.zl:14045` and `wm_session()` is reached from `kernel.zl:5954`.)
 With a framebuffer you get a compositor with the shell, System Monitor and
 About open; without one - which is what `verify.sh` boots - the old text shell
 runs unchanged and its transcript is still byte-identical to `golden.txt`.
@@ -1158,13 +1194,19 @@ of that run, including four things it found that no task list predicted, is
 
 ## Everything else in the kernel
 
-15 drivers, ~6,000 lines, all ours: `pci` `bga` `intel` `xhci` `efi` `apic`
+15 drivers, ~6,000 lines (2026-09-04: 17 `.c` files under `src/drivers/`,
+15,371 lines), all ours: `pci` `bga` `intel` `xhci` `efi` `apic`
 `virtio_gpu` `cpu` `nvme` `sched` `smp` `i2c_hid` `input` + two SMP trampolines.
 
 64-bit, 4 cores woken via INIT/SIPI, multitasking scheduler, NVMe persistence,
 bounded read/write USB mass storage, a persistent USB boot journal, USB HID
 keyboard, event-based input with modifiers and repeat, and a line editor with
 history.
+
+> **Corrected 2026-09-04:** the two paragraphs below are 2026-08-18 history.
+> `src/drivers/input/i2c_touch.c` is the decoder, `tests/host/i2ctest.c` covers
+> it, and the 2026-08-24 physical note at the top of this file records the pad
+> moving the cursor on the ThinkPad.
 
 **Unproven:** `src/drivers/input/i2c_hid.c` (QEMU has no Intel LPSS I2C) and the
 cold-start modeset.
@@ -1182,7 +1224,8 @@ and typed commands. On a machine with no framebuffer the old text shell runs
 exactly as it always did, and `verify.sh` still diffs it byte-for-byte against
 `golden.txt`.
 
-**Verified by boot, not by assertion:** `shots/v10-now.png`. All four boot
+**Verified by boot, not by assertion:** `shots/v10-now.png` (a disposable
+`kernel/shots/` render; not in the tree as of 2026-09-04). All four boot
 paths green — `verify.sh`, `tools/checks/verify-raw.sh`,
 `tools/checks/verify-efi.sh`, and the ISO.
 `wmtest` 79 · `inputtest` 24 · `tritest` 9 · `fbbench` all green.
@@ -1204,8 +1247,9 @@ measurement and a design comment, and passes every check while being
 unreachable. **A primitive is not done when it passes its test; it is done when
 something calls it and a gate covers the call.** For visual work the assertion
 has to check the PIXELS, not the state: `wm_anim_alpha()` reported a fade
-correctly for hours while nothing drew one. See T-16 and
-`docs/evidence/desktop-scale-and-effects.md` §5.
+correctly for hours while nothing drew one. See
+`docs/evidence/desktop-scale-and-effects.md` §5 (this also cited a T-16;
+`.ultra/TENSIONS.md` has no T-16 as of 2026-09-04).
 
 **Why the desktop looked small on a big screen, and where the effects went:**
 `docs/evidence/desktop-scale-and-effects.md`. Short version: `ui()` was `cell_w() / 8`,
@@ -1234,7 +1278,8 @@ The five that matter most to somebody touching this next:
    against a 1.23 MiB kernel. A kernel over that limit is not a build error —
    it is silently truncated and jumped into. `tools/images/mkdisk.sh` refuses
    to build such
-   an image now, and CHUNKS is 60.
+   an image now, and CHUNKS is 60 (256 since Stage 2 of `memory-model.md` —
+   `raw_boot.asm:53`, checked 2026-09-04).
 4. **The wallpaper is a cached bitmap**, and that is arithmetic rather than
    taste: a translucent full-screen pass is 22 cyc/px ≈ 22 ms at 1920×1200, the
    compositor redraws the wallpaper inside *every* damage rectangle, and the
@@ -1287,7 +1332,8 @@ inverts that. Designed 2026-08-17:
   next.** The frame target (every frame AND the peak under 16.67 ms), the
   vsync survey per backend (one source exists,
   `src/drivers/display/intel.c`'s `PIPE_FRMCNT_A`, and
-  it has zero callers), the blast radius of raising the PIT, and why SMP band
+  it has zero callers — **corrected 2026-09-04:** `intel_frame_count()` at
+  `intel.c:545` reads it, the HDMI fallback described above), the blast radius of raising the PIT, and why SMP band
   rendering is one call that should not be made yet — 1.76x measured, not 4x,
   and two bands is slower than serial. **Two of its entries carry correction
   banners** — one claim in it was wrong and says so.
@@ -1298,7 +1344,9 @@ inverts that. Designed 2026-08-17:
 - `docs/archive/superseded/desktop-plan.md` — the decisions, the evidence, and the line numbers.
 - `docs/desktop/desktop-toolkit.md` — **the layer that was missing from every earlier
   plan.** An **immediate-mode** toolkit (`ui.c`), chosen because a retained
-  widget tree needs a heap and *is* a list of children — zlOS has neither.
+  widget tree needs a heap and *is* a list of children — zlOS had neither when
+  this was chosen (a bounded kernel heap, `src/core/heap.c`, exists since
+  Stage 3; 2026-09-04).
   Widgets return whether they fired; nothing is allocated. Hit testing re-runs
   `app_draw` with drawing off, the same trick as `intel_modeset_dry()`.
 - `docs/desktop/desktop-look.md` — why it looks blocky. **The renderer is not the
@@ -1310,10 +1358,16 @@ inverts that. Designed 2026-08-17:
   size**. Fine for a desktop, a hard blocker for a browser. It is three
   resampling bugs, the
   worst being `fb_icon24` nearest-neighbour upscaling every icon at 2×
-  (`src/graphics/framebuffer/fb.c:929`).
+  (`src/graphics/framebuffer/fb.c:1347`, whose comment now describes that
+  copying in the past tense; re-grepped 2026-09-04).
 - `docs/desktop/desktop-polish-and-speed.md` — what makes a desktop look modern, and
-  what it costs. Three facts up front: **three of four cores are parked** in
-  `cli; hlt` forever (`src/arch/x86/smp.c:79`) so all drawing is single-core;
+  what it costs. Three facts up front: **three of four cores are parked**
+  (re-measured 2026-09-04: `src/arch/x86/smp.c`'s `smp_ap_main` is the
+  band-rendering worker, but the APs run it only after `smp_go` — the
+  `smp`/`cores` word in the desktop Terminal (`term.c:368`) or `*` in the text
+  shell (`kernel.zl:5548`). `smp_start()` has that one caller
+  (`runtime_kernel.c:2372`) and nothing at boot calls it, so an ordinary boot
+  still draws on one core);
   **nothing measures a frame inside the kernel** (TSC exists in
   `src/arch/x86/cpu.c`, not exposed to
   zl); and the renderer is now benchmarked — see below.
@@ -1358,12 +1412,14 @@ inverts that. Designed 2026-08-17:
   **On "can we just take Linux's driver":** no, and the doc measures why on this
   machine. `i915.ko` is **11.2 MB** uncompressed and ~100K lines; Mesa's Intel
   Vulkan driver is **24.3 MB**; the **entire zlOS kernel is 1.07 MB** and 11,374
-  hand-written lines. FreeBSD runs i915 only via **LinuxKPI** — it emulates the
+  hand-written lines (2026-08-17 figures; on 2026-09-04 `kernel/src` is 104,749
+  lines and `kernel.elf` 7,463,868 bytes). FreeBSD runs i915 only via **LinuxKPI** — it emulates the
   Linux kernel API rather than porting the driver, and i915 assumes GEM, TTM,
-  dma-buf/dma_fence locking, workqueues and a heap, none of which zlOS has by
-  design. **`src/drivers/display/intel.c` already does the correct thing: borrow
+  dma-buf/dma_fence locking, workqueues and a heap, none of which zlOS had by
+  design when this was written (a bounded kernel heap, `src/core/heap.c`, exists
+  now; 2026-09-04). **`src/drivers/display/intel.c` already does the correct thing: borrow
   Linux's knowledge, not its code.** Also:
-  `src/drivers/display/virtio_gpu.c:314` disables virgl on purpose — enabling
+  `src/drivers/display/virtio_gpu.c:359` disables virgl on purpose — enabling
   it would give real 3D in QEMU only, never on the laptop.
 - `docs/archive/superseded/desktop-northstar-feasibility.md` — can zlOS run the `~/zl OS v10.dc.html`
   mockup? Keep its layer breakdown and gap list; **ignore every percentage in
@@ -1422,10 +1478,15 @@ the desktop on real hardware:
    `BACK_MAX` is `1920*1200`), and it takes subpixel text, fast pixel readback
    and **window dragging** with it, silently. The ThinkPad panel is 2560×1440.
    Verified by reading; **not yet observed** — zlOS has never booted on it.
+   **Corrected 2026-09-04:** no longer true — `BACK_MAX` is gone; `fb.c:221`
+   `BACK_LIMIT = HI_APSTK - HI_BACK` (40 MiB) and `fb.c:202` records the back
+   buffer covering 3840×2160, as item C4 above says.
 2. **`src/graphics/framebuffer/fb.c` has no clipping.** Every primitive clips
    to the screen and nothing
    else, so there is no way to repaint part of the screen. That, not the window
-   code, is what blocks a real compositor.
+   code, is what blocks a real compositor. **Corrected 2026-09-04:** the scissor
+   exists (`fb.c:943-959`, `fb_clip()`), as the authority notice at the top of
+   this file already says.
 ## Arrow keys reached no application until 2026-08-18, and PS/2 was innocent
 
 Reported as "arrows are not delivered to apps", with a correct measurement
@@ -1683,8 +1744,10 @@ cd kernel
 ```
 
 `tools/checks/check-zlcalls.py` reads the builtin names out of
-`src/runtime/interp_kernel.c`'s own
-`streq(name, "...")` table rather than transcribing them, and it found `key()`
+`freestanding/runtime_kernel.c`'s own
+`streq(name, "...")` table rather than transcribing them (`check-zlcalls.py:35`;
+**corrected 2026-09-04** — this said `src/runtime/interp_kernel.c`, which has no
+such table), and it found `key()`
 on its first run. **A `_Static_assert` nobody has watched fail is a decoration**
 — that rule applies to these too, which is what `--selftest` is for.
 
@@ -1709,7 +1772,9 @@ cd tests/host && ./build.sh && ./wmtest && ./inputtest && ./fbbench && ./tritest
 **The `probe-*.py` scripts that drive the POINTER are not optional extras.**
 Every other gate here types, and the compositor's entire pointer path - drag,
 click-to-focus, the close box, the dock, the menu - was dead for hours while
-all of them stayed green. See T-15.
+all of them stayed green. See T-15 (no T-15 exists in `.ultra/TENSIONS.md` as
+of 2026-09-04; `docs/evidence/POINTER-EVIDENCE.md` is the retained pointer
+record).
 
 `tools/checks/check-memmap.sh` parses the fixed addresses out of `src/kernel.zl` and derives
 their sizes from the same constants, so bumping `FS_SLOT` or `HIST_N` re-runs
@@ -1725,10 +1790,10 @@ address and requires rejection. This closes the old `DISK_SCRATCH` blind spot;
 new memory owners still need to use a discoverable declaration shape.
 **`./build.sh` DOES NOT REBUILD WHAT THE PROBES BOOT, and this will cost you an
 afternoon.** `build.sh` produces `kernel.elf`. Every `probe-*.py` boots
-`zlOS.iso` (`tools/probes/exercise.py:280` `qemu_argv` → `-cdrom zlOS.iso`),
+`zlOS.iso` (`tools/probes/exercise.py:342` `qemu_argv` → `-cdrom zlOS.iso`),
 which is made by
-`tools/images/mkiso.sh` and only by that script. `tools/probes/exercise.py:273`
-`build()` runs it for you —
+`tools/images/mkiso.sh` and only by that script. `tools/probes/exercise.py:335`
+`build()` runs it for you (lines re-grepped 2026-09-04) —
 so a probe run WITHOUT `--no-build` is honest, and `./build.sh && ./probe-x.py
 --no-build` silently tests the kernel you had before your edit.
 
@@ -1807,7 +1872,9 @@ the shell responds, and `verify.sh` gates it. It just cannot do graphics.
 
 `kernel/metadata/dependency-lock.json` is now `zlos.host-dependency-lock.v2`. It retains
 the original 15 invoked command and two firmware identities, and joins 91 exact
-runtime files to 156 recursively installed binary packages. Each package records
+runtime files to 156 recursively installed binary packages. (**2026-09-04:** the
+file is now schema `v3` — 20 commands, 2 firmware, 101 runtime files, 160
+packages, 104 source packages.) Each package records
 binary version/architecture, source package/version, raw and resolved dependency
 edges, and local archive custody. The generator batches package ownership and
 installed metadata discovery and rejects missing commands, binary drift, wrong
@@ -1820,12 +1887,13 @@ but does not complete it or EV-005. The dependent toolchain manifest, build grap
 and joined evidence registry were regenerated after the lock changed.
 
 EV-008 is closed for the current batch. `kernel/metadata/wrapper-registry.json` hashes
-and classifies all 141 current shebang wrappers, including 17 legacy/action/
+and classifies all 141 current shebang wrappers (179 in today's registry;
+2026-09-04), including 17 legacy/action/
 probe policy gaps that are explicitly not landing authority. The only supported
 entry remains `gates/run-land-gate-contained.sh start`; `check-land-gate.py`
-proves 71 mandatory seams, including memory-map mutation and UI-scale
+proves 71 mandatory seams (108 `REQUIRED_SNIPPETS` on 2026-09-04), including memory-map mutation and UI-scale
 contracts, and rejects masked child-failure and masked final-exit mutations.
-The adversarial registry is 19/19 canaries caught. A stale zero-byte
+The adversarial registry is 19/19 canaries caught (23/23 on 2026-09-04). A stale zero-byte
 `kernel64.elf` was discovered by CAN-006 and rebuilt under a two-core,
 low-priority limit; its final 2,702,592-byte output matches the registered hash.
 

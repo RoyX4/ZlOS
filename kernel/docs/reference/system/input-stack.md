@@ -15,7 +15,7 @@ Insert and Delete are all `0xE0`-prefixed two-byte scancodes, and a driver that
 mishandles the prefix loses **exactly that set** and nothing else. It fits the
 evidence perfectly.
 
-It is also wrong. `hosttest/inputtest.c` drives the real `input.c` with a
+It is also wrong. `kernel/tests/host/inputtest.c` drives the real `input.c` with a
 scripted scancode stream and the PS/2 path decodes all nine of them correctly,
 before any change:
 
@@ -27,7 +27,7 @@ PS/2 up/lt/rt/pgup/pgdn      ->  KEY_DOWN 0x112  0x110  0x111  0x116  0x117
 `idt.c` never mattered either. Its IRQ1 handler pushes whatever byte port 0x60
 produced into a ring, `0xE0` included, and takes no view on what it means.
 
-**The keyboard in the repro was not the PS/2 one.** `try.sh` attaches
+**The keyboard in the repro was not the PS/2 one.** `tools/run/try.sh` attaches
 `-device usb-kbd`, and QEMU routes typing to the USB keyboard once it exists.
 The failing path was USB HID.
 
@@ -140,11 +140,14 @@ assume the stack is complete.
   the physical light never changes.
 - **`i2c_hid.c` is untouched and still unproven** — QEMU has no Intel LPSS I2C,
   so the ThinkPad's built-in keyboard has never been exercised through it.
+  **Corrected 2026-09-04:** `i2c_touch.c` decodes it, `tests/host/i2ctest.c`
+  covers it, and `HANDOFF.md`'s 2026-08-24 note records the physical touchpad
+  moving the cursor. (The built-in *keyboard* is PS/2 IRQ1, same note.)
 - **PrintScreen, ScrollLock and Pause** are mapped on neither path.
 
 ## The test
 
-`hosttest/inputtest.c` compiles the exact `input.c` that ships in the kernel
+`kernel/tests/host/inputtest.c` compiles the exact `input.c` that ships in the kernel
 against fake hardware. No GPU, no root, no QEMU — it runs anywhere in
 milliseconds.
 
@@ -237,7 +240,8 @@ records `kbd_port` and skips that port **before** touching it.
 
 **3. `xhci_key()` gave up on the first foreign event.** It polled the ring once
 and returned whatever was in the key queue. When the popped event belonged to
-the pointer the queue was empty, so it returned 0 - and `input.c:271` reads 0 as
+the pointer the queue was empty, so it returned 0 - and `input.c`'s USB drain
+loop (line 271 at the time) reads 0 as
 "no more keys" and stops draining. With a pointer producing events steadily,
 real keystrokes queue up behind them and never surface: the keyboard appears
 completely dead while the ring is in fact busy. It now drains until a key comes
@@ -484,21 +488,31 @@ layout is a different size in different builds of the same file. `set_gate()`
 still casts a handler pointer through `unsigned long`, which truncates to 32
 bits on that target - harmless only while the image loads below 4 GiB
 (measured: `&idt` at 0x3DD331B0, about 1 GiB), and worth fixing for the same
-reason.
+reason. **Fixed since (checked 2026-09-04):** `set_gate` casts to
+`unsigned long long`; `CLAUDE.md` records the shift-by-32 that clang had turned
+into a bare `ret`.
 
 ## Things that are still not known
 
-- **Why the restructured interrupt handlers killed the 64-bit boot.** A bisect
+- **Why the restructured interrupt handlers killed the 64-bit boot.** (**Answered
+  since, 2026-09-04:** `set_gate`'s `(u32)(a >> 32)` on a 32-bit `unsigned long`
+  was undefined and clang compiled it to a bare `ret`, so every gate's high half
+  was whatever `eax` held — `CLAUDE.md` §"Never put a pointer through
+  `unsigned long`".) A bisect
   proves they did - original handlers boot, the restructured ones die inside
   `setup_idt()` - but the mechanism was never found. Ruled out: the ISR calling
   `console_pxw()`, the tablet driver, and the missing `-mgeneral-regs-only`.
   The restructure was reverted because it was an unproven fix for a collision
   that a controlled A/B could not reproduce.
-- **The touchpad.** `i2c_hid.c` is complete and has zero test coverage. QEMU
+- **The touchpad.** `i2c_hid.c` is complete and has zero test coverage
+  (**2026-09-04:** `tests/host/i2ctest.c` exists and the pad has run on the
+  laptop — see the correction above). QEMU
   does not emulate Intel's LPSS I2C controller at PCI 00:15.1, so there is
   nothing for it to talk to and no flag that conjures one. It can only ever be
   tested on the laptop.
-- **The USB HID path emits only `EV_CHAR`.** `input.c:270` pushes characters and
+- **The USB HID path emits only `EV_CHAR`.** (**Fixed — that is the whole first
+  half of this file:** `xhci_key_event()` and `input.c:778` `handle_hid_event()`;
+  noted 2026-09-04.) When written, `input.c` pushed characters and
   nothing else, so over USB there are no key-down/key-up events and no
   navigation keys - an ESC arrives as character 27, not `0x101`. Anything keying
   off arrows or Home/End works on PS/2 and not on USB.

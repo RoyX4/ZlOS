@@ -132,6 +132,16 @@ run "address-space registry write" "$WT/kernel" \
     python3 tools/generators/gen-address-space-registry.py --write --selftest
 run "address-space registry check" "$WT/kernel" \
     python3 tools/generators/gen-address-space-registry.py --check --selftest
+# -mgeneral-regs-only guards the ISR's own file and not its callees; this
+# disassembles everything an interrupt handler reaches (gcc -m64) and refuses
+# any SSE/x87 there. It bit on zllog_event_irq on 2026-09-04.
+run "ISR callees stay off SSE" "$WT/kernel" ./tools/checks/check-isr-sse.sh
+# Three checkers that existed and nothing ran (found 2026-09-04): the DMA
+# seam rules, the EFI -Werror= guard in all three directions, and the
+# guest-RAM promise every QEMU launcher must keep.
+run "DMA seam rules" "$WT/kernel" ./tools/checks/check-dma.sh
+run "EFI -Werror guard bites" "$WT/kernel" ./tools/checks/wguard.sh
+run "guest RAM promise" "$WT/kernel" ./tools/checks/check-ram.sh
 run "memory map" "$WT/kernel" ./tools/checks/check-memmap.sh
 run "memory map mutation" "$WT/kernel" ./tools/checks/check-memmap.sh --selftest
 run "memory-map mirrors" "$WT/kernel" python3 tools/checks/check-memmap-mirror.py
@@ -180,7 +190,10 @@ if [ -f "$WT/kernel/SOURCES" ]; then
         continue
         ;;
     esac
-    if grep -q "$rel\|$b" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
+    # match the RELATIVE path only: matching the bare basename read a file
+    # in a new directory as "host-only" whenever a same-named file existed
+    # anywhere in build.sh (net.c appears there 21 times)
+    if grep -q "$rel" "$WT/kernel/tests/host/build.sh" 2>/dev/null; then
       # host-only: a harness compiles it, the kernel does not. Correct.
       echo "host-only (not in the kernel): $b"; hostonly=$((hostonly+1))
     elif grep -lsr -- "${b%.c}" "$WT"/kernel/src "$WT"/kernel/boot 2>/dev/null \

@@ -699,9 +699,9 @@ fn cat_draw(ax, ay, aw, ah) {
     i = 0
     while i < reg_count() {
         id = reg_id_at(i)
-        crow = idiv(i, cols) - cat_scroll         # idiv: a row number
-        ccol = i % cols
-        ty = gy + crow * CAT_TILE_H * u
+        cat_row = idiv(i, cols) - cat_scroll         # idiv: a row number
+        cat_col = i % cols
+        ty = gy + cat_row * CAT_TILE_H * u
         # only the rough vertical band, to skip work for rows scrolled off -
         # fb_clip (set to the client rect before app_draw runs) is what makes
         # this an optimisation rather than a correctness requirement.
@@ -716,7 +716,7 @@ fn cat_draw(ax, ay, aw, ah) {
         # exactly and this loses nothing.
         if ty >= gy {
             if ty < ay + ah {
-                tx = ax + ccol * CAT_TILE_W * u
+                tx = ax + cat_col * CAT_TILE_W * u
                 hv = 0
                 if cat_hover == i { hv = 1 }
                 # THE TILE FACE COMES FROM THE THEME, NOT FROM THE OLD PALETTE.

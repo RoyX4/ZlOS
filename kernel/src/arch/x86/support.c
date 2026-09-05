@@ -44,12 +44,14 @@ static char brand[49];
 static void do_cpuid(unsigned leaf, unsigned *a, unsigned *b, unsigned *c, unsigned *d)
 {
     unsigned ra, rb, rc, rd;
+    /* Let the compiler own ebx. The old save-through-esi dance did
+     * `xchgl %ebx,%esi`, which on x86-64 zero-extends and silently clears
+     * rbx[63:32] without declaring rbx touched; -fno-pic everywhere here, so
+     * a "=b" output is fine on the 32-bit build too. */
     __asm__ volatile(
-        "movl %%ebx, %%esi\n\t"
         "cpuid\n\t"
-        "xchgl %%ebx, %%esi\n\t"
-        : "=a"(ra), "=S"(rb), "=c"(rc), "=d"(rd)
-        : "0"(leaf)
+        : "=a"(ra), "=b"(rb), "=c"(rc), "=d"(rd)
+        : "0"(leaf), "2"(0u)
         : "memory");
     *a = ra; *b = rb; *c = rc; *d = rd;
 }

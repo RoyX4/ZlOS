@@ -91,7 +91,9 @@ int vmm_pt_txn_apply(struct vmm_pt_transaction *transaction)
     for (i = 0; i < transaction->count; i++) {
         *transaction->changes[i].entry = transaction->changes[i].after;
         transaction->applied++;
-        if (*transaction->changes[i].entry != transaction->changes[i].after)
+        /* the CPU may set Accessed/Dirty (bits 5/6) on a present entry between
+         * our write and our read; those are not a verify failure */
+        if ((*transaction->changes[i].entry & ~0x60ULL) != (transaction->changes[i].after & ~0x60ULL))
             return fail_after_restore(transaction, VMM_PT_TXN_ERR_VERIFY);
         if (transaction->fail_after_write == transaction->applied)
             return fail_after_restore(transaction, VMM_PT_TXN_ERR_INJECTED);
@@ -100,7 +102,9 @@ int vmm_pt_txn_apply(struct vmm_pt_transaction *transaction)
     if (!transaction->flush(transaction->flush_context))
         return fail_after_restore(transaction, VMM_PT_TXN_ERR_FLUSH);
     for (i = 0; i < transaction->count; i++) {
-        if (*transaction->changes[i].entry != transaction->changes[i].after)
+        /* the CPU may set Accessed/Dirty (bits 5/6) on a present entry between
+         * our write and our read; those are not a verify failure */
+        if ((*transaction->changes[i].entry & ~0x60ULL) != (transaction->changes[i].after & ~0x60ULL))
             return fail_after_restore(transaction, VMM_PT_TXN_ERR_VERIFY);
     }
     transaction->state = VMM_PT_TXN_APPLIED;

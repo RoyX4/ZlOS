@@ -59,6 +59,22 @@ ksetjmp:
     movq    %rax, 64(%rcx)
     movq    (%rsp), %rax
     movq    %rax, 72(%rcx)
+    /* Win64 also makes xmm6-xmm15 and MXCSR callee-saved, and clang keeps
+     * live doubles in them across the ksetjmp call (measured 2026-09-04 in
+     * zl_run_program: xmm6-9 spilled as callee-saved, and the longjmp path
+     * skipped every epilogue that would have restored them). Bytes 80..255
+     * of the buffer; movups because the buffer is only 8-aligned. */
+    stmxcsr 80(%rcx)
+    movups  %xmm6,   96(%rcx)
+    movups  %xmm7,  112(%rcx)
+    movups  %xmm8,  128(%rcx)
+    movups  %xmm9,  144(%rcx)
+    movups  %xmm10, 160(%rcx)
+    movups  %xmm11, 176(%rcx)
+    movups  %xmm12, 192(%rcx)
+    movups  %xmm13, 208(%rcx)
+    movups  %xmm14, 224(%rcx)
+    movups  %xmm15, 240(%rcx)
     xorl    %eax, %eax
     ret
 
@@ -77,6 +93,17 @@ klongjmp:
     movq   40(%rcx), %r13
     movq   48(%rcx), %r14
     movq   56(%rcx), %r15
+    ldmxcsr 80(%rcx)
+    movups   96(%rcx), %xmm6
+    movups  112(%rcx), %xmm7
+    movups  128(%rcx), %xmm8
+    movups  144(%rcx), %xmm9
+    movups  160(%rcx), %xmm10
+    movups  176(%rcx), %xmm11
+    movups  192(%rcx), %xmm12
+    movups  208(%rcx), %xmm13
+    movups  224(%rcx), %xmm14
+    movups  240(%rcx), %xmm15
     movq   72(%rcx), %r8
     movq   64(%rcx), %rsp
     jmp    *%r8

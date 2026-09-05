@@ -106,7 +106,8 @@ fi
 
 echo "== 64-bit multiboot: UEFI + GRUB =="
 if [ ! -f "$OVMF_CODE" ] || [ ! -f "$OVMF_VARS" ]; then
-    echo "  skip  no OVMF firmware (apt install ovmf)"
+    echo "  skip: no OVMF firmware (apt install ovmf) - the UEFI route did not run"
+    fail=1                           # half the routes booted is not green
 else
     VARS=$(mktemp)
     cp "$OVMF_VARS" "$VARS"

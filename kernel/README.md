@@ -188,10 +188,15 @@ for exactly this reason.
 
 ## Current limits
 
-The early polling-only description above is historical. The current kernel has
-interrupt-driven input, a timer, a compositor, NVMe and zlfs. It still has no
-general-purpose heap or active process scheduler, and the kernel-side zl
-interpreter is not linked into production. Read
+The early polling-only description above (including its 16 KiB stack line —
+the boot banner now says 256 KiB, `src/kernel.zl:14588`) is historical. The
+current kernel has interrupt-driven input, a timer, a compositor, NVMe and
+zlfs. **Corrected 2026-09-04:** this paragraph used to say it still had no
+general-purpose heap, no active process scheduler, and no linked kernel-side zl
+interpreter; `SOURCES` lists `src/core/heap.c` (a bounded 64 MiB kernel heap),
+`src/core/sched.c` and `src/runtime/interp_kernel.c`, and the banner above
+already said "heap online … scheduler opt-in". What remains open is in the
+project status. Read
 [`../docs/PROJECT-STATUS.md`](../docs/PROJECT-STATUS.md) for current repository
 and implementation truth. [`HANDOFF.md`](HANDOFF.md) preserves the measured
 hardware narrative and dated implementation history; do not infer current queue

@@ -180,6 +180,21 @@ echo "built ./tlscryptotest (run: ./tlscryptotest)"
 gcc $HOST_INCLUDES -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlstest tlstest.c ../../src/net/tls.c ../../src/net/crypto.c ../../src/net/x509.c ../../src/net/ecdsa.c ../../src/net/rsa.c ../../src/net/roots.c
 echo "built ./tlstest       (run: ./tlstest)"
 
+# The state machine against crafted records - what a well-behaved openssl
+# peer never sends: a record before ServerHello, a split message, a second
+# Finished. Includes tls.c to reach the statics.
+gcc $HOST_INCLUDES -I../../src/net -O1 -g -Wall -Wextra -D_GNU_SOURCE -o tlsstatetest tlsstatetest.c ../../src/net/crypto.c ../../src/net/x509.c ../../src/net/ecdsa.c ../../src/net/rsa.c ../../src/net/roots.c
+echo "built ./tlsstatetest  (run: ./tlsstatetest)"
+
+# sched.c had no host test at all. Two: the System V build (task_sleep really
+# waits; callee-saved GPRs survive a switch) and the EFI build's Microsoft-ABI
+# switch_to, compiled -mabi=ms so rsi/rdi/xmm6-15 preservation is what runs.
+# -DZL_HOSTTEST turns the trampoline's `sti` into `nop` (sti faults in ring 3).
+gcc $HOST_INCLUDES -O1 -g -Wall -Wextra -D_GNU_SOURCE -DZL_64 -DZL_HOSTTEST -o schedtest schedtest.c ../../src/core/sched.c
+echo "built ./schedtest     (run: ./schedtest)"
+gcc $HOST_INCLUDES -O1 -g -Wall -Wextra -D_GNU_SOURCE -DZL_64 -DZL_EFI -DZL_HOSTTEST -mabi=ms -fno-stack-protector -fno-builtin -o schedtest_ms schedtest_ms.c ../../src/core/sched.c
+echo "built ./schedtest_ms  (run: ./schedtest_ms)"
+
 # The bounded JavaScript interpreter. The SCOPE CLAIM in js.h is under test as
 # much as the code: section 7 asserts that what it cannot do fails cleanly with
 # a message, because a parser that accepts garbage and evaluates it to 0 is
@@ -393,7 +408,8 @@ echo "built ./inputtest_feel"
 # file, later. The i386 build is the one the kernel actually ships.
 gcc $HOST_INCLUDES -O2 -w -o jmptest   jmptest.c ../../src/arch/x86/ksetjmp.S
 gcc $HOST_INCLUDES -m32 -O2 -w -o jmptest32 jmptest.c ../../src/arch/x86/ksetjmp.S
-echo "built ./jmptest       (run: ./jmptest && ./jmptest32)"
+echo "built ./jmptest       (run: ./jmptest)"
+echo "built ./jmptest32     (run: ./jmptest32)"   # its own line, so run-all.sh's list sees it
 
 # The kernel's libc replacements, against the real libc. Fourteen functions,
 # each a dozen lines, each with a well-known way to be SUBTLY wrong - signed

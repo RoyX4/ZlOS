@@ -975,7 +975,7 @@ int ui_segmented(int x, int y, int w, int h, const char *items, int sel, int siz
          * on every item but the last */
         if (i + 1 < n && iw > 1)
             fb_fill_px(ix + iw - 1, iy, 1, ih, ui_color(UI_COLOR_CUT));
-        int tw = imin(ui_text_w(buf, size, 0), iw);
+        int tw = imin(ui_text_w(buf, size, UI_F_BOLD), iw);   /* measured as drawn: bold */
         ui_text(ix + (iw - tw) / 2, text_cy(iy, ih, size, UI_F_BOLD), buf, ink,
                 size, UI_F_BOLD);
         ui_ring(ix, iy, iw, ih);
@@ -1084,7 +1084,9 @@ int ui_tabstrip(int x, int y, int w, const char *items, int sel)
             if (i + 1 < n && tw > 1)
                 fb_fill_px(cx + tw - 1, ty, 1, th, ui_color(UI_COLOR_CUT));
             int room = tw - pl - pr - xw;
-            if (room > 0)
+            /* the label must FIT the room, not merely have some: a 46-char
+             * title ran under the close glyph and into the next tab */
+            if (room > 0 && ui_text_w(buf, UI_MD, 0) <= room)
                 ui_text(cx + pl, text_cy(ty, th, UI_MD, 0), buf, ink, UI_MD, 0);
             /* the close glyph never takes ZD_TEXT_INERT. It used to take
              * ZD_SURF_7, which is that token - 2.0222:1 on ZD_RAISE, a mark

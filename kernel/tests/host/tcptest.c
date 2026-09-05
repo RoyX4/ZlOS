@@ -805,6 +805,47 @@ static void t_adversarial(void)
           avail_before, tcp_available());
 }
 
+/* ---- blind off-path injection -------------------------------------------------
+ * The one out-of-order slot used to accept ANY future sequence number - half
+ * of sequence space. A forged segment with the right 4-tuple (the local port
+ * is sequential from 40000) and a far-ahead seq parked itself in the slot for
+ * the life of the connection, and every legitimate out-of-order segment after
+ * it was dropped. The RST path had the RFC 793 window test; the data path
+ * did not. Found 2026-09-04. */
+static void t_blind_future_segment(void)
+{
+    unsigned char junk[100], first[100], second[100], buf[512];
+    memset(junk, 'X', sizeof junk); memset(first, 'F', sizeof first); memset(second, 'S', sizeof second);
+
+    establish(0x33330000u);
+    int ooo0 = tcp_rx_ooo(), oow0 = tcp_rx_out_of_window();
+    inject(peer_isn + 1 + 0x40000000u, our_isn() + 1, F_ACK | F_PSH, junk, 100);
+    CHECK(tcp_rx_ooo() == ooo0, "a segment 1 GiB past the window took the out-of-order slot");
+    CHECK(tcp_rx_out_of_window() == oow0 + 1, "...and was not counted as out of window");
+    CHECK(tcp_state() == TCP_ESTABLISHED, "state %s after a far-future segment", tcp_state_name(tcp_state()));
+
+    /* a legitimate second-of-two segment must still be held, then delivered
+     * when the first fills the hole */
+    inject(peer_isn + 1 + 100, our_isn() + 1, F_ACK | F_PSH, second, 100);
+    CHECK(tcp_rx_ooo() == ooo0 + 1, "the legitimate out-of-order segment was not held");
+    inject(peer_isn + 1, our_isn() + 1, F_ACK | F_PSH, first, 100);
+    int n = tcp_recv(buf, sizeof buf);
+    CHECK(n == 200, "after the hole filled %d bytes were delivered, want 200", n);
+    CHECK(n == 200 && buf[0] == 'F' && buf[199] == 'S', "the two segments came out in order");
+}
+
+/* Past SYN_SENT every segment carries ACK (RFC 793 §3.9). One without it is
+ * not from the peer's stack and does not get to carry data. */
+static void t_data_without_ack(void)
+{
+    unsigned char data[100]; memset(data, 'R', sizeof data);
+    establish(0x44440000u);
+    inject(peer_isn + 1, 0, F_PSH, data, 100);
+    CHECK(tcp_available() == 0, "%d bytes accepted from a segment with no ACK flag", tcp_available());
+    inject(peer_isn + 1, our_isn() + 1, F_ACK | F_PSH, data, 100);
+    CHECK(tcp_available() == 100, "the same data WITH the ACK flag was refused (%d)", tcp_available());
+}
+
 int main(void)
 {
     printf("tcp.c against scripted packet sequences, no QEMU\n\n");
@@ -823,6 +864,10 @@ int main(void)
     t_sequence_wrap();
     t_send_path();
     t_adversarial();
+    /* last: these read the cumulative ooo/oow counters as deltas, but the
+     * older tests above compare them as absolutes */
+    t_blind_future_segment();
+    t_data_without_ack();
     printf("\n%d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

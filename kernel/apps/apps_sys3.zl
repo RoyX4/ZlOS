@@ -329,12 +329,12 @@ fn s3du_mount(x, y, w, nm, flag, used, total, ok) {
         return by + 18 * u + ui_th(S3_MD) + 6 * u
     }
     uk = idiv(used, 1024)                    # idiv: whole KiB
-    tk = idiv(total, 1024)                   # idiv: whole KiB
+    s3du_tk = idiv(total, 1024)                   # idiv: whole KiB
     num_aa(x, ty, uk, theme(TH_TEXT_DIM))
     s3_mono(x + s3_numw(uk), ty, " KiB used", theme(TH_TEXT_DIM))
-    tw = s3_numw(tk) + s3_mw(" KiB")
-    num_aa(x + w - tw, ty, tk, theme(TH_TEXT_DIM))
-    s3_mono(x + w - tw + s3_numw(tk), ty, " KiB", theme(TH_TEXT_DIM))
+    tw = s3_numw(s3du_tk) + s3_mw(" KiB")
+    num_aa(x + w - tw, ty, s3du_tk, theme(TH_TEXT_DIM))
+    s3_mono(x + w - tw + s3_numw(s3du_tk), ty, " KiB", theme(TH_TEXT_DIM))
     return ty + ui_th(S3_MD) + 6 * u
 }
 

@@ -156,12 +156,16 @@ void smp_ap_main(void)
     int id = (int)((b >> 24) & 0xFF);
 
     ap_last_id = id;
-    if (id < 32) ap_mask |= (1u << id);
-    ap_online++;
+    /* Several APs can arrive inside the same microsecond; a plain `|=` and
+     * `++` are read-modify-write and two late cores could both claim slot 1
+     * and lose an increment. Atomic RMW, and the slot is what THIS core's
+     * increment returned. */
+    if (id < 32) __sync_fetch_and_or(&ap_mask, (1u << id));
+    int slot = (int)__sync_add_and_fetch(&ap_online, 1);
 
     /* Claim a slot by arrival order, not by APIC id - ids are not dense and a
      * sparse array would leave the dispatcher spinning on a slot nobody owns. */
-    int slot = ap_online;              /* 1..n-1; the BSP is band 0          */
+    /* slot is 1..n-1; the BSP is band 0 */
     if (slot < 1 || slot >= SMP_SLOTS) {
         for (;;) __asm__ volatile("cli; hlt");   /* more cores than slots    */
     }

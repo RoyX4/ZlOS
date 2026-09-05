@@ -64,7 +64,7 @@ CLOSED, each with the command that established it:
 - [x] **A sole owner can drive the Gen9.5 blitter ring.** The question the whole
       driver was gated on. i915 unbound on the target machine: `START=0x400000`,
       `CTL=1`, HEAD chased TAIL, **16384/16384 pixels filled**. No execlists
-      needed — `RING_START`/`CTL`/`TAIL` is the path. `docs/gpu-driver.md`.
+      needed — `RING_START`/`CTL`/`TAIL` is the path. `kernel/docs/drivers/display/gpu-driver.md`.
 - [x] **The compositor calls the driver.** `wm.c` tries the display plane before
       compositing a sprite; `fb_fill_px` offers large fills to the blitter. Both
       fall back and both were proven to switch (a `wmshot` render diff of 927
@@ -72,7 +72,7 @@ CLOSED, each with the command that established it:
 - [x] **The render engine's two blockers.** The Gen9 pixel shader (80 bytes,
       lifted out of Mesa, colour patchable) and the 77-packet blended-draw
       pipeline (3240 dwords, captured from the vendor driver). `gpu_shader.inc`,
-      `gpu_batch.inc`, `docs/gen9-blend-pipeline.md`.
+      `gpu_batch.inc`, `kernel/docs/drivers/display/gen9-blend-pipeline.md`.
 - [x] **`check-himap.sh`** — the C side of the memory map finally has a checker,
       validated by watching it reject `edid_buf` put back where it was.
 
@@ -93,7 +93,8 @@ OPEN:
       not a blocker.
 - [ ] **SMP band rendering** — 1.78x on the desktop redraw, code already in the
       tree, switched off because `smp_go()` is reachable only from the old text
-      shell. Bigger and cheaper than anything the blitter offers. Untouched
+      shell (2026-09-04: also from the desktop Terminal's `smp`/`cores` word,
+      `term.c:368`; still nothing at boot). Bigger and cheaper than anything the blitter offers. Untouched
       because another session held `kernel.zl` all day.
 
 Two corrections worth keeping, both cost real time:
@@ -101,7 +102,7 @@ Two corrections worth keeping, both cost real time:
 - **`G` is the wrong key on the desktop.** The shell is a *window* and takes
   words plus Enter, so a single keypress sits in the line buffer and does
   nothing. `blit` (or `ring`). This is the trap in
-  `docs/typing-into-the-compositor.md`, and I handed out the wrong instruction
+  `kernel/docs/desktop/typing-into-the-compositor.md`, and I handed out the wrong instruction
   after reading that file the same day.
 - **The command output never reaches serial on the desktop path**, because the
   shell is a window. The ThinkPad has no serial port anyway. Every number has to

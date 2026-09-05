@@ -382,6 +382,20 @@ void dns_input(u32 src, const u8 *p, int len)
     int ulen = (int)be16(p + 4);
     if (ulen < 8 || ulen > len)        { c_rejected++; return; }
 
+    /* The checksum this file says it verifies (see the send side above) was
+     * only ever COMPUTED, never checked, until 2026-09-04. Same pseudo-header
+     * as dns_send; a wire value of zero means "no checksum" and is let
+     * through, anything else must sum to zero over header + payload. */
+    if (be16(p + 6) != 0) {
+        u32 sum = 0;
+        u32 dst = net_ip();
+        sum += (src >> 16) & 0xFFFF; sum += src & 0xFFFF;
+        sum += (dst >> 16) & 0xFFFF; sum += dst & 0xFFFF;
+        sum += IP_PROTO_UDP;
+        sum += (u32)ulen;
+        if (net_checksum(p, ulen, sum) != 0) { c_rejected++; return; }
+    }
+
     const u8 *d = p + 8;
     int dlen = ulen - 8;
     if (dlen < 12)                     { c_rejected++; return; }

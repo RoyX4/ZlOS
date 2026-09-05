@@ -1,14 +1,14 @@
 {
-  "build_script_sha256": "a7486cd7c91502a197e4d09257901c3dc12ab34c2fa269d3394f401e2f723f31",
+  "build_script_sha256": "9f2912e4e3dfa6e4e6f5072dc8f50b792efd9512dcfb3fc6fd476daa80224245",
   "counts": {
-    "auto_run_commands": 71,
-    "auto_run_targets": 69,
-    "compiled": 72,
+    "auto_run_commands": 74,
+    "auto_run_targets": 72,
+    "compiled": 75,
     "manual_or_instrument_targets": 12,
     "scripts": 9,
-    "total": 81
+    "total": 84
   },
-  "policy_sha256": "b160b34b08b9db53a33fd00af542035b90df453cc46b1a51462faf8af512336a",
+  "policy_sha256": "49ebec754e1c6de60d3884a90ce6a303ce7ae5e788c8c44d24661cfa2ad92912",
   "schema": "zlos.host-test-inventory.v1",
   "targets": [
     {
@@ -71,7 +71,7 @@
       "optional_build": false,
       "source": "blocktest.c",
       "source_present": true,
-      "source_sha256": "77bb110bdb1df6cd31f447a61669f48b6b6feb2a1617a2438624cffebac21c4d",
+      "source_sha256": "9e3428f294e2f9b1916c3e251c13d87ad77c1f80af4fbf8b6d737b9f03dcd48e",
       "timeout_seconds": 180
     },
     {
@@ -197,7 +197,7 @@
       "optional_build": false,
       "source": "build.sh",
       "source_present": true,
-      "source_sha256": "a7486cd7c91502a197e4d09257901c3dc12ab34c2fa269d3394f401e2f723f31",
+      "source_sha256": "9f2912e4e3dfa6e4e6f5072dc8f50b792efd9512dcfb3fc6fd476daa80224245",
       "timeout_seconds": 180
     },
     {
@@ -302,7 +302,7 @@
       "optional_build": false,
       "source": "dnstest.c",
       "source_present": true,
-      "source_sha256": "fc20d42dd9762c0ef23c5e60d5f9f709d9802185eafbfc821beebdcd8cd70a73",
+      "source_sha256": "122ddbedc472195f59a31a6a4addcb3648666d6095f5bd2066da15626e7a25c2",
       "timeout_seconds": 180
     },
     {
@@ -386,7 +386,7 @@
       "optional_build": false,
       "source": "exectest.c",
       "source_present": true,
-      "source_sha256": "f38d6e35ca6dd9c3205633229c0b8dc9d96f0e67bf078d9e9c584b3f2bab9cc1",
+      "source_sha256": "a7fe5aae3cec4069455df9b98a3bccbbe728207fd7f2955dbf61262c54d11b08",
       "timeout_seconds": 180
     },
     {
@@ -449,7 +449,7 @@
       "optional_build": false,
       "source": "fstest.c",
       "source_present": true,
-      "source_sha256": "0a9eb960d13bfff1afa8f42ba5b89fe10e8ba993d4b0ba3b5615ffb734252a47",
+      "source_sha256": "c3ac889b6d10d2ca583ee6dccea7bd400f499d42a0df70accb10430c11c74d9f",
       "timeout_seconds": 180
     },
     {
@@ -919,7 +919,7 @@
       "optional_build": false,
       "source": "jstest.c",
       "source_present": true,
-      "source_sha256": "e53062ae36b99252e3d623e03d4d2f57b05337c4db27f1a14c38d5870e1e6b8e",
+      "source_sha256": "d24bb6d071cad321eac3ba6962cf7e9cebc460532e264173d87765d9edef6cef",
       "timeout_seconds": 180
     },
     {
@@ -1297,7 +1297,7 @@
       "optional_build": false,
       "source": "run-all.sh",
       "source_present": true,
-      "source_sha256": "eb84d060e7e124032ea48bbc86afcf94e6bff9cb12398123189540b99c09ba2a",
+      "source_sha256": "1b7923c709b46ca9db75d9f2ce5719bc93457d46d2958bcaa68774e46573e857",
       "timeout_seconds": 180
     },
     {
@@ -1328,12 +1328,54 @@
       "auto_run": true,
       "commands": [
         [
-          "./settingstest"
+          "./schedtest"
         ]
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
       "id": "HT-063",
+      "kind": "gate",
+      "name": "schedtest",
+      "optional_build": false,
+      "source": "schedtest.c",
+      "source_present": true,
+      "source_sha256": "be4a1810d3b2a20acd9af3d36b814fff69bbec5a4e975b0054133b041e3692c6",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./schedtest_ms"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-064",
+      "kind": "gate",
+      "name": "schedtest_ms",
+      "optional_build": false,
+      "source": "schedtest_ms.c",
+      "source_present": true,
+      "source_sha256": "879552b1db1c0d47e3ecb5a85d51f6312d14fd721781a61f070a18bea26696a3",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./settingstest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-065",
       "kind": "gate",
       "name": "settingstest",
       "optional_build": false,
@@ -1354,7 +1396,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-064",
+      "id": "HT-066",
       "kind": "gate",
       "name": "systest",
       "optional_build": false,
@@ -1375,7 +1417,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-065",
+      "id": "HT-067",
       "kind": "gate",
       "name": "tartest",
       "optional_build": false,
@@ -1396,13 +1438,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-066",
+      "id": "HT-068",
       "kind": "gate",
       "name": "tcptest",
       "optional_build": false,
       "source": "tcptest.c",
       "source_present": true,
-      "source_sha256": "222ff4f443536954dfc03350d7729c5d533e162d12e67d4d8977a0ef4e555e46",
+      "source_sha256": "4069b5d37cc16dd7cc01ee788cdbf61072d5741cfff4f7ac13ed742056aa2131",
       "timeout_seconds": 180
     },
     {
@@ -1417,7 +1459,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-067",
+      "id": "HT-069",
       "kind": "gate",
       "name": "termwrap",
       "optional_build": false,
@@ -1438,7 +1480,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-068",
+      "id": "HT-070",
       "kind": "gate",
       "name": "tlscryptotest",
       "optional_build": false,
@@ -1454,18 +1496,39 @@
       "auto_run": true,
       "commands": [
         [
+          "./tlsstatetest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-071",
+      "kind": "gate",
+      "name": "tlsstatetest",
+      "optional_build": false,
+      "source": "tlsstatetest.c",
+      "source_present": true,
+      "source_sha256": "b47c51e3dcd9552e60c675bb33816f8ec9a51ad9127cc0022252807dbc40b1a4",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
           "./tlstest"
         ]
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-069",
+      "id": "HT-072",
       "kind": "gate",
       "name": "tlstest",
       "optional_build": false,
       "source": "tlstest.c",
       "source_present": true,
-      "source_sha256": "c634ab39ccdb6375731d592734ef3d39a6cc9567674208dde9bc5c5d45eb7996",
+      "source_sha256": "e05a7feef2499018ca3fdcd418b1b527b266be4fb990da0477a8d8d489122754",
       "timeout_seconds": 180
     },
     {
@@ -1480,7 +1543,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-070",
+      "id": "HT-073",
       "kind": "gate",
       "name": "toasttest",
       "optional_build": false,
@@ -1501,7 +1564,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-071",
+      "id": "HT-074",
       "kind": "gate",
       "name": "tritest",
       "optional_build": false,
@@ -1522,13 +1585,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-072",
+      "id": "HT-075",
       "kind": "gate",
       "name": "uitest",
       "optional_build": false,
       "source": "uitest.c",
       "source_present": true,
-      "source_sha256": "3ab38632e5d19586f3147de979b9bc9f74921137460e87bc7269210e1bdd52f8",
+      "source_sha256": "61489c340c885e68324f4ce478eb08e221624b11c795292fd3beab2856aba76a",
       "timeout_seconds": 180
     },
     {
@@ -1543,7 +1606,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-073",
+      "id": "HT-076",
       "kind": "gate",
       "name": "user-syscalls-test.sh",
       "optional_build": false,
@@ -1564,7 +1627,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-074",
+      "id": "HT-077",
       "kind": "gate",
       "name": "walltest",
       "optional_build": false,
@@ -1585,7 +1648,7 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-075",
+      "id": "HT-078",
       "kind": "instrument",
       "name": "wmbench",
       "optional_build": false,
@@ -1606,7 +1669,7 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-076",
+      "id": "HT-079",
       "kind": "instrument",
       "name": "wmshot",
       "optional_build": false,
@@ -1627,7 +1690,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-077",
+      "id": "HT-080",
       "kind": "gate",
       "name": "wmtest",
       "optional_build": false,
@@ -1648,7 +1711,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-078",
+      "id": "HT-081",
       "kind": "gate",
       "name": "wmtest_feel",
       "optional_build": false,
@@ -1669,7 +1732,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-079",
+      "id": "HT-082",
       "kind": "gate",
       "name": "x509test",
       "optional_build": false,
@@ -1690,7 +1753,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-080",
+      "id": "HT-083",
       "kind": "gate",
       "name": "xhcitest",
       "optional_build": false,
@@ -1715,7 +1778,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-081",
+      "id": "HT-084",
       "kind": "gate",
       "name": "zladdrs.sh",
       "optional_build": false,

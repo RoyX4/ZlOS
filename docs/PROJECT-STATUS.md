@@ -16,6 +16,12 @@ implementation state. They are not the same thing.
 5. [`WHOLE-TREE-CODEX-AUDIT-2026-08-26.md`](evidence/status-audits/WHOLE-TREE-CODEX-AUDIT-2026-08-26.md)
    records the current source-audit repairs and their hardware boundary.
 6. [`REMAINING-WORK.md`](REMAINING-WORK.md) is the post-integration H0-H3 map.
+7. [`evidence/whole-tree-sweep-2026-09-04.md`](evidence/whole-tree-sweep-2026-09-04.md)
+   is the ten-lane adversarial sweep: every verified defect fixed on
+   `fable/whole-tree-sweep` with the gate that now pins it, the claims that
+   survived, and what stayed open (physical boot above all).
+   [`GUARDS-THAT-DID-NOT-GUARD.md`](GUARDS-THAT-DID-NOT-GUARD.md) §6 lists
+   the fourteen checks that sweep found reporting green while checking nothing.
 
 ## Repository State
 
@@ -40,6 +46,11 @@ The audit began with 17 clean registered worktrees. All heads were either
 already ancestors of `main` or were attached by the ancestry-only closure
 merge. Fifteen redundant worktrees were removed; the temporary publication
 checkout is removed after publication, leaving only the canonical checkout.
+**Corrected 2026-09-04:** `git worktree list` now shows six — `main`,
+`codex/906-evidence-close`, `codex/process-lifecycle`,
+`codex/persistent-user-scheduler`, `fable/whole-tree-sweep`
+(`.claude/worktrees/fable-sweep`) and `codex/github-professional-pass` — all
+created after this table was checked.
 
 | Worktree branch | Working state |
 |---|---|
@@ -68,7 +79,8 @@ implementation status.
 The static validator currently passes for program inventory, repository
 identity, identifiers, dependencies and links in the isolated verification
 tree. All 17 generated registry/status checks now agree on the current
-154-input build identity. Historical artifact and runtime receipts retain their
+154-input build identity (162 inputs in the 2026-09-04 regeneration on
+`fable/whole-tree-sweep`, generated with a dirty tree). Historical artifact and runtime receipts retain their
 original subject identities and are explicitly not current-build-bound. T-8
 and T-9 are closed in [`.ultra/TENSIONS.md`](../.ultra/TENSIONS.md): the
 evidence chain regenerates without joining unlike builds, and the recovery

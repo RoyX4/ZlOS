@@ -1417,6 +1417,7 @@ fn kt_val(ax, y, v, c) {
     x = au_val_x(ax)
     ety = v / 65536
     code = v % 65536
+    if ety == 5 { if code > 32767 { code = code - 65536 } }   # wheel: sign back
     s = kt_ety_name(ety)
     ui_txt(x, y, s, c, AU_MD, AU_MONO)
     x = x + ui_tw(s, AU_MD, AU_MONO) + dw
@@ -1462,7 +1463,7 @@ fn kt_draw(ax, ay, aw, ah) {
 
 fn kt_event(win, ety, ecode) {
     if ety == 4 { return 0 }            # mouse motion would repaint every pixel
-    kt_push(ety * 65536 + ecode)
+    kt_push(ety * 65536 + band(ecode, 65535))   # a wheel notch is SIGNED; keep it in the low half
     wm_dmg(win)
     return 1
 }

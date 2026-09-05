@@ -11,6 +11,7 @@ static u32 fake_tsc;
 int nvme_ready(void) { return 1; }
 u32 nvme_blocksize(void) { return 512; }
 u32 nvme_blocks_lo(void) { return 512; }
+u32 nvme_blocks_hi(void) { return 0; }
 u32 cpu_tsc_lo(void) { return fake_tsc += 2300; }
 u32 cpu_tsc_khz(void) { return 2300000; }
 int nvme_read_to(u32 dst, u32 lba, u32 hi)

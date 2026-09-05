@@ -356,4 +356,24 @@ check("nan + 1 is nan",  is_nan(nan + 1), true)
 check("floor(inf)",      floor(inf),    inf)
 check("1/inf",           1 / inf,       0)
 
+# ------------------------------------------------------ number literal parsing
+# F-2 (2026-09-04): the C backend used to paste a NUMBER token's text
+# verbatim into generated C, and 010 is OCTAL 8 there, not decimal 10 - this
+# only shows up cross-engine (interp always used atof, which has no octal
+# reading), so run_tests.sh's C-backend cross-check is what actually pins it;
+# this line just records the value by hand for the interpreter too.
+check("leading zero literal", 010, 10)
+
+# F-3 (2026-09-04): a literal past 2^63 used to be pasted into generated C as
+# an integer constant too big for any integer type gcc has, which is
+# undefined and was observed to truncate mod 2^64 before the double
+# conversion - so 18446744073709551616 (2^64) came out wrong in the C
+# backend specifically, even though interp's atof() always got it right.
+# 2^64 is exactly representable as a double (a power of two), and so is
+# half of it, so both sides of this check are exact - no rounding to hide
+# a real mismatch behind. run_tests.sh separately checks that compilel and
+# nativegen (the integer-only backends) REFUSE this literal instead of
+# silently saturating.
+check("2^64 literal", 18446744073709551616 / 2, 9223372036854775808)
+
 report()

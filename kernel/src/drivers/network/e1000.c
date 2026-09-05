@@ -71,8 +71,11 @@ int e1000_mtu(void) { return BUF_N; }
 struct rx_desc { u64 addr; u16 len, csum; u8 status, errors; u16 special; } __attribute__((packed));
 struct tx_desc { u64 addr; u16 len; u8 cso, cmd, status, css; u16 special; } __attribute__((packed));
 
-static struct rx_desc rx[RX_N] __attribute__((aligned(128)));
-static struct tx_desc tx[TX_N] __attribute__((aligned(128)));
+/* The NIC writes these behind the compiler's back, so every read must reach
+ * memory: volatile, like virtio_net's rings. Correct before only because
+ * e1000_poll is reached through a function pointer and never inlined. */
+static volatile struct rx_desc rx[RX_N] __attribute__((aligned(128)));
+static volatile struct tx_desc tx[TX_N] __attribute__((aligned(128)));
 static u8 rxbuf[RX_N][BUF_N] __attribute__((aligned(128)));
 static u8 txbuf[TX_N][BUF_N] __attribute__((aligned(128)));
 
@@ -97,7 +100,7 @@ static void wr(u32 reg, u32 value)
 #endif
 }
 
-static u64 phys(const void *p) { return (u64)(uptr)p; }
+static u64 phys(const volatile void *p) { return (u64)(uptr)p; }
 
 static int supported(int id)
 {
@@ -219,7 +222,7 @@ int e1000_init(void)
 int e1000_send(const u8 *frame, int len)
 {
     if (!ready || !frame || len <= 0 || len > BUF_N) return 0;
-    struct tx_desc *d = &tx[tx_at];
+    volatile struct tx_desc *d = &tx[tx_at];
     if (!(d->status & 1)) { n_full++; return 0; }
     for (int i = 0; i < len; i++) txbuf[tx_at][i] = frame[i];
     d->len = (u16)len; d->cso = d->css = 0; d->special = 0;
@@ -231,7 +234,7 @@ int e1000_send(const u8 *frame, int len)
 int e1000_poll(u8 *out, int max)
 {
     if (!ready || !out || max <= 0) return 0;
-    struct rx_desc *d = &rx[rx_at];
+    volatile struct rx_desc *d = &rx[rx_at];
     if (!(d->status & 1)) return 0;
     int n = d->len;
     if (d->errors || n <= 0 || n > BUF_N) { n_drop++; n = 0; }

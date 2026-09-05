@@ -47,7 +47,18 @@ LAND_GATE_REQUIREMENTS = (
 )
 
 
+def code_only(source: str) -> str:
+    """The source with `#` comment lines removed: a requirement that survives
+    only inside a comment is not a requirement (found 2026-09-04: every
+    snippet here passed with the authority commented out)."""
+    return "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 def failures(launcher: str, land_gate: str) -> list[str]:
+    launcher = code_only(launcher)
+    land_gate = code_only(land_gate)
     errors = [
         f"launcher is missing: {item}"
         for item in LAUNCHER_REQUIREMENTS
@@ -66,6 +77,15 @@ def failures(launcher: str, land_gate: str) -> list[str]:
 def selftest(launcher: str, land_gate: str) -> None:
     mutations = (
         (launcher.replace("--property=CPUQuota=100%", "", 1), land_gate, "cpu-cap"),
+        # the same control commented out, verbatim: was green until 2026-09-04
+        (
+            "\n".join(
+                ("# " + line if "--property=CPUQuota=100%" in line else line)
+                for line in launcher.splitlines()
+            ),
+            land_gate,
+            "cpu-cap-commented-out",
+        ),
         (
             launcher.replace("foreign_process_matches '[q]emu-system'", "true", 1),
             land_gate,

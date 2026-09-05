@@ -915,6 +915,9 @@ fn c4_event(win, ety, ecode, ex, ey) {
     u = ui()
     cell = 30 * u
     gx = wm_cx(win) + (wm_cw(win) - C4_W * cell) / 2
+    gy = wm_cy(win) + 6 * u                  # the board's origin, as c4_draw places it
+    if ey < gy { return 0 }                  # a click on the caption or the bar is not a drop
+    if ey >= gy + C4_H * cell { return 0 }
     cx = ex - gx
     if cx < 0 { return 0 }
     col = idiv(cx, cell)                     # idiv: a column INDEX, see ac_grid_hit

@@ -549,7 +549,9 @@ int main(void)
     printf("\n  column header + list row - S7, tracks verbatim from S7.1\n");
     {
         ui_grid(UI_GRID_PROC);
-        oknum(ui_grid_cols(), "PGRID parses to six tracks", ui_grid_cols(), 6);
+        /* oknum takes a CONDITION. Six checks in this file passed the value
+         * instead, so any nonzero answer was green (found 2026-09-04). */
+        oknum(ui_grid_cols() == 6, "PGRID parses to six tracks", ui_grid_cols(), 6);
         int x = 0, w = 600, pl = ZD_COLHEAD_PL, pr = ZD_COLHEAD_PR;
         int cx, cw;
         ui_grid_span(x, w, 0, &cx, &cw);
@@ -567,7 +569,7 @@ int main(void)
               cw, w - pl - pr - fixed);
         ui_grid(UI_GRID_FILES);
         ui_grid_span(0, 600, 0, &cx, &cw);
-        oknum(ui_grid_cols(), "FGRID parses to five tracks", ui_grid_cols(), 5);
+        oknum(ui_grid_cols() == 5, "FGRID parses to five tracks", ui_grid_cols(), 5);
         ok(cw > 100, "FGRID puts the 1fr FIRST - Name grows, unlike PGRID");
         /* CONTROL: a column past the end must report nothing, not the last
          * track - otherwise every cell of an over-long row silently stacks. */
@@ -761,7 +763,7 @@ int main(void)
         ok(knob && knob->w == ZD_SW_KNOB && knob->h == ZD_SW_KNOB,
            "the knob is 13 square inside a 17 track - 1px of pit all round");
         int offx = knob && track ? knob->x - track->x : -1;
-        oknum(offx, "off: the knob sits at inset 1", offx, ZD_SW_INSET);
+        oknum(offx == ZD_SW_INSET, "off: the knob sits at inset 1", offx, ZD_SW_INSET);
         ok(find_rgb(ZD_ACCENT) == NULL,
            "off: no overprint - a switch is never vermilion in either state");
         on = 1;
@@ -773,7 +775,8 @@ int main(void)
         ok(track && track->w == ZD_SW_W,
            "on: the track is the KNOCKOUT, not the accent");
         int onx = knob && track ? knob->x - track->x : -1;
-        oknum(onx, "on: 34 - 13 - 1 == 20, so the travel is symmetric",
+        oknum(onx == ZD_SW_W - ZD_SW_INSET - ZD_SW_KNOB,
+              "on: 34 - 13 - 1 == 20, so the travel is symmetric",
               onx, ZD_SW_W - ZD_SW_INSET - ZD_SW_KNOB);
         ok(onx != offx, "control: the knob actually MOVES between states");
         ok(find_rgb(ZD_ACCENT) == NULL,
@@ -832,7 +835,8 @@ int main(void)
     {
         const char *items = "Open|Rename|Delete";
         int w = ui_menu_w(items), h = ui_menu_h(items);
-        oknum(h, "the menu is three items tall plus its padding", h,
+        oknum(h == 3 * ZD_MENU_ITEM_H + 2 * ZD_MENU_PAD,
+              "the menu is three items tall plus its padding", h,
               3 * ZD_MENU_ITEM_H + 2 * ZD_MENU_PAD);
         begin_draw();
         ui_menu(0, 0, items, 1);
@@ -921,7 +925,7 @@ int main(void)
            "a badge asked for ZD_BAD writes ZD_BAD_INK - the ink, not the fill");
         begin_draw();
         ui_dot(0, 0, ZD_BAD, 0);
-        oknum(count_kind(OP_RRECT), "a dot with no glow is exactly one shape",
+        oknum(count_kind(OP_RRECT) == 1, "a dot with no glow is exactly one shape",
               count_kind(OP_RRECT), 1);
         /* PRESSWORK HAS ONE SHADOW TOKEN and it is drawn under the three
          * objects that are off the plane. A halo round a 6dp square is not one

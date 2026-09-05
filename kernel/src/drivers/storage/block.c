@@ -18,6 +18,7 @@ extern int nvme_read_to(u32 dst, u32 lba_lo, u32 lba_hi);
 extern int nvme_write_from(u32 src, u32 lba_lo, u32 lba_hi);
 extern u32 nvme_blocksize(void);
 extern u32 nvme_blocks_lo(void);
+extern u32 nvme_blocks_hi(void);   /* NSZE bits 63:32 - a >= 2^32-block namespace is not 0 blocks */
 extern u32 cpu_tsc_lo(void);
 extern u32 cpu_tsc_khz(void);
 
@@ -79,7 +80,7 @@ int block_read(u32 lba, void *buf)
 {
     u32 bs = nvme_blocksize();
     if (!nvme_ready() || !buf || !bs || bs > BLOCK_BYTES_MAX ||
-        lba >= nvme_blocks_lo()) return 0;
+        (nvme_blocks_hi() == 0 && lba >= nvme_blocks_lo())) return 0;
     int at = find_page(lba);
     if (at >= 0) {
         hits++;
@@ -102,7 +103,7 @@ int block_write(u32 lba, const void *buf)
 {
     u32 bs = nvme_blocksize();
     if (!nvme_ready() || !buf || !bs || bs > BLOCK_BYTES_MAX ||
-        lba >= nvme_blocks_lo()) return 0;
+        (nvme_blocks_hi() == 0 && lba >= nvme_blocks_lo())) return 0;
     int at = find_page(lba);
     if (at < 0) at = take_page();
     if (at < 0) { refusals++; return 0; }

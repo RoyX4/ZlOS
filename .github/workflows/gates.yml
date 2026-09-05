@@ -22,6 +22,11 @@ jobs:
       - name: and does not, on this tree
         run: python3 kernel/tools/checks/check-dead-state.py
 
+      # gcc + objdump only: every function an interrupt handler reaches must
+      # be free of SSE/x87 (the per-file -mgeneral-regs-only cannot see callees)
+      - name: ISR callees stay off SSE
+        run: bash kernel/tools/checks/check-isr-sse.sh
+
   lang:
     name: language (interp vs C backend vs native)
     runs-on: ubuntu-latest

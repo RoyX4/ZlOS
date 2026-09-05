@@ -86,6 +86,25 @@ for t in "${TESTS[@]}"; do
     fi
 done
 
+# The two zl rule harnesses (244 checks over the games) were documented with a
+# cwd that cannot resolve their imports and were wired into nothing until
+# 2026-09-04. They import the app modules, so they run from kernel/apps.
+for z in games4_rules games12_rules; do
+    if [ ! -x ../../../interp ]; then
+        printf "  %-22s NOT BUILT (../../../interp: run ./build.sh at the repo root)\n" "$z"
+        missing=$((missing + 1)); continue
+    fi
+    out=$(cd ../../apps && timeout 120 ../../interp "../tests/host/$z.zl" 2>&1); rc=$?
+    last=$(printf '%s' "$out" | tail -1)
+    if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q ' 0 failures'; then
+        printf "  %-22s ok        %s\n" "$z" "$last"
+        pass=$((pass + 1))
+    else
+        printf "  %-22s FAILED    %s\n" "$z" "$last"
+        fail=$((fail + 1))
+    fi
+done
+
 echo
 echo "  $pass passed, $fail failed, $missing NOT BUILT, $skipped skipped"
 # A test that did not build is a FAILURE, not an absence. That is the entire

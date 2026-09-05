@@ -34,6 +34,7 @@
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include "crypto.h"                     /* x25519_base, for the key check */
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -71,9 +72,12 @@ int main(void)
     printf("tlstest: a real TLS 1.3 handshake\n\n");
 
     if (!have("openssl")) {
-        printf("  skip  openssl is not installed - nothing to talk to\n");
-        printf("\n0 passed, 0 failed (skipped)\n");
-        return 0;
+        /* A gate that cannot run is red, not green: the inventory classes
+         * this a `gate` with exit 0 meaning pass, so a skip that returned 0
+         * was recorded as PASS on a box with no openssl (2026-09-04). */
+        printf("  FAIL openssl is not installed - the handshake gate cannot run (apt install openssl)\n");
+        printf("\n0 passed, 1 failed\n");
+        return 1;
     }
 
     char dir[] = "/tmp/zlos-tls-XXXXXX";
@@ -127,12 +131,25 @@ int main(void)
     /* The ephemeral private key. tls.c does not generate one - there is no RNG
      * in the kernel - so the caller supplies it, and the harness reads real
      * entropy so this is a genuine ephemeral exchange rather than a fixed key. */
+    unsigned char supplied_priv[32];
     {
         int u = open("/dev/urandom", O_RDONLY);
         if (u >= 0) { if (read(u, c.priv, 32) != 32) {} close(u); }
+        memcpy(supplied_priv, c.priv, 32);
     }
     tls_start(&c, "localhost");
     ok("ClientHello was produced", c.outn > 0);
+    /* A handshake succeeds with ANY scalar, so nothing below would notice if
+     * tls_start threw the key away - which it did until 2026-09-04: its reset
+     * memset wiped priv, and every session ran on clamp(0), a public
+     * constant. Check the contract directly. */
+    ok("tls_start kept the caller's private key",
+       memcmp(c.priv, supplied_priv, 32) == 0);
+    {
+        unsigned char zero[32] = {0}, pub0[32];
+        x25519_base(pub0, zero);
+        ok("public key is not x25519_base(0)", memcmp(c.pub, pub0, 32) != 0);
+    }
 
     unsigned char rx[8192];
     int guard = 0;

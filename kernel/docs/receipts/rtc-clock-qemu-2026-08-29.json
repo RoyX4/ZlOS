@@ -1,10 +1,10 @@
 {
   "schema": "zlos.rtc-clock-qemu-receipt.v1",
   "result": "PASS",
-  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "build_identity": "bb05ab6c51d87a3b8e7ee9f3a3904bc64881be84424c2280b707ad49740913d3",
   "artifact": {
     "path": "kernel/kernel.elf",
-    "sha256": "e1ae8455065586cf7b4620118fee30927c20862b5f49eb9ead193c21715ccef1"
+    "sha256": "08e382d7b2fb53190851d7c86b3fb0a305feba90e48c42ab1b48bce805bc1299"
   },
   "harness": {
     "path": "kernel/tools/checks/verify-clock.sh",

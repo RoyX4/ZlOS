@@ -69,7 +69,8 @@ work out, and it had already cost two undiagnosed failures earlier the same day.
 
 The closure audit found the same discarded status in the clock, disk and
 network gates too. `kernel/tools/checks/qemu-crash.sh` is now the single answer,
-sourced by all eight landing boot gates, with `qemu-crash-selftest.sh` proving
+sourced by seven of the eight landing boot gates (**corrected 2026-09-04:**
+`verify-net.sh` does not source it), with `qemu-crash-selftest.sh` proving
 it fires for unexpected signal exits 128..142 and stays silent on 143 - **the
 SIGTERM the gates send themselves on every healthy boot**,
 which is the case that matters, because a version treating "died by signal" as a

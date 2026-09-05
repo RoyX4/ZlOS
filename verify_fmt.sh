@@ -50,6 +50,23 @@ while IFS= read -r -d '' f; do
     cmp -s "$tmp/o.tok" "$tmp/n.tok" || { echo "  FAIL  $f - token stream differs"; fail=1; }
 done < <(git ls-files -z '*.zl' | sort -z)
 
+# F-14 (2026-09-04): reindent() stops at the first NUL byte (strchr/strlen
+# both do), so a file containing one used to be silently re-indented - and
+# under -w, WRITTEN BACK - as whatever came before that byte, with
+# everything after it gone. zlfmt must refuse it instead, and leave the
+# file on disk untouched.
+printf 'print(1)\000print(2)\n' > "$tmp/has_nul.zl"
+cp "$tmp/has_nul.zl" "$tmp/has_nul.before"
+if ./zlfmt -w "$tmp/has_nul.zl" 2>"$tmp/has_nul.err"; then
+    echo "  FAIL  a NUL byte in the source was accepted instead of refused"; fail=1
+elif ! grep -q "NUL byte" "$tmp/has_nul.err"; then
+    echo "  FAIL  a NUL byte was refused, but not with a message naming it"; fail=1
+elif ! cmp -s "$tmp/has_nul.before" "$tmp/has_nul.zl"; then
+    echo "  FAIL  a NUL byte in the source was refused but the file was still rewritten (truncated)"; fail=1
+else
+    echo "  ok    zlfmt -w refuses a NUL byte and leaves the file untouched"
+fi
+
 echo "----------------------------------------------"
 echo "  $files files checked, $changed would be re-indented"
 if [ $fail -eq 0 ]; then

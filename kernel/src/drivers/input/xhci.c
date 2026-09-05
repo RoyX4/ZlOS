@@ -908,7 +908,10 @@ int xhci_port_reset(int port)
 
     /* USB 2.0 s7.1.7.5: a device gets 10 ms of reset recovery before it has to
      * answer anything. Ask for 20 and let the PIT measure it. */
-    wait_bit(reg, 0xFFFFFFFFu, 1, 20);   /* never satisfied - a pure delay */
+    /* A plain delay. This used to be wait_bit() on a mask PORTSC can never
+     * match, which logged an ERROR-severity xHCI timeout plus two snapshots
+     * into the flight recorder on EVERY successful port reset. */
+    delay_ms(20);
 
     return (rd32(reg) & PORTSC_PED) ? 1 : 0;
 }
@@ -1739,9 +1742,18 @@ int xhci_cur_speed(void) { return cur_speed; }
  * was newly pressed means diffing against the previous report - which is also
  * what stops one held key repeating forever.
  */
-#define CFG_BUF      (XMEM_DATA + 0x100)     /* configuration descriptor       */
+/* The configuration descriptor buffer is 4 KiB at +0x1000: it was 256 bytes
+ * at +0x100, and wTotalLength was silently clamped to that, so any HID
+ * interface past byte 256 of a composite device (headset + media keys,
+ * gaming keyboard with audio, a dock) was walked to byte 256 and the port
+ * reported "not a keyboard" with no diagnostic (measured 2026-09-04). The
+ * data window runs to XMEM_SCRATCH_ARR (+0x10000); nothing else lives
+ * between +0x900 and there. */
+#define CFG_BUF      (XMEM_DATA + 0x1000)    /* configuration descriptor       */
 #define KBD_REPORT   (XMEM_DATA + 0x400)     /* the 8 bytes from the keyboard  */
-#define CFG_MAX      256
+#define KBD_REPORT_BYTES 256u                /* ..up to PTR_BUF0 at +0x500     */
+#define CFG_MAX      4096
+_Static_assert(CFG_BUF + CFG_MAX <= XMEM_SCRATCH_ARR, "CFG_BUF runs into the scratchpad array");
 
 /* USB descriptor types and the class triple that identifies a boot keyboard */
 #define DESC_CONFIG      2
@@ -2075,7 +2087,12 @@ static void kbd_requeue(void)
      * hid_decode would see keys that are not held. */
     zero_mem(KBD_REPORT, 64);
     u32 ring = INT_RING(kbd_slot);
-    trb_write(ring, kbd_enq, dma_addr(KBD_REPORT), (u32)kbd_mps,
+    /* THE TRB LENGTH IS A DMA PERMIT. wMaxPacketSize is device-supplied (up
+     * to 1024 is accepted); the buffer is 256 bytes and the pointer report
+     * buffers sit right after it. Permit only what the buffer holds - the
+     * controller reports a short packet or babble instead of writing past. */
+    trb_write(ring, kbd_enq, dma_addr(KBD_REPORT),
+              (u32)kbd_mps < KBD_REPORT_BYTES ? (u32)kbd_mps : KBD_REPORT_BYTES,
               (TRB_NORMAL << 10) | (1u << 5) | kbd_cyc);   /* IOC */
     kbd_enq++;
     if (kbd_enq >= RING_TRBS - 1) {
@@ -2099,7 +2116,8 @@ static void ptr_requeue(void)
      * still hold an older report, and a stale delta is movement that never
      * happened. */
     zero_mem(PTR_BUF(ptr_enq), PTR_BUFSZ);
-    trb_write(ring, ptr_enq, dma_addr(PTR_BUF(ptr_enq)), (u32)ptr_mps,
+    trb_write(ring, ptr_enq, dma_addr(PTR_BUF(ptr_enq)),
+              (u32)ptr_mps < PTR_BUFSZ ? (u32)ptr_mps : PTR_BUFSZ,   /* DMA permit = buffer */
               (TRB_NORMAL << 10) | (1u << 5) | ptr_cyc);   /* IOC */
     ptr_enq++;
     if (ptr_enq >= PTR_RING_USE) {

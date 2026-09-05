@@ -413,6 +413,17 @@ int pmm_boot_selftest(void)
 
 void pmm_report(void)
 {
+    /* A second call must only REPORT. pmm_init_boot resets every owner
+     * table, which would mark pages still mapped to processes as free and
+     * hand them out again; the zl builtin `pmm_up` can reach here twice. */
+    if (live) {
+        say("  pmm: ");
+        say_u(free_count);
+        say("/");
+        say_u(total_count);
+        say(" pages free (already up; not re-initialised)\n");
+        return;
+    }
     int status = pmm_init_boot();
     if (status != PMM_OK) {
         say("  pmm: unavailable status ");

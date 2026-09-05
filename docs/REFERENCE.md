@@ -1,7 +1,7 @@
 # zl Language Reference
 
 A quick reference for the zl language: syntax, operators, and the built-in
-functions. (See `MASTER_PLAN.md` for the design, `README.md` for the build.)
+functions. (See `program/research/language/MASTER_PLAN.md` for the design, `../README.md` for the build.)
 
 ## Syntax
 
@@ -95,7 +95,7 @@ names.
 
 ## Keywords
 
-All 16, and there are no others (`src/frontend/lexer.c:48-55`):
+All 16, and there are no others (`src/frontend/lexer.c:89`, `is_keyword`):
 
 `if  elif  else  for  in  fn  return  while  not  and  or  true  false
 break  continue  import`
@@ -103,7 +103,12 @@ break  continue  import`
 Built-ins below are ordinary identifiers, not keywords — and so are `do`,
 `loop`, `to`, `step` and `nil`, none of which are zl keywords.
 
-## Built-in functions (93)
+## Built-in functions (93 listed; 104 in `src/runtime/interp.c`)
+
+Not listed below (checked 2026-09-04 against `interp.c`'s `strcmp(name, …)`
+table): the raw-memory builtins `alloc` · `free` · `copy_mem` · `fill_mem` ·
+`sext`, and the OS builtins `run` · `start` · `kill` · `rm` · `copy` · `move`
+(see the root README, "What changed from the Windows original").
 
 ### I/O
 `print(...)` · `input()` · `read(path)` · `write(path, text)` ·
@@ -160,7 +165,8 @@ than saturating.
 
 ## Standard library (stdlib/*.zl)
 
-64 modules, written in zl. A sample of the newer ones:
+108 modules (`ls stdlib/*.zl | wc -l`, 2026-09-04; this said 64), written in
+zl. A sample of the newer ones:
 
 | Module | What it gives |
 |--------|---------------|

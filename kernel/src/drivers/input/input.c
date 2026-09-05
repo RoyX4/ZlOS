@@ -489,7 +489,11 @@ static int ms_pub_x, ms_pub_y;            /* ...and the last one ANNOUNCED    */
  * number is a double, so the interrupted code is usually the interpreter
  * itself. This exact mistake killed the 64-bit boot once already. Everything
  * below is integer, so it could not touch SSE even if it were inlined
- * somewhere it should not be, and the gate checks that by disassembly.
+ * somewhere it should not be, and tools/checks/check-isr-sse.sh checks that
+ * by disassembly. (This sentence claimed such a gate from the day it was
+ * written; the gate was first written on 2026-09-04, and on its first run
+ * found zllog_event_irq - reached from keyboard_isr's drop branch - using
+ * xmm0-3 in the gcc 64-bit build.)
  *
  * WORKING FROM A POSITION, NOT A DELTA. The ISR has already integrated the
  * PS/2 deltas by the time this runs, so the raw delta is recovered here as the

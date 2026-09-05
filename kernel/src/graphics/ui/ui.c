@@ -1207,7 +1207,7 @@ void ui_num(const char *s, int v)
 {
     char buf[16];
     int n = 0, neg = v < 0;
-    unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
+    unsigned u = neg ? 0u - (unsigned)v : (unsigned)v;   /* INT_MIN is what a NaN becomes */
     if (!u) buf[n++] = '0';
     while (u && n < 12) { buf[n++] = (char)('0' + u % 10u); u /= 10u; }
     if (neg && n < 15) buf[n++] = '-';
@@ -1336,6 +1336,10 @@ int ui_list_row(const char *s, int selected)
 void ui_scroll_begin(int h, int *off)
 {
     int x, y;
+    /* h <= -1 made `content > h` true for an empty viewport and ui_scroll_end
+     * divided by content == 0 (#DE from the zl `ui_scroll` builtin, measured
+     * 2026-09-04); a viewport shorter than its chrome is just empty */
+    if (h < 0) h = 0;
     place(L.w, h, &x, &y);
 
     S.on = 1;

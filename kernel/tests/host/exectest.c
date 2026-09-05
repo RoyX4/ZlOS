@@ -33,6 +33,19 @@
  * still lands on. A branch with no test is a branch that rots.
  *
  * Build and run:  ./build.sh && ./exectest && ./exectest-nofs
+ *
+ * EX_FAIL (F-1, 2026-09-04) IS NOT PINNED HERE, ON PURPOSE. Every assertion
+ * above depends on zl_lex_guarded/zl_parse_guarded/zl_run_program being
+ * ABSENT (this binary does not link lexer.c/parser.c/interp.c at all, so the
+ * weak symbols stay NULL and exec.c takes EX_LOADED) - that is the entire
+ * point of the "found ... but nothing can execute it yet" checks. Defining
+ * real or fake versions of those three here to reach EX_FAIL would make
+ * zl_lex_guarded != 0 for every one of THOSE checks too, and break them.
+ * EX_FAIL is pinned instead in ../../../run_tests.sh's "F-1: run declines
+ * cleanly on a lex/parse error" section, which links exec.c UNMODIFIED
+ * against the REAL hosted lexer.c/parser.c/interp.c and feeds it an
+ * unterminated string and an unmatched brace through the same `run` path -
+ * see that file for why it lives there rather than here.
  */
 #define _GNU_SOURCE
 #include <stdio.h>

@@ -117,7 +117,11 @@ fi
 
 echo "== ISO: UEFI boot =="
 if [ ! -f "$OVMF_CODE" ]; then
-    echo "  skip  no OVMF firmware (apt install ovmf)"
+    # `skip:` is what every skip detector greps for, and a boot gate that
+    # booted half its routes is not green - it used to print "skip" with no
+    # colon and end "ISO gate green" (found 2026-09-04)
+    echo "  skip: no OVMF firmware (apt install ovmf) - the UEFI route did not run"
+    fail=1
 else
     VARS=$(mktemp); cp "$OVMF_VARS" "$VARS"
     ULOG=$(mktemp)

@@ -114,7 +114,9 @@ double k_atan2(double, double);
  * and 8 on the 64-bit ELF kernel. ksetjmp.S stores 8-byte slots on x86-64
  * (and 10 of them under the Win64 EFI ABI), so this must be qwords on every
  * target. */
-typedef unsigned long long zi_jmp_buf[16];
+/* 32 qwords: the Win64 variant of ksetjmp.S keeps MXCSR at byte 80 and
+ * xmm6-xmm15 at bytes 96..255 (callee-saved there, not on SysV). */
+typedef unsigned long long zi_jmp_buf[32];
 int  ksetjmp(zi_jmp_buf);
 void klongjmp(zi_jmp_buf, int) __attribute__((noreturn));
 #define zi_setjmp  ksetjmp

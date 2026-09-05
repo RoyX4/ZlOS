@@ -300,7 +300,13 @@ static void emit_call(FILE *out, Node *n)
 static void emit_expr(FILE *out, Node *n)
 {
     switch (n->type) {
-        case N_NUMBER: fprintf(out, "zl_num(%s)", n->text); break;
+        /* zl_num_canon(), not n->text pasted verbatim (F-2, 2026-09-04): a
+         * literal with a leading zero like 010 is octal 8 in generated C,
+         * not decimal 10, and 09 does not compile at all (9 is not a valid
+         * octal digit). %.17g round-trips any double exactly, so the value
+         * generated C sees is the SAME one interp.c's atof() already gives
+         * that literal - see lexer.h for the rest of the reasoning. */
+        case N_NUMBER: fprintf(out, "zl_num(%.17g)", zl_num_canon(n->text)); break;
         case N_BOOL:   fprintf(out, "zl_bool(%d)", strcmp(n->text, "true") == 0); break;
         case N_STRING:
             fprintf(out, "zl_str(");
@@ -440,13 +446,27 @@ static void emit_stmt(FILE *out, Node *n, int indent)
             }
             break;
 
-        case N_IF:
-            pad(out, indent); fputs("if (zl_truthy(", out); emit_expr(out, n->a); fputs(")) {\n", out);
-            emit_block(out, n->b, indent + 1);
+        case N_IF: {
+            Node *cur = n;
+            pad(out, indent); fputs("if (zl_truthy(", out); emit_expr(out, cur->a); fputs(")) {\n", out);
+            emit_block(out, cur->b, indent + 1);
             pad(out, indent); fputs("}", out);
-            if (n->c) { fputs(" else {\n", out); emit_block(out, n->c, indent + 1); pad(out, indent); fputs("}", out); }
+            /* AN ELIF CHAIN STAYS FLAT. The parser stores `elif` as an else
+             * block holding exactly one N_IF, and emitting that as a nested
+             * `else { if ... }` indented one level deeper per branch made
+             * the output quadratic: a 3,000-branch chain was 72.6 MB of C
+             * and a reviewer's 30,000-branch probe filled a 7.7 GB tmpfs
+             * (measured 2026-09-04). `else if` at THIS indent is the same
+             * program and linear. */
+            while (cur->c && cur->c->nkids == 1 && cur->c->kids[0]->type == N_IF) {
+                cur = cur->c->kids[0];
+                fputs(" else if (zl_truthy(", out); emit_expr(out, cur->a); fputs(")) {\n", out);
+                emit_block(out, cur->b, indent + 1);
+                pad(out, indent); fputs("}", out);
+            }
+            if (cur->c) { fputs(" else {\n", out); emit_block(out, cur->c, indent + 1); pad(out, indent); fputs("}", out); }
             fputs("\n", out);
-            break;
+            break; }
 
         case N_FOR: {
             /* for v in seq {...}  ->  loop over the list's items */

@@ -875,7 +875,15 @@ static int fs_write_impl(int idx, const void *src, u32 bytes)
      * in-place overwrite can leave old metadata pointing at half-new bytes
      * after power loss; a second run keeps the published file untouched until
      * the new data and its directory generation are both durable. */
-    if (!alloc_run(need, &base)) {
+    if (old_len == 0 && need <= ent_blocks(idx)) {
+        /* NEVER WRITTEN: the run fs_create reserved holds no live bytes, so
+         * writing into it overwrites nothing and a torn write is invisible
+         * behind the published length of 0. Without this branch every
+         * create-then-write needed TWO contiguous runs of the file's size,
+         * and a volume with room for exactly one archive refused it
+         * (measured 2026-09-04: 100 free blocks, create 60, write 60 -> 0). */
+        base = old_start;
+    } else if (!alloc_run(need, &base)) {
         p_str("  zlfs: '"); p_name((const char *)(ent(idx) + FE_NAME));
         p_str("' needs a separate "); p_u32(need);
         p_str("-block replacement run - refusing rather than overwriting live data\n");

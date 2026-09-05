@@ -124,6 +124,14 @@ static const u8 OID_RSA_SHA384[]   = { 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0
 static const u8 OID_RSA_SHA512[]   = { 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x0D };
 static const u8 OID_SAN[]          = { 0x55,0x1D,0x11 };
 static const u8 OID_BASIC[]        = { 0x55,0x1D,0x13 };
+/* extensions we recognise well enough to ignore even when marked critical */
+static const u8 OID_SKI[]          = { 0x55,0x1D,0x0E };   /* 2.5.29.14 */
+static const u8 OID_KEY_USAGE[]    = { 0x55,0x1D,0x0F };   /* 2.5.29.15 */
+static const u8 OID_CRL_DP[]       = { 0x55,0x1D,0x1F };   /* 2.5.29.31 */
+static const u8 OID_CERT_POLICIES[]= { 0x55,0x1D,0x20 };   /* 2.5.29.32 */
+static const u8 OID_AKI[]          = { 0x55,0x1D,0x23 };   /* 2.5.29.35 */
+static const u8 OID_EXT_KEY_USAGE[]= { 0x55,0x1D,0x25 };   /* 2.5.29.37 */
+static const u8 OID_AIA[]          = { 0x2B,0x06,0x01,0x05,0x05,0x07,0x01,0x01 }; /* 1.3.6.1.5.5.7.1.1 */
 
 static int oid_is(const u8 *v, int n, const u8 *want, int wn)
 {
@@ -348,9 +356,26 @@ sig_done:;
             if (!d_next(&one, &tag, &ov, &ol) || tag != 0x06) continue;
             int is_san   = oid_is(ov, ol, OID_SAN, sizeof OID_SAN);
             int is_basic = oid_is(ov, ol, OID_BASIC, sizeof OID_BASIC);
+            /* RFC 5280 §4.2: an extension marked critical that we do not
+             * understand MUST fail the certificate. We understand SAN and
+             * basicConstraints; the ones below are routinely critical and
+             * safe to ignore for a TLS client that checks the chain, the
+             * name and the dates. Anything else critical - nameConstraints,
+             * policyConstraints, inhibitAnyPolicy - would constrain what a
+             * CA may sign, and ignoring that is how a leaked sub-CA cert
+             * signs for any host. */
+            int is_known = is_san || is_basic ||
+                           oid_is(ov, ol, OID_KEY_USAGE, sizeof OID_KEY_USAGE) ||
+                           oid_is(ov, ol, OID_EXT_KEY_USAGE, sizeof OID_EXT_KEY_USAGE) ||
+                           oid_is(ov, ol, OID_CERT_POLICIES, sizeof OID_CERT_POLICIES) ||
+                           oid_is(ov, ol, OID_AKI, sizeof OID_AKI) ||
+                           oid_is(ov, ol, OID_SKI, sizeof OID_SKI) ||
+                           oid_is(ov, ol, OID_CRL_DP, sizeof OID_CRL_DP) ||
+                           oid_is(ov, ol, OID_AIA, sizeof OID_AIA);
             const u8 *nv; int nl;
             if (!d_next(&one, &tag, &nv, &nl)) continue;
             if (tag == 0x01) {                        /* critical BOOLEAN */
+                if (nl >= 1 && nv[0] != 0 && !is_known) return 0;
                 if (!d_next(&one, &tag, &nv, &nl)) continue;
             }
             if (tag != 0x04) continue;                /* the OCTET STRING */
