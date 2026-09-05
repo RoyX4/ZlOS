@@ -80,6 +80,14 @@ class HookTests(unittest.TestCase):
         self.assertEqual((self.root / 'TODO.md').read_text(), 'original todo\n')
         self.assert_no_generation()
 
+    def test_ignored_untracked_managed_file_is_preserved(self):
+        self.git('rm', '--cached', 'TODO.md')
+        (self.root / '.gitignore').write_text('TODO.md\n')
+        self.git('add', '.gitignore')
+        self.commit()
+        self.assertEqual((self.root / 'TODO.md').read_text(), 'original todo\n')
+        self.assert_no_generation()
+
     def test_shared_hook_checks_the_calling_worktree(self):
         linked = Path(self.temp.name) / 'linked'
         self.git('worktree', 'add', '-q', '-b', 'linked', str(linked))

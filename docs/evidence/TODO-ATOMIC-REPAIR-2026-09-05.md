@@ -50,15 +50,16 @@ needed to exercise isolated TODO-file publication.
 
 The installed post-commit hook previously regenerated both managed documents
 even when they already contained pending work. The installer now emits a guard
-that preserves both if either is dirty or untracked, and skips refresh if Git
+that preserves both if either is dirty, untracked or ignored, and skips refresh if Git
 cannot report their state. Clean managed documents retain automatic refresh.
 The guard checks the calling checkout, including when a linked worktree uses
 the common hook installation. This closes the pre-existing-change case; it
 does not add locking against an edit beginning after the status check.
 
-`python3 tools/test_hooks.py` passes six checks using disposable repositories.
+`python3 tools/test_hooks.py` passes seven checks using disposable repositories.
 Before the guard, five refusal cases failed, including overwriting pending
-documentation in a linked worktree. Afterward all six checks pass, and the nine
+documentation in a linked worktree. A later ignored-file regression also
+reproduced an overwrite and now passes. All seven checks pass, and the nine
 TODO publication checks remain green. Both suites run in the docs workflow.
 The installer also now accurately describes pre-push as including build/QEMU
 work; its preflight behavior is unchanged.

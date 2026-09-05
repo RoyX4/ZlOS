@@ -61,7 +61,7 @@ export ZL_HOOK_RUNNING=1
 
 # Existing pending files may belong to another agent or an unfinished edit.
 # Preserve them together; a successful commit is not ownership of their bytes.
-if ! pending=$(git status --porcelain --untracked-files=all -- docs/JOURNAL.md TODO.md); then
+if ! pending=$(git status --porcelain --untracked-files=all --ignored=matching -- docs/JOURNAL.md TODO.md); then
     echo "post-commit: could not read pending documentation; refresh skipped." >&2
     exit 0
 fi
