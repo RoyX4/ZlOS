@@ -194,6 +194,26 @@ else
 fi
 }
 
-if [ "${1:-}" = "--stdout" ]; then gen; exit 0; fi
-gen > "$OUT"
+if [ "${1:-}" = "--stdout" ]; then gen; exit $?; fi
+
+# Generate beside the destination so publication is one filesystem rename.
+# An interrupted refresh must never truncate the user's hand-written backlog.
+tmp=$(mktemp ".${OUT}.XXXXXX") || exit 1
+trap 'rm -f -- "$tmp"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+if ! gen > "$tmp"; then
+    echo "failed to generate $OUT; existing file preserved" >&2
+    exit 1
+fi
+if [ -f "$OUT" ]; then
+    chmod --reference="$OUT" "$tmp" || exit 1
+else
+    chmod '=rw' "$tmp" || exit 1
+fi
+if ! mv -fT -- "$tmp" "$OUT"; then
+    echo "failed to publish $OUT; existing file preserved" >&2
+    exit 1
+fi
 echo "wrote $OUT ($(grep -c '^- \[ \]' "$OUT") open items)"
