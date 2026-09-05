@@ -10,6 +10,9 @@ skipped check from a passed check.
 The [allocator feature-join repair](../docs/evidence/allocator-feature-join-repair-2026-09-05.md)
 records the current scheduler continuation's full-gate blocker and focused
 regression command, `python3 tools/test_feature_status_pmm.py`.
+The [toolchain join repair](../docs/evidence/toolchain-join-repair-2026-09-05.md)
+removes a fixed host-header count while retaining the manifest validator;
+run `python3 tools/test_evidence_toolchain.py` for its regressions.
 
 ## Directory documentation
 
