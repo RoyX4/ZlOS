@@ -4991,6 +4991,7 @@ fn run_command(cmd, arg) {
             if us > 0 {
                 put("    slot ")  put(ui + 1)  put(": pid ")  put(user_pid(ui))
                 if us == 1 { print(" runnable") }
+                if us == 4 { print(" sleeping until timer deadline") }
                 if us == 2 {
                     put(" exited with status ")  put(user_term_code(ui))
                     print("; ready to reap")
@@ -5027,7 +5028,7 @@ fn run_command(cmd, arg) {
             color(C_GREEN)  put("    released slot ")  print(arg)
         } else {
             color(C_RED)
-            if ur == 0 - 11 { print("    process is still runnable") } else {
+            if ur == 0 - 11 { print("    process is still live (runnable or sleeping)") } else {
                 put("    reap refused: ")  print(ur)
             }
         }

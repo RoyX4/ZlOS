@@ -1,5 +1,10 @@
 # Project Status
 
+Current continuation, 2026-09-05:
+[persistent process sleep and the 906-feature queue](evidence/process-sleep-2026-09-05.md).
+The repository/worktree tables below are the historical 2026-08-30 snapshot;
+they do not describe today's concurrent dirty worktrees or PR #12.
+
 Checked 2026-08-30. This page separates repository state, planning state, and
 implementation state. They are not the same thing.
 

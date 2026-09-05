@@ -13,7 +13,8 @@ enum fake_action {
     FAKE_EXIT,
     FAKE_FAULT,
     FAKE_REAP,
-    FAKE_CORRUPT_POLICY
+    FAKE_CORRUPT_POLICY,
+    FAKE_SLEEP
 };
 
 struct fake_process {
@@ -27,6 +28,8 @@ struct fake_runner {
     struct process_lifecycle_table *lifecycle;
     struct user_process_service *service;
     struct fake_process processes[LIFE_SLOTS];
+    unsigned int sleep_now;
+    unsigned int sleep_delay;
 };
 
 static struct process_lifecycle_slot lifecycle_slots[LIFE_SLOTS];
@@ -63,6 +66,30 @@ static int fake_step(void *context, process_lifecycle_handle handle,
     if (!process || process->fail) return -1;
     process->runs++;
     *elapsed_ticks = process->runs;
+    if (process->action == FAKE_SLEEP) {
+        process->action = FAKE_YIELD;
+        expect(user_process_service_request_sleep(fake->service, handle,
+                   fake->sleep_now, 0) == USER_PROCESS_SERVICE_E_ARGUMENT,
+               "zero sleep is rejected without yielding");
+        expect(user_process_service_request_sleep(fake->service, handle,
+                   fake->sleep_now, 0x80000000U) == USER_PROCESS_SERVICE_E_ARGUMENT,
+               "ambiguous half-wrap sleep is rejected");
+        expect(user_process_service_request_sleep(fake->service,
+                   handle ^ (1ULL << 32), fake->sleep_now, 1) ==
+                   USER_PROCESS_SERVICE_E_NOT_FOUND,
+               "foreign generation cannot request running owner's sleep");
+        if (fake->processes[1].handle)
+            expect(user_process_service_request_sleep(fake->service,
+                       fake->processes[1].handle, fake->sleep_now, 1) ==
+                       USER_PROCESS_SERVICE_E_STATE,
+                   "runnable sibling cannot request current owner's sleep");
+        int status = user_process_service_request_sleep(fake->service, handle,
+            fake->sleep_now, fake->sleep_delay);
+        expect(user_process_service_request_sleep(fake->service, handle,
+                   fake->sleep_now + 7, 1) == USER_PROCESS_SERVICE_E_PENDING,
+               "second request cannot overwrite the first deadline");
+        return status;
+    }
     if (process->action == FAKE_EXIT)
         return process_lifecycle_exit(fake->lifecycle, handle, 7);
     if (process->action == FAKE_FAULT)
@@ -259,11 +286,10 @@ static void test_fail_stop_boundaries(void)
     handle = create_process(0, 70);
     expect(user_process_service_admit(&service, handle) ==
            USER_PROCESS_SERVICE_OK, "corruption owner admitted");
-    scheduler_slots[0].state = SCHEDULER_POLICY_SLEEPING;
-    scheduler_slots[0].wake_at = 1;
+    scheduler_slots[0].state = SCHEDULER_POLICY_EXITED;
     expect(user_process_service_check(&service) ==
            USER_PROCESS_SERVICE_E_STATE,
-           "unsupported sleeping state cannot masquerade as runnable");
+           "terminal scheduler state cannot masquerade as runnable");
 
     reset_service();
     handle = create_process(0, 71);
@@ -336,6 +362,88 @@ static void test_saturating_work_count(void)
            "service work count saturates instead of wrapping");
 }
 
+static void test_sleep_deadline_and_sibling(void)
+{
+    struct scheduler_policy_snapshot policy;
+    process_lifecycle_handle dispatched = 0;
+    reset_service();
+    process_lifecycle_handle sleeper = create_process(0, 90);
+    process_lifecycle_handle sibling = create_process(1, 91);
+    expect(user_process_service_admit(&service, sleeper) ==
+           USER_PROCESS_SERVICE_OK, "sleeping owner admitted");
+    expect(user_process_service_admit(&service, sibling) ==
+           USER_PROCESS_SERVICE_OK, "sleeping owner's sibling admitted");
+    runner.sleep_now = 0xfffffffeU;
+    runner.sleep_delay = 5;
+    runner.processes[0].action = FAKE_SLEEP;
+    runner.processes[1].action = FAKE_EXIT;
+    expect(user_process_service_work(&service, 0xfffffffdU, &dispatched) ==
+           USER_PROCESS_SERVICE_OK && dispatched == sleeper,
+           "running owner requests a sleep crossing tick wrap");
+    expect(scheduler_policy_snapshot(&service.scheduler, sleeper, &policy) ==
+           SCHEDULER_POLICY_OK && policy.state == SCHEDULER_POLICY_SLEEPING &&
+           policy.wake_at == 3 && policy.run_ticks == 1 && policy.dispatches == 1,
+           "sleep begins at request time and charges the completed turn once");
+    expect(user_process_service_check(&service) == USER_PROCESS_SERVICE_OK,
+           "sleeping scheduler owner retains valid runnable lifecycle custody");
+    expect(user_process_service_detach_terminal(&service, sleeper) ==
+           USER_PROCESS_SERVICE_E_PENDING, "sleep cannot be reaped as exit");
+    expect(user_process_service_work(&service, 0xffffffffU, &dispatched) ==
+           USER_PROCESS_SERVICE_OK && dispatched == sibling,
+           "sibling completes while the first process sleeps");
+    dispatched = 0xfeedULL;
+    expect(user_process_service_work(&service, 2, &dispatched) ==
+           USER_PROCESS_SERVICE_E_IDLE && dispatched == 0xfeedULL &&
+           runner.processes[0].runs == 1 && service.work_calls == 2,
+           "before deadline no process runs or consumes a dispatch turn");
+    runner.processes[0].action = FAKE_EXIT;
+    expect(user_process_service_work(&service, 3, &dispatched) ==
+           USER_PROCESS_SERVICE_OK && dispatched == sleeper,
+           "exact wrapped deadline resumes the sleeping process");
+    expect(scheduler_policy_snapshot(&service.scheduler, sleeper, &policy) ==
+           SCHEDULER_POLICY_OK && policy.state == SCHEDULER_POLICY_EXITED &&
+           policy.run_ticks == 3 && policy.dispatches == 2,
+           "sleeping time is not charged as running time");
+    expect(user_process_service_detach_terminal(&service, sleeper) ==
+           USER_PROCESS_SERVICE_OK &&
+           process_lifecycle_reap(&lifecycle, 0, sleeper) == PROCESS_LIFECYCLE_OK,
+           "woken process can exit, detach and release exact identity");
+    expect(user_process_service_request_sleep(&service, sleeper, 4, 1) ==
+           USER_PROCESS_SERVICE_E_NOT_FOUND,
+           "stale sleeping handle cannot affect another generation");
+}
+
+static void test_sleep_request_boundaries(void)
+{
+    process_lifecycle_handle dispatched = 0;
+    reset_service();
+    process_lifecycle_handle handle = create_process(0, 92);
+    expect(user_process_service_request_sleep(NULL, handle, 0, 1) ==
+           USER_PROCESS_SERVICE_E_ARGUMENT, "null sleep service rejected");
+    expect(user_process_service_request_sleep(&service, 0, 0, 1) ==
+           USER_PROCESS_SERVICE_E_ARGUMENT, "zero sleep identity rejected");
+    expect(user_process_service_admit(&service, handle) ==
+           USER_PROCESS_SERVICE_OK, "boundary sleeper admitted");
+    expect(user_process_service_request_sleep(&service, handle, 0, 1) ==
+           USER_PROCESS_SERVICE_E_STATE, "sleep outside runner rejected");
+    runner.sleep_now = 0x80000001U;
+    runner.sleep_delay = USER_PROCESS_SERVICE_MAX_SLEEP_TICKS;
+    runner.processes[0].action = FAKE_SLEEP;
+    expect(user_process_service_work(&service, runner.sleep_now, &dispatched) ==
+           USER_PROCESS_SERVICE_OK, "maximum unambiguous sleep accepted");
+    expect(user_process_service_work(&service, 0xffffffffU, &dispatched) ==
+           USER_PROCESS_SERVICE_E_IDLE, "deadline zero does not mean ready early");
+    expect(user_process_service_work(&service, 0, &dispatched) ==
+           USER_PROCESS_SERVICE_OK, "deadline zero resumes at tick wrap");
+    service.sleep_delay = 1;
+    expect(user_process_service_check(&service) == USER_PROCESS_SERVICE_E_STATE,
+           "pending sleep without a running owner is corruption");
+    service.sleep_delay = 0;
+    service.sleep_started = 1;
+    expect(user_process_service_check(&service) == USER_PROCESS_SERVICE_E_STATE,
+           "stray request timestamp is corruption");
+}
+
 int main(void)
 {
     test_arguments();
@@ -343,6 +451,8 @@ int main(void)
     test_fail_stop_boundaries();
     test_admission_and_detach_boundaries();
     test_saturating_work_count();
+    test_sleep_deadline_and_sibling();
+    test_sleep_request_boundaries();
     printf("userprocessservicetest: %d checks, %d failures\n", checks, failures);
     if (!failures)
         puts("lifecycle custody and bounded dispatch remain generation-exact across every turn");

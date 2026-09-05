@@ -26,6 +26,16 @@ PROGRAM = bytes.fromhex(
     "bb25000000b803000000cd80"
     "0f0b"
 )
+# Read guest ticks, sleep five ticks, then require an unsigned elapsed value
+# of at least five before running the original output/exit program. No polling
+# loop exists in the fixture: an early successful wake executes UD2.
+SLEEP_TICKS = 5
+SLEEP_PROGRAM = bytes.fromhex(
+    "b805000000cd8089c6"          # time -> ESI
+    "bb0500000031c931d2b819000000cd80"  # sleep(5, 0, 0)
+    "4885c074020f0b"              # unsuccessful sleep -> UD2
+    "b805000000cd8029f083f80573020f0b"  # time - ESI >= 5, else UD2
+) + PROGRAM
 DEFAULT_RECEIPT = os.path.join(
     KERNEL_ROOT, "docs", "receipts",
     "user-process-exit-native-uefi64-qemu-2026-09-03.json",
@@ -69,7 +79,8 @@ def ensure_seed_tool():
     subprocess.run(command, cwd=HOST_TESTS, check=True)
 
 
-def write_receipt(path, transcript, fixture_path):
+def write_receipt(path, transcript, fixture_path, sleep=False):
+    program = SLEEP_PROGRAM if sleep else PROGRAM
     with open(os.path.join(KERNEL_ROOT, "metadata", "build-identity.json"),
               encoding="utf-8") as stream:
         identity = json.load(stream)["identity_sha256"]
@@ -81,9 +92,13 @@ def write_receipt(path, transcript, fixture_path):
         "userreap released slot 1",
         "userps reported an empty table after reap",
     ]
+    if sleep:
+        assertions.insert(2, "guest sleep returned successfully after at least five PIT ticks without userspace polling")
     value = {
-        "schema": "zlos.user-process-exit-native-uefi64-qemu-receipt.v1",
-        "result": "PASS_EXTERNAL_FILE_SPAWN_EXIT_OBSERVE_REAP",
+        "schema": ("zlos.user-process-sleep-native-uefi64-qemu-receipt.v1" if sleep
+                   else "zlos.user-process-exit-native-uefi64-qemu-receipt.v1"),
+        "result": ("PASS_EXTERNAL_FILE_SLEEP_EXIT_OBSERVE_REAP" if sleep
+                   else "PASS_EXTERNAL_FILE_SPAWN_EXIT_OBSERVE_REAP"),
         "build_identity": identity,
         "route": "native-uefi64",
         "artifact": {
@@ -100,9 +115,9 @@ def write_receipt(path, transcript, fixture_path):
         ],
         "fixture": {
             "path": NAME,
-            "bytes": len(PROGRAM),
+            "bytes": len(program),
             "sha256": sha256(fixture_path),
-            "content_hex": PROGRAM.hex(),
+            "content_hex": program.hex(),
             "created_through": "host instrument linked to the shipping zlfs implementation",
             "expected_output": OUTPUT_MARKER,
             "expected_exit_status": EXIT_STATUS,
@@ -124,6 +139,9 @@ def write_receipt(path, transcript, fixture_path):
             "application format, or physical hardware"
         ),
     }
+    if sleep:
+        value["fixture"]["minimum_guest_sleep_ticks"] = SLEEP_TICKS
+        value["known_gaps"].append("no measured maximum wake latency, suspend behavior or physical timer receipt")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     temporary = path + ".tmp"
     with open(temporary, "w", encoding="utf-8") as stream:
@@ -137,8 +155,13 @@ def main():
     parser.add_argument("--boot-timeout", type=float, default=240)
     parser.add_argument("--step-timeout", type=float, default=60)
     parser.add_argument("--no-build", action="store_true")
+    parser.add_argument("--sleep", action="store_true",
+                        help="prove a real PIT-timed sleep before output and exit")
     parser.add_argument("--receipt", default=DEFAULT_RECEIPT)
     args = parser.parse_args()
+    program = SLEEP_PROGRAM if args.sleep else PROGRAM
+    if args.sleep and args.receipt == DEFAULT_RECEIPT:
+        args.receipt = DEFAULT_RECEIPT.replace("user-process-exit-", "user-process-sleep-")
 
     if not args.no_build:
         build(True)
@@ -151,7 +174,7 @@ def main():
     qmp_path = os.path.join(tmp, "qmp.sock")
     fixture_path = os.path.join(tmp, "user.bin")
     with open(fixture_path, "wb") as stream:
-        stream.write(PROGRAM)
+        stream.write(program)
 
     argv = qemu_argv(tmp, True, serial_path, qmp_path, boot_snapshot=True)
     subprocess.run(
@@ -184,7 +207,8 @@ def main():
         if not passed:
             print(transcript[-2500:])
             return 1
-        if "persistent user-process service FAILED" in transcript:
+        if "persistent user-process service FAILED" in transcript or \
+                "persistent sleep deadline FAILED" in transcript:
             print("  FAIL  boot-time persistent process service self-check", flush=True)
             print(transcript[-2500:])
             return 1
@@ -196,7 +220,7 @@ def main():
         qtype(qmp, "ls\n", settle=key_settle)
         expect(serial, "external executable is present", NAME)
         expect(serial, "external executable has the exact byte count",
-               f"{len(PROGRAM)} bytes")
+               f"{len(program)} bytes")
 
         qtype(qmp, "userexec\n", settle=key_settle)
         expect(serial, "userexec admitted the external image",
@@ -221,7 +245,9 @@ def main():
         print(f"\nnormal-exit user-process gate FAILED: {len(failures)}")
         print("\n--- serial transcript tail ---\n" + transcript[-4000:])
         return 1
-    write_receipt(os.path.abspath(args.receipt), transcript, fixture_path)
+    write_receipt(os.path.abspath(args.receipt), transcript, fixture_path, args.sleep)
+    if args.sleep:
+        print("  ok    external process slept at least five real guest PIT ticks without polling")
     print(f"  note  receipt: {os.path.abspath(args.receipt)}")
     print("normal-exit user-process gate green: external file -> syscalls -> "
           "exit status -> observe -> reap")

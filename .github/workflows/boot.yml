@@ -116,6 +116,15 @@ jobs:
             --receipt kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json \
             2>&1 | tee -a boot.log
 
+      - name: sleeping user-process command route
+        if: matrix.script == 'kernel/tools/checks/verify-efi.sh'
+        run: |
+          set -o pipefail
+          python3 kernel/tools/probes/probe-user-process-exit.py \
+            --no-build --sleep \
+            --receipt kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json \
+            2>&1 | tee -a boot.log
+
       # Every verify-*.sh degrades to `echo "skip: ..."; exit 0` when qemu, nasm
       # or OVMF is missing. That produces a green check for a boot that never
       # happened — which is precisely the bug class this workflow exists to kill.
@@ -134,6 +143,7 @@ jobs:
         with:
           name: user-process-command-receipts
           path: |
+            kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json
             kernel/docs/receipts/user-process-command-native-uefi64-qemu-2026-09-03.json
             kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json
           if-no-files-found: ignore
@@ -144,6 +154,7 @@ jobs:
         with:
           name: boot-log-${{ strategy.job-index }}
           path: |
+            kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json
             boot.log
             kernel/*.out
             kernel/*.log

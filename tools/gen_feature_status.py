@@ -780,7 +780,7 @@ OVERRIDES = {
                ("ABI table covers x86-64 only", "dispatch bodies remain hand-written",
                 "no generated argument/type metadata", "no compatibility translation layer",
                 "no current physical-hardware receipt"),
-               "ABI version 1 generates the admitted 1..24 table and current host/QEMU gates reject unsigned unknown IDs with ENOSYS; typed arguments, compatibility and physical proof remain open"),
+               "ABI version 1 generates the admitted 1..25 table and current host/QEMU gates reject unsigned unknown IDs with ENOSYS; typed arguments, compatibility and physical proof remain open"),
     "KR-037": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/docs/architecture/system/user-process-abi.md"),
                    ("implementation", "kernel/src/arch/x86/usermode.c"),
@@ -822,7 +822,7 @@ OVERRIDES = {
                ("separate PML4 and kernel stacks", "cooperative AB12 resume",
                 "timer-preempted non-yielding PQ loops",
                 "faulted-process sibling survival", "126-check bounded policy",
-                "105-check lifecycle-policy coordinator", "persistent ST12 kernel-turn service",
+                "144-check lifecycle-policy coordinator", "persistent ST12 kernel-turn service",
                 "external-file spawn, normal exit, fault observation and reap command routes"),
                ("the persistent Ring-3 service has exactly two fixed process slots",
                 "no general priority or deadline contract beyond bounded round robin",
@@ -831,6 +831,26 @@ OVERRIDES = {
                 "the separate eight-slot kernel task demo is cooperative and lacks FPU/SSE state",
                 "no current physical-hardware scheduler receipt"),
                "current host and native-UEFI64 QEMU receipts prove a bounded fair two-slot persistent process scheduler and command route; priorities, per-CPU ownership, migration, userspace authority and physical qualification remain open"),
+    "KR-024": ("PARTIAL_CURRENT", (
+                   ("implementation", "kernel/src/core/user_process_service.c"),
+                   ("implementation", "kernel/src/arch/x86/usermode.c"),
+                   ("implementation", "kernel/docs/architecture/system/user-process-abi.md"),
+                   ("implementation", "kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json"),
+                   ("implementation", "kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json")),
+               ("kernel/tests/host/userprocessservicetest",
+                "kernel/tools/checks/verify-efi.sh",
+                "kernel/tools/probes/probe-user-process-exit.py --no-build --sleep"),
+               ("kernel/zlOS-usb.img", "kernel/tests/host/test-run-receipt.json",
+                "kernel/docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json",
+                "kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json"),
+               ("wrap-safe bounded relative sleep", "sibling progress and exact deadline eligibility",
+                "no idle dispatch or run-time charge", "stale-owner rejection",
+                "external program checks five real PIT ticks before output and exit"),
+               ("no public absolute-deadline API", "no cancellation or timer coalescing",
+                "no suspend/resume clock contract", "no measured maximum wake latency",
+                "two fixed process slots and 32-bit 100 Hz tick domain",
+                "no current physical-hardware timer receipt"),
+               "bounded relative sleep is host and QEMU proved; the complete timer/deadline contract remains open"),
     "KR-027": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/src/core/process_lifecycle.h"),
                    ("implementation", "kernel/src/core/process_lifecycle.c"),
@@ -1276,7 +1296,8 @@ def validate_scheduler_receipt(receipt: dict, build_identity: str,
     assertions = receipt.get("assertions", [])
     if [row.get("id") for row in assertions] != [
             "cooperative-context-resume", "timer-preemption",
-            "faulted-process-sibling-survival", "persistent-process-service"]:
+            "faulted-process-sibling-survival", "persistent-process-service",
+            "persistent-process-sleep"]:
         raise ValueError("scheduler QEMU receipt assertion coverage drifted")
     if assertions[0].get("processes") != 2 \
             or assertions[0].get("trace") != "AB12" \
@@ -1298,11 +1319,20 @@ def validate_scheduler_receipt(receipt: dict, build_identity: str,
             or assertions[3].get("physical_frame_baseline_restored") is not True:
         raise ValueError("scheduler QEMU receipt bounded observations drifted")
     host = receipt.get("host_receipt", {})
+    sleep = assertions[4]
+    if sleep.get("trace") != "LSW" or sleep.get("syscall") != 25 \
+            or sleep.get("clock") != "injected scheduler ticks; no wall-clock latency claim" \
+            or sleep.get("zero_delay_refused") is not True \
+            or sleep.get("no_early_dispatch") is not True \
+            or sleep.get("sibling_exit_status") != 44 \
+            or sleep.get("wake_exit_status") != 33 \
+            or sleep.get("physical_frame_baseline_restored") is not True:
+        raise ValueError("scheduler sleep deadline observations drifted")
     if host.get("path") != "kernel/tests/host/test-run-receipt.json" \
             or host.get("targets") != {
                 "processlifecycletest": {"checks": 91},
                 "schedulerpolicytest": {"checks": 126},
-                "userprocessservicetest": {"checks": 105},
+                "userprocessservicetest": {"checks": 144},
             }:
         raise ValueError("scheduler host policy/service observations drifted")
     gaps = receipt.get("known_gaps", [])
@@ -1380,7 +1410,7 @@ def validate_user_process_receipt(receipt: dict, build_identity: str,
     if assertions[0].get("syscalls") != 6 \
             or assertions[0].get("returned_to_kernel") is not True \
             or assertions[1].get("abi_version") != 1 \
-            or assertions[1].get("probes") != [0, 25, 1 << 63, (1 << 64) - 1] \
+            or assertions[1].get("probes") != [0, 26, 1 << 63, (1 << 64) - 1] \
             or assertions[1].get("result") != "ENOSYS" \
             or assertions[2].get("stale_handle_refused") is not True \
             or assertions[2].get("observed_exit_status") != -7 \
@@ -1506,7 +1536,7 @@ def validate_user_process_receipt(receipt: dict, build_identity: str,
             or contracts.get("hardware_pte_bits") != \
             "accessed and dirty accepted without weakening ownership checks" \
             or contracts.get("syscall_numbers") != {
-                "abi_version": 1, "first": 1, "last": 24,
+                "abi_version": 1, "first": 1, "last": 25,
                 "dispatch": "generated unsigned admission",
                 "unknown_result": "ENOSYS"}:
         raise ValueError("user-process QEMU receipt source contract drifted")
@@ -1567,11 +1597,13 @@ def validate_user_process_command_receipt(receipt: dict, build_identity: str,
 
 
 def validate_user_process_exit_receipt(receipt: dict, build_identity: str,
-                                       evidence_root: Path) -> None:
+                                       evidence_root: Path, *, sleep: bool = False) -> None:
+    schema = ("zlos.user-process-sleep-native-uefi64-qemu-receipt.v1" if sleep
+              else "zlos.user-process-exit-native-uefi64-qemu-receipt.v1")
+    result = ("PASS_EXTERNAL_FILE_SLEEP_EXIT_OBSERVE_REAP" if sleep
+              else "PASS_EXTERNAL_FILE_SPAWN_EXIT_OBSERVE_REAP")
     if receipt.get("schema") != \
-            "zlos.user-process-exit-native-uefi64-qemu-receipt.v1" \
-            or receipt.get("result") != \
-            "PASS_EXTERNAL_FILE_SPAWN_EXIT_OBSERVE_REAP" \
+            schema or receipt.get("result") != result \
             or receipt.get("route") != "native-uefi64" \
             or receipt.get("build_identity") != build_identity:
         raise ValueError("user-process exit receipt is absent, failed or foreign")
@@ -1601,30 +1633,39 @@ def validate_user_process_exit_receipt(receipt: dict, build_identity: str,
         "bb25000000b803000000cd80"
         "0f0b"
     )
-    if fixture != {
+    if sleep:
+        expected_hex = ("b805000000cd8089c6bb0500000031c931d2b819000000cd80"
+                        "4885c074020f0bb805000000cd8029f083f80573020f0b") + expected_hex
+    expected_fixture = {
             "path": "/system/user.bin",
-            "bytes": 50,
+            "bytes": len(bytes.fromhex(expected_hex)),
             "sha256": hashlib.sha256(bytes.fromhex(expected_hex)).hexdigest(),
             "content_hex": expected_hex,
             "created_through":
                 "host instrument linked to the shipping zlfs implementation",
             "expected_output": "R3!",
             "expected_exit_status": 37,
-            }:
+            }
+    if sleep:
+        expected_fixture["minimum_guest_sleep_ticks"] = 5
+    if fixture != expected_fixture:
         raise ValueError("user-process normal-exit fixture drifted")
-    if receipt.get("assertions") != [
+    expected_assertions = [
             "external /system/user.bin exists as exact raw x86-64 bytes",
             "userexec admitted pid 1000",
             "the external program emitted R3! through three Ring-3 syscalls",
             "userps retained normal exit status 37",
             "userreap released slot 1",
             "userps reported an empty table after reap",
-            ]:
+            ]
+    if sleep:
+        expected_assertions.insert(2, "guest sleep returned successfully after at least five PIT ticks without userspace polling")
+    if receipt.get("assertions") != expected_assertions:
         raise ValueError("user-process normal-exit observations drifted")
     if len(receipt.get("serial_transcript_sha256", "")) != 64:
         raise ValueError("user-process exit transcript identity is absent")
     gaps = receipt.get("known_gaps", [])
-    if len(gaps) != 4 or not any("physical" in gap for gap in gaps) \
+    if len(gaps) != (5 if sleep else 4) or not any("physical" in gap for gap in gaps) \
             or not any("process-handle" in gap for gap in gaps):
         raise ValueError("user-process exit receipt hides its known gaps")
 
@@ -1723,6 +1764,9 @@ def build(evidence_root: Path) -> dict:
     user_process_exit_receipt = json.loads((
         evidence_root / "kernel/docs/receipts/user-process-exit-native-uefi64-qemu-2026-09-03.json"
     ).read_text())
+    user_process_sleep_receipt = json.loads((
+        evidence_root / "kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json"
+    ).read_text())
     host_receipt = json.loads((
         evidence_root / "kernel/tests/host/test-run-receipt.json"
     ).read_text())
@@ -1760,6 +1804,9 @@ def build(evidence_root: Path) -> dict:
     )
     validate_user_process_exit_receipt(
         user_process_exit_receipt, joined["build_identity"], evidence_root
+    )
+    validate_user_process_exit_receipt(
+        user_process_sleep_receipt, joined["build_identity"], evidence_root, sleep=True
     )
     if joined.get("counts", {}).get("decision_records") != len(decisions["records"]) \
             or joined.get("open_gaps", {}).get("decision_legacy_semantics_open") \
@@ -2194,6 +2241,19 @@ def selftest(value: dict, evidence_root: Path) -> None:
         raise ValueError(
             "feature-status selftest mutation escaped: invented-user-process-exit-status"
         )
+    user_process_sleep_receipt = json.loads((
+        evidence_root /
+        "kernel/docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json"
+    ).read_text())
+    user_process_sleep_receipt["fixture"]["minimum_guest_sleep_ticks"] = 0
+    try:
+        validate_user_process_exit_receipt(
+            user_process_sleep_receipt, value["build_identity"], evidence_root, sleep=True
+        )
+    except ValueError:
+        caught.append("invented-user-process-sleep-deadline")
+    else:
+        raise ValueError("feature-status selftest mutation escaped: invented-user-process-sleep-deadline")
     print("feature-status selftest: caught " + ", ".join(caught))
 
 

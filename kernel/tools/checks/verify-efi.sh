@@ -235,6 +235,12 @@ else
         grep -E "process lifecycle slots reaped|process lifecycle final teardown" "$LOG" | tail -3 | sed 's/^/          /'
         fail=1
     fi
+    if grep -q "persistent sleep LSW: injected deadline held, sibling exited, wake and frames reclaimed" "$LOG"; then
+        echo "  ok    Ring-3 sleep holds until its injected deadline while a sibling completes"
+    else
+        echo "  FAIL  persistent process sleep/deadline proof missing or failed"
+        fail=1
+    fi
     if grep -q "persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped" "$LOG"; then
         echo "  ok    persistent Ring-3 service returned across four cooperative kernel turns and reaped exact exits"
     else
