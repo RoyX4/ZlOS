@@ -1,0 +1,84 @@
+name: kernel host evidence
+
+# Fast, source-bound host evidence on the same disposable Kali environment as
+# the complete closure. This keeps a single failing target visible without
+# waiting for every QEMU lane, and never schedules work on a self-hosted runner.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: all automatic kernel host tests on Kali
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: kalilinux/kali-rolling:latest
+      options: --cpus 2 --memory 6g --memory-swap 8g --pids-limit 384
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: bootstrap Git before checkout
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates git
+
+      - uses: actions/checkout@v4
+
+      - name: trust only the mounted Actions checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: install the measured Kali host toolchain
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            ca-certificates curl git build-essential gcc-multilib \
+            clang llvm lld nasm binutils \
+            mtools dosfstools gdisk parted \
+            xorriso grub-pc-bin grub-efi-amd64-bin \
+            python3 procps coreutils util-linux
+
+      - name: prove the hosted runner contract
+        run: bash gates/run-land-gate-hosted.sh doctor
+
+      - name: install the exact AX201 host-test fixture
+        run: |
+          ax201_fixture="$RUNNER_TEMP/iwlwifi-QuZ-a0-hr-b0-77.ucode"
+          curl -fsSL \
+            'https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20260519/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode' \
+            -o "$ax201_fixture"
+          echo '69ca0913ccca609dedff5e30b1d478482487fa14ad6b7be079f8cc856ac26cac  '"$ax201_fixture" \
+            | sha256sum -c -
+          install -Dm0644 "$ax201_fixture" \
+            /lib/firmware/intel/iwlwifi/iwlwifi-QuZ-a0-hr-b0-77.ucode
+
+      - name: build the zl compiler and bind host evidence
+        run: |
+          ./build.sh
+          python3 kernel/tools/generators/gen-build-identity.py --write --selftest
+          kernel/tests/host/build.sh
+          python3 kernel/tools/generators/gen-test-inventory.py --write --selftest
+
+      - name: execute every automatic host test
+        run: |
+          set -o pipefail
+          python3 kernel/tools/run/run-host-tests.py --run --selftest \
+            2>&1 | tee kernel-host.log
+
+      - name: retain the exact host receipt and transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-host-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            kernel-host.log
+            kernel/metadata/build-identity.json
+            kernel/metadata/test-inventory.json
+            kernel/tests/host/test-run-receipt.json
+          if-no-files-found: warn

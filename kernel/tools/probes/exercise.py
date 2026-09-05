@@ -348,7 +348,8 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False,
     # CI/sandbox runners often expose QEMU but not /dev/kvm. `-cpu host` is
     # legal only with KVM, so choose the accelerator and CPU as one pair. This
     # is a slower proof of the same guest image, not a different boot path.
-    accel = ("-cpu", "host", "-accel", "kvm") if os.path.exists("/dev/kvm") \
+    accel = ("-cpu", "host", "-accel", "kvm") \
+            if os.access("/dev/kvm", os.R_OK | os.W_OK) \
             else ("-cpu", "max", "-accel", "tcg,thread=multi")
     common = [
         "-m", "1G", "-smp", "4", *accel,

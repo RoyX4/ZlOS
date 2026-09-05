@@ -443,6 +443,31 @@ gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
     -o pmmtest pmmtest.c ../../src/core/pmm.c ../../src/core/boot/boot_handover.c
 echo "built ./pmmtest       (run: ./pmmtest)"
 
+# Process identity is independent of page-table mechanics. Exercise exact
+# parent custody, exit/fault distinction, generation exhaustion, stale-handle
+# rejection and bounded capacity before wiring the table into Ring 3.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror \
+    -o processlifecycletest processlifecycletest.c \
+    ../../src/core/process_lifecycle.c
+echo "built ./processlifecycletest (run: ./processlifecycletest)"
+
+# The architecture-independent bounded policy is the intended common seam for
+# kernel tasks and Ring-3 process work. Prove owner admission, wrap-safe sleep,
+# fairness, accounting and reap without privileged context-switch instructions.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror \
+    -o schedulerpolicytest schedulerpolicytest.c \
+    ../../src/core/scheduler_policy.c
+echo "built ./schedulerpolicytest (run: ./schedulerpolicytest)"
+
+# Bind generation-safe lifecycle custody to the scheduling policy. The fake
+# step callback drives yield, exit, fault and injected mid-turn corruption so
+# the reconciliation contract is proved without entering Ring 3 on the host.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror \
+    -o userprocessservicetest userprocessservicetest.c \
+    ../../src/core/user_process_service.c \
+    ../../src/core/process_lifecycle.c ../../src/core/scheduler_policy.c
+echo "built ./userprocessservicetest (run: ./userprocessservicetest)"
+
 # Process address spaces consume eight PMM-owned frames: four table levels,
 # code, user stack and two kernel-stack pages. Drive allocation rollback at
 # every short-pool boundary and exact two-process reclamation on the host.
@@ -507,6 +532,12 @@ echo "built ./exectest      (run: ./exectest)"
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../../src/fs/fs.c
 echo "built ./fstest        (run: ./fstest)"
+
+# Build exact QEMU fixture disks through the shipping zlfs implementation.
+# This is an instrument consumed by target probes, not a standalone pass gate.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DFS_HOSTTEST \
+    -o zlfsseed zlfsseed.c ../../src/fs/fs.c
+echo "built ./zlfsseed      (instrument: seed a disposable zlfs image)"
 
 # The ustar the Archive Manager writes, read back by the SHELL'S OWN tar. A
 # test that parses back the layout its own writer just emitted agrees with

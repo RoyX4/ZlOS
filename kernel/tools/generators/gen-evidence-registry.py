@@ -7,6 +7,7 @@ import argparse
 import ast
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 import tempfile
@@ -17,6 +18,10 @@ HERE = Path(__file__).resolve().parent
 KERNEL_ROOT = HERE.parents[1]
 METADATA = KERNEL_ROOT / "metadata"
 ROOT = KERNEL_ROOT.parent
+TOOLCHAIN_SPEC = importlib.util.spec_from_file_location(
+    "toolchain_manifest", HERE / "gen-toolchain-manifest.py")
+TOOLCHAIN = importlib.util.module_from_spec(TOOLCHAIN_SPEC)
+TOOLCHAIN_SPEC.loader.exec_module(TOOLCHAIN)
 OUTPUT = METADATA / "evidence-registry.json"
 INPUTS = (
     "build-identity.json",
@@ -93,6 +98,13 @@ def landing_gate_seam_count() -> int:
     raise ValueError("cannot derive mandatory landing-gate seam count")
 
 
+def toolchain_manifest_counts(value: dict) -> dict:
+    # The measured closure varies with the runner's locked sysroot. Reuse the
+    # trusted generator's shape/identity/ABI policy instead of a host count.
+    TOOLCHAIN.validate(value)
+    return value["counts"]
+
+
 def validate(value: dict) -> None:
     if value.get("schema") != "zlos.evidence-registry.v1":
         raise ValueError("wrong evidence-registry schema")
@@ -122,6 +134,7 @@ def validate(value: dict) -> None:
     build_graph = load("build-graph.json")
     address = load("address-space-registry.json")
     host_receipt = load("tests/host/test-run-receipt.json")
+    toolchain_counts = toolchain_manifest_counts(load("toolchain-manifest.json"))
     host_counts = host_receipt.get("counts", {})
     application_count = len(manifest.get("entries", []))
     build_input_count = len(load("build-identity.json").get("source_files_sha256", {}))
@@ -150,9 +163,9 @@ def validate(value: dict) -> None:
         "wrapper_legacy_policy_gaps": wrappers.get("counts", {}).get(
             "no_static_failure_policy"
         ),
-        "toolchain_tools": 7,
-        "toolchain_target_lanes": 4,
-        "toolchain_external_headers": 82,
+        "toolchain_tools": toolchain_counts["tools"],
+        "toolchain_target_lanes": toolchain_counts["target_lanes"],
+        "toolchain_external_headers": toolchain_counts["external_headers"],
         "toolchain_hermetic_builds": 0,
         "build_graph_source_inputs": build_input_count,
         "build_graph_target_lanes": 4,
@@ -489,9 +502,7 @@ def build() -> dict:
             ) \
             or wrappers.get("authority_contract", {}).get("legacy_policy_gaps_are_not_landing_authority") is not True:
         raise ValueError("wrapper inventory is missing or overpromoted")
-    if toolchain.get("result") != "PASS_WITH_OPEN_PORTABILITY_GAPS" \
-            or toolchain.get("counts") != {"tools": 7, "target_lanes": 4, "external_headers": 82}:
-        raise ValueError("toolchain manifest is missing or overpromoted")
+    toolchain_manifest_counts(toolchain)
     if build_graph.get("result") != "PASS_CURRENT_ARTIFACTS" \
             or build_graph.get("counts", {}).get("source_inputs") != build_input_count \
             or build_graph.get("counts", {}).get("orphan_source_inputs") != 0 \
@@ -577,18 +588,21 @@ def build() -> dict:
                 input_path("tests/host/test-run-receipt.json")) \
             or pmm.get("host_receipt", {}).get("target") != "pmmtest" \
             or pmm.get("host_receipt", {}).get("checks", 0) < 80 \
-            or len(pmm_assertions) != 4 \
+            or [row.get("id") for row in pmm_assertions] != [
+                "bounded-firmware-map-admission", "typed-owner-release",
+                "exact-owner-accounting-and-quota", "zero-reuse-and-exhaustion",
+                "typed-process-and-anonymous-consumer"] \
             or pmm_assertions[0].get("managed_floor_bytes") != 320 * 1024 * 1024 \
             or pmm_assertions[0].get("managed_limit_bytes") != 1024 * 1024 * 1024 \
             or pmm_assertions[0].get("free_pages_after_selftest") != \
                 pmm_assertions[0].get("admitted_pages") \
             or pmm_assertions[1].get("wrong_owner_refused_without_mutation") is not True \
-            or pmm_assertions[2].get("host_exhaustion_observed") is not True \
-            or pmm_assertions[3].get("frames_per_process") != 8 \
-            or pmm_assertions[3].get("two_processes_disjoint") is not True \
-            or pmm_assertions[3].get("failure_atomic_acquire") is not True \
-            or pmm_assertions[3].get("target_baseline_restored") is not True \
-            or len(pmm.get("known_gaps", [])) != 6:
+            or pmm_assertions[3].get("host_exhaustion_observed") is not True \
+            or pmm_assertions[4].get("frames_per_process") != 8 \
+            or pmm_assertions[4].get("two_processes_disjoint") is not True \
+            or pmm_assertions[4].get("failure_atomic_acquire") is not True \
+            or pmm_assertions[4].get("target_baseline_restored") is not True \
+            or len(pmm.get("known_gaps", [])) != 7:
         raise ValueError("physical allocator evidence is missing or overpromoted")
     if hardware.get("result") != "READY_FOR_PHYSICAL_EXECUTION_WITHOUT_RECEIPTS" \
             or hardware.get("physical_status") != "NOT_RUN" \
@@ -961,6 +975,9 @@ def selftest(value: dict) -> None:
     wrappers = copy.deepcopy(value)
     wrappers["counts"]["wrapper_inventory"] += 1
     mutations["wrapper-count-drift"] = wrappers
+    toolchain = copy.deepcopy(value)
+    toolchain["counts"]["toolchain_external_headers"] += 1
+    mutations["toolchain-header-count-drift"] = toolchain
     skipped = copy.deepcopy(value)
     skipped["open_gaps"]["host_hardware_skips"] = 0
     mutations["hidden-hardware-skip"] = skipped

@@ -126,7 +126,10 @@ def qcommand(transcript, qmp, command, ceiling, prompt_ready=False):
     """Submit one emulated-keyboard command at an exact prompt boundary."""
     if not prompt_ready and not transcript.expect(PROMPT, ceiling):
         return False
-    qtype(qmp, command + "\n")
+    # TCG cannot consume emulated key events at the KVM rate reliably after
+    # disk work. A dropped key is a different command, not a slower command.
+    key_settle = 0.12 if os.access("/dev/kvm", os.R_OK | os.W_OK) else 0.8
+    qtype(qmp, command + "\n", settle=key_settle)
     # term_key writes the prompt before inviting a line and only the submitted
     # characters here. Looking for `zl> command` after the prompt was already
     # consumed made the very first command fail and the second inherit its
@@ -327,6 +330,9 @@ def main():
                 check("...and names it", has_missing_name)
                 check("...and no longer claims there is no filesystem",
                       "no filesystem" not in blob2)
+            else:
+                check("mounted filesystem kept the terminal interactive", False,
+                      "run nothing.zl was not echoed")
         else:
             check("`.` mounted a filesystem", False, "keystroke never arrived")
 
@@ -411,6 +417,7 @@ def main():
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.wait()
 
     print()
     if failures:

@@ -35,10 +35,16 @@ Core kernel services shared across boot routes and subsystems.
 - `heap.c`
 - `pmm.c`
 - `pmm.h`
+- `process_lifecycle.c`
+- `process_lifecycle.h`
 - `process_memory.c`
 - `process_memory.h`
 - `sched.c`
+- `scheduler_policy.c`
+- `scheduler_policy.h`
 - `telemetry.h`
+- `user_process_service.c`
+- `user_process_service.h`
 - `version.h`
 - `zllog.c`
 - `zllog.h`

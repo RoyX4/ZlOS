@@ -129,8 +129,11 @@ that shape: raising (1) pushed the loaded region through the stack, which is
   has privilege separation without memory isolation. Native UEFI64 has a
   separate bounded path with two fixed CR3-owned process slots, RX user code,
   guarded RW/NX user stacks, guarded supervisor/NX TSS stacks, complete-range
-  user-copy admission and offender-only fault containment. It is a proved
-  diagnostic and file-backed program seam, not a persistent process service.
+  user-copy admission and offender-only fault containment. A kernel-owned
+  persistent service now admits external file-backed programs, schedules one
+  preemptible turn per work-loop call, retains exact exit/fault custody and
+  reaps resources through generation-safe handles. Userspace spawn/wait,
+  cancellation, general capacity, SMP ownership and physical proof remain open.
 
 ---
 

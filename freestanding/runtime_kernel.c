@@ -188,6 +188,14 @@ extern int  user_has_exited(void);
 extern unsigned int user_call_count(void);
 #if defined(ZL_64)
 extern int user64_run_default_file(void);
+extern int user64_service_spawn_default_file(void);
+extern int user64_service_work(void);
+extern int user64_service_count(void);
+extern int user64_service_pid(int index);
+extern int user64_service_state(int index);
+extern int user64_service_termination_code(int index);
+extern int user64_service_reap(int index);
+extern int user64_service_last_failure(void);
 #endif
 
 extern void vmm_report(void);
@@ -2593,8 +2601,24 @@ Value zl_calln(const char *name, int n, ...)
     if (streq(name, "user_calls"))    return zl_num((double)user_call_count());
 #if defined(ZL_64)
     if (streq(name, "user_file"))     return zl_num((double)user64_run_default_file());
+    if (streq(name, "user_spawn"))    return zl_num((double)user64_service_spawn_default_file());
+    if (streq(name, "user_work"))     return zl_num((double)user64_service_work());
+    if (streq(name, "user_count"))    return zl_num((double)user64_service_count());
+    if (streq(name, "user_pid"))      return zl_num((double)user64_service_pid((int)a[0].num));
+    if (streq(name, "user_state"))    return zl_num((double)user64_service_state((int)a[0].num));
+    if (streq(name, "user_term_code")) return zl_num((double)user64_service_termination_code((int)a[0].num));
+    if (streq(name, "user_reap"))     return zl_num((double)user64_service_reap((int)a[0].num));
+    if (streq(name, "user_fail"))     return zl_num((double)user64_service_last_failure());
 #else
     if (streq(name, "user_file"))     return zl_num(-64.0);
+    if (streq(name, "user_spawn"))    return zl_num(-64.0);
+    if (streq(name, "user_work"))     return zl_num(0.0);
+    if (streq(name, "user_count"))    return zl_num(0.0);
+    if (streq(name, "user_pid"))      return zl_num(-64.0);
+    if (streq(name, "user_state"))    return zl_num(-64.0);
+    if (streq(name, "user_term_code")) return zl_num(-64.0);
+    if (streq(name, "user_reap"))     return zl_num(-64.0);
+    if (streq(name, "user_fail"))     return zl_num(-64.0);
 #endif
     /* Dedicated destructive diagnostic. The ordinary shell never invokes it;
      * term.c accepts only the exact word `crashtest`, and the QEMU gate uses

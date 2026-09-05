@@ -27,6 +27,7 @@ System-wide ABI, audit, memory, process, and service contracts.
 
 - `always-on-telemetry.md`
 - `automatic-system-audit.md`
+- `bounded-scheduler-policy.md`
 - `exec-kill-path.md`
 - `user-process-abi.md`
 
@@ -35,5 +36,9 @@ for repository-wide ownership.
 <!-- END GENERATED: directory-docs -->
 
 <!-- BEGIN LOCAL: directory-docs -->
-<!-- Add verified directory-specific notes here. -->
+## Current contracts
+
+- [Bounded scheduler policy](bounded-scheduler-policy.md) separates the
+  host-proved selection/state contract from privileged switching and records
+  its bounded persistent Ring-3 target integration.
 <!-- END LOCAL: directory-docs -->

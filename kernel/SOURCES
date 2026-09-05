@@ -51,6 +51,7 @@ src/arch/x86/cpu.c
 src/drivers/storage/nvme.c
 src/drivers/storage/block.c
 src/core/sched.c
+src/core/scheduler_policy.c
 src/arch/x86/smp.c
 src/drivers/input/i2c_touch.c
 src/drivers/input/i2c_hid.c
@@ -79,6 +80,8 @@ src/arch/x86/rtc.c
 src/core/arena.c
 src/core/heap.c
 src/core/pmm.c
+src/core/process_lifecycle.c
+src/core/user_process_service.c
 src/core/process_memory.c
 src/core/anon_memory.c
 src/arch/x86/page_table_txn.c

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 
 
@@ -19,6 +20,16 @@ ARTIFACT = KERNEL_ROOT / "zlOS-usb.img"
 HARNESS = KERNEL_ROOT / "tools/checks/verify-efi.sh"
 USERMODE = KERNEL_ROOT / "src/arch/x86/usermode.c"
 IDT = KERNEL_ROOT / "src/arch/x86/idt.c"
+PROCESS_LIFECYCLE_HEADER = KERNEL_ROOT / "src/core/process_lifecycle.h"
+PROCESS_LIFECYCLE = KERNEL_ROOT / "src/core/process_lifecycle.c"
+PROCESS_LIFECYCLE_TEST = KERNEL_ROOT / "tests/host/processlifecycletest.c"
+SCHEDULER_POLICY_HEADER = KERNEL_ROOT / "src/core/scheduler_policy.h"
+SCHEDULER_POLICY = KERNEL_ROOT / "src/core/scheduler_policy.c"
+SCHEDULER_POLICY_TEST = KERNEL_ROOT / "tests/host/schedulerpolicytest.c"
+PROCESS_SERVICE_HEADER = KERNEL_ROOT / "src/core/user_process_service.h"
+PROCESS_SERVICE = KERNEL_ROOT / "src/core/user_process_service.c"
+PROCESS_SERVICE_TEST = KERNEL_ROOT / "tests/host/userprocessservicetest.c"
+HOST_RECEIPT = KERNEL_ROOT / "tests/host/test-run-receipt.json"
 DEFAULT_OUTPUT = KERNEL_ROOT / "docs/receipts/scheduler-native-uefi64-qemu-2026-08-29.json"
 
 ASSERTIONS = (
@@ -45,11 +56,67 @@ ASSERTIONS = (
         "sibling_trace": "K",
         "kernel_survived": True,
     },
+    {
+        "id": "persistent-process-service",
+        "marker": "<- persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped",
+        "processes": 2,
+        "kernel_turns": 4,
+        "trace": "ST12",
+        "selection": "round-robin exact lifecycle handle",
+        "turn_boundary": "cooperative yield or exit; timer preemption is proved by the independent non-yielding-process assertion",
+        "exit_statuses": [11, 22],
+        "terminal_custody_observed": True,
+        "scheduler_detached_before_identity_reap": True,
+        "physical_frame_baseline_restored": True,
+    },
 )
 
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expected_implementation() -> list[dict]:
+    files = (
+        ("kernel/src/arch/x86/usermode.c", USERMODE),
+        ("kernel/src/arch/x86/idt.c", IDT),
+        ("kernel/src/core/process_lifecycle.h", PROCESS_LIFECYCLE_HEADER),
+        ("kernel/src/core/process_lifecycle.c", PROCESS_LIFECYCLE),
+        ("kernel/tests/host/processlifecycletest.c", PROCESS_LIFECYCLE_TEST),
+        ("kernel/src/core/scheduler_policy.h", SCHEDULER_POLICY_HEADER),
+        ("kernel/src/core/scheduler_policy.c", SCHEDULER_POLICY),
+        ("kernel/tests/host/schedulerpolicytest.c", SCHEDULER_POLICY_TEST),
+        ("kernel/src/core/user_process_service.h", PROCESS_SERVICE_HEADER),
+        ("kernel/src/core/user_process_service.c", PROCESS_SERVICE),
+        ("kernel/tests/host/userprocessservicetest.c", PROCESS_SERVICE_TEST),
+    )
+    return [{"path": name, "sha256": digest(path)} for name, path in files]
+
+
+def host_observation() -> dict:
+    receipt = json.loads(HOST_RECEIPT.read_text())
+    identity = json.loads(IDENTITY.read_text())["identity_sha256"]
+    if receipt.get("build_identity") != identity:
+        raise ValueError("scheduler host receipt is from a foreign build")
+    observed = {}
+    for target, minimum in (("processlifecycletest", 80),
+                            ("schedulerpolicytest", 100),
+                            ("userprocessservicetest", 100)):
+        rows = [row for row in receipt.get("results", [])
+                if row.get("name") == target]
+        if len(rows) != 1 or rows[0].get("status") != "passed":
+            raise ValueError(f"current host receipt has no passing {target}")
+        commands = rows[0].get("commands", [])
+        match = re.search(rf"{target}: ([1-9][0-9]*) checks, 0 failures",
+                          commands[0].get("output_tail", "") if len(commands) == 1 else "")
+        if not match or int(match.group(1)) < minimum:
+            raise ValueError(f"{target} lost its bounded observations")
+        observed[target] = {"checks": int(match.group(1))}
+    return {
+        "path": "kernel/tests/host/test-run-receipt.json",
+        "sha256": digest(HOST_RECEIPT),
+        "targets": observed,
+    }
 
 
 def validate_log(log: str) -> None:
@@ -63,6 +130,7 @@ def validate_log(log: str) -> None:
         "multi-process yield/resume FAILED",
         "timer process preemption FAILED",
         "sibling fault isolation FAILED",
+        "persistent user-process service FAILED",
     )
     present = [marker for marker in rejected if marker in log]
     if present:
@@ -75,7 +143,7 @@ def build(log_path: Path) -> dict:
     identity = json.loads(IDENTITY.read_text())
     value = {
         "schema": "zlos.scheduler-native-uefi64-qemu-receipt.v1",
-        "result": "PASS_BOUNDED_TWO_PROCESS_GATE",
+        "result": "PASS_BOUNDED_PERSISTENT_PROCESS_GATE",
         "build_identity": identity["identity_sha256"],
         "route": "native-uefi64",
         "artifact": {
@@ -87,21 +155,21 @@ def build(log_path: Path) -> dict:
             "path": "kernel/tools/checks/verify-efi.sh",
             "sha256": digest(HARNESS),
         },
-        "implementation": [
-            {"path": "kernel/src/arch/x86/usermode.c", "sha256": digest(USERMODE)},
-            {"path": "kernel/src/arch/x86/idt.c", "sha256": digest(IDT)},
-        ],
+        "implementation": expected_implementation(),
+        "host_receipt": host_observation(),
         "assertions": [dict(assertion) for assertion in ASSERTIONS],
         "known_gaps": [
-            "the preemptive Ring-3 gate has exactly two fixed process slots",
-            "there is no general priority, fairness or deadline contract",
+            "the persistent Ring-3 service has exactly two fixed process slots",
+            "there is no general priority or deadline contract beyond bounded round robin",
             "there is no per-CPU run-queue ownership or process migration",
-            "spawn, reap, cancellation and resource reclamation are not persistent services",
+            "spawn and reap are kernel commands; there is no userspace process-management or cancellation API",
+            "the separate eight-slot kernel task demo is cooperative and lacks FPU/SSE state",
             "there is no current physical-hardware scheduler receipt",
         ],
         "evidence_ceiling": (
-            "exact current native-UEFI64 QEMU artifact and three bounded two-process "
-            "observations; not a general scheduler or physical-hardware qualification"
+            "exact current host policy/service tests and native-UEFI64 QEMU artifact "
+            "with four bounded two-process observations; not a general per-CPU "
+            "scheduler, userspace process API or physical-hardware qualification"
         ),
         "generator": {
             "path": "kernel/tools/checks/write-scheduler-receipt.py",
@@ -115,7 +183,7 @@ def build(log_path: Path) -> dict:
 def validate(value: dict) -> None:
     identity = json.loads(IDENTITY.read_text())["identity_sha256"]
     if value.get("schema") != "zlos.scheduler-native-uefi64-qemu-receipt.v1" \
-            or value.get("result") != "PASS_BOUNDED_TWO_PROCESS_GATE" \
+            or value.get("result") != "PASS_BOUNDED_PERSISTENT_PROCESS_GATE" \
             or value.get("route") != "native-uefi64":
         raise ValueError("wrong scheduler receipt schema/result/route")
     if value.get("build_identity") != identity:
@@ -126,19 +194,17 @@ def validate(value: dict) -> None:
     if value.get("harness") != {
             "path": "kernel/tools/checks/verify-efi.sh", "sha256": digest(HARNESS)}:
         raise ValueError("scheduler receipt does not bind the current verifier")
-    expected_implementation = [
-        {"path": "kernel/src/arch/x86/usermode.c", "sha256": digest(USERMODE)},
-        {"path": "kernel/src/arch/x86/idt.c", "sha256": digest(IDT)},
-    ]
-    if value.get("implementation") != expected_implementation:
+    if value.get("implementation") != expected_implementation():
         raise ValueError("scheduler receipt implementation identity drifted")
+    if value.get("host_receipt") != host_observation():
+        raise ValueError("scheduler host observation drifted")
     if value.get("assertions") != [dict(assertion) for assertion in ASSERTIONS]:
         raise ValueError("scheduler receipt assertion set drifted")
     if len(value.get("boot_log_sha256", "")) != 64 \
             or len(value.get("generator", {}).get("sha256", "")) != 64:
         raise ValueError("scheduler receipt evidence identity is missing")
     gaps = value.get("known_gaps", [])
-    if len(gaps) != 5 or not any("physical" in gap for gap in gaps):
+    if len(gaps) != 6 or not any("physical" in gap for gap in gaps):
         raise ValueError("scheduler receipt hides its bounded or physical gaps")
 
 
