@@ -41,6 +41,9 @@ jobs:
       - name: are the docs still true?
         run: tools/doc-check.sh
 
+      - name: TODO generation preserves the backlog on failure
+        run: python3 tools/test_todo.py
+
       - name: regenerate the derived docs
         env:
           GH_TOKEN: ${{ github.token }}

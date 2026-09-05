@@ -7,6 +7,15 @@ scripts and their checked data files.
 Tools must fail clearly when prerequisites are absent and must distinguish a
 skipped check from a passed check.
 
+## TODO publication
+
+`todo.sh` generates beside `TODO.md` and publishes with a filesystem rename.
+Interrupted generation preserves the previous backlog. Existing permissions and
+the hand-written block are retained; `--stdout` does not publish anything.
+Run `python3 tools/test_todo.py` for the isolated failure-recovery checks, also
+run by the docs workflow. See the
+[cleanup repair receipt](../docs/evidence/TODO-ATOMIC-REPAIR-2026-09-05.md).
+
 ## Directory documentation
 
 `directory-docs.py` creates and verifies the eight-part documentation capsule in
