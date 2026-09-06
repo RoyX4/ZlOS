@@ -19,8 +19,8 @@ in the same session, not from arithmetic.
 | base | | what | owner | enforced by |
 |---|---|---|---|---|
 | `0x00000000` | 0 | PML4, PDPT, PD0..PD3 | `boot64.S:40-42` | — |
-| `0x00008FE0` | | `CR3_PTR`, `ENTRY_PTR` | `smp.c:56-57` | — |
-| `0x00009000` | | the SMP trampoline | `smp.c:55,124` | — |
+| `0x00008FE0`, `0x00008FF0` | | `CR3_PTR`, `ENTRY_PTR` | `smp.c:68,67` | — |
+| `0x00009000` | | the SMP trampoline | `smp.c:66` | — |
 | `0x000A0000` | | VGA hole and BIOS ROM | hardware | — |
 | `0x00100000` | 1 MiB | the kernel image | `link*.ld` | 6 linker `ASSERT`s |
 | `0x00900000` | 9 MiB | top of what the raw loader fills | `raw_boot.asm` `CHUNKS` | `mkdisk.sh` size guard |
@@ -28,6 +28,8 @@ in the same session, not from arithmetic.
 | `0x00E00000` | 14 MiB | the program arena, 16 MiB budget | `arena.c` | `check-memmap.sh` |
 | `0x01E00000` | 30 MiB | arena end | | |
 | `0x02000000` | 32 MiB | `SNAKE_X`, `FS_*`, `LINE_BUF`, `HIST_BUF` … | `kernel.zl` | `check-memmap.sh` |
+| `0x03000000` | 48 MiB | `HI_IMG` … `HI_IMG_END` (added after this table was written; row added 2026-09-04) | `memmap.h` | `memmap.h` chain |
+| `0x03400000` | 52 MiB | `HI_EDID`, one page — declared, but no `.c` file references it (2026-09-04) | `memmap.h:224` | `memmap.h` chain |
 | `0x04000000` | 64 MiB | virtio-net rings and frame buffers | `virtio_net.c` | 4 `_Static_assert`s |
 | `0x05000000` | 80 MiB | browser document, tree, CSS, runs | `browser.c` | `memmap.h` chain |
 | `0x06000000` | 96 MiB | the ustar staging buffer, 4 MiB | `tar.c` | `memmap.h` chain |
@@ -62,6 +64,11 @@ kernel64.elf      3,354,920 bytes
 ZLOS.EFI          3,457,024 bytes
 ```
 
+Re-measured 2026-09-04 in the `fable/whole-tree-sweep` worktree (`stat -c %s`;
+`readelf -s kernel.elf | grep __kernel_end`): `kernel_raw.bin` 7,283,044 bytes,
+`kernel.elf` 7,463,868 bytes, `__kernel_end` `0x00AB36A0` (10.701 MiB — the 12 MiB
+stack still clears it). `kernel64.elf` and `ZLOS.EFI` were not present to measure.
+
 ---
 
 ## The four ceilings, and why they are different numbers
@@ -76,8 +83,9 @@ one of them is about how much RAM the machine has.
    must fit is `__bss_start`, not `__kernel_end`. **Guard: `mkdisk.sh`**, on the
    objcopy'd binary.
 2. **Where the image may end** — `__kernel_end`, including `.bss`, must clear
-   the raw-boot stack and then the arena. **Guard: six `ASSERT`s across
-   `link.ld`, `link-raw.ld`, `link64.ld`.**
+   the raw-boot stack and then the arena. **Guard: seven `ASSERT`s across
+   `link.ld`, `link-raw.ld`, `link64.ld`** (2 + 3 + 2 by `grep -c ASSERT`; six
+   until `link-raw.ld` gained one on 2026-09-04).
 3. **Who owns which address** — the region map. **Guards: `memmap.h`'s
    `_Static_assert` chain, `check-memmap.sh`, `check-himap.sh`.**
 4. **How much RAM exists** — `HI_TOP`. Everything a *device* DMAs must be below
@@ -121,7 +129,10 @@ that shape: raising (1) pushed the loaded region through the stack, which is
 - **Stage 4 — paging for the kernel's own use. DONE, for one region.**
   `paging.c` maps the heap's 64 MiB at virtual 4 GiB on the 64-bit builds, with
   everything else identity-mapped underneath. `dma.h` is the seam every
-  device-visible address now passes through — 48 forward sites and 3 inverse —
+  device-visible address now passes through — 48 forward sites and 3 inverse
+  when written (2026-09-04: `grep -rho 'dma_addr(' kernel/src --include=*.c | wc -l`
+  → 70 and `dma_kaddr(` → 6, declarations included; `check-dma.sh` counts
+  `virtio_net x9, xhci x43, nvme x7`) —
   and `check-dma.sh` fails the build if a new one skips it. See below.
 - **Stage 5 — ring 3 and syscalls. PARTIALLY DONE.** Ring 3, a TSS, a DPL-3
   syscall gate and a working `int 0x80` round trip exist on the 32-bit build and
@@ -168,11 +179,12 @@ none; `arena.c`'s `_Static_assert` is what catches two of the three.
 PRESSWORK later grew `kernel_raw.bin` to 6,324,036 bytes. The 6 MiB guard failed
 by 32,580 bytes before the bootloader could ship a truncated kernel. Raising to
 256 chunks gives an 8 MiB payload ceiling and 2,064,572 measured bytes of
-headroom. The loader now fills 1..9 MiB, still three MiB below the 12 MiB stack,
+headroom (2026-09-04: `kernel_raw.bin` is 7,283,044 bytes, so the headroom under
+8,388,608 is 1,105,564). The loader now fills 1..9 MiB, still three MiB below the 12 MiB stack,
 so the stack and arena remain in place.
 
 `ARENA_BASE` is written in **three** places too — `arena.c`, and deliberately
-duplicated in `hosttest/arenatest.c` and `hosttest/libctest.c` so a partial move
+duplicated in `kernel/tests/host/arenatest.c` and `kernel/tests/host/libctest.c` so a partial move
 fails loudly in the harness instead of testing a different address than the
 kernel uses. `arenatest` asserts `arena_base_addr() == ARENA_BASE`, which is the
 check that fires.
@@ -304,8 +316,11 @@ Linux program. **2162 checks, 0 failures**, no QEMU:
 ### The limit worth knowing
 
 `ram_backed()` answers *"is there RAM here"*. It does **not** answer *"is this
-RAM unclaimed"*, and on the EFI path that second question is open — firmware
-chooses where to load the image and nothing here reads the UEFI memory map. That
+RAM unclaimed"*, and on the EFI path that second question was open when written
+— firmware chooses where to load the image and, at the time, nothing here read
+the UEFI memory map (**2026-09-04:** `pmm.c` now consumes the sealed
+UEFI/Multiboot map for the pool above 320 MiB — Stage 3A — but the fixed regions
+below it are still not checked against it). That
 is true of every region in `memmap.h` and is why each driver ships a
 `*_ram_ok()`; the heap is no worse and no better. The probe restores what it
 found so a probe alone is harmless, but `heap_init()` writes a block header
@@ -511,6 +526,12 @@ ownership/migration, ABI compatibility tooling and physical-hardware proof.
 The 32-bit route still has none of that memory isolation and must not inherit
 the 64-bit evidence by name alone.
 
+> **Corrected 2026-09-04:** the paragraph below is the 2026-08-20 position. The
+> native UEFI64 ring-3 path described under "What is left, precisely" exists
+> (`usermode.c`), `verify-efi.sh` switches two Ring-3 contexts (`AB12`, see
+> `HANDOFF.md`), and `verify-64.sh` is a second 64-bit boot gate in the landing
+> gate.
+
 Ring 3 is 32-bit-only, and that is a scope decision: the entry stub is
 hand-written assembly, and a 64-bit one wants `syscall`/`sysret` plus three MSRs
 — writable, but with **no boot gate that could prove it works**, since the only
@@ -532,5 +553,6 @@ this repo acquires subsystems that have never executed.
   `nvme.c` all say "fixed physical addresses, identity mapped on every boot
   path" in their headers.
 - **Every guard gets a planted defect.** `docs/GUARDS-THAT-DID-NOT-GUARD.md`
-  lists five checks in this tree that reported green while checking nothing. A
+  lists five checks (nineteen since 2026-09-04) in this tree that reported green
+  while checking nothing. A
   check whose failure mode is silence looks exactly like a check that passed.

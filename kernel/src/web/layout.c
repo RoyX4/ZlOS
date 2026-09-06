@@ -1391,7 +1391,7 @@ static void lay_flex(int n, const struct css_style *cst, const struct inh *in)
             int total = normalize_shares(sf, nn, 32767);
             if (total > 0) {
                 for (int k = 0; k < nn; k++) {
-                    int cut = neg * sf[k] / total;
+                    int cut = (int)((long long)neg * sf[k] / total);   /* neg*sf overflowed int */
                     struct fitem *it = &fpool[ln->first + k];
                     it->target -= cut;
                     if (it->target < it->minmain) it->target = it->minmain;
@@ -1905,7 +1905,10 @@ static void lay_table(int tnode, const struct inh *in)
             int ct = html_tag(cnode);
             if (ct != HT_TD && ct != HT_TH) continue;
             int cstyle = style | (ct == HT_TH ? LS_BOLD : 0);
-            int w = cell_natural(html_first(cnode), size, cstyle);
+            /* clampdim, like every flex/grid dimension: an unclamped natural
+             * width overflowed `colw * room` below and collapsed the column
+             * to one glyph per line (UBSan, 400 KB cell, 2026-09-04) */
+            int w = clampdim(cell_natural(html_first(cnode), size, cstyle));
             if (w > colw[col]) colw[col] = w;
             col++;
         }

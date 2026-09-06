@@ -90,6 +90,21 @@ static struct gdt_ptr gp;
 
 void gdt_init(void)
 {
+    /* EFER.NXE. boot64.S and smp_trampoline64.S set it with LME; the native
+     * UEFI entry (efi.c) inherits whatever the firmware left, and every
+     * process PTE sets bit 63 - which is RESERVED while NXE is clear, so the
+     * first ring-3 syscall would #PF(RSVD) on the TSS stack and double-fault.
+     * OVMF happens to set NXE itself; nothing says the ThinkPad's firmware
+     * does. This runs on every 64-bit route (setup_gdt in kernel.zl), and
+     * setting a bit that is already set is harmless. */
+    {
+        unsigned int lo, hi;
+        __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(0xC0000080u));
+        if (!(lo & (1u << 11))) {
+            lo |= (1u << 11);
+            __asm__ volatile("wrmsr" : : "c"(0xC0000080u), "a"(lo), "d"(hi) : "memory");
+        }
+    }
     unsigned long long base = (unsigned long long)&tss;
     unsigned long long limit = sizeof(tss) - 1;
     tss.rsp0 = gdt64_kernel_stack_top();

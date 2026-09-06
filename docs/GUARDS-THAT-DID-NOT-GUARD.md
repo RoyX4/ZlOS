@@ -1,7 +1,7 @@
 # Guards that did not guard
 
-Written 2026-08-19. Five checks in this tree that reported green, or read as
-coverage, while checking nothing — each with the command that establishes it.
+Written 2026-08-19; §6 added 2026-09-04. Five checks in this tree (nineteen with
+§6) that reported green, or read as coverage, while checking nothing — each with the command that establishes it.
 
 This is not a list of embarrassments. It is a list of **shapes**, because the
 same shape keeps recurring here and it is cheap to recognise once named:
@@ -130,7 +130,8 @@ static uptr edid_buf = 0x0C980000u;      /* intel.c */
 
 `0x0C980000` is 9.5 MiB into `fb.c`'s cached-blur arena. `fb.c` hands out that
 space and knows nothing of `intel.c`; `intel.c` does not `#include "memmap.h"`
-at all. Running the checker today prints a clean six-region map and says `OK`.
+at all. Running the checker today prints a clean six-region map and says `OK`
+(21 `HI_*` bases by 2026-09-04, still `OK`).
 
 **Fixed by removal, not by declaration.** `edid_buf` never needed a physical
 address: every byte arrives by CPU store (`gmbus_read_edid` reads the `GMBUS3`
@@ -144,13 +145,14 @@ accessor that still honours `intel_set_edid_buffer()` for the host harness.
 no address cannot collide with anything, and there is no map entry to keep in
 step later.
 
-**Still open:** the checker's blindness itself. Nothing scans C for a hardcoded
-literal that lands inside a declared `HI_*` region without being its base. That
-is the rule that would have caught `edid_buf` (and the `i2c_hid` collision
-before it) with no allowlist to rot — a literal *equal* to a region base is a
-deliberate cross-check, a literal *strictly inside* one is the bug. It must
-strip comments first: `memmap.h` and `i2c_hid.c` both quote the old addresses
-in prose describing the fix.
+**Closed since (checked 2026-09-04):** this used to read "Still open: nothing
+scans C for a hardcoded literal that lands inside a declared `HI_*` region
+without being its base". `kernel/tools/checks/check-himap.sh` is that scanner —
+a literal *equal* to a region base is a deliberate cross-check, a literal
+*strictly inside* one is the bug, comments stripped first because `memmap.h`
+and `i2c_hid.c` quote the old addresses in prose.
+`cd kernel && ./tools/checks/check-himap.sh` →
+`OK: 8 in-range literals, every one of them a declared region base`.
 
 ---
 
@@ -163,24 +165,26 @@ wrong file.**
 
 ```
 $ grep -rn 'fb_par_hook' --include=*.c kernel/ | grep -v hosttest
-fb.c:259    void fb_par_hook(...)                    <- the definition
-smp.c:265   if (bands > 1) fb_par_hook(smp_band_dispatch, bands);   <- a real caller
+fb.c:281    void fb_par_hook(...)                    <- the definition
+smp.c:335   if (bands > 1) fb_par_hook(smp_band_dispatch, bands);   <- a real caller
 ```
 
-`smp.c:265` is inside `smp_start()`, and the wiring below it is finished and
+`smp.c:335` (lines re-grepped 2026-09-04) is inside `smp_start()`, and the wiring below it is finished and
 correct. The gap is one rung up — **nothing calls `smp_start()` at boot:**
 
 ```
 $ grep -n 'smp_go' kernel/src/kernel.zl
-1886:        smn = smp_go()          <- the ONLY occurrence
+5560:        smn = smp_go()          <- the ONLY occurrence
 
 $ grep -n 'if cmd == 42' kernel/src/kernel.zl
-1874:    if cmd == 42 {              # * - wake the other CPU cores
+5548:    if cmd == 42 {              # * - wake the other CPU cores
 ```
 
-One call site, inside `run_command()`, under the `*` key of the old text shell.
-Press `*` and three cores wake and start rendering bands. Boot the desktop and
-they stay parked forever.
+One call site, inside `run_command()`, under the `*` key of the old text shell
+(since the desktop became the boot state, the Terminal's `smp`/`cores` words
+reach the same `run_command(42)` — `term.c:368`; checked 2026-09-04).
+Press `*` (or type `smp`) and three cores wake and start rendering bands. Boot
+the desktop and they stay parked until you do.
 
 So the conclusion in those documents is right — three of four cores are idle —
 but anyone who follows the stated method finds `fb_par_hook` properly called,
@@ -188,15 +192,16 @@ concludes the path is live, and stops. **Verify the ignition, not the wiring.**
 
 Two things to know before switching it on, neither of them blocking:
 
-- `kernel.zl:1874`'s own text says *"they park immediately: nothing is
+- `kernel.zl:5548`'s own text says *"they park immediately: nothing is
   lock-protected yet"*. The APs' only job would be `smp_band_dispatch`; that
   needs to be true, not assumed.
 - **Almost no gate covers more than one core.** Corrected 2026-08-19: this
   first said "no gate", and `verify-efi.sh` boots `-smp 2`. The rest run one
   core, and not by an explicit `-smp 1` either - they pass no `-smp` at all and
   QEMU defaults to one. So SMP band rendering is exercised by exactly one of the
-  seven boot gates, the EFI one, and a
-  regression here is invisible to every boot gate in the repo.
+  seven boot gates, the EFI one (**2026-09-04:** two of eight —
+  `verify-64.sh:94,115` also boots `-smp 2`), and a
+  regression here is invisible to every other boot gate in the repo.
 
 ---
 
@@ -260,9 +265,47 @@ bites even when nobody edits the same file.
 
 ---
 
+## 6. Seven more, from the 2026-09-04 whole-tree sweep
+
+Same shapes, found by telling reviewers to refute the tree's own claims and
+then reproducing each one before touching code
+([`evidence/whole-tree-sweep-2026-09-04.md`](evidence/whole-tree-sweep-2026-09-04.md)).
+
+| the guard | what it actually checked | how it was shown |
+|---|---|---|
+| `kernel/tests/host/tlstest` "real handshake against openssl" | that a handshake completes - which it does with ANY X25519 scalar. `tls_start`'s reset memset wiped the caller's private key and every session ran on clamp(0), a public constant, for the whole life of the check. | `tlsstatetest` case 1: `memcmp(c.priv, supplied, 32)` after `tls_start` |
+| `input.c`'s sentence "the gate checks that by disassembly" | nothing - there was no such gate. The first run of the one written that day (`check-isr-sse.sh`) found `zllog_event_irq`, reached from `keyboard_isr`, using xmm0-3 in the gcc 64-bit build. | planted-defect direction A of that script |
+| `verify-64.sh`'s EFER.NXE "structural verifier" | a `grep -F` over two `.S` files for the literal `1 << 11`. The third 64-bit entry, `efi.c`, is C and sets no EFER bit; every process PTE sets NX, which is a reserved bit while NXE is clear. | `grep -rn 'NXE\|0xC0000080' kernel/` |
+| `dns.c`'s comment "the checksum is computed anyway - a resolver that accepts corrupted answers is worse" | the checksum on the way OUT. `dns_input` never verified one. | `dnstest` `t_bad_checksum` |
+| six `oknum(value, ...)` calls in `uitest.c` | that the value was nonzero. `oknum` takes a condition; a two-track grid parser passed "parses to six tracks", and a knob that was not drawn at all (`offx == -1`) passed "sits at inset 1". | planted `G.n < 2` in a scratch `uikit.c`: still green |
+| `xhci_port_reset`'s `wait_bit(reg, 0xFFFFFFFF, 1, 20)` "pure delay" | it was a wait on a value PORTSC can never hold, so it exited through the timeout branch and wrote an ERROR-severity xHCI timeout into the flight recorder on every successful reset. | fake-controller harness, `cfgtest` case D |
+| TCP's "RFC 793 acceptability test" | the RST path only. The data path held ANY future sequence number in its one out-of-order slot - half of sequence space - so a blind off-path segment parked there for the life of the connection. | `tcptest` `t_blind_future_segment` |
+
+And the same day, a reviewer told to break the TEST LAYER itself found these
+- including one in a gate written that morning:
+
+| the guard | what it actually checked | how it was shown |
+|---|---|---|
+| `check-isr-sse.sh`, first version, "follows those calls two levels deep" | the first level. Its function bodies came from `objdump -d`, and under `-mcmodel=large` a call is `movabs $0,%rax; call *%rax` - the callee's name exists only as a relocation, which `-d` does not print. A handler → clean function → xmm function chain stayed green. | planted `mid.c`/`leaf.c`; now direction A of the script |
+| the three new host tests of that morning | nothing ran them. `run-host-tests.py` (the landing gate's runner) takes its list from `test-policy.json`, which nobody had told about them; the inventory check was red and no one had run it. | `gen-test-inventory.py --check` |
+| `verify-iso.sh` / `verify-64.sh` "UEFI boot" | printed `  skip  no OVMF` (no colon, which no skip detector greps) and ended "gate green" after booting only the BIOS leg. | `printf '  skip  ...' \| grep -E '^\s*skip:'` → no match |
+| `check-contained-gate.py`, `check-land-gate.py`, `check-build-contract.py` | that a snippet of text was in the file. Commenting the authority out kept every one green. | each `failures()` run on a commented-out copy |
+| `tlstest` "a real TLS 1.3 handshake" | with no openssl it printed a skip and exited 0; the inventory classes it a gate, so the receipt said PASS. | `run-host-tests.py` policy: exit 0 is pass |
+| `check-ram.sh`, `check-dma.sh`, `wguard.sh` | nothing - not one gate, workflow or runner invoked them, and `check-ram.sh` was red on four false positives the day it was first wired. | grep over `gates/`, `.github/`, `tools/` |
+| `games4_rules.zl`, `games12_rules.zl` (244 checks) | nothing - documented with a cwd from which their imports do not resolve, invoked by no script. | `cd kernel && ../interp hosttest/games4_rules.zl` → module not found |
+
+Two more that are not guards but the same belief-without-execution: the
+kernel's `task_sleep` was a hint whenever nothing else was runnable
+(`yield()` returned at once; `schedtest` measures the wait), and
+`fs_create(n)` + `fs_write(n)` needed two contiguous runs of `n` blocks
+because the first write into an empty file was treated as an overwrite of live
+data (`fstest` "less than two runs free").
+
+---
+
 ## What these have in common
 
-Four of the five are **not** wrong code. They are correct code with a false
+Four of the original five are **not** wrong code. They are correct code with a false
 belief attached, and the belief was never executed:
 
 - the flag order that "must" work

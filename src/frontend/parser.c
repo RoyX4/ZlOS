@@ -64,6 +64,24 @@ static Token *toks;
 static int    ntoks;
 static int    pos;
 
+/* F-7 (2026-09-04). break/continue used to compile no matter where they
+ * were written: `fn f() { break }` called from inside a loop stopped THAT
+ * loop, not any loop of f's own (there isn't one) - g_breaking is a global
+ * the interpreter sets and the caller's exec_block() happens to notice.
+ * Worse, a top-level `break` with no loop at all left g_breaking SET, and
+ * the next top-level block silently returned early for no visible reason -
+ * see interp.c's g_breaking/g_continuing note. Every other engine already
+ * agreed this should be a syntax error - a WHILE/FOR/DO/LOOP construct is
+ * the only thing that ever checks these flags, so a break/continue outside
+ * one can never do anything sensible.
+ *
+ * Incremented for the BODY of a real loop only - not its header (a
+ * `for i = 1 to break_count()` is not inside the loop it is building) - and
+ * saved/reset to 0 across a nested `fn`, whose own body starts a fresh count:
+ * a loop enclosing `fn f() { break }` does not make break valid inside f,
+ * and a loop INSIDE f is unaffected by one enclosing the `fn` itself. */
+static int g_loop_depth;
+
 static Token *cur(void)        { return &toks[pos]; }
 static TokenType curtype(void) { return toks[pos].type; }
 static Token *advance(void)    { return &toks[pos++]; }
@@ -72,7 +90,7 @@ static void parse_error(const char *msg)
 {
     fprintf(stderr, "line %d: %s (got '%s')\n",
             cur()->line, msg, cur()->text);
-    exit(1);
+    zl_frontend_fail();     /* see lexer.h - exit(1) unless a trap is armed */
 }
 
 /* is the current token this exact text? (used for keywords, which
@@ -117,6 +135,49 @@ static void skip_newlines(void)
 static Node *parse_expr(void);
 static Node *parse_statement(void);
 static Node *parse_block(void);
+/* the three F-9 wrappers: each one's _body calls the wrapper (not itself)
+ * for its own recursive case, so the wrapper is what needs declaring here. */
+static Node *parse_unary(void);
+static Node *parse_not(void);
+static Node *parse_ternary(void);
+
+/* ---- F-9 (2026-09-04): a depth counter, so recursive descent cannot walk
+ * off the bottom of the C stack --------------------------------------------
+ * FOUND BY AN ADVERSARIAL READER, same family as interp.c's ZI_MAX_NESTING
+ * comment: 10000 `(` segfaults compile/compilel/nativegen (they call
+ * parse() directly, not zl_parse_guarded, so they never get interp.c's
+ * bracket pre-scan at all), and even where that pre-scan DOES run, it only
+ * counts brackets - 30000 `-` or 20000 `not` segfault the interpreter too,
+ * because parse_unary() and parse_not() recurse on THEMSELVES for a chain
+ * of prefixes without ever passing back through parse_expr(), and
+ * parse_ternary() does the same for a right-nested `a ? b : c ? d : ...`
+ * chain. None of those three is a bracket, so the pre-scan cannot see them
+ * no matter how it is written.
+ *
+ * The fix lives in the parser itself instead: one counter, incremented on
+ * entry to every function this file's OWN recursion can chain through
+ * arbitrarily deep - parse_expr, parse_statement, parse_unary, parse_not,
+ * parse_ternary - and checked against the same limit (64) and message
+ * shape interp.c's bracket pre-scan already uses, so a program that is
+ * refused prints the same kind of complaint regardless of which recursion
+ * shape triggered it. This subsumes the bracket pre-scan for parens (every
+ * `(` re-enters parse_expr via parse_primary) but not for the pre-scan's
+ * OTHER duty - reporting zi_killed and a deepest/line summary before ANY
+ * frame is pushed, which matters more to the kernel than to a hosted parse
+ * error - so that pre-scan stays, and this is an additional net under it
+ * that also covers compile/compilel/nativegen, which never call it. */
+#define ZP_MAX_DEPTH 64
+static int zp_depth;
+
+static void zp_enter(void)
+{
+    if (++zp_depth > ZP_MAX_DEPTH) parse_error("nested too deeply to parse");
+}
+
+static void zp_exit(void)
+{
+    zp_depth--;
+}
 
 /* =============================================================
  * EXPRESSIONS - lowest precedence at the top, highest at the bottom.
@@ -166,14 +227,14 @@ static Node *parse_slot_expr(const char *src, int line)
     skip_newlines();
     if (curtype() == T_EOF) {
         fprintf(stderr, "line %d: f-string has an empty {}\n", line);
-        exit(1);
+        zl_frontend_fail();
     }
     Node *e = parse_expr();
     skip_newlines();
     if (curtype() != T_EOF) {
         fprintf(stderr, "line %d: f-string slot has leftover text (got '%s')\n",
                 line, cur()->text);
-        exit(1);
+        zl_frontend_fail();
     }
 
     toks = save_toks; ntoks = save_ntoks; pos = save_pos;
@@ -237,7 +298,7 @@ static Node *build_fstring(const char *s, int line)
             if (s[i] == '\0') {
                 fprintf(stderr, "line %d: f-string has '{' with no matching '}'\n",
                         line);
-                exit(1);
+                zl_frontend_fail();
             }
 
             char slot[MAX_TEXT];
@@ -255,7 +316,7 @@ static Node *build_fstring(const char *s, int line)
             fprintf(stderr,
                     "line %d: f-string has a lone '}' - write '}}' for a literal brace\n",
                     line);
-            exit(1);
+            zl_frontend_fail();
         }
 
         if (blen < MAX_TEXT - 1) buf[blen++] = c;
@@ -315,7 +376,7 @@ static Node *parse_primary(void)
     if (is_sym("[")) {
         advance();
         Node *n = new_node(N_LIST);
-        if (!is_text("]")) {
+        if (!is_sym("]")) {
             add_kid(n, parse_expr());
             while (match_text(",")) add_kid(n, parse_expr());
         }
@@ -379,7 +440,10 @@ static Node *parse_postfix(void)
 }
 
 /* unary := - unary | postfix */
-static Node *parse_unary(void)
+/* F-9: parse_unary_body, not parse_unary, recurses on a chain of `-` - see
+ * zp_enter's comment. The wrapper is the only thing every recursive call
+ * goes through, so it is the only thing that needs to count. */
+static Node *parse_unary_body(void)
 {
     if (is_sym("-")) {
         advance();
@@ -389,6 +453,14 @@ static Node *parse_unary(void)
         return n;
     }
     return parse_postfix();
+}
+
+static Node *parse_unary(void)
+{
+    zp_enter();
+    Node *n = parse_unary_body();
+    zp_exit();
+    return n;
 }
 
 /* helper: build a left-associative chain of binary ops.
@@ -401,8 +473,19 @@ static Node *parse_binary_left(Node *(*next)(void), const char *ops[])
         for (int i = 0; ops[i] != NULL; i++) {
             if (is_sym(ops[i])) {
                 char op[MAX_TEXT];
-                strncpy(op, cur()->text, MAX_TEXT - 1);
-                op[MAX_TEXT - 1] = '\0';
+                /* F-19 (2026-09-04): a false-positive -Wstringop-truncation
+                 * silenced the clean way - memcpy of a bounded length plus an
+                 * explicit terminator, which gcc's checker cannot mistake for
+                 * an unterminated copy the way it does strncpy + a separate
+                 * '\0' assignment on the next line. Same fix, same reason,
+                 * at every other strncpy(..., MAX_TEXT - 1) site in this
+                 * project (compile.c was already clear of this - T-20). */
+                {
+                    size_t len = strlen(cur()->text);
+                    if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+                    memcpy(op, cur()->text, len);
+                    op[len] = '\0';
+                }
                 advance();
                 Node *bin = new_node(N_BINARY);
                 set_text(bin, op);
@@ -491,7 +574,9 @@ static Node *parse_in(void)
 }
 
 /* 'not' is a word-operator, tighter than and/or, looser than compare */
-static Node *parse_not(void)
+/* F-9: parse_not_body, not parse_not, recurses on a chain of `not` - see
+ * parse_unary_body's comment just above, same reasoning. */
+static Node *parse_not_body(void)
 {
     if (curtype() == T_KEYWORD && is_text("not")) {
         advance();
@@ -501,6 +586,14 @@ static Node *parse_not(void)
         return n;
     }
     return parse_in();
+}
+
+static Node *parse_not(void)
+{
+    zp_enter();
+    Node *n = parse_not_body();
+    zp_exit();
+    return n;
 }
 
 /* and := not ( 'and' not )* */
@@ -538,7 +631,9 @@ static Node *parse_or(void)
  * Right-associative: the else-branch recurses into ternary again, so
  *   a ? b : c ? d : e   is   a ? b : (c ? d : e)
  * The then-branch may also be a ternary; the ':' ends it either way. */
-static Node *parse_ternary(void)
+/* F-9: parse_ternary_body, not parse_ternary, recurses on a right-nested
+ * `a ? b : c ? d : ...` chain - see parse_unary_body's comment. */
+static Node *parse_ternary_body(void)
 {
     Node *cond = parse_or();
     if (!is_sym("?")) return cond;
@@ -552,9 +647,20 @@ static Node *parse_ternary(void)
     return n;
 }
 
+static Node *parse_ternary(void)
+{
+    zp_enter();
+    Node *n = parse_ternary_body();
+    zp_exit();
+    return n;
+}
+
 static Node *parse_expr(void)
 {
-    return parse_ternary();
+    zp_enter();
+    Node *n = parse_ternary();
+    zp_exit();
+    return n;
 }
 
 /* =============================================================
@@ -567,7 +673,7 @@ static Node *parse_block(void)
     expect_text("{");
     Node *block = new_node(N_BLOCK);
     skip_newlines();
-    while (!is_text("}") && curtype() != T_EOF) {
+    while (!is_sym("}") && curtype() != T_EOF) {
         add_kid(block, parse_statement());
         skip_newlines();
     }
@@ -611,7 +717,9 @@ static Node *parse_while(void)
     advance();                       /* eat 'while' */
     Node *n = new_node(N_WHILE);
     n->a = parse_expr();             /* condition */
+    g_loop_depth++;
     n->b = parse_block();            /* body */
+    g_loop_depth--;
     return n;
 }
 
@@ -745,7 +853,9 @@ static Node *parse_for_range(const char *var)
         stepv = num_node("1");
     }
 
+    g_loop_depth++;
     Node *body = parse_block();
+    g_loop_depth--;
 
     /* if first { first = false } else { i = i + st } */
     Node *bump = new_node(N_IF);
@@ -793,8 +903,12 @@ static Node *parse_for(void)
     if (curtype() != T_IDENT) parse_error("expected a loop variable after 'for'");
 
     char var[MAX_TEXT];
-    strncpy(var, cur()->text, MAX_TEXT - 1);
-    var[MAX_TEXT - 1] = '\0';
+    {
+        size_t len = strlen(cur()->text);
+        if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+        memcpy(var, cur()->text, len);
+        var[len] = '\0';
+    }
     advance();
 
     if (is_sym("=")) return parse_for_range(var);
@@ -806,7 +920,9 @@ static Node *parse_for(void)
     Node *n = new_node(N_FOR);
     set_text(n, var);                /* the loop variable name */
     n->a = parse_expr();             /* the thing to loop over */
+    g_loop_depth++;
     n->b = parse_block();            /* the body */
+    g_loop_depth--;
     return n;
 }
 
@@ -824,7 +940,9 @@ static Node *parse_do_while(void)
     int id = g_hidden++;
 
     advance();                       /* eat 'do' */
+    g_loop_depth++;
     Node *body = parse_block();
+    g_loop_depth--;
 
     if (!(curtype() == T_KEYWORD && is_text("while")))
         parse_error("expected 'while' after the body of a 'do'");
@@ -856,7 +974,9 @@ static Node *parse_loop(void)
     advance();                       /* eat 'loop' */
     Node *n = new_node(N_WHILE);
     n->a = bool_node("true");
+    g_loop_depth++;
     n->b = parse_block();
+    g_loop_depth--;
     return n;
 }
 
@@ -881,7 +1001,11 @@ static Node *parse_fn(void)
     }
     expect_text(")");
 
+    /* a fn body starts its own loop count - see g_loop_depth's comment */
+    int save_loop_depth = g_loop_depth;
+    g_loop_depth = 0;
     n->a = parse_block();
+    g_loop_depth = save_loop_depth;
     return n;
 }
 
@@ -890,7 +1014,7 @@ static Node *parse_return(void)
 {
     advance();                       /* eat 'return' */
     Node *n = new_node(N_RETURN);
-    if (curtype() != T_NEWLINE && !is_text("}") && curtype() != T_EOF) {
+    if (curtype() != T_NEWLINE && !is_sym("}") && curtype() != T_EOF) {
         n->a = parse_expr();
     }
     return n;
@@ -912,8 +1036,14 @@ static int starts_block_word(const char *word)
 }
 
 /* a statement is either a keyword-led form, or an expression that
- * may turn out to be an assignment (target = value). */
-static Node *parse_statement(void)
+ * may turn out to be an assignment (target = value).
+ *
+ * F-9: parse_statement_body, not parse_statement, is what parse_block calls
+ * per statement and what if/while/for/fn bodies recurse through - the
+ * wrapper below is the single place that counts, so every one of its many
+ * return paths (kept as they were) is covered without touching any of
+ * them. */
+static Node *parse_statement_body(void)
 {
     if (curtype() == T_KEYWORD) {
         if (is_text("if"))     return parse_if();
@@ -921,8 +1051,14 @@ static Node *parse_statement(void)
         if (is_text("for"))    return parse_for();
         if (is_text("fn"))     return parse_fn();
         if (is_text("return")) return parse_return();
-        if (is_text("break"))    { advance(); return new_node(N_BREAK); }
-        if (is_text("continue")) { advance(); return new_node(N_CONTINUE); }
+        if (is_text("break")) {
+            if (g_loop_depth == 0) parse_error("'break' outside a loop");
+            advance(); return new_node(N_BREAK);
+        }
+        if (is_text("continue")) {
+            if (g_loop_depth == 0) parse_error("'continue' outside a loop");
+            advance(); return new_node(N_CONTINUE);
+        }
     }
 
     if (starts_block_word("do"))   return parse_do_while();
@@ -962,6 +1098,14 @@ static Node *parse_statement(void)
     Node *stmt = new_node(N_EXPRSTMT);
     stmt->a = expr;
     return stmt;
+}
+
+static Node *parse_statement(void)
+{
+    zp_enter();
+    Node *n = parse_statement_body();
+    zp_exit();
+    return n;
 }
 
 /* program := (statement)* EOF */
@@ -1005,10 +1149,14 @@ static void mark_imported(const char *name)
 {
     if (g_nimported >= MAX_IMPORTS) {
         fprintf(stderr, "parse error: too many imports (max %d)\n", MAX_IMPORTS);
-        exit(1);
+        zl_frontend_fail();
     }
-    strncpy(g_imported[g_nimported], name, MAX_TEXT - 1);
-    g_imported[g_nimported][MAX_TEXT - 1] = '\0';
+    {
+        size_t len = strlen(name);
+        if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+        memcpy(g_imported[g_nimported], name, len);
+        g_imported[g_nimported][len] = '\0';
+    }
     g_nimported++;
 }
 
@@ -1046,7 +1194,7 @@ static void parse_import_into(Node *prog)
         if (curtype() != T_IDENT) {
             fprintf(stderr, "parse error line %d: import needs a module name\n",
                     cur()->line);
-            exit(1);
+            zl_frontend_fail();
         }
         char name[MAX_TEXT];
         strncpy(name, cur()->text, MAX_TEXT - 1);
@@ -1062,20 +1210,39 @@ static void parse_import_into(Node *prog)
                         "./stdlib/%s.zl", name, name, name);
                 if (env && *env) fprintf(stderr, ", %s/%s.zl", env, name);
                 fprintf(stderr, ")\n");
-                exit(1);
+                zl_frontend_fail();
             }
             mark_imported(name);                /* BEFORE loading: breaks cycles */
 
-            /* the nested parse clobbers the cursor - save it */
+            /* the nested parse clobbers the cursor - save it. g_loop_depth
+             * too (F-7): parse() resets it to 0 for the module, and an
+             * `import` written inside the CALLER's own loop must not leave
+             * that loop's depth at 0 for the statements after it.
+             *
+             * g_hidden is NOT saved/restored (F-8, 2026-09-04, and this is
+             * the other half of that fix - parse() no longer resets it,
+             * but restoring the OUTER value here after the module used it
+             * undoes that just as completely). It is a process-wide
+             * uniqueness counter: the module's own for-range loops just
+             * minted __zl_lim0/__zl_st0 while parsing above, and if this
+             * function then rewound g_hidden back to what it was BEFORE
+             * that, the OUTER program's very next for-range would mint
+             * THE SAME id 0 - two unrelated loops sharing one set of
+             * hidden globals, so the module's loop (still live in
+             * mx_count(), called from inside the outer loop's body)
+             * clobbers the outer loop's own counter every time it runs.
+             * Leaving g_hidden wherever the module left it is exactly
+             * "monotonically increasing, never reset" - the outer
+             * program's ids simply continue from there. */
             Token *save_toks = toks; int save_ntoks = ntoks;
-            int save_pos = pos, save_hidden = g_hidden;
+            int save_pos = pos, save_loop_depth = g_loop_depth;
 
             int mcount = 0;
             Token *mtoks = lex_file(path, &mcount);
             Node  *mod   = parse(mtoks, mcount);
 
             toks = save_toks; ntoks = save_ntoks;
-            pos  = save_pos;  g_hidden = save_hidden;
+            pos  = save_pos;  g_loop_depth = save_loop_depth;
 
             /* Splice the module's DEFINITIONS - its functions and its
              * top-level constants - and skip everything else.
@@ -1245,7 +1412,33 @@ Node *parse(Token *tokens, int ntokens)
     toks    = tokens;
     ntoks   = ntokens;
     pos     = 0;
-    g_hidden = 0;
+    /* g_hidden is NOT reset here (F-8, 2026-09-04). It used to be, and an
+     * imported module is parsed by a SECOND, NESTED call to this same
+     * function (parse_import_into, below) while the outer parse is still
+     * mid-flight - resetting made the module mint the exact same
+     * __zl_lim0/__zl_st0 names the outer program's OWN for-range loops had
+     * already used, so a module's desugared loop could clobber the
+     * caller's loop state. g_hidden is a process-wide uniqueness counter,
+     * not a per-file one, and a static zero-initialised global already IS
+     * "reset once at the outermost entry" - there is nothing to do here.
+     * (parse_import_into still saves/restores it around the nested call,
+     * so the OUTER program's own next hidden id continues from where it
+     * left off rather than from whatever the module used.) */
+
+    /* g_loop_depth DOES reset here, unlike g_hidden - see its own comment.
+     * It is not a uniqueness counter, it is "am I lexically inside a loop
+     * IN THIS FILE", and a module being imported is a self-contained
+     * program: its own top-level break/continue validity must not depend
+     * on whether the statement that imported it happens to be inside a
+     * loop of the CALLER's. parse_import_into also saves/restores it, so
+     * the outer parse's own depth is undisturbed either way. */
+    g_loop_depth = 0;
+    /* zp_depth (F-9): same reasoning as g_loop_depth just above - a
+     * recursion-depth counter is a per-file property, not a process-wide
+     * one, and imports only ever happen at parse_program's own top level
+     * (zp_depth is always 0 there already), so there is nothing to save
+     * and restore around the nested parse() call the way g_hidden needs. */
+    zp_depth = 0;
     return parse_program();
 }
 

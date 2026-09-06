@@ -194,7 +194,13 @@
  * but their SPAN belongs in the map, or the map is lying by omission.
  * 0x02000000 (SNAKE_X) to 0x02032000 (end of HIST_BUF), rounded up. */
 #define ZL_LOW_BASE  0x02000000UL
-#define ZL_LOW_END   0x02100000UL   /* 33 MiB - covers the block with room  */
+/* 48 MiB, = HI_IMG. It was 0x02100000 while kernel.zl had already placed
+ * PAINT_BUF at 0x02100000 and 21 game boards / palette buffers at
+ * 0x02200000-0x02216000 - above the end this file and efi.c asserted
+ * against, so the EFI fixed-memory witness never looked at them and a zl
+ * constant anywhere below HI_IMG passed every check in the tree. The
+ * address-space contract JSON already said 0x03000000. (2026-09-04) */
+#define ZL_LOW_END   0x03000000UL
 
 #define HI_IMG    0x03000000UL   /* png.c        - decoded picture arena    */
 #define HI_IMG_SCRATCH (HI_IMG + 0x200000UL)
@@ -287,7 +293,10 @@
  * no check. Declaring the region here is what makes the assert honest. */
 #define HI_APSTK  0x0A800000UL   /* smp_trampoline{,64}.S STACK_BASE        */
 #define AP_STACK_SIZE 0x4000UL   /* 16 KiB per core                         */
-#define AP_STACK_SPAN (17UL * AP_STACK_SIZE)  /* cpu_apic_ids[] holds 16    */
+/* The trampolines index the stack by APIC ID (top = base + (id+1)*size,
+ * smp_trampoline*.S), and an APIC id can be anything up to 255 - so the span
+ * the map must reserve is 256 stacks, not the 16 cpu_apic_ids[] holds. */
+#define AP_STACK_SPAN (256UL * AP_STACK_SIZE)
 #define HI_SCHED  0x0B000000UL   /* sched.c      - stacks, counters         */
 #define HI_HID    0x0B800000UL   /* i2c_hid.c    - HID over I2C buffers     */
 #define HI_GPU    0x0BC00000UL   /* gpuring.c    - the GPU command ring      */

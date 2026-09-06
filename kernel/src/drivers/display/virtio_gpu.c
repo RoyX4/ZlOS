@@ -345,7 +345,14 @@ int virtio_gpu_init(void)
 
     /* the reset-and-negotiate handshake the spec requires, in order */
     mmio_w8(cfg_common + CC_DEVICE_STATUS, 0);          /* reset */
-    while (mmio_r8(cfg_common + CC_DEVICE_STATUS) != 0) { }
+    /* bounded like every other wait in this file: a device that never
+     * completes reset (or a BAR reading 0xFF) must not hang the boot */
+    {
+        long spin = 0;
+        while (mmio_r8(cfg_common + CC_DEVICE_STATUS) != 0) {
+            if (++spin > 20000000L) return 0;
+        }
+    }
     mmio_w8(cfg_common + CC_DEVICE_STATUS, STATUS_ACKNOWLEDGE);
     mmio_w8(cfg_common + CC_DEVICE_STATUS, STATUS_ACKNOWLEDGE | STATUS_DRIVER);
 

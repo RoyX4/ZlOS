@@ -91,7 +91,8 @@ while IFS= read -r f; do
         END { if (buf != "") print start ":" buf }' "$f" \
         | grep -E 'qemu-system-[a-z0-9_]+|qemu,[[:space:]]*"-m"' \
         | grep -vE ':[[:space:]]*#' \
-        | grep -vE 'command -v|pgrep|shutil\.which|--version|echo |print\(|"qemu-system-[a-z0-9_]+"\]?,?[[:space:]]*$')
+        | grep -vE 'command -v|pgrep|shutil\.which|--version|echo |print\(|"qemu-system-[a-z0-9_]+"\]?,?[[:space:]]*$' \
+        | grep -vE '"qemu-system-[a-z0-9_]+" if |else "qemu-system-[a-z0-9_]+"|\("[a-z0-9-]+", "zlOS|\["qemu-system-[a-z0-9_]+"\] *=|command:qemu-system|^[0-9]+:[[:space:]]*"qemu-system-[a-z0-9_]+",[[:space:]]*$')   # a Python ternary picking the binary for a `--version` on the next line, a route tuple, a dict key, or a bare list element naming it - not a launch
     [ "${#lines[@]}" -gt 0 ] || continue
 
     checked=$((checked + 1))

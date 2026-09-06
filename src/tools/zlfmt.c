@@ -90,6 +90,26 @@ static void buf_spaces(Buf *b, int n)
  * work on a pipe. The editor integration formats the UNSAVED buffer, so
  * reading stdin is not optional - VS Code's copy of the document is the
  * one that must be formatted, not whatever is still on disk. */
+/* F-14 (2026-09-04): reindent() below walks `src` with `while (*p != 0)`
+ * and strchr()/strlen() - all three stop at the first NUL byte, so a file
+ * containing one used to be silently re-indented (and, under --write,
+ * WRITTEN BACK) as whatever came before that byte, with everything after
+ * it simply gone. Buf tracks the real length independently of any NUL
+ * inside the data (buf_add's memcpy does not stop at one), so this is the
+ * one place that can tell the difference between "empty file" and "file
+ * with a NUL in it" - refuse the second one instead of mis-formatting it. */
+static void refuse_nul(const Buf *b, const char *what)
+{
+    if (memchr(b->data, '\0', b->len) != NULL) {
+        fprintf(stderr,
+                "zlfmt: %s contains a NUL byte - zlfmt formats TEXT, not "
+                "binary, and every pass over it stops at the first NUL "
+                "(strchr/strlen do), which used to mean --write silently "
+                "truncated the file there instead of refusing it\n", what);
+        exit(2);
+    }
+}
+
 static char *read_stream(FILE *f)
 {
     Buf b = {0};
@@ -102,6 +122,33 @@ static char *read_stream(FILE *f)
         buf_reserve(&b, 1);
         b.data[0] = '\0';
     }
+    refuse_nul(&b, "<stdin>");
+    return b.data;
+}
+
+/* the same read, for a real path - NOT lexer.c's read_whole_file(), which
+ * returns only a pointer and no length, so it cannot tell reindent()'s
+ * NUL-stopped strlen() apart from a file that legitimately ends there.
+ * Buf's own .len is the one source of truth for how long the file really
+ * is, so this stays local to zlfmt rather than changing a signature every
+ * other backend also links. */
+static char *read_file_checked(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        fprintf(stderr, "zlfmt: can't open '%s'\n", path);
+        exit(2);
+    }
+    Buf b = {0};
+    char chunk[8192];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof chunk, f)) > 0) buf_add(&b, chunk, n);
+    fclose(f);
+    if (b.data == NULL) {
+        buf_reserve(&b, 1);
+        b.data[0] = '\0';
+    }
+    refuse_nul(&b, path);
     return b.data;
 }
 
@@ -341,7 +388,7 @@ int main(int argc, char **argv)
             return 2;
         }
 
-        char *src = is_stdin ? read_stream(stdin) : read_whole_file(path);
+        char *src = is_stdin ? read_stream(stdin) : read_file_checked(path);
         char *dst = reindent(src, indent);           /* exits(1) if it does not lex */
 
         int changed = (strcmp(src, dst) != 0);

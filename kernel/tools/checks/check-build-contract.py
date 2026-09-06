@@ -16,15 +16,17 @@ REQUIRED_LANGUAGE_INCLUDES = ("-I../src/frontend", "-I../src/runtime")
 
 def route_failures(name: str, source: str) -> list[str]:
     errors = []
-    for flag in REQUIRED_FLAGS:
-        if flag not in source:
-            errors.append(f"{name}: missing {flag}")
-    for include in REQUIRED_LANGUAGE_INCLUDES:
-        if include not in source:
-            errors.append(f"{name}: missing language include {include}")
+    # comment lines are stripped FIRST: a required flag that survives only in
+    # a comment ("-Werror" next to a real -Wno-error) passed until 2026-09-04
     code = "\n".join(
         line for line in source.splitlines() if not line.lstrip().startswith("#")
     )
+    for flag in REQUIRED_FLAGS:
+        if flag not in code:
+            errors.append(f"{name}: missing {flag}")
+    for include in REQUIRED_LANGUAGE_INCLUDES:
+        if include not in code:
+            errors.append(f"{name}: missing language include {include}")
     if re.search(r"(?<![A-Za-z0-9_-])-w(?![A-Za-z0-9_-])", code):
         errors.append(f"{name}: blanket -w suppression")
     if "set -e" not in source:
@@ -50,6 +52,14 @@ def selftest(sources: dict[str, str]) -> None:
     removed = dict(sources)
     removed["build.sh"] = removed["build.sh"].replace("-Werror", "", 1)
     assert any("build.sh: missing -Werror" == item for item in all_failures(removed))
+
+    # the flag surviving only in a comment is the same defect (2026-09-04)
+    commented = dict(sources)
+    commented["build.sh"] = "\n".join(
+        ("# " + line if "-Werror" in line else line)
+        for line in commented["build.sh"].splitlines()
+    )
+    assert any("build.sh: missing -Werror" == item for item in all_failures(commented))
 
     silenced = dict(sources)
     silenced["buildefi.sh"] += "\nCF=\"$CF -w\"\n"

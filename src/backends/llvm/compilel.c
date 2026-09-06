@@ -229,9 +229,26 @@ static int set_index(const NameSet *s, const char *n) {
     for (int i=0;i<s->count;i++) if(!strcmp(s->names[i],n)) return i;
     return -1;
 }
+/* F-11 (2026-09-04): this used to drop a name past 512 SILENTLY - the 512th
+ * global, function, or local just never made it into the set, so a later
+ * set_has()/set_index() on it answered "no such name" for a name the
+ * program plainly declared. compile.c was already cured of exactly this
+ * shape (see its own set_add, T-20) - the fix here is the same one: name
+ * the count and the name that overflowed it, and stop, rather than
+ * compile a program that silently disagrees with itself past 512 names. */
 static void set_add(NameSet *s, const char *n) {
     if (set_index(s,n) >= 0) return;
-    if (s->count<512){ strncpy(s->names[s->count],n,MAX_TEXT-1); s->names[s->count][MAX_TEXT-1]='\0'; s->count++; }
+    if (s->count >= 512) {
+        fprintf(stderr,
+                "compilel: too many names: '%s' is number %d and the limit "
+                "is 512.\n"
+                "    Dropping it would let a later lookup silently answer\n"
+                "    \"no such name\" for one the program plainly declared.\n"
+                "    Raise the 512 in src/backends/llvm/compilel.c's NameSet.\n",
+                n, s->count + 1);
+        exit(1);
+    }
+    strncpy(s->names[s->count],n,MAX_TEXT-1); s->names[s->count][MAX_TEXT-1]='\0'; s->count++;
 }
 static int set_has(const NameSet *s, const char *n) { return set_index(s,n) >= 0; }
 
@@ -265,9 +282,22 @@ static void collect_vars(Node *n, NameSet *out) {
 static Node *g_strs[512];
 static int   g_nstr = 0;
 
+/* F-11 (2026-09-04): a 513th string literal used to be dropped SILENTLY -
+ * str_index() then answers -1 for it (never found, since it was never
+ * collected), and emit_expr's N_STRING case indexes @.str<n> with that -1,
+ * emitting a reference to a global that does not exist. A name the LLVM
+ * assembler would refuse is a better failure than one it might not. */
 static void collect_strs(Node *n) {
     if (!n) return;
-    if (n->type==N_STRING && g_nstr<512) g_strs[g_nstr++] = n;
+    if (n->type==N_STRING) {
+        if (g_nstr >= 512) {
+            fprintf(stderr,
+                    "compilel: too many string literals (limit 512) - "
+                    "'%s' is number %d\n", n->text, g_nstr + 1);
+            exit(1);
+        }
+        g_strs[g_nstr++] = n;
+    }
     for (int i=0;i<n->nkids;i++) collect_strs(n->kids[i]);
     collect_strs(n->a); collect_strs(n->b); collect_strs(n->c);
 }
@@ -315,8 +345,15 @@ static int  g_nbnames = 0;
 static int  bname_ref(const char *name) {
     for (int i=0;i<g_nbnames;i++) if (!strcmp(g_bnames[i],name)) return i;
     if (g_nbnames >= 256) { fprintf(stderr,"compilel: too many builtin names\n"); exit(1); }
-    strncpy(g_bnames[g_nbnames], name, MAX_TEXT-1);
-    g_bnames[g_nbnames][MAX_TEXT-1] = '\0';
+    /* F-19: bounded memcpy + explicit terminator, not strncpy - see
+     * parser.c's copy of this comment (a real -Wstringop-truncation
+     * false positive, silenced the way the task asked, not suppressed). */
+    {
+        size_t len = strlen(name);
+        if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+        memcpy(g_bnames[g_nbnames], name, len);
+        g_bnames[g_nbnames][len] = '\0';
+    }
     return g_nbnames++;
 }
 
@@ -328,7 +365,33 @@ static int loopids[64];
 static const char *loopcont[64];
 static int nloops = 0;
 
-/* where does this name live - a function-local alloca, or a global? */
+/* where does this name live - a function-local alloca, or a global?
+ *
+ * F-10(a) (2026-09-04), A DELIBERATE GAP, NOT A BUG - do not "fix" this by
+ * making a function's locals write through to a same-named global. This
+ * backend gives EVERY name assigned inside a function body its own LOCAL
+ * slot (see collect_vars, called on fn->a with no access to the caller's
+ * scope) - there is no notion of "this name happens to already be a
+ * global, so assigning it here should reach outside the function" at
+ * all. interp.c's own scoping is closer to that (a function call's env
+ * chains to g_global, so an assignment can reach a global it never
+ * declared locally), and the two backends visibly disagree on a program
+ * like:
+ *
+ *     x = 1
+ *     fn f() { x = 2 }
+ *     f()
+ *     print(x)          # interp.c: 2 (f's assignment reached the global)
+ *                        # compilel/nativegen: 1 (f's x was always local)
+ *
+ * (this is e06_llvm_scope.zl in the differential test set this project's
+ * reviews use). Changing it is a SCOPING DESIGN DECISION - which rule zl
+ * itself should have - not a translation defect this file can silently
+ * correct on its own; making the two engines agree means picking one
+ * behaviour and teaching interp.c (or this file) to match it, which is
+ * out of scope for a backend parity pass. Recorded here, not silently
+ * left to be rediscovered as a "regression" by the next reviewer who
+ * runs that program through both engines. */
 static void var_slot(const char *name, char *buf) {
     if (g_curfn && set_has(&g_curfn->locals, name)) sprintf(buf, "%%l_%s", name);
     else                                            sprintf(buf, "@v_%s", name);
@@ -896,7 +959,17 @@ static int emit_truth(const char *ref, Ty t) {
  * header - freeing is a decision for the whole language.
  */
 
-/* narrow an index to an i64, the way interp.c narrows idx.num */
+/* narrow an index to an i64, the way interp.c narrows idx.num.
+ *
+ * F-10(b) (2026-09-04): llvm.fptosi.sat converts a NaN input to 0 - that
+ * is the intrinsic's own documented saturation behaviour, not a bug in
+ * this file, but 0 is a perfectly valid index into any non-empty list, so
+ * a NaN index used to silently read/write element 0 instead of refusing
+ * with "list index out of range" the way interp.c's exact_i64-guarded
+ * path does. Forcing the NaN case to -1 instead makes zl_index's own
+ * bounds check (icmp slt i64 %i, 0) catch it exactly like any other
+ * negative index - no new call, no new error message, just a value that
+ * is never in range. */
 static void to_index(char *ref, Ty t) {
     if (is_str(t) || is_list(t)) {
         fprintf(stderr, "compilel: a list index must be a number\n"); exit(1);
@@ -905,7 +978,11 @@ static void to_index(char *ref, Ty t) {
     g_used_sat = 1;
     int r = newtmp();
     fprintf(out, "  %%t%d = call i64 @llvm.fptosi.sat.i64.f64(double %s)\n", r, ref);
-    snprintf(ref, REFLEN, "%%t%d", r);
+    int isnan = newtmp();
+    fprintf(out, "  %%t%d = fcmp uno double %s, %s\n", isnan, ref, ref);
+    int sel = newtmp();
+    fprintf(out, "  %%t%d = select i1 %%t%d, i64 -1, i64 %%t%d\n", sel, isnan, r);
+    snprintf(ref, REFLEN, "%%t%d", sel);
 }
 
 /* put a value in a fresh 8-byte box and leave `ref` pointing at the box */
@@ -1123,7 +1200,22 @@ static Ty emit_expr(Node *n, char *ref) {
                 snprintf(ref, REFLEN, "0x%016llX", bits.u);
                 return T_NUM;
             }
-            sprintf(ref, "%lld", (long long)atoll(n->text));
+            /* zl_num_exact_i64(), not atoll() (F-3, 2026-09-04): atoll()
+             * SATURATES past int64 range with no diagnostic at all, so
+             * 18446744073709551616 (2^64) silently became LLONG_MAX. This
+             * backend is an integer SUBSET by design (see the T_INT/T_NUM
+             * split above) - a literal that is not exactly an int64 is
+             * refused, not silently wrong. */
+            {
+                long long v;
+                if (!zl_num_exact_i64(n->text, &v)) {
+                    fprintf(stderr, "compilel: %s is not exactly representable "
+                                    "as a 64-bit integer - this backend is an "
+                                    "integer subset\n", n->text);
+                    exit(1);
+                }
+                sprintf(ref, "%lld", v);
+            }
             return T_INT;
         case N_BOOL:
             sprintf(ref, "%d", strcmp(n->text,"true")==0);
@@ -1229,9 +1321,16 @@ static Ty emit_expr(Node *n, char *ref) {
         case N_UNARY: {
             char a[REFLEN]; Ty ta = emit_expr(n->a, a);
             if (!strcmp(n->text,"-")) {
-                if (is_str(ta) || is_list(ta)) {   /* interp: "cannot negate a non-number" */
+                /* F-10(c) (2026-09-04): this checked str/list but not bool,
+                 * so `-true` fell through to the T_INT branch below (a bool
+                 * IS an i64 0/1 here - see T_BOOL's own comment) and typed
+                 * the result T_BOOL too, so `-true` silently became a bool
+                 * carrying the machine value -1 instead of refusing the way
+                 * interp.c's "cannot negate a non-number" already does for
+                 * every non-V_NUM operand, bools included. */
+                if (is_str(ta) || is_list(ta) || ta == T_BOOL) {
                     fprintf(stderr, "compilel: cannot negate a %s\n",
-                            is_str(ta) ? "string" : "list"); exit(1);
+                            is_str(ta) ? "string" : is_list(ta) ? "list" : "bool"); exit(1);
                 }
                 int t = newtmp();
                 if (ta == T_NUM) fprintf(out, "  %%t%d = fneg double %s\n", t, a);
@@ -1524,6 +1623,17 @@ static Ty emit_expr(Node *n, char *ref) {
             }
             if (n->nkids > 16) { fprintf(stderr,"compilel: too many arguments\n"); exit(1); }
             FnInfo *callee = g_fninfo[set_index(&g_fns, n->a->text)];
+            /* F-4 (2026-09-04): a missing argument used to be silently
+             * bound to 0 (the interpreter's own bug bound it to a
+             * same-named global instead - see eval_call - so the two
+             * engines did not even agree on what the wrong answer was).
+             * Refuse instead, matching the interpreter's new check. */
+            if (n->nkids != callee->nparams) {
+                fprintf(stderr, "compilel: %s expects %d argument%s, got %d\n",
+                        n->a->text, callee->nparams, callee->nparams == 1 ? "" : "s",
+                        n->nkids);
+                exit(1);
+            }
             char argv_[16][REFLEN]; Ty at[16];
             for (int i=0;i<n->nkids;i++) at[i] = emit_expr(n->kids[i], argv_[i]);
             for (int i=0;i<n->nkids;i++) coerce(argv_[i], at[i], param_ty(callee,i));
@@ -2376,7 +2486,25 @@ static void emit_helpers(void) {
     }
 }
 
+/* F-11 (2026-09-04): compilel has 45 exit(1) call sites, most of them
+ * reached AFTER out.ll is already open and partially written - a program
+ * that trips one of them left a truncated out.ll sitting next to a
+ * compiler that just said it failed, which a build script chaining
+ * `compilel x.zl && clang out.ll` would never see (the && short-circuits),
+ * but anything that globs for *.ll or re-runs a stale one would. One
+ * atexit hook covers every exit(1) site (present and future) instead of
+ * threading a remove() through each of them: g_out_complete is set to 1
+ * on the one path that finishes writing successfully, and the hook
+ * removes the file unless that happened. */
+static int g_out_complete = 0;
+
+static void cleanup_incomplete_output(void)
+{
+    if (!g_out_complete) remove("out.ll");
+}
+
 int main(int argc, char **argv) {
+    atexit(cleanup_incomplete_output);
     if (argc<2){ fprintf(stderr,"usage: compilel <file.zl>\n"); return 1; }
     int count;
     Token *toks = lex_file(argv[1], &count);
@@ -2463,6 +2591,7 @@ int main(int argc, char **argv) {
     /* last, now that the flags say which ones are reachable */
     emit_helpers();
     fclose(out);
+    g_out_complete = 1;
     printf("compilel: wrote out.ll (LLVM IR)\n");
     return 0;
 }

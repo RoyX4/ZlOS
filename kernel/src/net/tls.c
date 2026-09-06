@@ -255,8 +255,17 @@ void tls_start(struct tls_conn *c, const char *host)
     const struct x509_cert *rt = c->roots;
     int nr = c->nroots;
     const char *nz = c->nowZ;
+    /* THE PRIVATE KEY SURVIVES TOO. Until 2026-09-04 this reset wiped priv
+     * along with everything else, four lines above the comment saying the
+     * caller fills it: every session then ran on clamp(0), a public constant,
+     * and http.c's rnd_bytes quality gate guarded a value that was discarded.
+     * tlstest never saw it because a handshake succeeds with ANY scalar.
+     * Preserve it explicitly, the same way the trust settings are. */
+    u8 pk[32];
+    for (int k = 0; k < 32; k++) pk[k] = c->priv[k];
     tmemset(c, 0, (int)sizeof *c);
     c->verify = v; c->roots = rt; c->nroots = nr; c->nowZ = nz;
+    for (int k = 0; k < 32; k++) c->priv[k] = pk[k];
     int i = 0;
     while (host && host[i] && i < TLS_HOST_MAX - 1) { c->host[i] = host[i]; i++; }
     c->host[i] = 0;
@@ -302,6 +311,11 @@ static int parse_server_hello(struct tls_conn *c, const u8 *p, int n)
         } else if (et == 0x0033) {             /* key_share                  */
             if (el >= 4 && be16(p + i) == 0x001D && be16(p + i + 2) == 32 && el >= 36) {
                 x25519(c->shared, c->priv, p + i + 4);
+                /* a low-order server point yields an all-zero secret that the
+                 * peer also knows (RFC 7748 §6.1, RFC 8446 §7.4.2): refuse it */
+                u8 acc = 0;
+                for (int z = 0; z < 32; z++) acc |= c->shared[z];
+                if (!acc) { c->err = TLS_E_GROUP; return -1; }
                 got_share = 1;
             }
         }
@@ -376,6 +390,10 @@ static int check_cert_verify(const u8 *body, int len,
     else if (scheme == 0x0603) hbits = 512;    /* ecdsa_secp521r1 - unsupported */
     else return -1;                            /* RSA schemes: unsupported */
     if (hbits == 512) return -1;
+    /* RFC 8446 §4.2.3 binds the scheme to the key's curve; without this the
+     * signer picks the hash (a P-384 scheme over a P-256 key truncated the
+     * SHA-384 digest to 32 bytes inside ecdsa_verify). */
+    if (leaf->curve_bits != hbits) return -1;
 
     /* the content that was signed */
     static u8 sc[64 + 34 + 32];
@@ -454,6 +472,13 @@ static int handle_handshake(struct tls_conn *c, const u8 *p, int n)
         const u8 *body = p + i + 4;
 
         if (type == 20) {                      /* server Finished            */
+            /* Finished is only meaningful once, in WAIT_FIN. A second one
+             * after READY would re-derive and re-install application keys
+             * mid-stream; one before ServerHello is the zero-key forgery
+             * that the type-23 gate also refuses. */
+            if (c->state != TLS_WAIT_FIN) {
+                c->err = TLS_E_PROTOCOL; c->state = TLS_ERROR; return -1;
+            }
             /* the hash must cover everything BEFORE this message */
             u8 thash[32];
             tx_hash(c, thash);
@@ -561,6 +586,12 @@ static int handle_record(struct tls_conn *c, const u8 *rec, int len)
 
     if (type == 23) {                              /* encrypted              */
         static u8 pt[TLS_REC_MAX];
+        /* NO KEYS YET, NOTHING TO DECRYPT. Before ServerHello s_key/s_iv are
+         * the zeros from tls_start's reset, so an encrypted record here would
+         * be "decrypted" under key 0 / nonce 0 - and a forged Finished under
+         * that key verifies, because every input to it is public. Refuse the
+         * record instead of trying. */
+        if (!c->saw_sh) { c->err = TLS_E_PROTOCOL; c->state = TLS_ERROR; return -1; }
         if (n < 17 || n > TLS_REC_MAX) { c->err = TLS_E_PROTOCOL; c->state = TLS_ERROR; return -1; }
         int body = n - 16;
         tmemcpy(pt, rec + 5, body);
@@ -574,9 +605,19 @@ static int handle_record(struct tls_conn *c, const u8 *rec, int len)
         while (e > 0 && pt[e] == 0) e--;
         int inner = pt[e];
         if (inner == 22) {
-            if (handle_handshake(c, pt, e) < 0) { c->state = TLS_ERROR; return -1; }
+            /* append to whatever the previous record left unfinished, parse
+             * every complete message, carry the tail forward */
+            if (c->hsn + e > TLS_HS_MAX) { c->err = TLS_E_OVERFLOW; c->state = TLS_ERROR; return -1; }
+            tmemcpy(c->hs + c->hsn, pt, e);
+            c->hsn += e;
+            int used = handle_handshake(c, c->hs, c->hsn);
+            if (used < 0) { c->state = TLS_ERROR; return -1; }
+            int left = c->hsn - used;
+            for (int k = 0; k < left; k++) c->hs[k] = c->hs[used + k];
+            c->hsn = left;
         } else if (inner == 23) {
             if (c->appn + e <= TLS_REC_MAX) { tmemcpy(c->app + c->appn, pt, e); c->appn += e; }
+            else { c->err = TLS_E_OVERFLOW; c->state = TLS_ERROR; return -1; }  /* never silently drop bytes */
         } else if (inner == 21) {
             /* close_notify is 1, anything else at level fatal ends it */
             if (e >= 2 && pt[1] == 0) c->state = TLS_CLOSED;

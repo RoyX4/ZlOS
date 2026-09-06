@@ -6,10 +6,14 @@ before starting — two of these steps are the ones that waste an hour if missed
 
 ## What you are booting
 
-`zlOS-usb.img` — **64 MB, GPT, one EFI System Partition, and no bootloader at
-all.** UEFI looks for `EFI/BOOT/BOOTX64.EFI` and executes it, and that file *is*
-zlOS: `buildefi.sh` compiles the kernel into a PE32+ EFI application. There is no
-GRUB anywhere in this path.
+`zlOS-usb.img` — **GPT, an EFI System Partition, and no GRUB anywhere in this
+path.** **Corrected 2026-09-04:** this used to say 64 MB with one partition and
+"`BOOTX64.EFI` *is* zlOS". `mkusb.sh` now builds 132 MiB by default — a 62 MiB
+ESP plus a 64 MiB `ZLLOG` journal partition (`--log-mb` up to 512) — and
+`EFI/BOOT/BOOTX64.EFI` is a 20 KiB witness (`boot/efi_stage0.c`) that records
+its entry and chainloads the real kernel, `EFI/ZLOS/ZLOS.EFI`, which
+`buildefi.sh` compiles into a PE32+ EFI application. See `HANDOFF.md` §"The USB
+boot flight recorder".
 
 Verify it is ours, not GRUB's, before you write it:
 
@@ -76,6 +80,14 @@ Two lines to check specifically:
 
 ## What to run first, in this order
 
+> **Corrected 2026-09-04:** on a GOP boot the compositor is the boot state and
+> the shell is a Terminal window that takes a **word plus Enter**, not a single
+> key (`HANDOFF.md` §"How a harness types a command"). The key column below is
+> the old text shell's; the Terminal words that reach the same commands
+> (`term.c:355-381`, codes equal to the old key's ASCII) are `help` (`h`),
+> `cpu` (`z`), `pci`/`hw` (`k`), `smp`/`cores` (`*`), `nvme`/`disk` (`o`),
+> `usb` (`u`), `i2c`/`touchpad` (`?`); the rest are in that table.
+
 | Key | Why this one, and what proves it worked |
 |---|---|
 | `h` | the shell responds at all — i.e. the keyboard is delivering |
@@ -84,7 +96,7 @@ Two lines to check specifically:
 | `*` | SMP: wakes the other 3 cores with INIT/SIPI on real hardware |
 | `o` | NVMe against the real controller — but see the warning below |
 | `u` | xHCI on real silicon. This driver had four bugs that only appear outside QEMU (64-bit BARs, address truncation, firmware ownership, scratchpads) — this is where they would show |
-| `?` | **the touchpad.** Zero test coverage; QEMU has no Intel LPSS I2C so this has never run. See below |
+| `?` | **the touchpad.** Zero test coverage when written; QEMU has no Intel LPSS I2C. (**2026-09-04:** `tests/host/i2ctest.c` exists and it has run on the laptop — `HANDOFF.md` 2026-08-24 note; `i2c` is now a read-only status command.) See below |
 | `x` | the pointer. TrackPoint is PS/2 so it should track; it also prints its IRQ12 count and final position on exit |
 
 **`o` (NVMe) writes to LBA 1000 of whatever NVMe controller it finds.** In the VM
@@ -97,7 +109,9 @@ press `o` on the ThinkPad unless you have decided that is fine — check what
 This is the one thing the VM structurally cannot test, and the reason it is worth
 booting at all for input work.
 
-`i2c_hid.c` is 315 lines and complete, but has **never executed**. It expects the
+`i2c_hid.c` is 315 lines and complete, but has **never executed** (**corrected
+2026-09-04:** 649 lines, plus `i2c_touch.c`; it has executed on the ThinkPad —
+see `HANDOFF.md`'s 2026-08-24 touchpad note). It expects the
 Synopsys DesignWare I2C controller Intel puts at PCI `00:15.1` — under Linux the
 pad shows up as `SYNA8006:00 06CB:CD8B Touchpad` on `i2c-2`.
 
@@ -115,7 +129,9 @@ Known weaknesses to expect on the first run:
 - `i2c_init()` tries controller index 1 then 0, but once `i2c_found` is set a
   failed DesignWare check leaves no way to fall back. If it picks the wrong LPSS
   block it will not recover.
-- The report buffer sits at `0x0C900000` (210 MiB). That is plain RAM the CPU
+- The report buffer sits at `0x0C900000` (210 MiB) — **corrected 2026-09-04:**
+  that address collided with `fb.c`'s blur arena and moved; `i2c_hid.c:155`
+  `HID_BUF` is `HI_HID` = `0x0B800000` (184 MiB) from `memmap.h`. That is plain RAM the CPU
   writes itself, not DMA — but it is worth confirming the UEFI memory map calls
   that region usable, because the recurring bug class in this kernel is exactly
   "a buffer outside usable RAM".
@@ -135,7 +151,9 @@ Capture, in this order:
 
 ## What is NOT in scope for this boot
 
-The cold-start modeset and anything arming `lt_armed` in `intel.c` — that is a
+The cold-start modeset and anything arming `lt_armed` in `intel.c` (**2026-09-04:**
+the `P` diagnostic's `panel_up()` — `kernel.zl:5146` → `intel_bringup_panel`,
+`intel.c:4502` — now arms it, so do not type that casually either) — that is a
 separate piece of work with a hardware-damage hazard list (violating the panel's
 500 ms T12 delay, or driving AUX into an unpowered panel). Section 4.1 of
 `kernel/docs/evidence/display/gen9-modeset-plan.json`. Do not go there casually.

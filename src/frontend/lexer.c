@@ -24,6 +24,45 @@
 
 #include "lexer.h"        /* Token, TokenType and MAX_TEXT now live here */
 
+/* THE FRONTEND TRAP - see lexer.h for the long comment. Only
+ * zl_parse_guarded/zl_lex_guarded (interp.c) ever arm this; every other
+ * caller of die()/parse_error() leaves it at 0, so zl_frontend_fail() is
+ * exit(1) for them exactly as it always was. */
+zf_jmp_buf zf_trap;
+int        zf_trap_armed;
+
+void zl_frontend_fail(void)
+{
+    if (zf_trap_armed) {
+        zf_trap_armed = 0;
+        zf_longjmp(zf_trap, 1);
+    }
+    exit(1);
+}
+
+/* See lexer.h for why this exists. atof(), not strtod(): ZL_FREESTANDING
+ * has no strtod, only k_atof (#defined to atof there), and interp.c already
+ * trusted atof() for the exact same text - this makes every backend agree
+ * with interp.c instead of adding a second numeric parser. */
+double zl_num_canon(const char *text)
+{
+    return atof(text);
+}
+
+int zl_num_exact_i64(const char *text, long long *out)
+{
+    double d = zl_num_canon(text);
+    /* the open-ended upper bound matters: 9223372036854775808.0 (2^63) is
+     * itself NOT representable as an int64 (LLONG_MAX is 2^63 - 1), and it
+     * IS exactly representable as a double, so a >= here is required or
+     * that boundary value would wrongly pass. */
+    if (d < -9223372036854775808.0 || d >= 9223372036854775808.0) return 0;
+    long long v = (long long)d;
+    if ((double)v != d) return 0;      /* a fraction, or precision lost past 2^53 */
+    *out = v;
+    return 1;
+}
+
 typedef struct {
     const char *src;
     int         pos;
@@ -93,7 +132,7 @@ static Token make_token(TokenType type, const char *start, int len, int line)
     if (len >= MAX_TEXT) {
         fprintf(stderr, "line %d: token exceeds the %d-byte text limit\n",
                 line, MAX_TEXT - 1);
-        exit(1);
+        zl_frontend_fail();
     }
     memcpy(t.text, start, (size_t)len);
     t.text[len] = '\0';
@@ -103,7 +142,7 @@ static Token make_token(TokenType type, const char *start, int len, int line)
 static void die(int line, const char *msg, char c)
 {
     fprintf(stderr, "line %d: %s '%c'\n", line, msg, c);
-    exit(1);
+    zl_frontend_fail();
 }
 
 /* --- the four things we know how to chop ----------------------- */
@@ -122,7 +161,7 @@ static void string_put(Token *t, int *out, int line, char c)
     if (*out >= MAX_TEXT - 1) {
         fprintf(stderr, "line %d: string literal exceeds the %d-byte text limit\n",
                 line, MAX_TEXT - 1);
-        exit(1);
+        zl_frontend_fail();
     }
     t->text[(*out)++] = c;
 }
@@ -205,7 +244,7 @@ static Token lex_string(Lexer *lx)
         char c = peek(lx);
         if (c == '\0' || c == '\n') {
             fprintf(stderr, "line %d: string never closed\n", line);
-            exit(1);
+            zl_frontend_fail();
         }
 
         if (c != '\\') {
@@ -249,7 +288,7 @@ static Token lex_string(Lexer *lx)
         if (real == 0) {
             fprintf(stderr, "line %d: a string cannot contain a NUL byte "
                             "(\\0 or \\x00) - zl strings are NUL-terminated\n", line);
-            exit(1);
+            zl_frontend_fail();
         }
 
         string_put(&t, &out, line, (char)real);

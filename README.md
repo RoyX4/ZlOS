@@ -55,8 +55,9 @@ Six more orientation docs worth knowing about:
 - [`docs/CODE-MAP.md`](docs/CODE-MAP.md) — current source ownership.
 - [`docs/REPOSITORY-STRUCTURE.md`](docs/REPOSITORY-STRUCTURE.md) — placement rules.
 - [`src/README.md`](src/README.md) — language-toolchain ownership.
-- [`docs/GUARDS-THAT-DID-NOT-GUARD.md`](docs/GUARDS-THAT-DID-NOT-GUARD.md) — five
-  checks in this tree that reported green while checking nothing. Read it before
+- [`docs/GUARDS-THAT-DID-NOT-GUARD.md`](docs/GUARDS-THAT-DID-NOT-GUARD.md) — nineteen
+  checks (five original, fourteen from the 2026-09-04 sweep) in this tree that
+  reported green while checking nothing. Read it before
   trusting any green result here, and before writing a new gate.
 
 ## The five ways to run
@@ -67,7 +68,7 @@ speed path:
 | # | Tool | Path | Status |
 |---|------|------|--------|
 | 1 | `interp` | tree-walking interpreter | **The reference.** Whatever it does is correct; runs the whole language |
-| 2 | `compile` | zl → boxed C → gcc | **Archived — do not develop** |
+| 2 | `compile` | zl → boxed C → gcc | **Archived as a speed path — do not develop for speed.** It is still the backend that builds zlOS (`kernel/build.sh:25` runs `../compile`), so it is kept correct (2026-09-04) |
 | 3 | `compilef` | zl → unboxed C → gcc | **Archived.** The proof-of-concept that unboxing is the win |
 | 4 | `compilel` | zl → LLVM IR → clang | **The speed backend.** The active one |
 | 5 | `nativegen` | zl → x86-64 machine code → ELF | Hand-written, no C compiler in the output |
@@ -135,7 +136,7 @@ written rather than used:
 | Display | PCI probe, BGA and Intel Gen9 modesetting, pixel clock derived from the link M/N registers |
 | Input | xHCI host controller and a USB HID driver, including the firmware handoff |
 | Storage | NVMe queues, and `zlfs`, which survives power cycles |
-| Runtime | APIC, scheduler, and a windowed compositor with eight apps |
+| Runtime | APIC, scheduler, and a windowed compositor with eight apps (64 entries in `kernel/metadata/app-manifest.json` on 2026-09-04) |
 
 ### Gates
 
@@ -153,7 +154,10 @@ in the background rather than blocking on them.
 build was dead: the first two boot the 32-bit kernel, and `verify-iso.sh`'s "UEFI"
 case boots *GRUB's* `bootx64.efi`, which multiboot-loads that same 32-bit kernel.
 Nothing exercised `kernel/boot/efi.c` or the path a real machine takes. Run
-`verify-efi.sh` before believing a change is safe on hardware.
+`verify-efi.sh` before believing a change is safe on hardware. The landing gate
+(`gates/land-gate.sh:212-215`) runs eight boot gates today — these four plus
+`verify-64.sh` (the mandatory 64-bit BIOS+GRUB route), `verify-disk.sh`,
+`verify-clock.sh` and `verify-net.sh` (2026-09-04).
 
 **Do not run several QEMU instances alongside a fan-out of agents.** This box has
 4 cores and 15 GB; doing so has produced a gate reporting a regression that did
@@ -224,14 +228,15 @@ stage is skipped with a notice if `clang` is absent.
 
 `zlfmt` re-indents; it does not reformat. It rewrites leading whitespace, strips
 trailing whitespace, and copies every other byte through untouched. That restraint
-is load-bearing: `src/frontend/lexer.c:272-273` discards comments and `src/frontend/lexer.c:88` truncates
+is load-bearing: `src/frontend/lexer.c:355` discards comments and `src/frontend/lexer.h:10` (`MAX_TEXT`) truncates
 token text at 128 bytes, so any formatter that *rebuilt* source from the token
 stream would delete every comment in the corpus and silently corrupt long string
 literals. `verify_fmt.sh` proves the token stream is byte-identical before and
 after, line numbers included.
 
 Of the 324 `.zl` files in the tree, 25 currently have inconsistent indentation
-(`./zlfmt --check`, 2026-08-19).
+(`./zlfmt --check`, 2026-08-19). The tree holds 175 tracked `.zl` files as of
+2026-09-04 (`git ls-files '*.zl' | wc -l`); `--check` was not re-run.
 
 ## Learning the language
 

@@ -96,12 +96,61 @@ __asm__(
     ".globl switch_to\n"
     "switch_to:\n"
 #if defined(ZL_EFI)
-    "    movq %rcx, %rax\n"        /* MS x64: rcx = &old->sp, rdx = new sp */
+    /* MS x64: rcx = &old->sp, rdx = new sp. THE MICROSOFT CALLEE-SAVED SET
+     * IS BIGGER than System V's: rsi, rdi and xmm6-xmm15 are the callee's to
+     * preserve too, and clang keeps live values in them across `call yield`
+     * (measured 2026-09-04: runtime_kernel.c's zl_builtin keeps the hidden
+     * struct-return pointer in rsi across yield). Until then this arm saved
+     * only the SysV six, so the first switch back handed a task the OTHER
+     * task's rsi/rdi. movups, not movaps: rsp is 8 mod 16 here. */
+    "    movq %rcx, %rax\n"
     "    movq %rdx, %r10\n"
+    "    pushq %rbx\n"
+    "    pushq %rbp\n"
+    "    pushq %r12\n"
+    "    pushq %r13\n"
+    "    pushq %r14\n"
+    "    pushq %r15\n"
+    "    pushq %rsi\n"
+    "    pushq %rdi\n"
+    "    subq $160, %rsp\n"
+    "    movups %xmm6,    0(%rsp)\n"
+    "    movups %xmm7,   16(%rsp)\n"
+    "    movups %xmm8,   32(%rsp)\n"
+    "    movups %xmm9,   48(%rsp)\n"
+    "    movups %xmm10,  64(%rsp)\n"
+    "    movups %xmm11,  80(%rsp)\n"
+    "    movups %xmm12,  96(%rsp)\n"
+    "    movups %xmm13, 112(%rsp)\n"
+    "    movups %xmm14, 128(%rsp)\n"
+    "    movups %xmm15, 144(%rsp)\n"
+    "    movq %rsp, (%rax)\n"
+    "    movq %r10, %rsp\n"
+    "    movups    0(%rsp), %xmm6\n"
+    "    movups   16(%rsp), %xmm7\n"
+    "    movups   32(%rsp), %xmm8\n"
+    "    movups   48(%rsp), %xmm9\n"
+    "    movups   64(%rsp), %xmm10\n"
+    "    movups   80(%rsp), %xmm11\n"
+    "    movups   96(%rsp), %xmm12\n"
+    "    movups  112(%rsp), %xmm13\n"
+    "    movups  128(%rsp), %xmm14\n"
+    "    movups  144(%rsp), %xmm15\n"
+    "    addq $160, %rsp\n"
+    "    popq %rdi\n"
+    "    popq %rsi\n"
+    "    popq %r15\n"
+    "    popq %r14\n"
+    "    popq %r13\n"
+    "    popq %r12\n"
+    "    popq %rbp\n"
+    "    popq %rbx\n"
+    "    ret\n");
+/* 8 GPR slots + 160 bytes of xmm = 28 eight-byte words in the saved block */
+#define SAVED_REGS 28
 #else
     "    movq %rdi, %rax\n"        /* System V: rdi, rsi                   */
     "    movq %rsi, %r10\n"
-#endif
     "    pushq %rbx\n"
     "    pushq %rbp\n"
     "    pushq %r12\n"
@@ -117,14 +166,18 @@ __asm__(
     "    popq %rbp\n"
     "    popq %rbx\n"
     "    ret\n");
+#define SAVED_REGS 6
+#endif
 
 __asm__(
     ".globl task_trampoline\n"
     "task_trampoline:\n"
+#if defined(ZL_HOSTTEST)
+    "    nop\n"                    /* sti faults in ring 3; the host test links this file */
+#else
     "    sti\n"
+#endif
     "    ret\n");
-
-#define SAVED_REGS 6
 
 #else
 /* 32-bit: pushal/popal move all eight general registers as a block. */
@@ -261,8 +314,14 @@ void task_sleep(u32 ticks)
         while ((int)(idt_ticks() - t) < 0) { }
         return;
     }
-    tasks[current].wake_at = sleep_deadline(idt_ticks(), ticks);
-    yield();
+    u32 t = sleep_deadline(idt_ticks(), ticks);
+    tasks[current].wake_at = t;
+    /* yield() returns at once when nothing else is runnable (pick_next falls
+     * back to `current`), so a single yield made this sleep a hint: with the
+     * other tasks asleep too, task_sleep(50) came back after two tick reads
+     * (measured 2026-09-04). Keep yielding until the deadline has passed. */
+    while ((int)(idt_ticks() - t) < 0) yield();
+    tasks[current].wake_at = 0;
 }
 
 /* A task that runs off the end of its function lands here. There is no

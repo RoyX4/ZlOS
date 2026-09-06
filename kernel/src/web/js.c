@@ -437,7 +437,21 @@ static int parse_postfix(void)
     }
 }
 
+/* EVERY recursive-descent entry counts, not just `(` and `{`. The guard
+ * below was added for parentheses and blocks and missed array literals,
+ * unary chains, ternary/assignment chains and if-bodies: 1,500 `[` or a
+ * run of `!` overflowed a 256 KiB stack from a hostile <script> (measured
+ * 2026-09-04). parse_unary, parse_assign and parse_stmt are the three
+ * functions every recursive path passes through, so they carry the count. */
+static int parse_unary_inner(void);
 static int parse_unary(void)
+{
+    if (++pdepth > MAX_DEPTH) { err("expression nested too deeply"); pdepth--; return -1; }
+    int n = parse_unary_inner();
+    pdepth--;
+    return n;
+}
+static int parse_unary_inner(void)
 {
     if (at("!") || at("-") || at("+")) {
         int op = src_base[toks[tp].str];
@@ -498,7 +512,15 @@ static int parse_bin(int minbp)
     }
 }
 
+static int parse_assign_inner(void);
 static int parse_assign(void)
+{
+    if (++pdepth > MAX_DEPTH) { err("expression nested too deeply"); pdepth--; return -1; }
+    int n = parse_assign_inner();
+    pdepth--;
+    return n;
+}
+static int parse_assign_inner(void)
 {
     int lhs = parse_bin(1);
     if (haderr || lhs < 0) return lhs;
@@ -548,15 +570,18 @@ static int parse_block(void)
     return n;
 }
 
+static int parse_stmt_inner(void);
 static int parse_stmt(void)
 {
+    if (++pdepth > MAX_DEPTH) { err("blocks nested too deeply"); pdepth--; return -1; }
+    int n = parse_stmt_inner();
+    pdepth--;
+    return n;
+}
+static int parse_stmt_inner(void)
+{
     if (haderr) return -1;
-    if (at("{")) {
-        if (++pdepth > MAX_DEPTH) { err("blocks nested too deeply"); pdepth--; return -1; }
-        int b = parse_block();
-        pdepth--;
-        return b;
-    }
+    if (at("{")) return parse_block();
     if (at(";")) { adv(); return nnew(N_BLOCK); }
 
     if (atkw(K_VAR) || atkw(K_LET) || atkw(K_CONST)) {

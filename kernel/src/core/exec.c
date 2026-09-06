@@ -73,8 +73,15 @@ extern unsigned long arena_base_addr(void);
 extern void *arena_alloc(unsigned long bytes);
 extern void arena_reset(void);
 
-/* The interpreter. Weak so hosttest/exectest.c keeps the EX_LOADED path. */
-extern void *lex_text(const char *src, int *out_count) ZL_WEAK;
+/* The interpreter. Weak so hosttest/exectest.c keeps the EX_LOADED path.
+ *
+ * zl_lex_guarded, not lex_text directly (F-1, 2026-09-04): a syntax error
+ * used to call exit(1), which under ZL_FREESTANDING is k_exit() - kfatal()
+ * then spin forever, halting the machine on a mistyped script. zl_lex_guarded
+ * (interp.c) arms the frontend trap around lex_text so a lex error returns
+ * NULL here instead, exactly like zl_parse_guarded already does for a
+ * too-deep-to-parse program. */
+extern void *zl_lex_guarded(const char *src, int *out_count) ZL_WEAK;
 extern void *zl_parse_guarded(void *tokens, int count) ZL_WEAK;
 extern void  zi_confine(unsigned long long lo, unsigned long long hi) ZL_WEAK;
 extern int   zl_run_program(void *program, long long steps, int max_depth) ZL_WEAK;
@@ -240,7 +247,7 @@ int exec_run(void)
     /* Load, parse, run. The interpreter is a weak symbol so a kernel that
      * has not linked it still takes the EX_LOADED path, which is what
      * hosttest/exectest.c asserts. */
-    if (lex_text == 0 || zl_parse_guarded == 0 || zl_run_program == 0 ||
+    if (zl_lex_guarded == 0 || zl_parse_guarded == 0 || zl_run_program == 0 ||
         fs_read == 0) {
         state = EX_LOADED;
         term_say("  run: '");
@@ -261,7 +268,7 @@ int exec_run(void)
     buf[n] = 0;
 
     int count = 0;
-    void *tok = lex_text(buf, &count);
+    void *tok = zl_lex_guarded(buf, &count);
     if (!tok)
         return decline(EX_FAIL, "the lexer refused that file");
 

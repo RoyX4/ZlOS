@@ -973,8 +973,34 @@ int fb_clip_left(void)  { return clip_x0; }
 int fb_clip_right(void) { return clip_x1; }
 
 
+/* NO COORDINATE PAST +-2^28 MEANS ANYTHING ON A SCREEN, and every `x + w`,
+ * `clip_x0 - x`, `w * h` in this file is int arithmetic that overflows for
+ * values near 2^31. The zl bridge hands those out freely: `(int)a[i].num`
+ * of a NaN, an inf or any out-of-range double is INT_MIN on x86
+ * (cvttsd2si), so a zl app whose layout divided by zero called
+ * fb_gradient(INT_MIN, ...) and wrote 16 GiB below the back buffer, with no
+ * MMU in the way (measured 2026-09-04 with guard pages, gcc -O2 and clang).
+ * Saturate once, at the entry of every rectangle primitive; after this no
+ * sum of two coordinates and no product of two extents can overflow. */
+#define FB_COORD_MAX (1 << 28)
+static int sat_coord(int v)
+{
+    if (v > FB_COORD_MAX)  return FB_COORD_MAX;
+    if (v < -FB_COORD_MAX) return -FB_COORD_MAX;
+    return v;
+}
+static int sat_extent(int v)
+{
+    if (v < 0) return 0;
+    if (v > FB_COORD_MAX) return FB_COORD_MAX;
+    return v;
+}
+#define RECT_SANE(x, y, w, h) do { \
+    (x) = sat_coord(x); (y) = sat_coord(y); (w) = sat_extent(w); (h) = sat_extent(h); } while (0)
+
 void fb_clip(int x, int y, int w, int h)
 {
+    RECT_SANE(x, y, w, h);
     int x1 = x + w, y1 = y + h;
     int bx0 = surface_on ? surface_x : 0;
     int by0 = surface_on ? surface_y : 0;
@@ -982,6 +1008,8 @@ void fb_clip(int x, int y, int w, int h)
     int by1 = surface_on ? surface_y + surface_h : (int)fb_h;
     if (x < bx0) x = bx0;
     if (y < by0) y = by0;
+    if (x > bx1) x = bx1;            /* a scissor cannot START past the bound either */
+    if (y > by1) y = by1;
     if (x1 > bx1) x1 = bx1;
     if (y1 > by1) y1 = by1;
     if (x1 < x) x1 = x;              /* an empty rect clips everything away */
@@ -1704,7 +1732,8 @@ static void grad_band(void *ctx, int i0, int i1)
 
 void fb_gradient(int x, int y, int w, int h, unsigned int top, unsigned int bot)
 {
-    if (h <= 0) return;
+    RECT_SANE(x, y, w, h);
+    if (h <= 0 || w <= 0) return;
     int tr = (top >> 16) & 0xFF, tg = (top >> 8) & 0xFF, tb = top & 0xFF;
     int br = (bot >> 16) & 0xFF, bg = (bot >> 8) & 0xFF, bb = bot & 0xFF;
 
@@ -1811,9 +1840,12 @@ unsigned int fb_get_px(int x, int y)
 void fb_shade(int x, int y, int w, int h, int num, int den)
 {
     if (den <= 0) return;
+    RECT_SANE(x, y, w, h);
+    /* the SCISSOR, not the screen: a retained client surface of a window
+     * hanging off the screen edge was left unpainted where an app shaded it */
     for (int yy = y; yy < y + h; yy++)
         for (int xx = x; xx < x + w; xx++) {
-            if ((unsigned)xx >= fb_w || (unsigned)yy >= fb_h) continue;
+            if (xx < clip_x0 || xx >= clip_x1 || yy < clip_y0 || yy >= clip_y1) continue;
             unsigned int c = fb_get_px(xx, yy);
             int r = (int)((c >> 16) & 0xFF) * num / den;
             int g = (int)((c >> 8)  & 0xFF) * num / den;
@@ -1846,9 +1878,10 @@ void fb_mix(int x, int y, int w, int h, unsigned int rgb, int num, int den)
     int tg = (int)((rgb >> 8)  & 0xFF);
     int tb = (int)( rgb        & 0xFF);
     int keep = den - num;
+    RECT_SANE(x, y, w, h);
     for (int yy = y; yy < y + h; yy++)
         for (int xx = x; xx < x + w; xx++) {
-            if ((unsigned)xx >= fb_w || (unsigned)yy >= fb_h) continue;
+            if (xx < clip_x0 || xx >= clip_x1 || yy < clip_y0 || yy >= clip_y1) continue;
             unsigned int c = fb_get_px(xx, yy);
             int r = ((int)((c >> 16) & 0xFF) * keep + tr * num) / den;
             int g = ((int)((c >> 8)  & 0xFF) * keep + tg * num) / den;
@@ -2019,8 +2052,10 @@ void fb_shadow(int x, int y, int w, int h, int off, int soft)
  * squares pay for this; the whole interior is still a straight fill. */
 void fb_rrect(int x, int y, int w, int h, int r, unsigned int rgb)
 {
-    if (2 * r > w) r = w / 2;
-    if (2 * r > h) r = h / 2;
+    RECT_SANE(x, y, w, h);
+    if (r > w / 2) r = w / 2;           /* not `2 * r > w`: that product overflowed */
+    if (r > h / 2) r = h / 2;
+    if (r > 4096) r = 4096;
     if (r < 0) r = 0;
 
     /* the interior, as three plain rectangles - no per-pixel test at all */
@@ -2069,8 +2104,12 @@ void fb_rrect_blend(int x, int y, int w, int h, int r, unsigned int rgb, int a)
 {
     if (w <= 0 || h <= 0 || a <= 0) return;
     if (a >= 255) { fb_rrect(x, y, w, h, r, rgb); return; }
-    if (2 * r > w) r = w / 2;
-    if (2 * r > h) r = h / 2;
+    RECT_SANE(x, y, w, h);
+    /* compare r against w/2, not 2*r against w: the product overflowed for
+     * a huge r and skipped the clamp, and the corner loop below is r^2 */
+    if (r > w / 2) r = w / 2;
+    if (r > h / 2) r = h / 2;
+    if (r > 4096) r = 4096;
     if (r < 0) r = 0;
 
     fb_fill_blend(x + r, y, w - 2 * r, h, rgb, a);              /* centre column */
@@ -2488,6 +2527,22 @@ void fb_box(int x, int y, int w, int h, unsigned int rgb)
  * lit pixels would not bracket it. */
 void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb)
 {
+    /* An endpoint at INT_MIN made `x1 - x0` overflow and the divide trap
+     * (#DE, gcc -O2); one at INT_MAX made `x <= x1` never false. Nothing
+     * past 64K pixels off the screen changes which pixels light up, so
+     * saturate there: the loop is then at most 128K steps and no int
+     * below can overflow. (measured 2026-09-04) */
+    {
+        const int L = 65536;
+        if (x0 >  L) x0 =  L;
+        if (x0 < -L) x0 = -L;
+        if (y0 >  L) y0 =  L;
+        if (y0 < -L) y0 = -L;
+        if (x1 >  L) x1 =  L;
+        if (x1 < -L) x1 = -L;
+        if (y1 >  L) y1 =  L;
+        if (y1 < -L) y1 = -L;
+    }
     int adx = x1 - x0, ady = y1 - y0;
     if (adx < 0) adx = -adx;
     if (ady < 0) ady = -ady;
@@ -2502,10 +2557,10 @@ void fb_line(int x0, int y0, int x1, int y1, unsigned int rgb)
      * never applied. */
     int grad = dx ? (int)(((long long)dy << 16) / dx) : 0;
 
-    int acc = y0 << 16;
+    long long acc = (long long)y0 * 65536;   /* 64-bit: y0 << 16 overflowed int */
     for (int x = x0; x <= x1; x++) {
-        int yi = acc >> 16;            /* arithmetic shift: floor, not trunc */
-        int f  = acc & 0xFFFF;         /* ...so this fraction is always >= 0 */
+        int yi = (int)(acc >> 16);     /* arithmetic shift: floor, not trunc */
+        int f  = (int)(acc & 0xFFFF);  /* ...so this fraction is always >= 0 */
         int a2 = (f * 255) >> 16;      /* how far into the NEXT pixel we are  */
         int a1 = 255 - a2;
         if (steep) {
@@ -2941,9 +2996,13 @@ int fb_wall_save(void)
 void fb_wall_paint(int x, int y, int w, int h)
 {
     if (!fb_wall_ok()) return;
+    RECT_SANE(x, y, w, h);
     int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
     if (!clip_rect(&x0, &y0, &x1, &y1)) return;
-    if (back_on) {
+    /* !surface_on, like every other back-buffer writer: under a surface the
+     * scissor is the SURFACE rectangle, which may hang off the screen, and
+     * these rows would index `back` and `wall_buf` outside them */
+    if (back_on && !surface_on) {
         for (int yy = y0; yy < y1; yy++) {
             const unsigned short *s = wall_buf + (unsigned long)yy * wall_w + x0;
             unsigned int *o = back + (unsigned long)yy * fb_w + x0;
@@ -3083,8 +3142,15 @@ static void box_v(unsigned int *dst, const unsigned int *src, int w, int h, int 
  * same operation with no filter on the end. */
 static int slot_capture(int x, int y, int w, int h)
 {
+    RECT_SANE(x, y, w, h);
     if (w <= 0 || h <= 0) return -1;
-    unsigned int need = (unsigned int)(w * h);
+    /* w * h in 64 bits, and no capture larger than the whole arena: the
+     * 32-bit product wrapped to 4 pixels for a 2^31 x 2^31 request, the
+     * arena take succeeded, and the copy ran off the end of HI_BLUR into
+     * HI_NVME (measured 2026-09-04) */
+    unsigned long long need64 = (unsigned long long)w * (unsigned long long)h;
+    if (need64 > (unsigned long long)BLUR_LIMIT / 4u) return -1;
+    unsigned int need = (unsigned int)need64;
 
     /* an unused slot whose buffer is already big enough, or a free slot that
      * can take a new one out of the arena */
@@ -3192,7 +3258,7 @@ void fb_stash_blend(int slot, int x, int y, int a)
     if (!clip_rect(&x0, &y0, &x1, &y1)) return;
 
     if (a >= 255) { fb_blur_paint(slot, x, y); return; }
-    if (back_on) {
+    if (back_on && !surface_on) {           /* under a surface the scissor may be off-screen */
         for (int yy = y0; yy < y1; yy++) {
             unsigned int *o = back + (unsigned long)yy * fb_w;
             const unsigned int *s = src + (unsigned long)(yy - y) * w - x;
@@ -3219,7 +3285,7 @@ void fb_blur_paint(int slot, int x, int y)
     int x0 = x, y0 = y, x1 = x + w, y1 = y + h;
     if (!clip_rect(&x0, &y0, &x1, &y1)) return;
 
-    if (back_on) {
+    if (back_on && !surface_on) {           /* under a surface the scissor may be off-screen */
         for (int yy = y0; yy < y1; yy++) {
             unsigned int *o = back + (unsigned long)yy * fb_w + x0;
             const unsigned int *s = src + (unsigned long)(yy - y) * w + (x0 - x);

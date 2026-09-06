@@ -703,8 +703,19 @@ static int take_data(u32 seqno, const u8 *data, int dlen)
         send_seg(snd_nxt, F_ACK, 0, 0);
         return 1;
     }
-    /* past the hole. ONE slot, and the second is dropped and counted rather
-     * than silently ignored. */
+    /* past the hole - but only INSIDE THE WINDOW WE ADVERTISED. Without this
+     * test any of the 2^31 "future" sequence numbers took the one slot, so a
+     * blind off-path segment (right 4-tuple, any far-ahead seq) parked itself
+     * there for the life of the connection and every real out-of-order
+     * segment after it was dropped. The RST path got this check first
+     * (below); the data path is the same RFC 793 acceptability test. */
+    if (!seq_lt(seqno, rcv_nxt + (u32)rcv_space())) {
+        c_oow++;
+        send_seg(snd_nxt, F_ACK, 0, 0);
+        return 0;
+    }
+    /* ONE slot, and the second is dropped and counted rather than silently
+     * ignored. */
     if (!ooo_len && dlen <= OOO_BUF) {
         for (int i = 0; i < dlen; i++) ooo[i] = data[i];
         ooo_len = dlen;
@@ -739,7 +750,10 @@ static int take_fin(u32 seqno, int dlen, int in_seq)
 
 static void st_established(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
 {
-    if (flags & F_ACK) on_ack(ack);
+    /* past SYN_SENT every segment carries ACK (RFC 793 §3.9); one without it
+     * is not from our peer's stack, so it does not get to carry data. */
+    if (!(flags & F_ACK)) { c_oow++; return; }
+    on_ack(ack);
     int in_seq = take_data(seqno, data, dlen);
     if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) {
         tcp_set_state(TCP_CLOSE_WAIT, TCP_R_PEER_FIN); return;
@@ -759,7 +773,8 @@ static void st_established(u32 seqno, u32 ack, u8 flags, const u8 *data, int dle
 
 static void st_fin_wait_1(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
 {
-    if (flags & F_ACK) on_ack(ack);
+    if (!(flags & F_ACK)) { c_oow++; return; }   /* see st_established */
+    on_ack(ack);
 
     /* Data may still arrive after we have closed our half - a half close is
      * legal and an HTTP/1.0 server does exactly this. Dropping it here would
@@ -780,7 +795,10 @@ static void st_fin_wait_1(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen
 
 static void st_fin_wait_2(u32 seqno, u32 ack, u8 flags, const u8 *data, int dlen)
 {
-    if (flags & F_ACK) on_ack(ack);
+    /* past SYN_SENT every segment carries ACK (RFC 793 §3.9); one without it
+     * is not from our peer's stack, so it does not get to carry data. */
+    if (!(flags & F_ACK)) { c_oow++; return; }
+    on_ack(ack);
     int in_seq = take_data(seqno, data, dlen);
     if ((flags & F_FIN) && take_fin(seqno, dlen, in_seq)) {
         tcp_set_state(TCP_TIME_WAIT, TCP_R_PEER_FIN);

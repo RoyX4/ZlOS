@@ -580,16 +580,26 @@ static int app_drawable(int app)
  * A zero or uncalibrated clock leaves app_us alone rather than storing a
  * garbage duration, and the same wrap guard frame_delta_us uses rejects a
  * sample that straddles a 32-bit wrap. */
+/* The window whose draw hook is running right now, and the windows that asked
+ * to close while it was. wm_close from inside app_draw frees the client
+ * surface the compositor is still drawing into (ASan: heap-use-after-free at
+ * put_pixel, measured 2026-09-04); such a close is recorded here and done at
+ * the top of the next wm_frame, when nothing is bound. */
+static int drawing_win = -1;
+static unsigned int close_deferred;
+
 static void app_draw_dispatch(int win, int app, int x, int y, int w, int h,
                               int focused)
 {
     unsigned int khz = cpu_tsc_khz();
     unsigned int t0 = khz ? cpu_tsc_lo() : 0u;
 
+    drawing_win = win;
     if (userwin_is_app && userwin_draw_app && userwin_is_app(app))
         userwin_draw_app(app, x, y, w, h, focused);
     else if (hook_draw)
         hook_draw(app, x, y, w, h, focused);
+    drawing_win = -1;
 
     if (!khz || win < 0 || win >= WM_MAX) return;
     unsigned int cyc_us = khz / 1000u;
@@ -2148,6 +2158,12 @@ void wm_close(int win)
                              ZLLOG_OP_WINDOW_CLOSE, -1, 9u, (unsigned)win);
         return;
     }
+    if (win == drawing_win) {          /* closing yourself mid-draw: next frame */
+        close_deferred |= 1u << win;
+        zlt_operation_result(ZLLOG_SUB_DISPLAY, operation_id,
+                             ZLLOG_OP_WINDOW_CLOSE, 0, 0u, (unsigned)win);
+        return;
+    }
     int app = win_app(win);
     unsigned int generation = wins[win].generation;
     wm_damage_win(win);
@@ -2212,6 +2228,11 @@ void wm_raise(int win)
  * impossible to express. */
 void wm_focus(int win)
 {
+    /* A closed, never-opened or out-of-range id must not become focus_win:
+     * every key then routed to a dead slot until a click refocused (850
+     * stale-focus states in a 20,000-op storm, measured 2026-09-04).
+     * wm_raise already refuses; this did not. */
+    if (!wm_is_open(win)) return;
     if (wm_is_minimized(win)) {
         wins[win].flags &= ~WF_MINIMIZED;
         window_surfaces_prepare(win);
@@ -4800,6 +4821,13 @@ void wm_peak_reset(void) { frame_peak_us = 0; frame_late = 0; frame_lost = 0;
 
 void wm_frame(void)
 {
+    /* closes requested from inside a draw hook last frame (see drawing_win) */
+    while (close_deferred) {
+        int i = 0;
+        while (!(close_deferred & (1u << i))) i++;
+        close_deferred &= ~(1u << i);
+        wm_close(i);
+    }
     /* This executes before the pacing early-return.  HID->route latency is
      * therefore interrupt/main-loop latency, not one 60 Hz frame interval. */
     wm_input_drain();

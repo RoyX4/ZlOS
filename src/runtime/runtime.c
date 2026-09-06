@@ -18,6 +18,7 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #include "runtime.h"
 #include "os.h"
@@ -428,10 +429,14 @@ Value zl_binop(const char *op, Value l, Value r)
      * long comment there. b == 0 is 0xC0000094 and answers nan (like
      * fmod), b == -1 is 0xC0000095 on LLONG_MIN and answers 0. */
     case '%': {
-        long long bi = (long long)b;
+        /* F-10(e) (2026-09-04): exact_i64, not a raw cast - see
+         * interp.c's copy of this comment. A NaN or out-of-range operand
+         * used to hit undefined behaviour here instead of being refused. */
+        long long bi = exact_i64(b, "%");
         if (bi == 0)  return zl_num(fmod(a, 0.0));
         if (bi == -1) return zl_num(0.0);
-        return zl_num((double)((long long)a % bi));
+        long long ai = exact_i64(a, "%");
+        return zl_num((double)(ai % bi));
     }
     case '>': return zl_bool(op[1] == '=' ? a >= b : a >  b);
     case '<': return zl_bool(op[1] == '=' ? a <= b : a <  b);
@@ -468,12 +473,25 @@ int zl_len_list(Value v)
 }
 Value zl_item(Value v, int i) { return *v.items[i]; }
 
-/* x[i] = v : mutate a list element in place (items array is shared). */
+/* x[i] = v : mutate a list element in place (items array is shared).
+ *
+ * F-12 (2026-09-04): this never checked idx.type, so xs["a"] = 9 read
+ * idx.num off a STRING value - never written for a V_STR, so it was
+ * whatever happened to be sitting in that field, which in practice was
+ * often 0.0: xs["a"] = 9 silently overwrote slot 0 instead of refusing.
+ * interp.c's own index-assign path (exec_inner's N_ASSIGN/N_INDEX case)
+ * already checked this; this brings the C backend's runtime up to match.
+ *
+ * F-17: range-checked as a DOUBLE before casting, not after - (int)idx.num
+ * on a double outside int's range is undefined behaviour. See
+ * zl_index just below and interp.c's N_INDEX for the same fix. */
 void zl_set(Value list, Value idx, Value val)
 {
     if (list.type != V_LIST) rt_error("can only index-assign a list");
+    if (idx.type != V_NUM)   rt_error("list index must be a number");
+    if (idx.num != idx.num || !(idx.num >= 0 && idx.num < (double)list.nitems))
+        rt_error("index-assign out of range");
     int i = (int)idx.num;
-    if (i < 0 || i >= list.nitems) rt_error("index-assign out of range");
     *list.items[i] = val;
 }
 
@@ -481,8 +499,10 @@ Value zl_index(Value seq, Value idx)
 {
     if (seq.type != V_LIST) rt_error("only lists can be indexed");
     if (idx.type != V_NUM)  rt_error("list index must be a number");
+    /* F-17: same double-domain range check as zl_set, before the cast. */
+    if (idx.num != idx.num || !(idx.num >= 0 && idx.num < (double)seq.nitems))
+        rt_error("list index out of range");
     int i = (int)idx.num;
-    if (i < 0 || i >= seq.nitems) rt_error("list index out of range");
     return *seq.items[i];
 }
 
@@ -547,8 +567,36 @@ static int is_simulated(const char *name)
     return 0;
 }
 
+/* F-5 (2026-09-04), mirroring interp.c's zi_check_min_arity - see that
+ * comment for the full reasoning. args[] here is exactly nargs long and
+ * never zeroed, so a missing argument used to be a read of uninitialised
+ * heap, not nil. */
+typedef struct { const char *name; int min; } MinArity;
+static const MinArity RT_MIN_ARITY[] = {
+    {"seed", 1}, {"randint", 2},
+    {"sin", 1}, {"cos", 1}, {"tan", 1}, {"log", 1}, {"exp", 1}, {"atan", 1},
+    {"sign", 1}, {"gcd", 2}, {"bool", 1}, {"type", 1}, {"str", 1},
+    {"sum", 1}, {"first", 1}, {"last", 1}, {"starts", 2},
+    {"reverse", 1}, {"repeat", 2}, {"trim", 1}, {"count", 2}, {"pad", 2},
+    {"replace", 3}, {"insert", 3}, {"remove", 2},
+};
+#define RT_MIN_ARITY_N (int)(sizeof(RT_MIN_ARITY) / sizeof(RT_MIN_ARITY[0]))
+
+static void rt_check_min_arity(const char *name, int nargs)
+{
+    for (int i = 0; i < RT_MIN_ARITY_N; i++) {
+        if (strcmp(name, RT_MIN_ARITY[i].name) == 0 && nargs < RT_MIN_ARITY[i].min) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "%s needs %d argument%s, got %d",
+                     name, RT_MIN_ARITY[i].min, RT_MIN_ARITY[i].min == 1 ? "" : "s", nargs);
+            rt_error(buf);
+        }
+    }
+}
+
 static Value builtin(const char *name, Value *args, int nargs)
 {
+    rt_check_min_arity(name, nargs);
     if (strcmp(name, "print") == 0) {
         for (int i = 0; i < nargs; i++) {
             char *s = to_string(args[i]);
@@ -797,9 +845,16 @@ static Value builtin(const char *name, Value *args, int nargs)
 
     if (strcmp(name, "read") == 0) {
         if (nargs < 1 || args[0].type != V_STR) rt_error("read needs a filename");
+        /* F-15 (2026-09-04): see interp.c's copy of this comment - a
+         * directory opens fine, only reading from it fails, and ftell on
+         * one can return -1, which (size_t)-1 + 1 wraps to 0. */
+        struct stat st;
+        if (stat(args[0].str, &st) != 0 || !S_ISREG(st.st_mode))
+            rt_error("read: not a regular file");
         FILE *f = fopen(args[0].str, "rb");
         if (!f) rt_error("read: can't open that file");
         fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f);
+        if (sz < 0) { fclose(f); rt_error("read: could not determine the file's size"); }
         char *buf = malloc((size_t)sz + 1);
         size_t got = fread(buf, 1, (size_t)sz, f);
         buf[got] = '\0'; fclose(f);
@@ -910,6 +965,13 @@ static Value builtin(const char *name, Value *args, int nargs)
         } else {
             rt_error("kill needs a process name (string) or pid (number)");
         }
+        /* F-16 (2026-09-04): see interp.c's copy of this comment - 0 and
+         * negative pids have a POSIX-special meaning (a process group, or
+         * every process this user owns), never "one program". */
+        if (pid <= 1)
+            rt_error("kill: refusing pid <= 1 (0 and negative pids signal "
+                      "a whole process group or every process you own, "
+                      "not one program)");
         return zl_bool(kill((pid_t)pid, SIGTERM) == 0);
     }
 
@@ -1104,7 +1166,8 @@ static Value builtin(const char *name, Value *args, int nargs)
         if (L > 0 && (size_t)n > 100000000u / L) rt_error("repeat result is too large to build");
         char*b=malloc(L*(size_t)n+1);
         if (!b) rt_error("out of memory in repeat");
-        for (int i=0;i<n;i++) memcpy(b+(size_t)i*L, args[0].str, L); b[L*(size_t)n]='\0';
+        for (int i=0;i<n;i++) memcpy(b+(size_t)i*L, args[0].str, L);
+        b[L*(size_t)n]='\0';
         Value v=zl_nil(); v.type=V_STR; v.str=b; return v;
     }
     if (strcmp(name, "trim") == 0) {

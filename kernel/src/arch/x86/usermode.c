@@ -295,6 +295,7 @@ __asm__(
     "    mov %ax, %es\n"
     "    mov %ax, %fs\n"
     "    mov %ax, %gs\n"
+    "    cld\n"                        /* ring 3 may have left DF set; the ABI wants it clear */
     /* load the four arguments out of the saved frame, THEN push - pushing
      * directly from an esp-relative slot would move esp under the next read */
     "    mov 44(%esp), %eax\n"        /* nr   */
@@ -524,6 +525,40 @@ static u32 proc_kstack_high_water[U64_PROCS];
 
 u64 user64_kernel_cr3, user64_process_cr3;
 u64 user64_return_rsp, user64_return_rip, user64_return_rflags;
+
+/* FPU/SSE STATE ACROSS THE RING-3 BOUNDARY. Until 2026-09-04 the entry and
+ * return stubs moved general registers and the iret frame only. Ring 3 could
+ * `ldmxcsr` an unmasked MXCSR and exit; the kernel resumed with it, the first
+ * inexact SSE op in the zl interpreter raised #XM from CS=0x08 and the box
+ * halted - a nine-byte user program. In the other direction a preempted
+ * process resumed with its sibling's xmm registers. And on the Win64 (EFI)
+ * build xmm6-15 are callee-saved, so user code clobbering them broke the
+ * kernel frames above user64_enter_asm.
+ *
+ * Two 512-byte fxsave images: the kernel's, saved on the way into ring 3 and
+ * restored on every way back (label 9/7, and user64_abort lands on those);
+ * the user's, saved on every entry FROM ring 3 (syscall_isr, and the timer
+ * ISR only when it interrupted CPL 3) and restored before every iretq into
+ * it. The per-process copy lives in procs64_fx[] and is swapped through the
+ * scratch image by user64_step / user64_after_syscall / timer dispatch. */
+u8_64 user64_fx_kernel[512] __attribute__((aligned(16)));
+u8_64 user64_fx_user[512]   __attribute__((aligned(16)));
+static u8_64 procs64_fx[U64_PROCS][512] __attribute__((aligned(16)));
+
+static void user64_fx_copy(u8_64 *dst, const u8_64 *src)
+{
+    for (int i = 0; i < 512; i++) dst[i] = src[i];
+}
+
+/* a fresh process starts with the x87/SSE reset state: FCW 0x037F, MXCSR
+ * 0x1F80 (all exceptions masked), everything else zero */
+static void user64_fx_reset(u8_64 *img)
+{
+    for (int i = 0; i < 512; i++) img[i] = 0;
+    img[0] = 0x7F; img[1] = 0x03;               /* FCW                     */
+    img[24] = 0x80; img[25] = 0x1F;             /* MXCSR                   */
+    img[28] = 0xFF; img[29] = 0xFF;             /* MXCSR_MASK: all writable */
+}
 static volatile int user64_exited, user64_running, user64_faulted, user64_yielded;
 static volatile int user64_preempt_on;
 static u32 user64_preemptions;
@@ -1194,6 +1229,7 @@ int __attribute__((sysv_abi)) user64_after_syscall(u64 *frame)
     if (user64_yielded) {
         for (int i = 0; i < U64_SAVED_QWORDS; i++) proc64->saved_frame[i] = frame[i];
         proc64->has_frame = 1;
+        user64_fx_copy(procs64_fx[proc64 - procs64], user64_fx_user);
     }
     return user64_exited || user64_yielded;
 }
@@ -1208,6 +1244,7 @@ int __attribute__((sysv_abi)) user64_timer_dispatch(u64 *frame)
     for (int i = 0; i < U64_SAVED_QWORDS; i++) proc64->saved_frame[i] = frame[i];
     proc64->has_frame = 1;
     proc64->state = 1;
+    user64_fx_copy(procs64_fx[proc64 - procs64], user64_fx_user);
     user64_preemptions++;
     return 1;
 }
@@ -1220,6 +1257,7 @@ static int user64_load_process(int index, u32 pid, const u8_64 *code, u32 bytes)
     if (!page) return 0;
     for (u32 i = 0; i < bytes; i++) page[i] = code[i];
     for (u32 i = bytes; i < PMM_PAGE_BYTES; i++) page[i] = 0xcc;
+    user64_fx_reset(procs64_fx[index]);
     zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, pid,
                   ZLLOG_LIFE_START, 0u, bytes);
     return 1;
@@ -1233,6 +1271,7 @@ static int user64_step(int index)
     if (proc64->state != 1) return 0;
     user64_exited = user64_faulted = user64_yielded = 0;
     user64_running = 1;
+    user64_fx_copy(user64_fx_user, procs64_fx[index]);   /* this process's FPU state */
     if (!proc64->started) {
         proc64->started = 1;
         zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, proc64->pid,
@@ -1445,8 +1484,16 @@ int user64_service_reap(int index)
 static int user64_run_probe(const u8_64 *code, u32 bytes)
 {
     if (!user64_load_process(0, 1, code, bytes)) return -1;
+    /* Timer preemption used to be armed only inside the scheduler selftest,
+     * so a real /system/user.bin that never made a syscall (`jmp $`) kept
+     * the CPU forever - the box the header promises ring 3 cannot wedge.
+     * Arm it here: the 16-turn budget is the quantum, and a turn that ends
+     * by preemption simply counts. (2026-09-04) */
+    int was_on = user64_preempt_on;
+    user64_preempt_on = 1;
     for (int turns = 0; turns < 16 && procs64[0].state == 1; turns++)
         user64_step(0);
+    user64_preempt_on = was_on;
     process64_select(0);
     return proc64->state == 3 ? (int)proc64->fault_vector : 0;
 }
@@ -2133,36 +2180,49 @@ __asm__(
     ".globl user64_enter_asm\n"
     "user64_enter_asm:\n"
     "  push %rbx\n  push %rbp\n  push %r12\n  push %r13\n  push %r14\n  push %r15\n"
+    "  push %rsi\n  push %rdi\n"                 /* Win64 callee-saved too */
+    "  fxsave user64_fx_kernel(%rip)\n"
     "  mov %rsp,user64_return_rsp(%rip)\n"
     "  lea 9f(%rip),%rax\n  mov %rax,user64_return_rip(%rip)\n"
     "  pushfq\n  pop %rax\n  mov %rax,user64_return_rflags(%rip)\n"
     "  mov user64_process_cr3(%rip),%rax\n  mov %rax,%cr3\n"
     "  pushq $0x1b\n  push %rsi\n  pushfq\n  orq $0x200,(%rsp)\n"
-    "  pushq $0x23\n  push %rdi\n  iretq\n"
+    "  pushq $0x23\n  push %rdi\n"
+    "  fxrstor user64_fx_user(%rip)\n"
+    "  iretq\n"
     "9:\n"
+    "  fxrstor user64_fx_kernel(%rip)\n"
     "  push user64_return_rflags(%rip)\n  popfq\n"
+    "  pop %rdi\n  pop %rsi\n"
     "  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n  pop %rbp\n  pop %rbx\n  ret\n"
     ".globl user64_resume_asm\n"
     "user64_resume_asm:\n"
     "  push %rbx\n  push %rbp\n  push %r12\n  push %r13\n  push %r14\n  push %r15\n"
+    "  push %rsi\n  push %rdi\n"
+    "  fxsave user64_fx_kernel(%rip)\n"
     "  mov %rsp,user64_return_rsp(%rip)\n"
     "  lea 7f(%rip),%rax\n  mov %rax,user64_return_rip(%rip)\n"
     "  pushfq\n  pop %rax\n  mov %rax,user64_return_rflags(%rip)\n"
     "  mov user64_process_cr3(%rip),%rax\n  mov %rax,%cr3\n"
     "  mov %rdi,%rsp\n  jmp 6f\n"
     "7:\n"
+    "  fxrstor user64_fx_kernel(%rip)\n"
     "  push user64_return_rflags(%rip)\n  popfq\n"
+    "  pop %rdi\n  pop %rsi\n"
     "  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n  pop %rbp\n  pop %rbx\n  ret\n"
     ".globl syscall_isr\n"
     "syscall_isr:\n"
     "  push %rax\n  push %rbx\n  push %rcx\n  push %rdx\n  push %rsi\n"
     "  push %rdi\n  push %r8\n  push %r9\n  push %r10\n  push %r11\n"
     "  push %r12\n  push %r13\n  push %r14\n  push %r15\n  push %rbp\n"
+    "  cld\n"                    /* interrupt delivery does not clear DF; ring 3 may have set it */
+    "  fxsave user64_fx_user(%rip)\n"          /* int 0x80 comes from ring 3 only */
     "  mov 112(%rsp),%rdi\n  mov 104(%rsp),%rsi\n"
     "  mov 96(%rsp),%rdx\n  mov 88(%rsp),%rcx\n  call user64_dispatch\n"
     "  mov %rax,112(%rsp)\n  mov %rsp,%rdi\n  call user64_after_syscall\n"
     "  test %eax,%eax\n  jnz 8f\n"
     "6:\n"
+    "  fxrstor user64_fx_user(%rip)\n"          /* also the resume path's entry */
     "  pop %rbp\n  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n"
     "  pop %r11\n  pop %r10\n  pop %r9\n  pop %r8\n  pop %rdi\n"
     "  pop %rsi\n  pop %rdx\n  pop %rcx\n  pop %rbx\n  pop %rax\n  iretq\n"
@@ -2177,8 +2237,17 @@ __asm__(
     "  push %rax\n  push %rbx\n  push %rcx\n  push %rdx\n  push %rsi\n"
     "  push %rdi\n  push %r8\n  push %r9\n  push %r10\n  push %r11\n"
     "  push %r12\n  push %r13\n  push %r14\n  push %r15\n  push %rbp\n"
+    "  cld\n"                    /* interrupt delivery does not clear DF; ring 3 may have set it */
+    /* the timer also fires in ring 0; only a CPL-3 interruption has user
+     * FPU state to save (CS is at 128(%rsp) after the 15 pushes + RIP) */
+    "  testb $3,128(%rsp)\n  jz 5f\n"
+    "  fxsave user64_fx_user(%rip)\n"
+    "5:\n"
     "  mov %rsp,%rdi\n  call user64_timer_dispatch\n"
     "  test %eax,%eax\n  jnz 8b\n"
+    "  testb $3,128(%rsp)\n  jz 4f\n"
+    "  fxrstor user64_fx_user(%rip)\n"
+    "4:\n"
     "  pop %rbp\n  pop %r15\n  pop %r14\n  pop %r13\n  pop %r12\n"
     "  pop %r11\n  pop %r10\n  pop %r9\n  pop %r8\n  pop %rdi\n"
     "  pop %rsi\n  pop %rdx\n  pop %rcx\n  pop %rbx\n  pop %rax\n  iretq\n"

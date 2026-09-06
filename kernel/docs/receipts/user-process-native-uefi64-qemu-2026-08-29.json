@@ -1,13 +1,13 @@
 {
   "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY",
-  "build_identity": "9aeb5f46dffa99a1072a38b224380857f14c7e33fd1e6cd42603d3eb2968fd28",
+  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "b755af72b3eaae3e1a2f228fcc76a439a430833094098813ecc72931da0a40e8"
+    "sha256": "07be3fb66a86b1ba0e95e3514fafaca64d9a11da5b1aba822cb31fe089e96b23"
   },
-  "boot_log_sha256": "54418540b3bd3b0b93ac1fd6561135d77cabcb13a8e1301232b563228170365c",
+  "boot_log_sha256": "8a41e1da60e10c63e09ff3adbabbdf94e6372788b7d1abe629d5b502bd0e9a87",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -15,7 +15,7 @@
   "implementation": [
     {
       "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "142801cd87b614c9c70ea4df999ece5de5aff1d3ac496e920b0e2274630725b3"
+      "sha256": "ed969991203fc677815c90627353f94c04bee5c74fa9d0126e9d3f438be56414"
     },
     {
       "path": "kernel/src/core/process_memory.h",
@@ -35,7 +35,7 @@
     },
     {
       "path": "kernel/src/core/pmm.c",
-      "sha256": "7f2add8d308258d8108b3299f8a5fd1b18660fa21b49d4a96885b1c7dc5c8d83"
+      "sha256": "5c2a8c1e49a528959ff3d689bf01caff2d4260a0d717c4bd01b41ff8610b4e31"
     },
     {
       "path": "kernel/tests/host/pmmtest.c",
@@ -67,7 +67,7 @@
     },
     {
       "path": "kernel/boot/gdt64.c",
-      "sha256": "a85d7ec4b34c04014221d586511b0eb66aecde5167c0dcaa8db5a42dffcccccf"
+      "sha256": "2789dc982dc7788d9cd8166aac59ccc4a0d60a166194fb4a08f7cbd0f2da70c3"
     },
     {
       "path": "kernel/docs/architecture/system/user-process-abi.md",
@@ -76,7 +76,7 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "1f85450c014a183cc3de4cfa9e5de6563e2572dc63ca50b6a8ea97d7c7c3e923",
+    "sha256": "7c8433a40ed014d9a56a5b3ecbe15cecf09469110f39d94cd442f6b12f827d63",
     "targets": {
       "processmemorytest": {
         "checks": 191

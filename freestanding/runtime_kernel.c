@@ -800,7 +800,7 @@ static const char *zl_itoa(int v)
     static char buf[16];
     int i = (int)sizeof buf - 1;
     int neg = v < 0;
-    unsigned u = neg ? (unsigned)(-v) : (unsigned)v;
+    unsigned u = neg ? 0u - (unsigned)v : (unsigned)v;   /* -INT_MIN is UB; this is not */
     buf[i] = 0;
     do { buf[--i] = (char)('0' + (int)(u % 10u)); u /= 10u; } while (u && i > 1);
     if (neg && i > 0) buf[--i] = '-';
@@ -825,7 +825,7 @@ static const char *zl_ltoa(long v)
     static char buf[24];
     int i = (int)sizeof buf - 1;
     int neg = v < 0;
-    unsigned long u = neg ? (unsigned long)(-v) : (unsigned long)v;
+    unsigned long u = neg ? 0ul - (unsigned long)v : (unsigned long)v;
     buf[i] = 0;
     do { buf[--i] = (char)('0' + (int)(u % 10ul)); u /= 10ul; } while (u && i > 1);
     if (neg && i > 0) buf[--i] = '-';
@@ -1345,8 +1345,10 @@ Value zl_binop(const char *op, Value a, Value b)
     if (op[0] == '+' && !op[1]) return zl_num((double)(x + y));
     if (op[0] == '-' && !op[1]) return zl_num((double)(x - y));
     if (op[0] == '*' && !op[1]) return zl_num((double)(x * y));
-    if (op[0] == '/' && !op[1]) { if (!y) kfatal("divide by zero"); return zl_num((double)(x / y)); }
-    if (op[0] == '%' && !op[1]) { if (!y) kfatal("modulo by zero");  return zl_num((double)(x % y)); }
+    /* LLONG_MIN / -1 is the other #DE: the same trap the two kfatals below
+     * exist to name, and every double >= 2^63 becomes LLONG_MIN here */
+    if (op[0] == '/' && !op[1]) { if (!y || (y == -1 && x == (long long)0x8000000000000000ULL)) kfatal("divide by zero"); return zl_num((double)(x / y)); }
+    if (op[0] == '%' && !op[1]) { if (!y || (y == -1 && x == (long long)0x8000000000000000ULL)) kfatal("modulo by zero");  return zl_num((double)(x % y)); }
 
     if (op[0] == '=' && op[1] == '=') return zl_bool(x == y);
     if (op[0] == '!' && op[1] == '=') return zl_bool(x != y);
@@ -1408,6 +1410,11 @@ Value zl_calln(const char *name, int n, ...)
     __builtin_va_start(ap, n);
     for (i = 0; i < n && i < 8; i++) a[i] = __builtin_va_arg(ap, Value);
     __builtin_va_end(ap);
+    /* The table has eight slots and the loop above stops there, but the
+     * print/put arms below iterate to `n`: a nine-argument print read a[8]
+     * from the stack and, if the garbage said V_STR, dereferenced it in ring
+     * 0 (ASan-confirmed 2026-09-04). The C backend caps nothing. Refuse. */
+    if (n > 8) kfatal("builtin called with more than 8 arguments");
 
     if (streq(name, "print")) {
         for (i = 0; i < n; i++) {
@@ -2839,7 +2846,13 @@ Value zl_calln(const char *name, int n, ...)
         *(volatile unsigned long long *)(zl_uptr)a[0].num = v;
         return zl_nil();
     }
+    /* A COUNT IS NOT A LICENCE TO WIPE THE MACHINE. zl numbers are doubles; a
+     * negative or absurd count cast to unsigned long long is 2^64 bytes, and
+     * these two loops would run until they faulted. Every caller today passes
+     * a constant product under 64 KiB; refuse anything a caller could not
+     * mean. 4 MiB is larger than any zl-owned page or board in memmap.h. */
     if (streq(name, "fill_mem")) {
+        if (a[2].num < 0 || a[2].num > 4194304.0) kfatal("fill_mem: count outside 0..4 MiB");
         volatile unsigned char *p = (volatile unsigned char *)(zl_uptr)a[0].num;
         unsigned long long cnt = (unsigned long long)a[2].num;
         unsigned char b = (unsigned char)(unsigned long long)a[1].num;
@@ -2847,6 +2860,7 @@ Value zl_calln(const char *name, int n, ...)
         return zl_nil();
     }
     if (streq(name, "copy_mem")) {
+        if (a[2].num < 0 || a[2].num > 4194304.0) kfatal("copy_mem: count outside 0..4 MiB");
         volatile unsigned char *d = (volatile unsigned char *)(zl_uptr)a[0].num;
         volatile const unsigned char *s = (volatile const unsigned char *)(zl_uptr)a[1].num;
         unsigned long long cnt = (unsigned long long)a[2].num;

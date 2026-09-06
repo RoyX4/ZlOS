@@ -317,6 +317,18 @@ void zllog_event(unsigned subsystem, unsigned event, unsigned severity,
     ring_append(r);
 }
 
+/* Called from ISRs built -mgeneral-regs-only. That flag guards the ISR's own
+ * file and cannot see its callees: gcc's 64-bit build put four movd-to-xmm
+ * instructions in this function (measured 2026-09-04), and an ISR that
+ * clobbers xmm lands on the zl interpreter where every number is a double.
+ * clang's EFI build emitted none; the attribute is gcc-only and the EFI
+ * lane is covered by the build flag on idt.c/apic.c plus this measurement. */
+#if defined(__GNUC__) && !defined(__clang__)
+#define ZLLOG_IRQ_SAFE __attribute__((target("general-regs-only")))
+#else
+#define ZLLOG_IRQ_SAFE
+#endif
+ZLLOG_IRQ_SAFE
 void zllog_event_irq(unsigned subsystem, unsigned event, unsigned severity,
                      unsigned a, unsigned b, unsigned c)
 {
@@ -367,6 +379,7 @@ static void drain_irq_records(void)
     }
 }
 
+ZLLOG_IRQ_SAFE
 void zllog_counter_add(unsigned counter, unsigned delta)
 {
     if (!counter || counter >= ZLLOG_COUNTERS || !delta) return;

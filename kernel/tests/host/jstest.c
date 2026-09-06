@@ -53,8 +53,29 @@ static void refuses(const char *what, const char *src)
     else if (!js_error()[0]) { fails++; printf("  FAIL %s: failed with no message\n", what); }
 }
 
+/* Deep nesting through every recursive-descent path. Until 2026-09-04 only
+ * `(` and `{` were counted; 1,500 `[` or a run of `!` from a hostile
+ * <script> overflowed the 256 KiB compositor stack at parse time, before the
+ * evaluator's guard could run. Each of these must be REFUSED, not crash. */
+static void deep(const char *what, const char *open, const char *mid, const char *close, int n)
+{
+    static char buf[65536];
+    int p = 0;
+    for (int i = 0; i < n && p < 60000; i++) { for (const char *s = open; *s; s++) buf[p++] = *s; }
+    for (const char *s = mid; *s && p < 60000; s++) buf[p++] = *s;
+    for (int i = 0; i < n && p < 65000; i++) { for (const char *s = close; *s; s++) buf[p++] = *s; }
+    buf[p] = 0;
+    refuses(what, buf);
+}
+
 int main(void)
 {
+    deep("4000 nested array literals",  "[",        "1", "]",  4000);
+    deep("4000 chained unary !",        "!",        "1", "",   4000);
+    deep("4000 chained ternaries",      "1?",       "1", ":1", 4000);
+    deep("4000 chained assignments",    "a=",       "1", "",   4000);
+    deep("4000 nested if bodies",       "if(1)",    ";",  "",  4000);
+    deep("4000 nested parentheses",     "(",        "1", ")",  4000);
     printf("jstest: the bounded JavaScript interpreter\n\n1. expressions\n");
     expr("1 + 2 * 3", "7");
     expr("(1 + 2) * 3", "9");

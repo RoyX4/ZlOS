@@ -82,6 +82,12 @@ struct tls_conn {
     tu8 app[TLS_REC_MAX];
     int appn, appr;
 
+    /* handshake bytes carried over from a record that ended mid-message.
+     * Servers split Certificate across 16 KB records routinely; without this
+     * the head of the message was dropped and the transcript diverged. */
+    tu8 hs[TLS_HS_MAX];
+    int hsn;
+
     int saw_sh, saw_fin;
 
     /* ---- the certificate chain ------------------------------------------

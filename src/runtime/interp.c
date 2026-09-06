@@ -43,6 +43,7 @@
 #include <dirent.h>
 #include <stdint.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #endif
 
 #include "lexer.h"
@@ -785,12 +786,51 @@ static void list_push_str(Value *list, int *cap, const char *p, int len)
     list->nitems++;
 }
 
+/* F-5 (2026-09-04). ASan-confirmed heap overflow: replace("abc","b") reads
+ * args[2], insert([1,2],1) reads args[2], and sin()/gcd()/etc. read past a
+ * zero-length args[] with no bound check at all (call_builtin's args array is
+ * zi_alloc'd to exactly nargs and never zeroed - see eval_call - so a missing
+ * argument is not nil, it is uninitialised heap). Each of these builtins DID
+ * check its argument TYPES, just not that the argument existed first, so a
+ * one-argument call read args[1] or args[2] before ever looking at what was
+ * in it.
+ *
+ * One table, checked once, rather than patching each call site: the same
+ * shape as the kill path's "one gate, at the one door" a few lines up, and
+ * for the same reason - a list of individually-patched builtins is a list
+ * the NEXT one is not on. Builtins that already guarded their own nargs
+ * (len, sqrt, pow, fill, band, ...) are not repeated here; this only lists
+ * the ones the audit found actually missing the check. */
+typedef struct { const char *name; int min; } MinArity;
+static const MinArity ZI_MIN_ARITY[] = {
+    {"seed", 1}, {"randint", 2},
+    {"sin", 1}, {"cos", 1}, {"tan", 1}, {"log", 1}, {"exp", 1}, {"atan", 1},
+    {"sign", 1}, {"gcd", 2}, {"bool", 1}, {"type", 1}, {"str", 1},
+    {"sum", 1}, {"first", 1}, {"last", 1}, {"starts", 2},
+    {"reverse", 1}, {"repeat", 2}, {"trim", 1}, {"count", 2}, {"pad", 2},
+    {"replace", 3}, {"insert", 3}, {"remove", 2},
+};
+#define ZI_MIN_ARITY_N (int)(sizeof(ZI_MIN_ARITY) / sizeof(ZI_MIN_ARITY[0]))
+
+static void zi_check_min_arity(const char *name, int nargs)
+{
+    for (int i = 0; i < ZI_MIN_ARITY_N; i++) {
+        if (strcmp(name, ZI_MIN_ARITY[i].name) == 0 && nargs < ZI_MIN_ARITY[i].min) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "%s needs %d argument%s, got %d",
+                     name, ZI_MIN_ARITY[i].min, ZI_MIN_ARITY[i].min == 1 ? "" : "s", nargs);
+            runtime_error(buf);
+        }
+    }
+}
+
 /* run a built-in by name, given already-evaluated argument values */
 static Value call_builtin(const char *name, Value *args, int nargs)
 {
     /* One gate, at the one door. Putting this at each dangerous builtin
      * instead would be a list that the next dangerous builtin is not on. */
     zi_forbid(name);
+    zi_check_min_arity(name, nargs);
     /* print(...) - the real one */
     if (strcmp(name, "print") == 0) {
         for (int i = 0; i < nargs; i++) {
@@ -1102,9 +1142,20 @@ static Value call_builtin(const char *name, Value *args, int nargs)
 #ifndef ZL_FREESTANDING   /* needs the OS: read */
     if (strcmp(name, "read") == 0) {
         if (nargs < 1 || args[0].type != V_STR) runtime_error("read needs a filename");
+        /* F-15 (2026-09-04): fopen("rb") on a DIRECTORY succeeds on Linux -
+         * only reading from it fails - so this used to sail past the "can't
+         * open" check, then fail differently and worse: ftell after seeking
+         * a directory stream can return -1, and (size_t)-1 + 1 wraps to 0,
+         * so zi_alloc(0) got a zero/undersized buffer that buf[got]='\0'
+         * then wrote into regardless. Refuse anything that is not a plain
+         * file before ever calling fopen on it. */
+        struct stat st;
+        if (stat(args[0].str, &st) != 0 || !S_ISREG(st.st_mode))
+            runtime_error("read: not a regular file");
         FILE *f = fopen(args[0].str, "rb");
         if (!f) { runtime_error("read: can't open that file"); }
         fseek(f, 0, SEEK_END); long sz = ftell(f); rewind(f);
+        if (sz < 0) { fclose(f); runtime_error("read: could not determine the file's size"); }
         char *buf = zi_alloc((size_t)sz + 1);
         size_t got = fread(buf, 1, (size_t)sz, f);
         buf[got] = '\0';
@@ -1250,6 +1301,20 @@ static Value call_builtin(const char *name, Value *args, int nargs)
             runtime_error("kill needs a process name (string) or pid (number)");
             return make_nil();
         }
+        /* F-16 (2026-09-04): this forwarded ANY pid straight to kill(2)
+         * with no range check at all. POSIX gives 0 and negative pids a
+         * SPECIAL meaning that has nothing to do with killing "a
+         * process": 0 signals every process in the caller's own process
+         * group, -1 signals EVERY process this user has permission to
+         * signal, and any other negative pid signals a whole process
+         * group. kill(-1) from a zl script is "SIGTERM everything I
+         * own", which is never what a script meaning "stop process N"
+         * wrote. Refused before the syscall runs at all - not just
+         * before its effect, the syscall itself never happens for these. */
+        if (pid <= 1)
+            runtime_error("kill: refusing pid <= 1 (0 and negative pids "
+                           "signal a whole process group or every process "
+                           "you own, not one program)");
         return make_bool(kill((pid_t)pid, SIGTERM) == 0);
     }
 #endif  /* ZL_FREESTANDING */
@@ -1960,11 +2025,22 @@ static Value eval_binary(const char *op, Value l, Value r)
      *               value LLONG_MIN % -1.  Every a % -1 is 0
      *               mathematically, so answer 0 without dividing.
      * Mirrored verbatim in runtime.c - see the parity note there. */
+    /* F-10(e) (2026-09-04): both casts below now go through exact_i64
+     * instead of a raw (long long) cast. A raw cast of a NaN or an
+     * out-of-range double is undefined behaviour in C - the b==0/b==-1
+     * guards above only ever protected the DIVISION from a hardware
+     * trap, never this narrowing, so `1e300 % 3` or `5 % 1e300` was UB
+     * every time. exact_i64 refuses those instead (same policy as the
+     * bitwise builtins just above); an in-range b of 0.5 still becomes
+     * bi=0 exactly as before - exact_i64 does not require a WHOLE
+     * number, only one a double can represent in range, so the
+     * documented truncate-then-modulo behaviour is unchanged. */
     if (strcmp(op, "%") == 0) {
-        long long bi = (long long)b;
+        long long bi = exact_i64(b, "%");
         if (bi == 0)  return make_num(fmod(a, 0.0));
         if (bi == -1) return make_num(0.0);
-        return make_num((double)((long long)a % bi));
+        long long ai = exact_i64(a, "%");
+        return make_num((double)(ai % bi));
     }
     if (strcmp(op, ">")  == 0) return make_bool(a >  b);
     if (strcmp(op, "<")  == 0) return make_bool(a <  b);
@@ -2014,6 +2090,33 @@ static Value eval_call(Node *n, Env *env)
         if (slot && slot->val.type == V_FN) {
             Node *fn = slot->val.fn;
 
+            /* F-4 (2026-09-04): a missing argument used to silently bind
+             * the parameter to whatever GLOBAL happened to share its name
+             * (the loop below just stopped early, at `i < nargs`, leaving
+             * that parameter's env_define never called - so a later lookup
+             * fell through to the global scope instead of failing). The
+             * other three engines already disagreed with that: L and N
+             * both hand a missing argument 0, and C fails at gcc because
+             * the generated call has too few arguments for the prototype.
+             * Refusing here makes the interpreter agree with what every
+             * other engine's failure mode was already pointing at: this is
+             * a program error, not a value to make up. */
+            if (nargs != fn->nkids) {
+                /* 256, not 128: `name` is a Node's text field, up to
+                 * MAX_TEXT-1 (127) bytes on its own - gcc's
+                 * -Wformat-truncation is right that 128 could, in
+                 * principle, not be enough for a 127-byte function name
+                 * plus this template's own fixed text. snprintf would
+                 * still never overflow (it always truncates safely), but
+                 * a genuinely truncated error message is a real defect
+                 * for a name that long, not just a compiler nit. */
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s expects %d argument%s, got %d",
+                         name, fn->nkids, fn->nkids == 1 ? "" : "s", nargs);
+                free(args);
+                runtime_error(buf);
+            }
+
             /* parent is the GLOBAL scope, not the caller - real
              * function-local scoping (see g_global note above). */
             Env *call_env = env_new(g_global);
@@ -2025,10 +2128,25 @@ static Value eval_call(Node *n, Env *env)
                 g_depth = 0;
                 runtime_error("recursion too deep");
             }
+            /* F-7 (2026-09-04), belt-and-braces: the parser now refuses
+             * break/continue outside a loop (a loop is the only thing that
+             * ever checks these flags), so this should be unreachable in
+             * practice. Saved and cleared anyway, because g_breaking and
+             * g_continuing are process-wide globals and exec_block() stops
+             * a block the moment either is set - a caller's loop that was
+             * mid-break when it made this call would otherwise have the
+             * CALLEE's body cut short by a break that was never written in
+             * it, and the callee's own value would then leak back out and
+             * cut the caller's remaining statements short too. */
+            int save_breaking = g_breaking, save_continuing = g_continuing;
+            g_breaking = 0;
+            g_continuing = 0;
             g_returning = 0;
             g_return_value = make_nil();
             exec(fn->a, call_env);                /* run the body block */
             g_depth--;
+            g_breaking = save_breaking;
+            g_continuing = save_continuing;
 
             Value result = g_returning ? g_return_value : make_nil();
             g_returning = 0;
@@ -2198,8 +2316,18 @@ static Value eval_inner(Node *n, Env *env)
             Value idx = eval(n->b, env);
             if (obj.type != V_LIST) runtime_error("only lists can be indexed");
             if (idx.type != V_NUM)  runtime_error("list index must be a number");
+            /* F-17 (2026-09-04): range-check in the DOUBLE domain before
+             * casting, not after - (int)idx.num on a double outside int's
+             * range is undefined behaviour, and the index-assign path just
+             * below already did this the safe way (idx.num compared as a
+             * double first). NaN also belongs here: idx.num != idx.num is
+             * true only for NaN, and NaN compared any other way is always
+             * false, so the two range comparisons alone already refuse it -
+             * this just says why, matching clamp_index's own NaN line. */
+            if (idx.num != idx.num ||
+                !(idx.num >= 0 && idx.num < (double)obj.nitems))
+                runtime_error("list index out of range");
             int i = (int)idx.num;
-            if (i < 0 || i >= obj.nitems) runtime_error("list index out of range");
             return *obj.items[i];
         }
 
@@ -2421,7 +2549,38 @@ Node *zl_parse_guarded(Token *tokens, int count)
                 deepest, line, ZI_MAX_NESTING);
         return NULL;
     }
-    return parse(tokens, count);
+
+    /* F-1 (2026-09-04): a syntax error used to be die()/parse_error()'s bare
+     * exit(1), which is fatal in the kernel build - see the trap's own
+     * comment in lexer.h. Arming it here means parse() returns to us instead
+     * of exiting, so we can hand exec.c a NULL program the same way the
+     * nesting refusal above already does. zi_killed is left at 0 (unlike
+     * the refusal above), so main()'s caller can still tell "your program
+     * had a syntax error" apart from "your program was too deep to parse". */
+    if (zf_setjmp(zf_trap) != 0) {
+        zf_trap_armed = 0;
+        return NULL;
+    }
+    zf_trap_armed = 1;
+    Node *program = parse(tokens, count);
+    zf_trap_armed = 0;
+    return program;
+}
+
+/* Same guard, for the lexer. exec.c calls this instead of lex_text directly
+ * so a lex error (die()/make_token()/string_put(), all in lexer.c) also
+ * returns NULL instead of exit(1)/k_exit() (F-1, 2026-09-04). */
+Token *zl_lex_guarded(const char *src, int *out_count)
+{
+    if (zf_setjmp(zf_trap) != 0) {
+        zf_trap_armed = 0;
+        if (out_count) *out_count = 0;
+        return NULL;
+    }
+    zf_trap_armed = 1;
+    Token *tokens = lex_text(src, out_count);
+    zf_trap_armed = 0;
+    return tokens;
 }
 
 int zl_run_program(Node *program, long long steps, int max_depth)
@@ -2477,7 +2636,11 @@ int main(int argc, char **argv)
     int    count;
     Token *tokens  = lex_file(argv[argi], &count);
     Node  *program = zl_parse_guarded(tokens, count);
-    if (!program) return 2;              /* refused - stopped, not a crash */
+    /* NULL means EITHER "too deep to parse" (zi_killed=1, exit 2 - already
+     * true before F-1) OR "a plain syntax error" (zi_killed=0, exit 1 -
+     * F-1's trap now catches what die()/parse_error() used to exit(1) on
+     * directly; this keeps that exit code unchanged for the hosted CLI). */
+    if (!program) return zi_killed ? 2 : 1;
 
     if (confine_hi) zi_confine(confine_lo, confine_hi);
     int r = zl_run_program(program, steps, depth);

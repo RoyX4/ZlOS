@@ -2,15 +2,15 @@
   "schema": "zlos.host-test-policy.v1",
   "compiled": {
     "gate": [
-      "arenatest",
       "anonmemorytest",
+      "arenatest",
       "blocktest",
       "boot_handover_test",
       "boot_state_test",
       "browsertest",
       "browsertest_san",
-      "cryptotest",
       "crashtest",
+      "cryptotest",
       "csstest",
       "dhcptest",
       "dnstest",
@@ -39,23 +39,26 @@
       "memtypetest",
       "msctest",
       "nettest",
-      "pagingtest",
       "pagetxntest",
+      "pagingtest",
       "palette",
-      "pngtest",
       "pmmtest",
       "processlifecycletest",
+      "pngtest",
       "processmemorytest",
       "retest",
       "rtctest",
       "runtest",
       "schedulerpolicytest",
+      "schedtest",
+      "schedtest_ms",
       "settingstest",
       "systest",
       "tartest",
       "tcptest",
       "termwrap",
       "tlscryptotest",
+      "tlsstatetest",
       "tlstest",
       "toasttest",
       "tritest",
@@ -107,12 +110,22 @@
   },
   "commands": {
     "gpu_blt": [
-      ["./gpu_blt"],
-      ["./gpu_blt", "--negative"]
+      [
+        "./gpu_blt"
+      ],
+      [
+        "./gpu_blt",
+        "--negative"
+      ]
     ],
     "zladdrs.sh": [
-      ["./zladdrs.sh"],
-      ["./zladdrs.sh", "--selftest"]
+      [
+        "./zladdrs.sh"
+      ],
+      [
+        "./zladdrs.sh",
+        "--selftest"
+      ]
     ]
   },
   "source_overrides": {

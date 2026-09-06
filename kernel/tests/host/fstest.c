@@ -786,6 +786,26 @@ int main(int argc, char **argv)
     c = fs_create("big.bin", 5000);
     for (int i = 0; i < 5000; i++) buf[i] = (char)((i * 31 + 7) & 0xFF);
     fs_write(c, buf, 5000);
+    /* create N then write N with LESS than 2N free. Until 2026-09-04 the
+     * first write into a freshly created file demanded a second N-block run
+     * (every write was copy-on-write, even into a run holding no bytes), so
+     * a volume with room for exactly one archive refused it. */
+    {
+        u32 fb = fs_free_blocks();
+        u32 nbytes = (fb * 2u / 3u) * fs_bsize();
+        unsigned char *big = malloc(nbytes);
+        for (u32 i = 0; i < nbytes; i++) big[i] = (unsigned char)(i * 7u);
+        int x = fs_create("once.bin", nbytes);
+        ok("a file two thirds of the free space is created", x >= 0);
+        ok("...and its first write into the reserved run succeeds with less than two runs free",
+           x >= 0 && fs_write(x, big, nbytes) == 1);
+        unsigned char *back = malloc(nbytes);
+        int got = x >= 0 ? fs_read(x, back, nbytes) : -1;
+        ok("...and reads back whole", got == (int)nbytes && memcmp(back, big, nbytes) == 0);
+        if (x >= 0) fs_delete(x);
+        free(big); free(back);
+    }
+
     int gone = fs_create("gone.tmp", 100);
     fs_write(gone, "delete me", 9);
     fs_delete(gone);

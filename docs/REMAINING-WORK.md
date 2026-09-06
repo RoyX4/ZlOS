@@ -37,8 +37,8 @@ content, not architecture.
 static checkers run. `key()` does not halt the panel-handover path.
 `check-memmap.sh` sees `DISK_SCRATCH` and `PAINT_BUF`. Pointer-drain is on
 `main` (`7ddedb0`). Confirmed on a live ISO VM with `usb-mouse` (relative,
-the `./try.sh` device): `probe-pointer-usb.py` saw the compositor pointer
-move. gtk `./try.sh` *feel* is still **[HUMAN]** — this box has no display.
+the `kernel/tools/run/try.sh` device): `probe-pointer-usb.py` saw the compositor pointer
+move. gtk `kernel/tools/run/try.sh` *feel* is still **[HUMAN]** — this box has no display.
 
 **H1 — Desktop you can actually use.** Settings opens from the start menu and
 `settings_load` runs at boot when NVMe is up. Editor Ctrl+C/V is the clipboard
@@ -46,7 +46,10 @@ write path. Start menu is `WF_MODAL`. `verify-net.sh` fetches
 `http://example.com/`. `ui_*` widgets are zl builtins; About uses one.
 
 **H2 — The laptop is ours.** `edid_buf` is `HI_EDID` (top of the HID window,
-outside `HI_BLUR`). `intel_bringup_panel` calls `intel_vbt_find()`; PPS delays
+outside `HI_BLUR`) — **corrected 2026-09-04:** the EDID no longer has a fixed
+address at all: `intel.c:886` `static u8 edid_store[128]` behind `edid_addr()`,
+and `HI_EDID` (`memmap.h:224`, 0x03400000) is declared but referenced by no
+`.c` file (see `GUARDS-THAT-DID-NOT-GUARD.md` §2). `intel_bringup_panel` calls `intel_vbt_find()`; PPS delays
 and I_boost take VBT values when present. Ordered modeset is already the
 `P` path. **[HUMAN]** ThinkPad boot: Secure Boot off, USB image, screen-only
 diagnostics. Success is the panel at 2560×1440 with the H1 desktop on it.

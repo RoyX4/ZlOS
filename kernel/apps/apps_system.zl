@@ -113,7 +113,10 @@ fn clk_draw(ax, ay, aw, ah) {
     # rtc_up() is that reading and it is already bound.
     clk_card(ax + 8 * u, cy, cw, chh, "UPTIME", up)
     if rtc_ok() == 1 {
-        clk_card(ax + 13 * u + cw, cy, cw, chh, "RTC SECONDS", rtc_up())
+        # NOT rtc_up(): that builtin is rtc_read(), which returns 1 on success
+        # and 0 on failure - the card read "00 h 00 m 01 s" forever (found
+        # 2026-09-04). Compose the wall clock from the three accessors.
+        clk_card(ax + 13 * u + cw, cy, cw, chh, "WALL CLOCK", rtc_h() * 3600 + rtc_mi() * 60 + rtc_s())
     } else {
         rrect(ax + 13 * u + cw, cy, cw, chh, R_INSET_D * u, theme(TH_PANEL_HI))
         ui_caps(ax + 23 * u + cw, cy + 7 * u, "RTC SECONDS", theme(TH_TEXT_2), T_CAPTION)
@@ -369,7 +372,9 @@ fn ca_apply() {
     if ca_op == 2 { ca_acc = ca_acc - ca_entry }
     if ca_op == 3 { ca_acc = ca_acc * ca_entry }
     if ca_op == 4 { if ca_entry != 0 { ca_acc = ca_acc / ca_entry } }
-    if ca_op == 0 { ca_acc = ca_entry }
+    # only a typed entry replaces the accumulator: a second `=` with nothing
+    # typed used to zero the result (8 + 3 = 11, = again -> 0)
+    if ca_op == 0 { if ca_has_entry == 1 { ca_acc = ca_entry } }
     return 0
 }
 fn ca_clear() { ca_acc = 0  ca_op = 0  ca_entry = 0  ca_has_entry = 0  return 0 }
@@ -475,13 +480,13 @@ fn ca_draw(ax, ay, aw, ah) {
     # the same number, three other ways
     ky = ay + 42 * u
     ui_caps(ax + 12 * u, ky, "HEX", theme(TH_TEXT_2), T_CAPTION)
-    ac_draw_base(ax + 78 * u, ky, ca_val(), 8, 16, theme(TH_TEXT_HI))
+    ac_draw_base(ax + 78 * u, ky, band(ca_val(), 4294967295),8, 16, theme(TH_TEXT_HI))
     ky = ky + 16 * u
     ui_caps(ax + 12 * u, ky, "OCTAL", theme(TH_TEXT_2), T_CAPTION)
-    ac_draw_base(ax + 78 * u, ky, ca_val(), 11, 8, theme(TH_TEXT_HI))
+    ac_draw_base(ax + 78 * u, ky, band(ca_val(), 4294967295),11, 8, theme(TH_TEXT_HI))
     ky = ky + 16 * u
     ui_caps(ax + 12 * u, ky, "BINARY", theme(TH_TEXT_2), T_CAPTION)
-    ac_draw_base(ax + 78 * u, ky, ca_val(), 16, 2, theme(TH_TEXT_HI))
+    ac_draw_base(ax + 78 * u, ky, band(ca_val(), 4294967295),16, 2, theme(TH_TEXT_HI))
     ky = ky + 16 * u
     ui_caps(ax + 12 * u, ky, "WIDTH", theme(TH_TEXT_2), T_CAPTION)
     label(ax + 78 * u, ky, "int64, no float in the drawing path", theme(TH_TEXT_DIM), T_CAPTION, W_REG)

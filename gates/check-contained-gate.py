@@ -85,8 +85,17 @@ HOSTED_LAUNCHER_REQUIREMENTS = (
     'ZLOS_DEPENDENCY_CACHE="$CACHE_BASE"',
 )
 
+def code_only(source: str) -> str:
+    """Ignore full-line comments when checking required executable controls."""
+    return "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+
 
 def failures(launcher: str, hosted_launcher: str, land_gate: str) -> list[str]:
+    launcher = code_only(launcher)
+    hosted_launcher = code_only(hosted_launcher)
+    land_gate = code_only(land_gate)
     errors = [
         f"launcher is missing: {item}"
         for item in LAUNCHER_REQUIREMENTS
@@ -114,6 +123,24 @@ def selftest(launcher: str, hosted_launcher: str, land_gate: str) -> None:
             hosted_launcher,
             land_gate,
             "cpu-cap",
+        ),
+        (
+            "\n".join(
+                ("# " + line if "--property=CPUQuota=100%" in line else line)
+                for line in launcher.splitlines()
+            ),
+            hosted_launcher,
+            land_gate,
+            "cpu-cap-commented-out",
+        ),
+        (
+            launcher,
+            "\n".join(
+                ("# " + line if "ulimit -u 384" in line else line)
+                for line in hosted_launcher.splitlines()
+            ),
+            land_gate,
+            "hosted-process-cap-commented-out",
         ),
         (
             launcher.replace("foreign_process_matches '[q]emu-system'", "true", 1),

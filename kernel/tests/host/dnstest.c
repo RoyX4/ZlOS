@@ -83,6 +83,8 @@ static int last_query(unsigned *id, int *sport)
     return 0;
 }
 
+static int force_udp_csum;   /* nonzero: stamp this (wrong) UDP checksum */
+
 /* Deliver a DNS payload back to the stack as a real IPv4/UDP frame, so the
  * whole receive path is exercised rather than dns_input alone. */
 static void deliver(const unsigned char *dns, int dlen, unsigned src,
@@ -112,6 +114,8 @@ static void deliver(const unsigned char *dns, int dlen, unsigned src,
     int declared = corrupt_len ? corrupt_len : ulen;
     u[4] = (unsigned char)(declared >> 8); u[5] = (unsigned char)declared;
     memcpy(u + 8, dns, dlen);
+    /* zero on the wire means "no checksum"; a test can force a wrong one */
+    if (force_udp_csum) { u[6] = (unsigned char)(force_udp_csum >> 8); u[7] = (unsigned char)force_udp_csum; }
 
     memcpy(inq, f, 14 + 20 + ulen);
     inq_len = 14 + 20 + ulen;
@@ -452,11 +456,35 @@ static void t_timeout(void)
     CHECK(!dns_start(longlab, 90), "a 90-character label was accepted");
 }
 
+/* The file's comment said the UDP checksum was computed "anyway ... a
+ * resolver that accepts corrupted answers is worse". It was computed on the
+ * way out and never checked on the way in (found 2026-09-04). */
+static void t_bad_checksum(void)
+{
+    printf("a reply with a wrong UDP checksum\n");
+    bring_up();
+    dns_start("example.com", 11);
+    unsigned id = 0; int sport = 0;
+    CHECK(last_query(&id, &sport), "no query went out");
+
+    unsigned char d[512];
+    int n = build_answer(d, id, "example.com", 0x5DB8D822u, 300, 1, 1);
+    force_udp_csum = 0x1234;
+    deliver(d, n, DNS_IP, 53, sport, 0);
+    force_udp_csum = 0;
+    CHECK(dns_state() != DNS_DONE, "an answer with a wrong UDP checksum was accepted");
+
+    /* the same answer with checksum zero ("none") is still accepted */
+    deliver(d, n, DNS_IP, 53, sport, 0);
+    CHECK(dns_state() == DNS_DONE, "state %d after the good copy of the answer", dns_state());
+}
+
 int main(void)
 {
     printf("dns.c, mostly fed answers it should refuse\n\n");
     t_query();
     t_answer();
+    t_bad_checksum();
     t_hostile();
     t_pointers();
     t_timeout();

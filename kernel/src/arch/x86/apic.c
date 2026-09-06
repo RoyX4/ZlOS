@@ -365,7 +365,8 @@ int apic_init(void)
     /* The MSR is authoritative for the local APIC even when ACPI disagrees,
      * and it also carries the enable bit. */
     u64 base_msr = rdmsr(IA32_APIC_BASE);
-    uptr msr_base = (uptr)(base_msr & 0xFFFFF000ull);
+    /* bits 12..MAXPHYADDR; a 32-bit mask dropped a LAPIC relocated above 4 GiB */
+    uptr msr_base = (uptr)(base_msr & 0x000FFFFFFFFFF000ull);
     if (msr_base) lapic_base = msr_base;
     if (!lapic_base) lapic_base = 0xFEE00000u;   /* the architectural default */
 

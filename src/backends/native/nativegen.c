@@ -61,6 +61,14 @@ static int npfix = 0;
 static int print_num_off = -1;
 static int pnfix[4096];
 static int npnfix = 0;
+/* F-6 (2026-09-04): the exit(7) refusal for a fractional print used to say
+ * nothing at all - a silent exit code with no message is indistinguishable
+ * from a crash. This is the one fixed message it now writes to fd 2 first,
+ * a single fixup since (unlike a string literal) there is only ever one. */
+static const char FRAC_MSG[] =
+    "nativegen: cannot print a fractional number - no %g in this backend\n";
+static int frac_msg_leapos = -1;
+static int frac_msg_off = -1;
 
 /* print("literal") support: a print_str routine + string data. */
 static int print_str_off = -1;
@@ -388,6 +396,15 @@ static void emit_user_call(Node *call)
 {
     int nargs = call->nkids;
     TyFn *callee = &tyfns[fn_index(call->a->text)];
+    /* F-4 (2026-09-04): a missing argument used to just push fewer values -
+     * the callee then read whatever was sitting at that stack slot as its
+     * parameter (effectively 0 the first time, garbage on any later call at
+     * the same depth). Refuse instead, matching the interpreter's new check. */
+    if (nargs != callee->nparams) {
+        fprintf(stderr, "nativegen: %s expects %d argument%s, got %d\n",
+                call->a->text, callee->nparams, callee->nparams == 1 ? "" : "s", nargs);
+        exit(1);
+    }
     /* push args right-to-left so param[0] ends up at [rbp+16], coercing each
      * to the parameter's inferred type on the way in */
     for (int i = nargs-1; i >= 0; i--) {
@@ -399,8 +416,14 @@ static void emit_user_call(Node *call)
     if (nfixups >= (int)(sizeof(fixups) / sizeof(fixups[0])))
         backend_limit("call fixup");
     fixups[nfixups].pos = codelen;
-    strncpy(fixups[nfixups].name, call->a->text, MAX_TEXT-1);
-    fixups[nfixups].name[MAX_TEXT-1]='\0';
+    /* F-19: bounded memcpy + explicit terminator, not strncpy - see
+     * parser.c's copy of this comment. */
+    {
+        size_t len = strlen(call->a->text);
+        if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+        memcpy(fixups[nfixups].name, call->a->text, len);
+        fixups[nfixups].name[len] = '\0';
+    }
     nfixups++;
     b4(0);
     if (nargs > 0) {                               /* add rsp, 8*nargs (caller cleanup) */
@@ -418,7 +441,22 @@ static void gen_expr(Node *n)
              * apart, the static type does. */
             unsigned long long v;
             if (strchr(n->text,'.')) { union { double d; unsigned long long u; } bits; bits.d = strtod(n->text,0); v = bits.u; }
-            else                     { v = (unsigned long long)atoll(n->text); }
+            else {
+                /* zl_num_exact_i64(), not atoll() (F-3, 2026-09-04): atoll()
+                 * SATURATES past int64 range with no diagnostic, so
+                 * 18446744073709551616 (2^64) silently became LLONG_MAX.
+                 * nativegen is an integer subset by design - refuse a
+                 * literal that is not exactly an int64 rather than run with
+                 * the wrong number. */
+                long long iv;
+                if (!zl_num_exact_i64(n->text, &iv)) {
+                    fprintf(stderr, "nativegen: %s is not exactly representable "
+                                    "as a 64-bit integer - this backend is an "
+                                    "integer subset\n", n->text);
+                    exit(1);
+                }
+                v = (unsigned long long)iv;
+            }
             b(0x48); b(0xB8); for(int i=0;i<8;i++) b((unsigned char)((v>>(8*i))&0xFF));
             break;
         }
@@ -659,8 +697,12 @@ static void gen_function(Node *fn)
     for (int i=0;i<fn->nkids;i++) {
         if (nparams >= (int)(sizeof(params) / sizeof(params[0])))
             backend_limit("function parameter");
-        strncpy(params[nparams],fn->kids[i]->text,MAX_TEXT-1);
-        params[nparams][MAX_TEXT-1]='\0'; nparams++;
+        {
+            size_t len = strlen(fn->kids[i]->text);
+            if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+            memcpy(params[nparams], fn->kids[i]->text, len);
+            params[nparams][len] = '\0';
+        } nparams++;
     }
     nlocals = 0;
     collect_locals(fn->a);
@@ -673,30 +715,48 @@ static void gen_function(Node *fn)
     emit_fn_epilogue();                                  /* safety return */
 }
 
-/* emit the print_int routine: converts rax (a non-negative int) to
- * decimal ASCII + newline and writes it to stdout via a raw `write` syscall
+/* emit the print_int routine: converts rax (ANY int64, signed) to decimal
+ * ASCII + newline and writes it to stdout via a raw `write` syscall
  * (SYS_write=1, fd=1). Hand-encoded, dynamically label-patched (no more
  * hardcoded byte offsets - those were fragile and specific to the old
- * WriteFile call sequence this replaces). */
+ * WriteFile call sequence this replaces).
+ *
+ * F-6 (2026-09-04): this used to treat rax as unsigned, so print(0 - 1)
+ * (a plain T_INT expression, which calls this directly rather than through
+ * print_num) printed 18446744073709551615, not -1. r8 now remembers "was
+ * negative" across the digit loop (div/rax/rdx/rcx are all busy with the
+ * magnitude, so the sign can't live in any of those), and negation happens
+ * ONCE up front - two's-complement negate of INT64_MIN reproduces its own
+ * bit pattern, which read back as UNSIGNED is exactly 2^63, the correct
+ * magnitude, so this is exact even at the one value that has no positive
+ * counterpart. The buffer also grew from 15 to 23 usable bytes: a sign
+ * character plus up to 20 unsigned digits no longer fits in the old one. */
 static void emit_print_int(void)
 {
     print_int_off = codelen;
     b(0x55);                                                   /* push rbp */
     { unsigned char x[]={0x48,0x89,0xE5}; bytes(x,3); }        /* mov rbp,rsp */
-    { unsigned char x[]={0x48,0x83,0xEC,0x20}; bytes(x,4); }   /* sub rsp,0x20 */
-    { unsigned char x[]={0x48,0x8D,0x75,0xEF}; bytes(x,4); }   /* lea rsi,[rbp-0x11] */
+    { unsigned char x[]={0x48,0x83,0xEC,0x30}; bytes(x,4); }   /* sub rsp,0x30 */
+    { unsigned char x[]={0x48,0x8D,0x75,0xE8}; bytes(x,4); }   /* lea rsi,[rbp-0x18] */
     { unsigned char x[]={0xC6,0x06,0x0A}; bytes(x,3); }        /* mov byte[rsi],0x0A newline */
+    { unsigned char x[]={0x4D,0x31,0xC0}; bytes(x,3); }        /* xor r8,r8   (r8 = "was negative"?) */
+    { unsigned char x[]={0x48,0x85,0xC0}; bytes(x,3); }        /* test rax,rax */
+    b(0x0F); b(0x89); int p_notneg = codelen; b4(0);           /* jns L_notneg */
+    { unsigned char x[]={0x49,0xC7,0xC0,0x01,0x00,0x00,0x00}; bytes(x,7); } /* mov r8,1 */
+    { unsigned char x[]={0x48,0xF7,0xD8}; bytes(x,3); }        /* neg rax */
+    int L_notneg = codelen; patch4(p_notneg, L_notneg - (p_notneg + 4));
+
     { unsigned char x[]={0x48,0x85,0xC0}; bytes(x,3); }        /* test rax,rax */
     b(0x0F); b(0x85); int p_loop = codelen; b4(0);             /* jnz L_loop */
     { unsigned char x[]={0x48,0xFF,0xCE}; bytes(x,3); }        /* dec rsi */
     { unsigned char x[]={0xC6,0x06,0x30}; bytes(x,3); }        /* mov byte[rsi],'0' */
-    b(0xE9); int p_write1 = codelen; b4(0);                    /* jmp L_write */
+    b(0xE9); int p_sign1 = codelen; b4(0);                     /* jmp L_sign */
 
     int L_loop = codelen; patch4(p_loop, L_loop - (p_loop + 4));
     { unsigned char x[]={0xB9,0x0A,0x00,0x00,0x00}; bytes(x,5); } /* mov ecx,10 */
     int L_next = codelen;
     { unsigned char x[]={0x48,0x85,0xC0}; bytes(x,3); }        /* test rax,rax */
-    b(0x0F); b(0x84); int p_write2 = codelen; b4(0);           /* jz L_write */
+    b(0x0F); b(0x84); int p_sign2 = codelen; b4(0);            /* jz L_sign */
     { unsigned char x[]={0x48,0x31,0xD2}; bytes(x,3); }        /* xor rdx,rdx */
     { unsigned char x[]={0x48,0xF7,0xF1}; bytes(x,3); }        /* div rcx */
     { unsigned char x[]={0x80,0xC2,0x30}; bytes(x,3); }        /* add dl,'0' */
@@ -704,10 +764,17 @@ static void emit_print_int(void)
     { unsigned char x[]={0x88,0x16}; bytes(x,2); }             /* mov [rsi],dl */
     b(0xE9); b4(L_next - (codelen + 4));                       /* jmp L_next */
 
+    int L_sign = codelen;
+    patch4(p_sign1, L_sign - (p_sign1 + 4));
+    patch4(p_sign2, L_sign - (p_sign2 + 4));
+    { unsigned char x[]={0x4D,0x85,0xC0}; bytes(x,3); }        /* test r8,r8 */
+    b(0x0F); b(0x84); int p_write = codelen; b4(0);            /* jz L_write */
+    { unsigned char x[]={0x48,0xFF,0xCE}; bytes(x,3); }        /* dec rsi */
+    { unsigned char x[]={0xC6,0x06,0x2D}; bytes(x,3); }        /* mov byte[rsi],'-' */
+
     int L_write = codelen;
-    patch4(p_write1, L_write - (p_write1 + 4));
-    patch4(p_write2, L_write - (p_write2 + 4));
-    { unsigned char x[]={0x48,0x8D,0x55,0xF0}; bytes(x,4); }   /* lea rdx,[rbp-0x10] */
+    patch4(p_write, L_write - (p_write + 4));
+    { unsigned char x[]={0x48,0x8D,0x55,0xE9}; bytes(x,4); }   /* lea rdx,[rbp-0x17] */
     { unsigned char x[]={0x48,0x29,0xF2}; bytes(x,3); }        /* sub rdx,rsi  (rdx=length) */
     { unsigned char x[]={0xBF,0x01,0x00,0x00,0x00}; bytes(x,5); } /* mov edi,1 (fd=stdout) */
     { unsigned char x[]={0xB8,0x01,0x00,0x00,0x00}; bytes(x,5); } /* mov eax,1 (SYS_write) */
@@ -757,11 +824,19 @@ static void emit_print_num(void)
     { unsigned char x[]={0x48,0x89,0xC8}; bytes(x,3); }            /* mov rax,rcx                   */
     { unsigned char x[]={0x48,0x89,0xEC,0x5D}; bytes(x,4); }       /* mov rsp,rbp; pop rbp          */
     b(0xE9); b4(print_int_off - (codelen + 4));                    /* jmp print_int                 */
-    /* frac: refuse - exit(7). */
+    /* frac: refuse - write FRAC_MSG to fd 2, then exit(7). Before F-6 this
+     * was a bare exit(7) with no message at all, so the refusal read
+     * exactly like a crash. */
     int frac = codelen;
     patch4(p_jp,  frac - (p_jp  + 4));
     patch4(p_jne, frac - (p_jne + 4));
     patch4(p_js,  frac - (p_js  + 4));
+    { unsigned char x[]={0x48,0x8D,0x35}; bytes(x,3); }            /* lea rsi,[rip+disp] */
+    frac_msg_leapos = codelen; b4(0);
+    b(0xBA); b4((int)sizeof(FRAC_MSG) - 1);                        /* mov edx,MSGLEN */
+    { unsigned char x[]={0xBF,0x02,0x00,0x00,0x00}; bytes(x,5); }  /* mov edi,2 (fd=stderr) */
+    { unsigned char x[]={0xB8,0x01,0x00,0x00,0x00}; bytes(x,5); }  /* mov eax,1 (SYS_write) */
+    { unsigned char x[]={0x0F,0x05}; bytes(x,2); }                 /* syscall */
     { unsigned char x[]={0xBF,0x07,0x00,0x00,0x00}; bytes(x,5); }  /* mov edi,7 */
     emit_exit_syscall();
     b(0xC3);                                                       /* ret (unreached)               */
@@ -858,8 +933,12 @@ int main(int argc, char **argv)
         if (prog->kids[i]->type == N_FN) {
             if (nfuncs >= (int)(sizeof(fnames) / sizeof(fnames[0])))
                 backend_limit("function");
-            strncpy(fnames[nfuncs], prog->kids[i]->text, MAX_TEXT-1);
-            fnames[nfuncs][MAX_TEXT-1]='\0'; nfuncs++;
+            {
+                size_t len = strlen(prog->kids[i]->text);
+                if (len > MAX_TEXT - 1) len = MAX_TEXT - 1;
+                memcpy(fnames[nfuncs], prog->kids[i]->text, len);
+                fnames[nfuncs][len] = '\0';
+            } nfuncs++;
         }
 
     /* ---- number-type inference (INT/NUM), run to a fixpoint before any
@@ -908,6 +987,11 @@ int main(int argc, char **argv)
     emit_print_int();
     emit_print_str();
     emit_print_num();   /* after print_int: it tail-jumps into print_int */
+
+    /* F-6: the fractional-print refusal message, and its one fixup. */
+    frac_msg_off = codelen;
+    for (size_t i = 0; i < sizeof(FRAC_MSG) - 1; i++) b((unsigned char)FRAC_MSG[i]);
+    patch4(frac_msg_leapos, frac_msg_off - (frac_msg_leapos + 4));
 
     /* ---- string literal data + fix the lea disps that point to it ---- */
     for (int i=0;i<nsfix;i++) {

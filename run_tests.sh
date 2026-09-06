@@ -52,6 +52,28 @@ else
     echo "  FAIL  for-over-non-list semantics diverged"; fail=1
 fi
 
+# F-4 (2026-09-04): a missing argument used to silently bind to a same-named
+# GLOBAL in the interpreter (L/N gave 0, C already failed at gcc, just with
+# no message naming the problem) - interp now refuses it directly, with a
+# message; C's refusal is still gcc's own (compile.c emits a call with the
+# wrong argument count and lets the C compiler say so). compilel/nativegen
+# are checked in their own smoke-test sections below.
+cat > "$tmp/arity.zl" <<'EOF'
+fn f(a, b) { return a - b }
+print(f(1))
+EOF
+./interp "$tmp/arity.zl" >"$tmp/arity.interp" 2>&1 && arity_i=0 || arity_i=$?
+( cd "$tmp" && "$OLDPWD/compile" arity.zl >/dev/null 2>&1 &&
+  gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o arity.bin out.c \
+      "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm ) >"$tmp/arity.compile" 2>&1
+arity_c=$?
+if [ "$arity_i" -ne 0 ] && grep -q "f expects 2 arguments, got 1" "$tmp/arity.interp" &&
+   [ "$arity_c" -ne 0 ]; then
+    echo "  ok    a wrong-arity call is refused (interp names it, C fails at gcc)"
+else
+    echo "  FAIL  wrong-arity call was accepted or changed silently"; fail=1
+fi
+
 cat > "$tmp/stdlib_regressions.zl" <<'EOF'
 import strx
 import listx
@@ -65,6 +87,102 @@ if [ "$(./interp "$tmp/stdlib_regressions.zl" 2>&1 | tr '\n' ' ')" = "0 2 [[1, 2
     echo "  ok    stdlib edge contracts and JSON self-tests"
 else
     echo "  FAIL  stdlib edge or JSON regression"; fail=1
+fi
+
+# F-5 (2026-09-04): call_builtin's/runtime.c's args[] is exactly nargs long
+# and never zeroed, so a builtin that checked its arguments' TYPES but not
+# that they EXISTED read uninitialised heap - ASan-confirmed heap overflow
+# for replace() and insert() with too few arguments.
+cat > "$tmp/underarg.zl" <<'EOF'
+print(replace("a","b"))
+EOF
+./interp "$tmp/underarg.zl" >"$tmp/underarg.interp" 2>&1 && underarg_i=0 || underarg_i=$?
+( cd "$tmp" && "$OLDPWD/compile" underarg.zl >/dev/null 2>&1 &&
+  gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o underarg.bin out.c \
+      "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm &&
+  ./underarg.bin ) >"$tmp/underarg.c" 2>&1
+underarg_c=$?
+if [ "$underarg_i" -ne 0 ] && grep -q "replace needs 3 arguments, got 2" "$tmp/underarg.interp" &&
+   [ "$underarg_c" -ne 0 ] && grep -q "replace needs 3 arguments, got 2" "$tmp/underarg.c"; then
+    echo "  ok    a too-few-arguments builtin call is refused, interp and C"
+else
+    echo "  FAIL  under-argument builtin call was accepted or changed silently"; fail=1
+fi
+
+# F-7 (2026-09-04): break/continue outside a loop used to compile silently
+# and misbehave at run time (a break inside a called function stopped the
+# CALLER's loop; a top-level break left the interpreter's g_breaking flag
+# set for the next block). Now it is a parse-time refusal in every engine
+# that shares the frontend.
+cat > "$tmp/break_in_fn.zl" <<'EOF'
+fn f() { break }
+EOF
+./interp "$tmp/break_in_fn.zl" >"$tmp/break_in_fn.interp" 2>&1 && bif_i=0 || bif_i=$?
+./compile "$tmp/break_in_fn.zl" >"$tmp/break_in_fn.compile" 2>&1 && bif_c=0 || bif_c=$?
+if [ "$bif_i" -ne 0 ] && grep -q "'break' outside a loop" "$tmp/break_in_fn.interp" &&
+   [ "$bif_c" -ne 0 ] && grep -q "'break' outside a loop" "$tmp/break_in_fn.compile"; then
+    echo "  ok    'break' outside a loop is a parse error, interp and compile"
+else
+    echo "  FAIL  break-outside-a-loop was accepted or changed silently"; fail=1
+fi
+
+# F-9 (2026-09-04): parse_unary() and parse_not() recurse on THEMSELVES for
+# a chain of `-`/`not` without ever passing back through parse_expr(), so
+# interp.c's bracket-only pre-scan could not see them - 30000 `-` or 20000
+# `not` used to segfault the interpreter (200 is already well past the
+# depth limit of 64, no need to go anywhere near the numbers that found it).
+python3 -c "print('print(' + '-' * 200 + '1)')" > "$tmp/deep_dash.zl" 2>/dev/null ||
+    { printf 'print('; for _ in $(seq 1 200); do printf -- '-'; done; printf '1)\n'; } > "$tmp/deep_dash.zl"
+python3 -c "print('print(' + 'not ' * 200 + 'true)')" > "$tmp/deep_not.zl" 2>/dev/null ||
+    { printf 'print('; for _ in $(seq 1 200); do printf 'not '; done; printf 'true)\n'; } > "$tmp/deep_not.zl"
+deep_ok=1
+for f in deep_dash deep_not; do
+    timeout 5 ./interp "$tmp/$f.zl" >"$tmp/$f.interp" 2>&1; ec_i=$?
+    timeout 5 ./compile "$tmp/$f.zl" >"$tmp/$f.compile" 2>&1; ec_c=$?
+    if [ "$ec_i" -eq 139 ] || [ "$ec_i" -eq 134 ] || [ "$ec_c" -eq 139 ] || [ "$ec_c" -eq 134 ] ||
+       ! grep -q "nested too deeply" "$tmp/$f.interp" || ! grep -q "nested too deeply" "$tmp/$f.compile"; then
+        deep_ok=0
+        echo "  FAIL  $f: interp exit=$ec_i compile exit=$ec_c (want a clean refusal, not a crash)"
+    fi
+done
+if [ "$deep_ok" -eq 1 ]; then
+    echo "  ok    200-deep unary '-' and 'not' chains are refused cleanly, interp and compile"
+else
+    fail=1
+fi
+
+# F-15 (2026-09-04): fopen("rb") on a directory succeeds on Linux, and
+# ftell on the resulting stream can return -1 - (size_t)-1 + 1 wraps to 0,
+# so read() used to hand back a zero/undersized buffer it then wrote a
+# NUL terminator into regardless, instead of refusing a non-regular-file.
+cat > "$tmp/read_dir.zl" <<'EOF'
+print(read("/tmp"))
+EOF
+./interp "$tmp/read_dir.zl" >"$tmp/read_dir.interp" 2>&1 && readdir_i=0 || readdir_i=$?
+( cd "$tmp" && "$OLDPWD/compile" read_dir.zl >/dev/null 2>&1 &&
+  gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o read_dir.bin out.c       "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm &&
+  ./read_dir.bin ) >"$tmp/read_dir.c" 2>&1
+readdir_c=$?
+if [ "$readdir_i" -ne 0 ] && grep -q "not a regular file" "$tmp/read_dir.interp" &&
+   [ "$readdir_c" -ne 0 ] && grep -q "not a regular file" "$tmp/read_dir.c"; then
+    echo "  ok    read() of a directory is refused, interp and C"
+else
+    echo "  FAIL  read() of a directory was accepted or changed silently"; fail=1
+fi
+
+# F-16 (2026-09-04): kill(n) forwarded ANY pid straight to kill(2) with
+# SIGTERM - kill(-1) sends SIGTERM to every process this user owns. This
+# must be refused BEFORE any syscall, so the check below never actually
+# calls kill(-1) - it only asserts the REFUSAL message, which is the only
+# thing that can be checked here without risking the box it runs on.
+cat > "$tmp/kill_neg.zl" <<'EOF'
+kill(-1)
+EOF
+./interp "$tmp/kill_neg.zl" >"$tmp/kill_neg.interp" 2>&1 && killneg_i=0 || killneg_i=$?
+if [ "$killneg_i" -ne 0 ] && grep -qi "refus" "$tmp/kill_neg.interp"; then
+    echo "  ok    kill(-1) is refused before any syscall"
+else
+    echo "  FAIL  kill(-1) was accepted or refused without saying so"; fail=1
 fi
 
 echo "== C backend: cross-check against interpreter =="
@@ -130,6 +248,151 @@ if diff -q <(./interp examples/texttools.zl 2>&1) \
     echo "  ok    texttools_imports matches the inlined original byte for byte"
 else
     echo "  DIFF  texttools_imports differs from the original"; fail=1
+fi
+
+# F-8 (2026-09-04): parse() used to reset g_hidden=0 for EVERY parse,
+# including the nested one that loads an imported module - so a module's
+# own for-range loop minted the same __zl_lim0/__zl_st0 hidden globals the
+# importing program's for-range loops already used. mx_count()'s inner
+# `for j = 1 to 5` then clobbered the outer `for i = 1 to 3`'s own counter
+# every time it was called from inside that loop's body: 5 rows instead of
+# 3, in both the interpreter and the C backend.
+mkdir -p "$tmp/f8"
+cat > "$tmp/f8/modx.zl" <<'EOF'
+fn mx_count() {
+    n = 0
+    for j = 1 to 5 { n = n + 1 }
+    return n
+}
+EOF
+cat > "$tmp/f8/e07_import_collide.zl" <<'EOF'
+import modx
+for i = 1 to 3 {
+    print(i, mx_count())
+}
+print("end")
+EOF
+f8_want="1 5
+2 5
+3 5
+end"
+f8_i=$( ( cd "$tmp/f8" && "$OLDPWD/interp" e07_import_collide.zl ) 2>&1 )
+( cd "$tmp/f8" && "$OLDPWD/compile" e07_import_collide.zl >/dev/null 2>&1 &&
+  gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o e07.bin out.c \
+      "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm )
+f8_c=$( cd "$tmp/f8" && ./e07.bin 2>&1 )
+if [ "$f8_i" = "$f8_want" ] && [ "$f8_c" = "$f8_want" ]; then
+    echo "  ok    an imported module's for-range does not clobber the caller's, exactly 3 rows"
+else
+    echo "  FAIL  import for-range collision (interp: $f8_i | C: $f8_c)"; fail=1
+fi
+
+echo "== F-1: run declines cleanly on a lex/parse error (kernel exec.c) =="
+# exec.c's own hosttest (kernel/tests/host/exectest.c) deliberately links
+# NEITHER the real lexer/parser/interp NOR fs.c's weak symbols - it is
+# testing the "interpreter not linked yet" (EX_LOADED) contract, and wiring
+# the real frontend in there would break every one of those assertions.
+# So this harness is a second, smaller one: exec.c UNMODIFIED, the REAL
+# hosted lexer.c/parser.c/interp.c/runtime.c, and a fake single-file
+# "filesystem" - the same seam trick exectest.c uses, just pointed at a real
+# frontend instead of leaving it unlinked. Before F-1, a syntax error in the
+# "file" called exit(1) inside die()/parse_error() - fatal under
+# ZL_FREESTANDING (exit is k_exit(), which kfatals then spins forever) and
+# merely abrupt here (it would kill THIS TEST PROCESS, not just fail an
+# assertion). After F-1, zl_parse_guarded/zl_lex_guarded catch it and exec.c
+# takes its EX_FAIL decline path exactly like a too-deep-to-parse program
+# already did.
+cat > "$tmp/f1_exec_test.c" <<'EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+typedef unsigned int u32;
+static char typed_arg[256];
+static char said_buf[4096]; static size_t said_n;
+const char *term_argstr(void) { return typed_arg; }
+void term_say(const char *s) { size_t n = strlen(s);
+    if (said_n + n < sizeof(said_buf)) { memcpy(said_buf + said_n, s, n); said_n += n; said_buf[said_n] = 0; } }
+static unsigned long cap = 1 << 20, avail;
+unsigned long arena_capacity(void)  { return cap; }
+unsigned long arena_available(void) { return avail; }
+unsigned long arena_base_addr(void) { return 0; }
+void *arena_alloc(unsigned long n)  { return malloc(n ? n : 1); }
+void arena_reset(void)              { avail = cap; }
+void fb_text_prop(int x, int y, const char *s, unsigned int rgb) { (void)x; (void)y; (void)s; (void)rgb; }
+int  fb_text_prop_w(const char *s) { (void)s; return 0; }
+int  fb_text_prop_h(void) { return 16; }
+static const char *fake_name = "bad.zl";
+static const char *fake_src;                 /* the "file's" content       */
+int fs_mounted(void)              { return 1; }
+int fs_find(const char *n)        { return (n && !strcmp(n, fake_name)) ? 1 : -1; }
+u32 fs_size(int idx)              { return idx == 1 ? (u32)strlen(fake_src) : 0; }
+int fs_read(int idx, void *dst, u32 max) {
+    if (idx != 1) return -1;
+    u32 n = (u32)strlen(fake_src); if (n > max) n = max;
+    memcpy(dst, fake_src, n); return (int)n;
+}
+extern int exec_run(void);
+extern int exec_state(void);
+#define EX_FAIL 9
+#define EX_RAN  8
+int main(void) {
+    avail = cap;
+    /* 1) a LEX error: an unterminated string */
+    fake_src = "print(\"x";
+    snprintf(typed_arg, sizeof typed_arg, "%s", fake_name);
+    int st = exec_run();
+    if (st != EX_FAIL) { printf("FAIL lex error -> state %d, want EX_FAIL(9)\n", st); return 1; }
+    if (!strstr(said_buf, "run:") || !strstr(said_buf, "lexer refused")) {
+        printf("FAIL lex error message: %s\n", said_buf); return 1;
+    }
+    /* 2) a PARSE error: an unmatched brace */
+    fake_src = "if true { print(1)";
+    said_n = 0; said_buf[0] = 0;
+    st = exec_run();
+    if (st != EX_FAIL) { printf("FAIL parse error -> state %d, want EX_FAIL(9)\n", st); return 1; }
+    /* 3) proof this isn't just "always EX_FAIL": a good program still runs */
+    fake_src = "print(1 + 2)";
+    said_n = 0; said_buf[0] = 0;
+    st = exec_run();
+    if (st != EX_RAN) { printf("FAIL good program -> state %d, want EX_RAN(8)\n", st); return 1; }
+    printf("ok\n");
+    return 0;
+}
+EOF
+# interp.c's own main() is compiled out with -Dmain=... (it is only ever
+# suppressed by -DZL_FREESTANDING otherwise, and this harness wants the
+# hosted setjmp/longjmp path, not the kernel one - that path is separately
+# proven to compile clean under the kernel's own -Wall -Wextra -Werror -m32
+# -ffreestanding flags, see the F-1 report).
+if cc -O0 -w -c -DBUILD_INTERP -Dmain=zl_unused_main -D_strdup=strdup \
+      -Isrc/frontend -Isrc/runtime -o "$tmp/f1_interp.o" src/runtime/interp.c 2>"$tmp/f1_exec_test.err" &&
+   cc -O0 -w -o "$tmp/f1_exec_test" "$tmp/f1_exec_test.c" kernel/src/core/exec.c \
+      src/frontend/lexer.c src/frontend/parser.c "$tmp/f1_interp.o" \
+      src/runtime/runtime.c src/runtime/os_linux.c \
+      -DBUILD_PARSER -DBUILD_INTERP -D_strdup=strdup -Isrc/frontend -Isrc/runtime -lm 2>>"$tmp/f1_exec_test.err"; then
+    # the harness's stdout/stderr also carries the REAL die()/parse_error()
+    # messages and the real print(1+2) output ("3") - only its own verdict
+    # line, printed last, says whether the assertions passed.
+    out=$(timeout 5 "$tmp/f1_exec_test" 2>&1)
+    if [ "$(printf '%s\n' "$out" | tail -1)" = "ok" ]; then
+        echo "  ok    a lex error, a parse error, and a good program all decline/run correctly through run"
+    else
+        echo "  FAIL  F-1 exec harness"; echo "$out"; fail=1
+    fi
+else
+    echo "  BUILD FAIL F-1 exec harness"; cat "$tmp/f1_exec_test.err"; fail=1
+fi
+# and the hosted CLI itself: a syntax error must still exit 1 with the
+# message, unchanged from before F-1 (the trap is only armed inside
+# zl_parse_guarded/zl_lex_guarded, which the hosted CLI's own main() does
+# not call for a lexer error, and zi_killed distinguishes a real syntax
+# error, exit 1, from the pre-existing too-deep-to-parse refusal, exit 2).
+printf 'print("unterminated\n' > "$tmp/synerr.zl"
+./interp "$tmp/synerr.zl" >"$tmp/synerr.out" 2>&1; synerr_rc=$?
+if [ "$synerr_rc" -eq 1 ] && grep -q "string never closed" "$tmp/synerr.out"; then
+    echo "  ok    a syntax error still exits 1 with the message"
+else
+    echo "  FAIL  syntax error exit code/message changed (rc=$synerr_rc)"; cat "$tmp/synerr.out"; fail=1
 fi
 
 echo "== W5: hex literals + raw memory =="
@@ -199,6 +462,26 @@ if [ "$(./interp "$tmp/halves.zl" 2>&1 | tr '\n' ' ')" = "65535 11508224 " ]; th
 else
     echo "  FAIL  two-halves workaround"; fail=1
 fi
+
+echo "== C backend: an elif chain emits linear C =="
+# The parser stores `elif` as an else block holding one N_IF; emitted as a
+# nested `else { if ... }` one indent deeper per branch, the output was
+# quadratic - 3,000 branches were 72.6 MB of C and a 30,000-branch probe filled
+# a 7.7 GB tmpfs (2026-09-04). Flat `else if` is 566 KB for the same chain.
+python3 - > "$tmp/elif_chain.zl" <<'EOF'
+n = 2000
+s = 'x = 5\nif x == 0 { print(0)'
+for i in range(1, n): s += ' } elif x == %d { print(%d)' % (i, i)
+print(s + ' } else { print(-1) }')
+EOF
+( cd "$tmp" && timeout 20 "$OLDPWD/compile" elif_chain.zl >/dev/null 2>&1 ); elif_rc=$?
+elif_bytes=$(stat -c%s "$tmp/out.c" 2>/dev/null || echo 0)
+if [ "$elif_rc" -eq 0 ] && [ "$elif_bytes" -gt 0 ] && [ "$elif_bytes" -lt 2000000 ]; then
+    echo "  ok    2,000-branch elif chain compiles to $elif_bytes bytes of C (linear)"
+else
+    echo "  FAIL  2,000-branch elif chain: compile rc=$elif_rc, out.c $elif_bytes bytes (quadratic or hung)"; fail=1
+fi
+rm -f "$tmp/out.c"
 
 echo "== freestanding: zl with NO libc (the kernel-track proof) =="
 if ./freestanding/build.sh freestanding/demo.zl "$tmp/fs.bin" >"$tmp/fs.build" 2>&1; then
@@ -392,6 +675,102 @@ else
     echo "  skip  (clang not installed)"
 fi
 
+# F-3 (2026-09-04): compilel and nativegen are integer-only backends, so a
+# literal past 2^63 must be a REFUSAL, not the silent atoll() saturation to
+# LLONG_MAX this used to be.
+cat > "$tmp/big_lit.zl" <<'EOF'
+print(10000000000000000000000000000000000000000)
+EOF
+if command -v clang >/dev/null; then
+    ( cd "$tmp" && "$OLDPWD/compilel" big_lit.zl ) >"$tmp/big_lit.compilel.out" 2>&1
+    if [ $? -ne 0 ] && grep -q "not exactly representable" "$tmp/big_lit.compilel.out"; then
+        echo "  ok    compilel refuses a >2^63 literal"
+    else
+        echo "  FAIL  compilel accepted (or mis-refused) a >2^63 literal"; fail=1
+    fi
+fi
+( cd "$tmp" && "$OLDPWD/nativegen" big_lit.zl ) >"$tmp/big_lit.nativegen.out" 2>&1
+if [ $? -ne 0 ] && grep -q "not exactly representable" "$tmp/big_lit.nativegen.out"; then
+    echo "  ok    nativegen refuses a >2^63 literal"
+else
+    echo "  FAIL  nativegen accepted (or mis-refused) a >2^63 literal"; fail=1
+fi
+
+# F-4 (2026-09-04): compilel and nativegen used to hand a missing argument 0
+# with no diagnostic at all.
+if command -v clang >/dev/null; then
+    ( cd "$tmp" && "$OLDPWD/compilel" arity.zl ) >"$tmp/arity.compilel.out" 2>&1
+    if [ $? -ne 0 ] && grep -q "f expects 2 arguments, got 1" "$tmp/arity.compilel.out"; then
+        echo "  ok    compilel refuses a wrong-arity call"
+    else
+        echo "  FAIL  compilel accepted (or mis-refused) a wrong-arity call"; fail=1
+    fi
+fi
+( cd "$tmp" && "$OLDPWD/nativegen" arity.zl ) >"$tmp/arity.nativegen.out" 2>&1
+if [ $? -ne 0 ] && grep -q "f expects 2 arguments, got 1" "$tmp/arity.nativegen.out"; then
+    echo "  ok    nativegen refuses a wrong-arity call"
+else
+    echo "  FAIL  nativegen accepted (or mis-refused) a wrong-arity call"; fail=1
+fi
+
+# F-10(b) (2026-09-04): llvm.fptosi.sat converts a NaN index to 0 (its own
+# documented saturation behaviour), which is a valid index into any
+# non-empty list - so xs[nan] used to silently read/write element 0
+# instead of "list index out of range".
+cat > "$tmp/idx_nan.zl" <<'EOF'
+xs = [10, 20, 30]
+i = 0 / 0
+print(xs[i])
+EOF
+./interp "$tmp/idx_nan.zl" >"$tmp/idx_nan.interp" 2>&1
+if command -v clang >/dev/null; then
+    ( cd "$tmp" && "$OLDPWD/compilel" idx_nan.zl >/dev/null 2>&1 &&
+      clang -O2 out.ll "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c"             -I"$OLDPWD/src/runtime" -D_strdup=strdup -o idx_nan.bin -lm 2>/dev/null &&
+      ./idx_nan.bin ) >"$tmp/idx_nan.llvm" 2>&1
+    if grep -q "list index out of range" "$tmp/idx_nan.interp" &&
+       grep -q "list index out of range" "$tmp/idx_nan.llvm"; then
+        echo "  ok    a NaN list index is refused, interp and LLVM"
+    else
+        echo "  FAIL  NaN list index was accepted (or refused differently)"; fail=1
+    fi
+fi
+
+# F-10(c): unary '-' checked str/list but not bool, so `-true` silently
+# became a bool carrying machine value -1 instead of refusing the way
+# interp.c's "cannot negate a non-number" already does.
+cat > "$tmp/neg_bool.zl" <<'EOF'
+print(- true)
+EOF
+./interp "$tmp/neg_bool.zl" >"$tmp/neg_bool.interp" 2>&1
+if command -v clang >/dev/null; then
+    ( cd "$tmp" && "$OLDPWD/compilel" neg_bool.zl ) >"$tmp/neg_bool.llvm" 2>&1
+    if grep -q "cannot negate a" "$tmp/neg_bool.interp" &&
+       grep -q "cannot negate a bool" "$tmp/neg_bool.llvm"; then
+        echo "  ok    negating a bool is refused, interp and LLVM"
+    else
+        echo "  FAIL  negating a bool was accepted (or refused differently)"; fail=1
+    fi
+fi
+
+# F-10(e): '%' used to narrow an out-of-range/NaN operand via a raw
+# (long long) cast, which is undefined behaviour in C - now routed
+# through exact_i64, same policy as the bitwise builtins.
+cat > "$tmp/mod_huge.zl" <<'EOF'
+huge = pow(10, 300)
+print(huge % 3)
+EOF
+./interp "$tmp/mod_huge.zl" >"$tmp/mod_huge.interp" 2>&1 && modhuge_i=0 || modhuge_i=$?
+( cd "$tmp" && "$OLDPWD/compile" mod_huge.zl >/dev/null 2>&1 &&
+  gcc -O2 -D_strdup=strdup -I"$OLDPWD/src/runtime" -o mod_huge.bin out.c       "$OLDPWD/src/runtime/runtime.c" "$OLDPWD/src/runtime/os_linux.c" -lm &&
+  ./mod_huge.bin ) >"$tmp/mod_huge.c" 2>&1
+modhuge_c=$?
+if [ "$modhuge_i" -ne 0 ] && grep -q "% needs 64-bit integers" "$tmp/mod_huge.interp" &&
+   [ "$modhuge_c" -ne 0 ] && grep -q "% needs 64-bit integers" "$tmp/mod_huge.c"; then
+    echo "  ok    '%' of an out-of-range operand is refused, interp and C"
+else
+    echo "  FAIL  '%' of an out-of-range operand was accepted or changed silently"; fail=1
+fi
+
 echo "== native x86-64 ELF backend: integer-subset smoke test =="
 cat > "$tmp/nat_smoke.zl" <<'EOF'
 fn fact(n) {
@@ -405,6 +784,9 @@ while x > 0 {
     print(x)
     x = x - 1
 }
+# F-6 (2026-09-04): print_int treated rax as unsigned, so a negative T_INT
+# printed as a huge unsigned number instead of "-1".
+print(0 - 1)
 exit(42)
 EOF
 ( cd "$tmp" && "$OLDPWD/nativegen" nat_smoke.zl >/dev/null 2>&1 )

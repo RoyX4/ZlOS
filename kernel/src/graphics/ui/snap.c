@@ -42,7 +42,12 @@
 #define SNAP_BR     7
 
 #ifndef SNAP_WINDOWS
-#define SNAP_WINDOWS 12          /* matches WM_MAX in ui.h */
+/* ONE FACT: this is WM_MAX. It was a second copy ("matches WM_MAX in ui.h")
+ * with nothing checking the match, the same shape as the edge reserves in
+ * one-fact-many-copies-2026-08-27.md; a WM_MAX bump would have silently
+ * refused to snap windows 12 and up. Read it from where it lives. */
+#include "ui.h"
+#define SNAP_WINDOWS WM_MAX
 #endif
 
 /* How close to an edge counts as "at" it. In pixels of the pointer position,

@@ -34,7 +34,7 @@ where things live, not what is complete.
 | `.gitattributes` | repository policy | LF normalization, binary evidence handling, and generated-file classification. |
 | `.vscode/` | active support | Shared editor settings, launch tasks and C/C++ indexing. |
 | `.design/` | tracked metadata | Machine-readable record of the selected visual direction. |
-| `.ultra/` | tracked evidence | Integration tensions; OPEN/CLOSED states require explicit evidence. |
+| `.ultra/` | local evidence, **not tracked** (corrected 2026-09-04: `git ls-files .ultra` is empty; the directory matches `.ultra/` in `~/.gitignore_global`) | Integration tensions; OPEN/CLOSED states require explicit evidence. |
 
 ## Documentation Areas
 

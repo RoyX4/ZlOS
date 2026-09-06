@@ -45,6 +45,12 @@ SECTIONS
     __kernel_end = .;
     ASSERT(__kernel_end <= 0x00C00000,
            "the kernel image has grown into the raw-boot stack at 12 MiB (raw_entry.S)")
+    /* The stack GROWS DOWN from 0x00C00000, so the assert above protects an
+     * address, not the stack: an image ending at 0x00BFF000 links fine and
+     * boots with 4 KiB of stack under a compositor that needs 256 KiB
+     * (boot.S). Reserve the same 256 KiB here. */
+    ASSERT(__kernel_end + 0x40000 <= 0x00C00000,
+           "less than 256 KiB left between the kernel image and the raw-boot stack top at 12 MiB")
     ASSERT(__kernel_end <= 0x00E00000,
            "the kernel image has grown into the program arena at 14 MiB (arena.c ARENA_BASE)")
 }

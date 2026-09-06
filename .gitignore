@@ -55,6 +55,9 @@ kernel/tests/host/jstest
 kernel/tests/host/x509test
 kernel/tests/host/ecdsatest
 kernel/tests/host/tlstest
+kernel/tests/host/tlsstatetest
+kernel/tests/host/schedtest
+kernel/tests/host/schedtest_ms
 kernel/tests/host/cryptotest
 kernel/tests/host/tlscryptotest
 kernel/tests/host/jmptest

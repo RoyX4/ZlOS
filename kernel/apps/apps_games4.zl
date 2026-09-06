@@ -1009,10 +1009,15 @@ fn sk_move(dd) {
     # one byte per move: the direction in bits 0-1, "this one pushed" in bit 2.
     # That is everything needed to walk it backwards, because the crate a push
     # moved is always exactly one square beyond where the player ended up.
-    if sk_undo_n < SK_UNDO_MAX {
-        poke8(SK_UNDO + sk_undo_n, bor(dd, shl(pushed, 2)))
-        sk_undo_n = sk_undo_n + 1
+    # A full record drops the OLDEST move, not the newest: the move still
+    # happens either way, and an unrecorded newest move made the next undo
+    # walk back the wrong one (crate left in place, 2026-09-04).
+    if sk_undo_n >= SK_UNDO_MAX {
+        copy_mem(SK_UNDO, SK_UNDO + 1, SK_UNDO_MAX - 1)
+        sk_undo_n = SK_UNDO_MAX - 1
     }
+    poke8(SK_UNDO + sk_undo_n, bor(dd, shl(pushed, 2)))
+    sk_undo_n = sk_undo_n + 1
     if sk_solved() == 1 { sk_win = 1 }
     return 1
 }

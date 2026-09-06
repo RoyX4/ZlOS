@@ -100,6 +100,8 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `run-all.sh`
 - `runtest.c`
 - `schedulerpolicytest.c`
+- `schedtest.c`
+- `schedtest_ms.c`
 - `settingstest.c`
 - `systest.c`
 - `tartest.c`
@@ -109,6 +111,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `test-policy.json`
 - `test-run-receipt.json`
 - `tlscryptotest.c`
+- `tlsstatetest.c`
 - `tlstest.c`
 - `toasttest.c`
 - `trace_event.c`
