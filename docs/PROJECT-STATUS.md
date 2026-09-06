@@ -1,9 +1,15 @@
 # Project Status
 
-Current integration candidate, 2026-09-06:
-[process/sweep/cleanup integration and fresh proof](evidence/integration-sweep-process-2026-09-06.md).
-This branch combines PRs #12–#14 and Claude's committed sweep; main remains
-unchanged. Its combined source requires its own hosted gates.
+Current integration, 2026-09-06:
+[process/sweep/cleanup hosted closure and worktree snapshot](evidence/integration-hosted-closure-2026-09-06.md).
+Draft PR #15 combines PRs #12–#14 and Claude's committed sweep. Implementation
+`dd1871a` passed all 126 complete hosted gate steps, with zero failures, and has
+20 successful ordinary CI results (the optional model review was skipped).
+The fresh full-run ledger records 8 proved, 55 partial and 843 planned features.
+The host build budget and physical qualification remain open.
+Main advanced concurrently to the sweep tip `9212979`, already in this branch's
+ancestry. The integration and original PRs remain unmerged. See the new receipt
+for current ownership, exact tested source, evidence limits and the next feature.
 
 Current continuation, verified 2026-09-06:
 [persistent process sleep and the 906-feature queue](evidence/process-sleep-2026-09-05.md).
