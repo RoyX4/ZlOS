@@ -7,6 +7,8 @@
 
 typedef unsigned long long user_process_service_u64;
 
+#define USER_PROCESS_SERVICE_MAX_SLEEP_TICKS 0x7fffffffU
+
 enum user_process_service_status {
     USER_PROCESS_SERVICE_OK = 0,
     USER_PROCESS_SERVICE_E_ARGUMENT = -1,
@@ -29,6 +31,8 @@ struct user_process_service {
     user_process_service_step step;
     void *step_context;
     user_process_service_u64 work_calls;
+    scheduler_policy_u32 sleep_started;
+    scheduler_policy_u32 sleep_delay;
     int failed;
     int last_error;
 };
@@ -46,6 +50,12 @@ int user_process_service_admit(struct user_process_service *service,
 int user_process_service_work(struct user_process_service *service,
                               scheduler_policy_u32 now,
                               process_lifecycle_handle *dispatched);
+/* Only the exact running owner may request sleep from its step callback.
+ * Reconciliation commits the deadline and charges elapsed run time once. */
+int user_process_service_request_sleep(struct user_process_service *service,
+                                       process_lifecycle_handle handle,
+                                       scheduler_policy_u32 now,
+                                       scheduler_policy_u32 delay_ticks);
 int user_process_service_detach_terminal(
     struct user_process_service *service,
     process_lifecycle_handle handle);

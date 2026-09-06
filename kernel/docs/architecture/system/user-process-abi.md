@@ -40,8 +40,8 @@ complete range before the kernel touches the first byte.
 The admitted number set is ABI version 1 in `user_syscalls.json` and the kernel
 consumes its generated header. The generator requires unique, ordered,
 positive numbers below the sign bit and rejects an undeclared gap in the
-current 1..24 range. Any unsigned value outside that set returns `-ENOSYS`;
-the target gate covers zero, 25, the sign bit and all bits set.
+current 1..25 range. Any unsigned value outside that set returns `-ENOSYS`;
+the target gate covers zero, 26, the sign bit and all bits set.
 
 | nr | operation | arguments | result |
 |---:|---|---|---|
@@ -69,6 +69,23 @@ the target gate covers zero, 25, the sign bit and all bits set.
 | 22 | anonymous reserve | `RBX=first-page RCX=page-count` | virtual base or negative errno |
 | 23 | anonymous commit | `RBX=first-page RCX=page-count` | 0 or negative errno |
 | 24 | anonymous release | `RBX=first-page RCX=page-count` | 0 or negative errno |
+| 25 | bounded sleep | `RBX=ticks RCX=0 RDX=0` | 0 after the process becomes eligible at its deadline |
+
+Sleep accepts 1 through `0x7fffffff` ticks (100 Hz), measured from the syscall's
+current tick. Zero, wider or ambiguous delays and nonzero reserved arguments
+return `-EINVAL` without yielding. Only a process currently dispatched by the
+persistent service may sleep; diagnostic processes outside that service receive
+`-EAGAIN`. The exact lifecycle handle owns the request. Its saved user register
+frame resumes at the instruction after `int 0x80`; waiting consumes no dispatch
+turns or charged run ticks. Deadline eligibility is wrap-safe and does not
+promise immediate execution, real-time latency, suspend semantics or cancellation.
+
+The host service checks cover tick wrap, maximum delay, sibling progress,
+unchanged idle output, exact runtime accounting and stale identity rejection.
+The added native-UEFI QEMU oracle exercises the Ring-3 syscall and resume path
+using injected scheduler timestamps. It must observe the `LSW` trace, independent
+exit statuses 33 and 44, no dispatch before the deadline and exact frame
+reclamation. This is not a wall-clock wake-latency or physical-hardware claim.
 
 Each process has exactly 32 anonymous page slots beginning at PTE 6. Reserve
 changes only the typed virtual state and consumes no physical frame. Commit
@@ -120,7 +137,7 @@ parent/child authority or concurrent PID-reuse test.
 `verify-efi.sh` proves the normal entry/return path and hostile cases: `cli`
 gets `#GP`, kernel/device reads or writes get `#PF`, a crossing pointer is
 refused before dereference, the process dies alone, and the kernel continues.
-It also executes unknown syscall IDs 0, 25, `2^63` and `2^64-1` from Ring 3 and
+It also executes unknown syscall IDs 0, 26, `2^63` and `2^64-1` from Ring 3 and
 requires `-ENOSYS` for all four.
 The built-in user image also exercises time and yield. A second gate alternates
 two separate CR3/kernel-stack contexts across yield, verifies the resumed
@@ -150,9 +167,11 @@ exact pre-process PMM baseline. Final teardown must also leave every lifecycle
 slot empty while retaining its generation history.
 
 The persistent service then admits two exact lifecycle handles. Four separate
-kernel work-loop calls produce round-robin trace `ST12`: each process writes one
-byte and yields on its first turn, then writes one byte and exits with statuses
-11 and 22 on its second. The gate observes both terminal records, detaches both
+cooperative kernel work-loop calls produce round-robin trace `ST12`: each
+process writes one byte and yields on its first turn, then writes one byte and
+exits with statuses 11 and 22 on its second. Timer preemption remains enabled
+for production service work and is proved independently with the non-yielding
+`PQ` process pair. The gate observes both terminal records, detaches both
 scheduler owners, reaps both lifecycle identities and restores the exact PMM
 baseline. The coordinator host test also injects runner failure, policy
 corruption, lifecycle-policy drift, stale generations, mid-turn reap and counter
@@ -201,16 +220,23 @@ the owner queue, and closes every owned window on exit or fault. The EFI gate
 opens a real WM window, presents `Ring3 window`, injects/polls key `W` through
 the same bounded queue, closes it and proves no owner leak remains.
 
-The desktop command route is also QEMU-observed rather than inferred. Its probe
-creates a four-byte external `/system/user.bin` through Files and the disk-backed
-editor, confirms the file through `ls`, starts PID 1000 with `userexec`, observes
-the intentionally invalid image as a contained fault with `userps`, reaps slot 1
-and then observes an empty table. That fixture proves external file loading,
-command dispatch, fault custody and reap; it deliberately does not claim a
-successful application workload. The
+The desktop command routes are also QEMU-observed rather than inferred. The
+fault probe creates a four-byte external `/system/user.bin` through Files and
+the disk-backed editor, confirms the file through `ls`, starts PID 1000 with
+`userexec`, observes the intentionally invalid image as a contained fault with
+`userps`, reaps slot 1 and then observes an empty table.
+
+The normal-exit probe seeds an exact 50-byte raw x86-64 image through a host
+instrument linked to the shipping zlfs implementation. The external program is
+loaded as PID 1000, emits `R3!` through three Ring-3 console syscalls, exits with
+status 37, remains observable through `userps`, and is reaped before the probe
+requires an empty process table. An unreachable `UD2` after the exit syscall
+ensures that returning from exit cannot masquerade as success. Together these
+fixtures prove external file loading, useful syscall execution, normal-exit and
+fault custody, observation and reap within the fixed two-slot service. The
 [GitHub-hosted gate](../../../../docs/evidence/hosted-user-process-gate-2026-09-03.md)
-repeated this exact route under Ubuntu QEMU TCG and retained its six-assertion
-receipt separately from physical-hardware evidence.
+repeats these routes under QEMU TCG and retains their receipts separately from
+physical-hardware evidence.
 
 Still not complete process infrastructure: the anonymous window is fixed and
 has no virtual-area allocator, demand-fault commit, file mapping, shared memory

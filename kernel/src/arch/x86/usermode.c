@@ -453,6 +453,7 @@ typedef unsigned char u8_64;
 #define U64_IPC_BYTES 64
 #define U64_IO_MAX 4096
 #define U64_NAME_MAX 24
+#define U64_SERVICE_SLEEPING_VIEW 4
 #define U64_KSTACK_PAGES 2
 #define U64_KSTACK_BYTES (U64_KSTACK_PAGES * 4096)
 #define U64_KSTACK_FILL 0xa5u
@@ -530,6 +531,7 @@ static char user64_sched_trace[8];
 static int user64_sched_trace_n, user64_sched_trace_on;
 
 extern unsigned char user64_blob[], user64_blob_end[];
+extern unsigned char user64_sleep_probe[], user64_sleep_probe_end[];
 extern unsigned char user64_anon_probe[], user64_anon_probe_end[];
 extern unsigned char user64_anon_reserved_fault[], user64_anon_reserved_fault_end[];
 extern unsigned char user64_anon_released_fault[], user64_anon_released_fault_end[];
@@ -1012,6 +1014,20 @@ u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
         proc64->state = 1;
         U64_RETURN(0);
     }
+    if (nr == U64_SYS_SLEEP) {
+        if (!arg1 || arg1 > USER_PROCESS_SERVICE_MAX_SLEEP_TICKS || arg2 || arg3)
+            U64_RETURN(U64_EINVAL);
+        if (!proc_service_initialized)
+            U64_RETURN(U64_EAGAIN);
+        int status = user_process_service_request_sleep(&proc_service,
+            proc64->lifecycle_handle, idt_ticks(), (u32)arg1);
+        if (status != USER_PROCESS_SERVICE_OK)
+            U64_RETURN(status == USER_PROCESS_SERVICE_E_STATE ||
+                       status == USER_PROCESS_SERVICE_E_NOT_FOUND
+                           ? U64_EAGAIN : U64_EIO);
+        user64_yielded = 1;
+        U64_RETURN(0);
+    }
 
     /* The file ABI is intentionally whole-file and bounded. READ copies at
      * most 4 KiB from the beginning; WRITE atomically replaces the whole
@@ -1363,7 +1379,15 @@ int user64_service_pid(int index)
 
 int user64_service_state(int index)
 {
-    return index >= 0 && index < U64_PROCS ? (int)procs64[index].state : -22;
+    if (index < 0 || index >= U64_PROCS) return -22;
+    struct scheduler_policy_snapshot policy;
+    if (procs64[index].state == PROCESS_LIFECYCLE_RUNNABLE &&
+        proc_service_initialized &&
+        scheduler_policy_snapshot(&proc_service.scheduler,
+            procs64[index].lifecycle_handle, &policy) == SCHEDULER_POLICY_OK &&
+        policy.state == SCHEDULER_POLICY_SLEEPING)
+        return U64_SERVICE_SLEEPING_VIEW;
+    return (int)procs64[index].state;
 }
 
 int user64_service_termination_code(int index)
@@ -1486,7 +1510,7 @@ void user_selftest(void)
     static const u8_64 unknown_syscalls[] = {
         0x31,0xdb,
         0xb8,0,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
-        0xb8,25,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+        0xb8,26,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
         0x48,0xb8, 0,0,0,0,0,0,0,0x80,
         0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
         0x48,0xc7,0xc0, 0xff,0xff,0xff,0xff,
@@ -1989,6 +2013,57 @@ void user_selftest(void)
         up(" stage-b="); upu((u32)service_b_reap_stage);
         up(" remaining="); upu((u32)user64_service_count()); up("\n");
     }
+
+    /* Inject scheduler timestamps to prove the exact deadline without a
+     * wall-clock race on slow TCG hosts. The ordinary service uses idt_ticks.
+     * The independent PQ oracle above exercises actual timer preemption. */
+    static const u8_64 sleep_sibling[] = {
+        0xb8,1,0,0,0, 0xbb,'S',0,0,0, 0xcd,0x80,
+        0xbb,44,0,0,0, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b
+    };
+    int sleep_loaded = service_reaped &&
+        user64_load_process(0, 33, user64_sleep_probe,
+                           (u32)(user64_sleep_probe_end - user64_sleep_probe));
+    int sibling_loaded = sleep_loaded &&
+        user64_load_process(1, 34, sleep_sibling, sizeof sleep_sibling);
+    process_lifecycle_handle sleeper = procs64[0].lifecycle_handle;
+    process_lifecycle_handle sibling = procs64[1].lifecycle_handle;
+    process_lifecycle_handle ran = 0;
+    struct scheduler_policy_snapshot sleeping;
+    u64 sleep_work_before = proc_service.work_calls;
+    user64_sched_trace_n = 0;
+    user64_sched_trace_on = 1;
+    proc_service_preemptible = 0;
+    int sleep_ok = sibling_loaded &&
+        user_process_service_admit(&proc_service, sleeper) == USER_PROCESS_SERVICE_OK &&
+        user_process_service_admit(&proc_service, sibling) == USER_PROCESS_SERVICE_OK &&
+        user_process_service_work(&proc_service, idt_ticks(), &ran) == USER_PROCESS_SERVICE_OK &&
+        ran == sleeper &&
+        scheduler_policy_snapshot(&proc_service.scheduler, sleeper, &sleeping) ==
+            SCHEDULER_POLICY_OK && sleeping.state == SCHEDULER_POLICY_SLEEPING &&
+        user64_service_state(0) == U64_SERVICE_SLEEPING_VIEW &&
+        user_process_service_work(&proc_service, sleeping.wake_at - 1U, &ran) ==
+            USER_PROCESS_SERVICE_OK && ran == sibling && procs64[1].exit_status == 44;
+    ran = 0xfeedULL;
+    sleep_ok = sleep_ok &&
+        user_process_service_work(&proc_service, sleeping.wake_at - 1U, &ran) ==
+            USER_PROCESS_SERVICE_E_IDLE && ran == 0xfeedULL &&
+        user_process_service_work(&proc_service, sleeping.wake_at, &ran) ==
+            USER_PROCESS_SERVICE_OK && ran == sleeper &&
+        procs64[0].state == PROCESS_LIFECYCLE_EXITED && procs64[0].exit_status == 33 &&
+        proc_service.work_calls - sleep_work_before == 3 &&
+        user64_sched_trace_n == 3 && user64_sched_trace[0] == 'L' &&
+        user64_sched_trace[1] == 'S' && user64_sched_trace[2] == 'W';
+    proc_service_preemptible = 1;
+    user64_sched_trace_on = 0;
+    int sleep_reaped = sleep_loaded && user64_service_reap(0) == 0;
+    int sibling_reaped = sibling_loaded && user64_service_reap(1) == 0;
+    if (sleep_ok && sleep_reaped && sibling_reaped && process64_lifecycle_empty() &&
+        !process64_service_has_owners() && pmm_used_pages() == process_frame_baseline &&
+        !pmm_check())
+        up(" <- persistent sleep LSW: injected deadline held, sibling exited, wake and frames reclaimed\n");
+    else
+        up(" <- persistent sleep deadline FAILED\n");
 }
 
 __asm__(
@@ -2003,6 +2078,18 @@ __asm__(
     "  .byte 0xbb,0xf9,0xff,0xff,0xff, 0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b\n"
     ".globl user64_blob_end\n"
     "user64_blob_end:\n"
+    ".globl user64_sleep_probe\n"
+    "user64_sleep_probe:\n"
+    "  mov $1,%eax\n  mov $'L',%ebx\n  int $0x80\n"
+    "  xor %ebx,%ebx\n  xor %ecx,%ecx\n  xor %edx,%edx\n"
+    "  mov $25,%eax\n  int $0x80\n  cmp $-22,%rax\n  jne 1f\n"
+    "  mov $5,%ebx\n  mov $25,%eax\n  int $0x80\n"
+    "  test %rax,%rax\n  jne 1f\n"
+    "  mov $1,%eax\n  mov $'W',%ebx\n  int $0x80\n"
+    "  mov $33,%ebx\n  mov $3,%eax\n  int $0x80\n"
+    "1: ud2\n"
+    ".globl user64_sleep_probe_end\n"
+    "user64_sleep_probe_end:\n"
     ".globl user64_anon_probe\n"
     "user64_anon_probe:\n"
     "  xor %r13d,%r13d\n"

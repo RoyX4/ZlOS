@@ -69,6 +69,18 @@ ASSERTIONS = (
         "scheduler_detached_before_identity_reap": True,
         "physical_frame_baseline_restored": True,
     },
+    {
+        "id": "persistent-process-sleep",
+        "marker": "<- persistent sleep LSW: injected deadline held, sibling exited, wake and frames reclaimed",
+        "trace": "LSW",
+        "clock": "injected scheduler ticks; no wall-clock latency claim",
+        "syscall": 25,
+        "zero_delay_refused": True,
+        "no_early_dispatch": True,
+        "sibling_exit_status": 44,
+        "wake_exit_status": 33,
+        "physical_frame_baseline_restored": True,
+    },
 )
 
 
@@ -131,6 +143,7 @@ def validate_log(log: str) -> None:
         "timer process preemption FAILED",
         "sibling fault isolation FAILED",
         "persistent user-process service FAILED",
+        "persistent sleep deadline FAILED",
     )
     present = [marker for marker in rejected if marker in log]
     if present:
@@ -168,7 +181,7 @@ def build(log_path: Path) -> dict:
         ],
         "evidence_ceiling": (
             "exact current host policy/service tests and native-UEFI64 QEMU artifact "
-            "with four bounded two-process observations; not a general per-CPU "
+            "with five bounded two-process observations; not a general per-CPU "
             "scheduler, userspace process API or physical-hardware qualification"
         ),
         "generator": {

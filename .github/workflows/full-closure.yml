@@ -60,6 +60,9 @@ jobs:
       - name: prove allocator feature-join rejection boundaries
         run: python3 tools/test_feature_status_pmm.py
 
+      - name: prove sleep feature-join rejection boundaries
+        run: python3 tools/test_feature_status_sleep.py
+
       - name: prove measured toolchain join boundaries
         run: python3 tools/test_evidence_toolchain.py
 

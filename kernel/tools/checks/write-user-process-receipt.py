@@ -59,7 +59,7 @@ ASSERTIONS = (
         "id": "unknown-syscall-admission",
         "marker": "syscall ABI: zero/gap/sign-bit/max refused with ENOSYS",
         "abi_version": 1,
-        "probes": [0, 25, 1 << 63, (1 << 64) - 1],
+        "probes": [0, 26, 1 << 63, (1 << 64) - 1],
         "result": "ENOSYS",
     },
     {
@@ -239,7 +239,7 @@ SOURCE_CONTRACTS = {
     "syscall_numbers": {
         "abi_version": 1,
         "first": 1,
-        "last": 24,
+        "last": 25,
         "dispatch": "generated unsigned admission",
         "unknown_result": "ENOSYS",
     },

@@ -1,7 +1,8 @@
-# CI and the agent pipeline — design, not yet built
+# CI and the agent pipeline — implemented baseline and historical design
 
-Written 2026-08-18 by Claude (`source: claude`). **Nothing here is implemented.**
-This is the thinking-first pass; every claim below was checked against the tree.
+Written 2026-08-18 by Claude (`source: claude`). Updated 2026-09-06 to record
+the implemented pipeline. The original design rationale is preserved below;
+the measured current-state section supersedes its old implementation claims.
 
 Related: [../../CLAUDE.md](../../CLAUDE.md) (hazards and gates),
 `~/Documents/agent-when-to-use.md` (which agent for what).
@@ -34,25 +35,33 @@ Three destinations exist:
 The third row is the interesting one — it's what makes this project *not* fully
 cloud-able, and it's exactly where your hardware-damage hazards live.
 
-## 1. Current state, measured
+## 1. Current state, measured 2026-09-06
 
-```
-.github/workflows           does not exist — zero CI
-open PRs                    3, all authored by Claude Code, none independently reviewed
-remote branches             14 (desktop/*, claude/*, fix/*, lang/*)
-repo                        private, 13.5 MB packed
-gh auth                     RoyX4, scopes include repo + workflow + copilot
-uncommitted in worktree     57 files
-```
+The repository now has eight workflow files and the original off-machine plan
+is operational:
 
-Every gate runs only when a human remembers to run it, on the one machine that
-also has to think.
+| Workflow | Current role |
+|---|---|
+| `gates.yml` | language, formatter, self-host, parity, dead-state and hazard checks |
+| `boot.yml` | BIOS32, raw, ISO and native UEFI64 QEMU routes |
+| `kernel-host.yml` | complete registered kernel host-test evidence on Kali |
+| `desktop-shot.yml` | deterministic host compositor render artifact |
+| `docs.yml` | generated-document and evidence consistency |
+| `review.yml` | optional independent diff review when `OPENAI_API_KEY` is configured; explicit skip otherwise |
+| `nightly.yml` | scheduled clean-tree integration checks |
+| `full-closure.yml` | manual complete sequential gate in a hosted Kali container |
 
-**`.ultra/STATE.md` is stale.** It says the compositor is "built, tested, and
-unreachable — nothing calls them." `kernel/src/kernel.zl` calls `wm_open_p` at lines
-293–296, 2315, 2511, 2518, plus `wm_us`, `wm_peak`, `ui_scale`. It was wired up in
-the commits after that summary was written. Worth fixing before it misleads an
-agent into re-doing finished work.
+The native UEFI64 pull-request lane also runs the persistent external-fault and
+normal-exit and bounded-sleep process routes. The sleep fixture checks five
+real guest PIT ticks before normal exit. The normal-exit fixture is loaded from zlfs, emits
+`R3!`, exits with status 37, remains observable, and is reaped. The complete
+closure workflow restores the exact binary/source dependency archive from a
+runner cache, retains generated receipts and screenshots, and never promotes a
+failed or missing gate to passing evidence.
+
+GitHub-hosted execution removes ordinary builds, host tests and QEMU work from
+the laptop. Physical ThinkPad boot, real Gen9 display work and panel-power
+operations remain local-only evidence classes and are not implied by green CI.
 
 ## 2. Layer 1 — move the gates to GitHub Actions
 

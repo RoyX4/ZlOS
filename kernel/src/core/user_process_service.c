@@ -63,6 +63,11 @@ int user_process_service_check(const struct user_process_service *service)
     if (process_lifecycle_check(service->lifecycle) != PROCESS_LIFECYCLE_OK ||
         scheduler_policy_check(&service->scheduler) != SCHEDULER_POLICY_OK)
         return USER_PROCESS_SERVICE_E_STATE;
+    if (service->sleep_delay > USER_PROCESS_SERVICE_MAX_SLEEP_TICKS ||
+        (service->sleep_delay && service->scheduler.running ==
+            SCHEDULER_POLICY_INVALID_SLOT) ||
+        (!service->sleep_delay && service->sleep_started))
+        return USER_PROCESS_SERVICE_E_STATE;
 
     for (unsigned int i = 0; i < service->scheduler.capacity; i++) {
         const struct scheduler_policy_slot *slot =
@@ -74,7 +79,8 @@ int user_process_service_check(const struct user_process_service *service)
             return USER_PROCESS_SERVICE_E_STATE;
         if (snapshot.state == PROCESS_LIFECYCLE_RUNNABLE) {
             if (slot->state != SCHEDULER_POLICY_RUNNABLE &&
-                slot->state != SCHEDULER_POLICY_RUNNING)
+                slot->state != SCHEDULER_POLICY_RUNNING &&
+                slot->state != SCHEDULER_POLICY_SLEEPING)
                 return USER_PROCESS_SERVICE_E_STATE;
         } else if (snapshot.state == PROCESS_LIFECYCLE_EXITED ||
                    snapshot.state == PROCESS_LIFECYCLE_FAULTED) {
@@ -106,6 +112,8 @@ int user_process_service_init(
     service->step = step;
     service->step_context = step_context;
     service->work_calls = 0;
+    service->sleep_started = 0;
+    service->sleep_delay = 0;
     service->failed = 0;
     service->last_error = 0;
     return USER_PROCESS_SERVICE_OK;
@@ -130,6 +138,28 @@ int user_process_service_admit(struct user_process_service *service,
                                          : map_policy_status(status);
 }
 
+int user_process_service_request_sleep(struct user_process_service *service,
+                                       process_lifecycle_handle handle,
+                                       scheduler_policy_u32 now,
+                                       scheduler_policy_u32 delay_ticks)
+{
+    if (!service_shape(service) || !handle || !delay_ticks ||
+        delay_ticks > USER_PROCESS_SERVICE_MAX_SLEEP_TICKS)
+        return USER_PROCESS_SERVICE_E_ARGUMENT;
+    if (user_process_service_check(service) != USER_PROCESS_SERVICE_OK)
+        return USER_PROCESS_SERVICE_E_STATE;
+    struct scheduler_policy_snapshot snapshot;
+    int status = scheduler_policy_snapshot(&service->scheduler, handle,
+                                           &snapshot);
+    if (status != SCHEDULER_POLICY_OK) return map_policy_status(status);
+    if (snapshot.state != SCHEDULER_POLICY_RUNNING)
+        return USER_PROCESS_SERVICE_E_STATE;
+    if (service->sleep_delay) return USER_PROCESS_SERVICE_E_PENDING;
+    service->sleep_started = now;
+    service->sleep_delay = delay_ticks;
+    return USER_PROCESS_SERVICE_OK;
+}
+
 int user_process_service_work(struct user_process_service *service,
                               scheduler_policy_u32 now,
                               process_lifecycle_handle *dispatched)
@@ -152,7 +182,11 @@ int user_process_service_work(struct user_process_service *service,
         USER_PROCESS_SERVICE_OK)
         return fail_stop(service, USER_PROCESS_SERVICE_E_STATE);
     if (snapshot.state == PROCESS_LIFECYCLE_RUNNABLE) {
-        status = scheduler_policy_yield(&service->scheduler, owner, elapsed);
+        if (service->sleep_delay)
+            status = scheduler_policy_sleep(&service->scheduler, owner,
+                service->sleep_started, service->sleep_delay, elapsed);
+        else
+            status = scheduler_policy_yield(&service->scheduler, owner, elapsed);
     } else if (snapshot.state == PROCESS_LIFECYCLE_EXITED ||
                snapshot.state == PROCESS_LIFECYCLE_FAULTED) {
         status = scheduler_policy_exit(&service->scheduler, owner, elapsed);
@@ -162,6 +196,8 @@ int user_process_service_work(struct user_process_service *service,
     if (status != SCHEDULER_POLICY_OK)
         return fail_stop(service, USER_PROCESS_SERVICE_E_STATE);
 
+    service->sleep_started = 0;
+    service->sleep_delay = 0;
     service->work_calls = add_one_saturated(service->work_calls);
     *dispatched = owner;
     return USER_PROCESS_SERVICE_OK;

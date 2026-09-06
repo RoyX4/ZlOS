@@ -23,10 +23,11 @@ int main(void)
 {
     check(ZLOS_U64_SYSCALL_ABI_VERSION == 1ULL);
     check(ZLOS_U64_SYSCALL_FIRST == 1ULL);
-    check(ZLOS_U64_SYSCALL_LAST == 24ULL);
+    check(ZLOS_U64_SYSCALL_LAST == 25ULL);
     check(U64_SYS_ANON_RESERVE == 22ULL);
     check(U64_SYS_ANON_COMMIT == 23ULL);
     check(U64_SYS_ANON_RELEASE == 24ULL);
+    check(U64_SYS_SLEEP == 25ULL);
     for (unsigned long long number = ZLOS_U64_SYSCALL_FIRST;
          number <= ZLOS_U64_SYSCALL_LAST; number++)
         check(zlos_u64_syscall_known(number));
@@ -35,10 +36,10 @@ int main(void)
     check(!zlos_u64_syscall_known(1ULL << 63));
     check(!zlos_u64_syscall_known(~0ULL));
     if (failures) return 1;
-    return checks == 34 ? 0 : 2;
+    return checks == 36 ? 0 : 2;
 }
 C
 
 ${CC:-cc} -x c -std=c11 -Wall -Wextra -Werror -I. "$tmp" -o "$bin"
 "$bin"
-echo "user-syscalls host gate: 34 checks, 0 failed"
+echo "user-syscalls host gate: 36 checks, 0 failed"
