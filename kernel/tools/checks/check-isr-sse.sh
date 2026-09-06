@@ -28,9 +28,9 @@
 #
 # No QEMU. About ten seconds. Run from anywhere.
 set -u
-cd "$(dirname "$0")/../.."          # kernel/
+cd "$(dirname "$0")/../.." || exit 1          # kernel/
 
-TMP=$(mktemp -d)
+TMP=$(mktemp -d) || exit 1
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 INCLUDES=$(find src boot -type d -printf ' -I%p' | sort)
@@ -166,13 +166,13 @@ cat > "$TMP/deep.c" <<'EOF'
 extern void hop0(unsigned, unsigned);
 __attribute__((interrupt)) void deep_isr(void *frame) { (void)frame; hop0(1, 2); }
 EOF
-gcc $CFLAGS -mgeneral-regs-only -c "$TMP/deep.c" -o "$TMP/deep.o" || exit 1
+compile "$TMP/deep.c" "-mgeneral-regs-only" "$TMP/deep.o" || exit 1
 deep_objs="$TMP/deep.o $TMP/helper.o"
 for i in 0 1 2 3 4; do
     next="hop$((i + 1))"; [ "$i" = 4 ] && next=helper
     printf 'extern void %s(unsigned, unsigned);\nvoid hop%s(unsigned a, unsigned b) { %s(a, b); }\n' \
         "$next" "$i" "$next" > "$TMP/hop$i.c"
-    gcc $CFLAGS -c "$TMP/hop$i.c" -o "$TMP/hop$i.o" || exit 1
+    compile "$TMP/hop$i.c" "" "$TMP/hop$i.o" || exit 1
     deep_objs="$deep_objs $TMP/hop$i.o"
 done
 if check_tree "$deep_objs" deep_isr | grep -q '^OFFENDER helper'; then
@@ -195,7 +195,7 @@ for f in $CALLEE_FILES; do
 done
 # shellcheck disable=SC2086
 roots="$(interrupt_roots $HANDLERS) $EXTRA_ROOTS"
-echo "  roots: $(echo $roots | tr '\n' ' ')"
+echo "  roots: $(printf '%s\n' "$roots" | tr '\n' ' ')"
 real=$(check_tree "$objs" "$roots")
 if [ -n "$real" ]; then
     printf '%s\n' "$real" | sed 's/^/  /'
