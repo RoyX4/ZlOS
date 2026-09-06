@@ -14,6 +14,22 @@ The [toolchain join repair](../docs/evidence/toolchain-join-repair-2026-09-05.md
 removes a fixed host-header count while retaining the manifest validator;
 run `python3 tools/test_evidence_toolchain.py` for its regressions.
 
+## TODO publication
+
+`todo.sh` generates beside `TODO.md` and publishes with a filesystem rename.
+Interrupted generation preserves the previous backlog. Existing permissions and
+the hand-written block are retained; `--stdout` does not publish anything.
+Run `python3 tools/test_todo.py` for the isolated failure-recovery checks, also
+run by the docs workflow. See the
+[cleanup repair receipt](../docs/evidence/TODO-ATOMIC-REPAIR-2026-09-05.md).
+
+`install-hooks.sh` generates a post-commit hook that skips automatic refresh
+when either managed document already has pending changes, including untracked
+or ignored files. It also skips when Git cannot report their state. Run
+`python3 tools/test_hooks.py` for disposable-repository and linked-worktree
+checks. Linked worktrees share installed hooks; changing the installer source
+does not replace an existing shared installation.
+
 ## Directory documentation
 
 `directory-docs.py` creates and verifies the eight-part documentation capsule in

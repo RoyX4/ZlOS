@@ -7,8 +7,8 @@ name: docs
 # machine; this does it for main, so the repository is right even when a commit
 # lands from somewhere the hook is not installed.
 #
-# On a pull request it only CHECKS, and never writes - pushing commits onto
-# someone's PR branch while they are working on it is a good way to lose work.
+# On a pull request it checks and regenerates inside the disposable runner,
+# without pushing generated changes to the author's branch.
 
 on:
   push:
@@ -40,6 +40,12 @@ jobs:
 
       - name: are the docs still true?
         run: tools/doc-check.sh
+
+      - name: TODO generation preserves the backlog on failure
+        run: python3 tools/test_todo.py
+
+      - name: commit hooks preserve pending documentation
+        run: python3 tools/test_hooks.py
 
       - name: regenerate the derived docs
         env:

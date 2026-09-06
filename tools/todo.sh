@@ -194,18 +194,26 @@ else
 fi
 }
 
-if [ "${1:-}" = "--stdout" ]; then gen; exit 0; fi
-# Write to a temp file and move it into place: gen() runs git, a 20-second
-# `gh pr list` and the parity probe, and a caller killed mid-run (the
-# post-commit hook under a 2-minute tool timeout, 2026-09-05) left TODO.md
-# truncated with the hand-written block gone - the block this file promises
-# survives regeneration. A rename is all-or-nothing.
-tmpout=$(mktemp "$OUT.XXXXXX")
-if gen > "$tmpout" && grep -qF "$END_HOLD" "$tmpout"; then
-    mv -f "$tmpout" "$OUT"
-    echo "wrote $OUT ($(grep -c '^- \[ \]' "$OUT") open items)"
-else
-    rm -f "$tmpout"
-    echo "todo.sh: generation did not complete; $OUT left untouched" >&2
+if [ "${1:-}" = "--stdout" ]; then gen; exit $?; fi
+
+# Generate beside the destination so publication is one filesystem rename.
+# An interrupted refresh must never truncate the user's hand-written backlog.
+tmp=$(mktemp ".${OUT}.XXXXXX") || exit 1
+trap 'rm -f -- "$tmp"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+if ! gen > "$tmp" || ! grep -qxF -- "$END_HOLD" "$tmp"; then
+    echo "failed to generate $OUT; existing file preserved" >&2
     exit 1
 fi
+if [ -f "$OUT" ]; then
+    chmod --reference="$OUT" "$tmp" || exit 1
+else
+    chmod '=rw' "$tmp" || exit 1
+fi
+if ! mv -fT -- "$tmp" "$OUT"; then
+    echo "failed to publish $OUT; existing file preserved" >&2
+    exit 1
+fi
+echo "wrote $OUT ($(grep -c '^- \[ \]' "$OUT") open items)"
