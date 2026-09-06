@@ -99,9 +99,9 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `rtctest.c`
 - `run-all.sh`
 - `runtest.c`
-- `schedulerpolicytest.c`
 - `schedtest.c`
 - `schedtest_ms.c`
+- `schedulerpolicytest.c`
 - `settingstest.c`
 - `systest.c`
 - `tartest.c`

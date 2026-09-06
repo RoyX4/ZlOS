@@ -15,15 +15,16 @@
 # in with build64.sh's exact flags, takes every `__attribute__((interrupt))`
 # function (plus user64_timer_dispatch, which the hand-written IRQ0 stub calls
 # in ring-0 context with no FPU save) as a root, follows the calls in each
-# root's body three levels deep - reading RELOCATIONS, because under
+# root and every reachable callee until the worklist is empty - reading
+# RELOCATIONS, because under
 # -mcmodel=large a call is `movabs $0,%rax; call *%rax` and the callee's name
 # never appears as `<name>` - and fails if any reached function contains an
-# xmm/ymm/zmm/x87 instruction. Two planted defects (one level, and two levels
-# across translation units) run first so the check is known to bite.
+# xmm/ymm/zmm/x87 instruction. Planted root, one-level, two-level and
+# six-level defects run first so the check is known to bite.
 #
 # The syscall path (syscall_isr -> user64_dispatch) is deliberately NOT a
 # root: it is entered from ring 3 only, and the entry stub saves the user's
-# FPU state with fxsave before any C runs.
+# FPU state and restores kernel FP controls before any C runs.
 #
 # No QEMU. About ten seconds. Run from anywhere.
 set -u
@@ -90,7 +91,7 @@ check_tree() {   # $1 = objects to search, $2 = root symbols; prints offenders
     # build does not define (a 32-bit-only handler) is noted, not failed
     # shellcheck disable=SC2086
     nm -P $objs 2>/dev/null | awk '{print $1, $2}' | sort -u > "$TMP/symtab"
-    while [ -n "$queue" ] && [ $level -lt 4 ]; do
+    while [ -n "$queue" ]; do
         local next=""
         for sym in $queue; do
             case " $seen " in *" $sym "*) continue ;; esac
@@ -101,7 +102,7 @@ check_tree() {   # $1 = objects to search, $2 = root symbols; prints offenders
                 body=$(func_body "$obj" "$sym")
                 [ -n "$body" ] || continue
                 found=1
-                if [ $level -gt 0 ] && printf '%s\n' "$body" | grep -qE "$SSE_RE"; then
+                if printf '%s\n' "$body" | grep -qE "$SSE_RE"; then
                     echo "OFFENDER $sym in $(basename "$obj"):"
                     printf '%s\n' "$body" | grep -E "$SSE_RE" | head -4 | sed 's/^/    /'
                 fi
@@ -152,6 +153,32 @@ if check_tree "$TMP/handler2.o $TMP/mid.o $TMP/leaf.o" "$(interrupt_roots "$TMP/
     echo "  ok    planted two-level cross-TU xmm callee reported"
 else
     echo "  FAIL  planted two-level xmm callee NOT reported - the walk is blind past level 1"; fail=1
+fi
+
+# EXTRA_ROOTS are ordinary C functions, unlike compiler-restricted handlers.
+# Their own bodies must be checked, and a deep call chain must not be dropped.
+if check_tree "$TMP/helper.o" helper | grep -q '^OFFENDER helper'; then
+    echo "  ok    explicit C root with xmm reported"
+else
+    echo "  FAIL  xmm in an explicit C root was ignored"; fail=1
+fi
+cat > "$TMP/deep.c" <<'EOF'
+extern void hop0(unsigned, unsigned);
+__attribute__((interrupt)) void deep_isr(void *frame) { (void)frame; hop0(1, 2); }
+EOF
+gcc $CFLAGS -mgeneral-regs-only -c "$TMP/deep.c" -o "$TMP/deep.o" || exit 1
+deep_objs="$TMP/deep.o $TMP/helper.o"
+for i in 0 1 2 3 4; do
+    next="hop$((i + 1))"; [ "$i" = 4 ] && next=helper
+    printf 'extern void %s(unsigned, unsigned);\nvoid hop%s(unsigned a, unsigned b) { %s(a, b); }\n' \
+        "$next" "$i" "$next" > "$TMP/hop$i.c"
+    gcc $CFLAGS -c "$TMP/hop$i.c" -o "$TMP/hop$i.o" || exit 1
+    deep_objs="$deep_objs $TMP/hop$i.o"
+done
+if check_tree "$deep_objs" deep_isr | grep -q '^OFFENDER helper'; then
+    echo "  ok    six-level cross-TU xmm callee reported"
+else
+    echo "  FAIL  deep xmm callee was ignored"; fail=1
 fi
 
 echo "== B. the real handlers and everything they reach =="

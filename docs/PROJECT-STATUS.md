@@ -1,5 +1,10 @@
 # Project Status
 
+Current integration candidate, 2026-09-06:
+[process/sweep/cleanup integration and fresh proof](evidence/integration-sweep-process-2026-09-06.md).
+This branch combines PRs #12–#14 and Claude's committed sweep; main remains
+unchanged. Its combined source requires its own hosted gates.
+
 Current continuation, verified 2026-09-06:
 [persistent process sleep and the 906-feature queue](evidence/process-sleep-2026-09-05.md).
 The [continuation handoff](HANDOFF-CONTINUATION-2026-09-05.md) records exact

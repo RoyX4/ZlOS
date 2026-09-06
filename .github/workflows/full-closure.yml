@@ -66,6 +66,9 @@ jobs:
       - name: prove measured toolchain join boundaries
         run: python3 tools/test_evidence_toolchain.py
 
+      - name: prove Ring-3 FP controls stay out of kernel handlers
+        run: python3 tools/test_user_fpu_boundary.py
+
       - name: install the exact AX201 host-test fixture
         run: |
           ax201_fixture="$RUNNER_TEMP/iwlwifi-QuZ-a0-hr-b0-77.ucode"

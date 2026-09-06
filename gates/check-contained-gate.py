@@ -178,10 +178,7 @@ def selftest(launcher: str, hosted_launcher: str, land_gate: str) -> None:
     for changed_launcher, changed_hosted, changed_gate, label in mutations:
         if not failures(changed_launcher, changed_hosted, changed_gate):
             raise AssertionError(f"mutation escaped: {label}")
-    print(
-        "contained-gate selftest: caught cpu-cap, qemu-refusal, cgroup-binding, "
-        "self-hosted-refusal, hosted-process-cap and raw-refusal mutations"
-    )
+    print("contained-gate selftest: caught " + ", ".join(m[-1] for m in mutations))
 
 
 def main() -> int:

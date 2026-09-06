@@ -539,13 +539,17 @@ u64 user64_return_rsp, user64_return_rip, user64_return_rflags;
  * restored on every way back (label 9/7, and user64_abort lands on those);
  * the user's, saved on every entry FROM ring 3 (syscall_isr, and the timer
  * ISR only when it interrupted CPL 3) and restored before every iretq into
- * it. The per-process copy lives in procs64_fx[] and is swapped through the
+ * it. Before a C handler runs, reload the saved kernel image: merely saving
+ * user state still leaves unmasked exceptions and user rounding active inside
+ * the handler. The per-process copy lives in procs64_fx[] and is swapped through the
  * scratch image by user64_step / user64_after_syscall / timer dispatch. */
 u8_64 user64_fx_kernel[512] __attribute__((aligned(16)));
 u8_64 user64_fx_user[512]   __attribute__((aligned(16)));
 static u8_64 procs64_fx[U64_PROCS][512] __attribute__((aligned(16)));
 
-static void user64_fx_copy(u8_64 *dst, const u8_64 *src)
+/* Also called from IRQ0: the copy itself must not borrow an XMM register. */
+static void __attribute__((target("general-regs-only")))
+user64_fx_copy(u8_64 *dst, const u8_64 *src)
 {
     for (int i = 0; i < 512; i++) dst[i] = src[i];
 }
@@ -1234,7 +1238,8 @@ int __attribute__((sysv_abi)) user64_after_syscall(u64 *frame)
     return user64_exited || user64_yielded;
 }
 
-int __attribute__((sysv_abi)) user64_timer_dispatch(u64 *frame)
+int __attribute__((sysv_abi, target("general-regs-only")))
+user64_timer_dispatch(u64 *frame)
 {
     idt_timer_tick();
     /* saved[15..19] are RIP, CS, RFLAGS, RSP, SS after the 15 general
@@ -2217,6 +2222,7 @@ __asm__(
     "  push %r12\n  push %r13\n  push %r14\n  push %r15\n  push %rbp\n"
     "  cld\n"                    /* interrupt delivery does not clear DF; ring 3 may have set it */
     "  fxsave user64_fx_user(%rip)\n"          /* int 0x80 comes from ring 3 only */
+    "  fxrstor user64_fx_kernel(%rip)\n"        /* C handlers use kernel FP controls */
     "  mov 112(%rsp),%rdi\n  mov 104(%rsp),%rsi\n"
     "  mov 96(%rsp),%rdx\n  mov 88(%rsp),%rcx\n  call user64_dispatch\n"
     "  mov %rax,112(%rsp)\n  mov %rsp,%rdi\n  call user64_after_syscall\n"
@@ -2242,6 +2248,7 @@ __asm__(
      * FPU state to save (CS is at 128(%rsp) after the 15 pushes + RIP) */
     "  testb $3,128(%rsp)\n  jz 5f\n"
     "  fxsave user64_fx_user(%rip)\n"
+    "  fxrstor user64_fx_kernel(%rip)\n"
     "5:\n"
     "  mov %rsp,%rdi\n  call user64_timer_dispatch\n"
     "  test %eax,%eax\n  jnz 8b\n"
