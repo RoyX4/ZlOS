@@ -17,7 +17,7 @@ branch `codex/integrate-sweep-process`, based on main `8fb1425`.
 
 The sleep and sweep branches change 66 and 120 paths respectively relative to
 main, with 13 paths in common. Review covered those integration points and
-selected changed storage, USB and TLS paths. This is not a claim of independent
+selected changed storage, USB, compositor and TLS paths. This is not a claim of independent
 exhaustive verification of all 120 sweep paths. Its original dated receipt is
 retained as the author's evidence, with its unrun/physical limits intact.
 
@@ -58,12 +58,30 @@ FX-copy helper now require general registers, matching the unsaved Ring-0 IRQ
 contract. All four planted cases are rejected and the current direct-call
 closure passes. Indirect callbacks and physical execution are separate proof.
 
+## Deferred window-close lifetime
+
+The sweep defers a window's self-close until the next frame to protect its
+active drawing surface. The pending bit originally survived an explicit close
+or `wm_init()`. Opening another app in the same slot before the next frame then
+closed that replacement. Two added cases in the existing `wmtest.c` reproduce
+both failures against the first integration candidate.
+
+A completed close now clears its pending bit, and WM initialization clears the
+old table's pending-close state. The full focused compositor harness passes,
+including both slot-reuse cases and a control proving an uncancelled self-close
+still executes on the next frame. These changes preserve the deferred drawing
+lifetime and prevent a request crossing into a different window lifetime.
+The runnable build recipe remains the registered `wmtest` command in
+`kernel/tests/host/build.sh`; the isolated before/after binaries and logs are in
+the artifact directory below.
+
 ## Verification and limits
 
 Local logs and exact inputs are retained in
 `/home/roy/Documents/artifacts/zl-linux/integration-2026-09-06/`:
 
-- Two FP boundary tests, 10 TODO tests, seven hook tests pass.
+- Two FP boundary tests, 10 TODO tests, seven hook tests and the complete
+  focused compositor harness pass.
 - Six allocator-join, five sleep-join and six toolchain-join tests pass.
 - Contained-gate mutation tests retain all 64 controls, including commented-out
   local/hosted controls. Landing-gate mutation checks retain 118 required seams.

@@ -1852,6 +1852,8 @@ void wm_client(int win, int *x, int *y, int *w, int *h)
  * not a crash, it is a smear that only shows on some backgrounds. */
 void wm_init(void)
 {
+    drawing_win = -1;
+    close_deferred = 0;
     for (int i = 0; i < WM_MAX; i++) window_surfaces_free(i);
     client_surface_generation++;
     if (!client_surface_generation) client_surface_generation = 1;
@@ -2164,6 +2166,9 @@ void wm_close(int win)
                              ZLLOG_OP_WINDOW_CLOSE, 0, 0u, (unsigned)win);
         return;
     }
+    /* A real close ends this request's lifetime. A new window may reuse the
+     * slot before the next frame; it must not inherit the old pending close. */
+    close_deferred &= ~(1u << win);
     int app = win_app(win);
     unsigned int generation = wins[win].generation;
     wm_damage_win(win);
