@@ -7,6 +7,28 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-09-05 — docs: refresh TODO.md and JOURNAL.md; receipt paths repo-relative; atomic todo.sh write [skip ci] (5dc6f45)
+
+`fable/whole-tree-sweep` · 6 files changed, 62 insertions(+), 11 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>6 file(s)</summary>
+
+- `TODO.md`
+- `docs/JOURNAL.md`
+- `docs/evidence/whole-tree-sweep-2026-09-04.md`
+- `kernel/tests/host/README.md`
+- `kernel/tools/checks/README.md`
+- `tools/todo.sh`
+
+</details>
+
 ## 2026-09-05 — fix: whole-tree adversarial sweep - 70+ verified defects, gates that now bite (c6af05b)
 
 `fable/whole-tree-sweep` · 116 files changed, 4092 insertions(+), 857 deletions(-)
