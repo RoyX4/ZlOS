@@ -40,6 +40,10 @@ Run `python3 tools/test_evidence_toolchain.py`. The full hosted workflow runs
 this check before the expensive landing gate. The earlier PMM regression also
 remains green. Logs and original/replayed artifacts are retained under
 `/home/roy/Documents/artifacts/zl-linux/scheduler-continuation-2026-09-05/`.
-Replay proves the join repair on retained evidence; the next complete hosted
-run must still verify the newly published source. No generated runtime receipt
+Replay proves the join repair on retained evidence. Fresh complete hosted runs
+[33961205228](https://github.com/RoyX4/ZlOS/actions/runs/33961205228) at `54d3cf6`
+and [33961210688](https://github.com/RoyX4/ZlOS/actions/runs/33961210688) at
+`baa4bb2` now both pass, with 121 and 122 successful steps respectively, zero
+failures and final `GATE GREEN`. Both still record a failed host build-performance
+budget and absent physical performance evidence. No generated runtime receipt
 from the old worktree was staged with this repair.

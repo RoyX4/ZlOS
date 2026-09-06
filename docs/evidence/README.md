@@ -34,6 +34,9 @@ work. They are dated evidence, not the current task queue.
   address-space, privilege, copy, W^X, anonymous-memory, memory-accounting,
   fault-containment and ABI rows to the exact current native UEFI64 artifact
   without promoting general lifecycle or virtual-memory completeness.
+- `hosted-user-process-gate-2026-09-03.md` records the GitHub-hosted native
+  UEFI64 external-file fault, observation and reap route without promoting it
+  to successful-workload or physical-hardware proof.
 - `syscall-abi-feature-classification-2026-08-29.md` records the red/green
   generated ABI version-1 number table, 34 host checks and Ring 3 unsigned
   unknown-ID refusal used to classify KR-036.

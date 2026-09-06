@@ -1,7 +1,12 @@
 # Project Status
 
-Current continuation, 2026-09-05:
+Current continuation, verified 2026-09-06:
 [persistent process sleep and the 906-feature queue](evidence/process-sleep-2026-09-05.md).
+The [continuation handoff](HANDOFF-CONTINUATION-2026-09-05.md) records exact
+branches, PRs, proof, concurrent owners and the next implementation dependency.
+Both hosted full gates passed; the sleep run records 8 proved, 55 partial and
+843 planned features. The three PRs remain unmerged; physical proof and the
+host build-performance budget remain open.
 The repository/worktree tables below are the historical 2026-08-30 snapshot;
 they do not describe today's concurrent dirty worktrees or PR #12.
 
