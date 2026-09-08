@@ -554,6 +554,37 @@ void fault_stop32(const struct fault_frame32 *r)
     for (;;) __asm__ volatile("hlt");
 }
 
+/* Vector 8 is a TASK GATE on this lane (set in idt_init): the CPU switched
+ * to the double-fault TSS, so this runs on df_stack with the interrupted
+ * context saved in the main TSS, not on any frame of ours. The error code
+ * (always 0 for #DF) was pushed onto the new stack before entry. */
+__attribute__((noreturn, noinline, used))
+void fault_df_task32(void)
+{
+    extern u32  gdt_df_stack_low(void);
+    extern u32  gdt_df_stack_top(void);
+    extern void gdt_interrupted_context(u32 out[12]);
+    u32 c[12];
+    u32 handler_sp = 0, cr2 = 0;
+    __asm__ volatile("cli");
+    __asm__ volatile("mov %%esp, %0" : "=r"(handler_sp));
+    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+    gdt_interrupted_context(c);
+    u32 error = *(volatile u32 *)(gdt_df_stack_top() - 4u);
+    struct crash_registers registers = {
+        CRASH_REGS_32_ALL, 0,
+        c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[3],
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL, 8u, error, cr2);
+    zlt_irq_event(ZLLOG_SUB_CPU, ZLLOG_EV_FAULT, ZLLOG_FATAL, c[0], c[1], c[2]);
+    (void)crash_capture(8u, 1u, error, c[0], c[1], c[2], c[3], c[4], cr2,
+                        handler_sp, gdt_df_stack_low(), gdt_df_stack_top(),
+                        32u, &registers);
+    crash_report();
+    for (;;) __asm__ volatile("hlt");
+}
+
 #define DECLARE_FAULT(n) void fault_##n(void);
 DECLARE_FAULT(0)  DECLARE_FAULT(1)  DECLARE_FAULT(2)  DECLARE_FAULT(3)
 DECLARE_FAULT(4)  DECLARE_FAULT(5)  DECLARE_FAULT(6)  DECLARE_FAULT(7)
@@ -708,6 +739,28 @@ __asm__(
     "    ud2\n"
     ".size crash_test_ud2, .-crash_test_ud2\n"
 );
+
+/* Paging is off on this lane, so "RSP names an unmapped page" cannot be the
+ * trigger. Selector 0x38 is a one-byte data segment: loading it into SS is
+ * legal, the push is outside its limit (#SS), and delivering #SS pushes onto
+ * the same one-byte stack (#SS again) - a double fault by the architectural
+ * definition, with no page tables involved. Task gate 8 must switch stacks
+ * before any push. Destructive and QEMU-only. */
+__asm__(
+    ".text\n"
+    ".globl crash_test_df\n"
+    ".type crash_test_df, @function\n"
+    "crash_test_df:\n"
+    "    cli\n"
+    "    mov $0x38, %ax\n"
+    "    mov %ax, %ss\n"
+    "    xor %esp, %esp\n"
+    ".globl crash_test_df_fault\n"
+    "crash_test_df_fault:\n"
+    "    push %eax\n"
+    "    ud2\n"
+    ".size crash_test_df, .-crash_test_df\n"
+);
 #endif
 
 /* usermode.c, in assembly. Declared as a function taking no arguments purely so
@@ -850,6 +903,17 @@ void idt_init(void)
 #ifdef ZL_64
     /* #DF must not depend on the stack whose failure may have caused it. */
     set_gate_ist(8, fault_handlers[8], 1);
+#else
+    /* Same rule, 32-bit mechanism: a task gate. The offset is ignored, the
+     * selector names the double-fault TSS (GDT 0x30), and type 5 with P and
+     * DPL 0 is 0x85. The switch loads SS:ESP from that TSS before any push. */
+    {
+        extern void gdt_df_task_init(void (*)(void));
+        gdt_df_task_init(fault_df_task32);
+        idt[8].lo = 0; idt[8].hi = 0; idt[8].zero = 0;
+        idt[8].sel = 0x30;
+        idt[8].flags = 0x85;
+    }
 #endif
     for (int i = 32; i < 256; i++) set_gate(i, ignore_isr);   /* stray IRQs: ack     */
     /* THE SYSCALL DOOR. Installed before the IRQs so the ordering is visible:

@@ -142,7 +142,10 @@ int crash_validate(const struct crash_record *r)
     if (r->vector == 8u && r->error_code != 0) return 0;
     if (r->vector != 8u && r->vector != 14u && r->cr2 != 0) return 0;
     if (r->handler_sp == 0) return 0;
-    if (r->vector == 8u && r->word_bits == 64u) {
+    /* Every lane delivers #DF on a dedicated stack since 2026-09-08 (IST1 on
+     * 64-bit, a task gate on 32-bit), so a double fault without one is not a
+     * record of the mechanism this exists to prove. */
+    if (r->vector == 8u) {
         if (r->emergency_stack_low == 0 ||
                 r->emergency_stack_high <= r->emergency_stack_low ||
                 r->handler_sp < r->emergency_stack_low ||
@@ -170,7 +173,7 @@ int crash_capture(crash_u32 vector, crash_u32 has_error,
     if (vector == 8u && error_code != 0) return 0;
     if (vector != 8u && vector != 14u) cr2 = 0;
     if (handler_sp == 0) return 0;
-    if (vector == 8u && word_bits == 64u) {
+    if (vector == 8u) {
         if (emergency_stack_low == 0 || emergency_stack_high <= emergency_stack_low ||
                 handler_sp < emergency_stack_low ||
                 handler_sp >= emergency_stack_high) return 0;

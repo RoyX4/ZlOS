@@ -18,6 +18,9 @@
 *.ttf binary
 *.zst binary
 
+# Raw serial evidence is hashed byte-for-byte, including the prompt's spaces.
+/kernel/docs/receipts/*.serial.txt -text -whitespace
+
 # Generated truth surfaces and embedded build inputs.
 /kernel/metadata/** linguist-generated=true
 /kernel/docs/provenance-viewer.html linguist-generated=true

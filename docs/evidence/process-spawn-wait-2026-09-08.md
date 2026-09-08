@@ -4,16 +4,18 @@ Status: local implementation with host proof and four native-UEFI parent/child
 QEMU passes repeated at `52dc8b9c…` after the shared allocator rollback repair.
 The full host run, native boot gate and existing fault/exit/sleep probes pass
 for that image. The BIOS32 Run check and all 47 app lifecycle cycles also pass.
-The full boot matrix, later-main integration and hosted closure remain pending.
-No feature maturity promotion.
+Main `bd75552` is now reconciled with checkpoint `a5c3cac`; fresh verification
+of that combined source and hosted closure remain pending. No feature maturity
+promotion.
 
 The user accepted the full roadmap and authorized implementation on 2026-09-08.
 This pass starts `M-03.03` with the audited parent/child process contract.
 The original checkpoint remains in `/home/roy/Documents/repos/zl-linux-integration-2026-09-06`,
 branch `codex/integrate-sweep-process`. Current work is in the persistent
 `/home/roy/Documents/repos/zl-linux-spawn-wait-2026-09-08` checkout on
-`codex/spawn-wait-reconcile-2026-09-08`, based on `5a33421`, with a prepared,
-uncommitted merge of main `02180af`. All local changes remain uncommitted.
+`codex/spawn-wait-reconcile-2026-09-08`. Commit `a5c3cac` preserves the local
+implementation and main `02180af`; the next integration commit includes
+main `bd75552` and the strengthened BIOS32 double-fault gate.
 The user explicitly authorized commit/push of this batch on 2026-09-08.
 The approval-pending statements below describe earlier checkpoints. Publication
 will fast-forward the existing draft PR #15 after reconciliation and checks.
@@ -426,3 +428,29 @@ The remote integration branch was still `5a33421`, and remote main was
 now contains `465e075` and journal commit `a3fdb03`; its USB/display changes
 remain separate from this process publication. The original dirty integration
 checkout is preserved. No direct message was sent to Claude.
+
+## Main reconciliation for publication
+
+Checkpoint `a5c3cac` has parents `5a33421` and `02180af`. The subsequent
+merge incorporates `bd75552`, including its BIOS32 double-fault task gate.
+All ten predicted conflicts were resolved: the runtime code merged cleanly;
+existing exact runtime receipts were retained as historical evidence, and
+pure build identity/media IDs were regenerated for the combined source.
+The combined local source identity is
+`2bb71bad60e87e65f45d6fd88d5419c60f735f3659c49878f618b19157638279`.
+This regeneration alone does not prove boot or runtime behavior.
+
+The BIOS32 gate previously admitted four broken variants: deletion, changing
+to the native route, changing to UD2, and removing runtime execution. The
+expanded landing checker rejects all four and passes its existing controls,
+with 125 mandatory seams. The merge preserves the bounded resource waits and
+all four process scenarios. Raw serial evidence now has Git text conversion
+and whitespace repair disabled so the exact recorded hashes remain intact.
+
+The first commit's generated journal entry and main's ledger were both retained.
+Its post-commit claim check reported the local LLVM compiler was missing;
+the full pre-push toolchain build and a direct claim recheck are the next
+verification steps. The roadmap structural recheck passed 7,151 checks.
+Publication will update existing draft PR #15 without rewriting its history.
+Fresh hosted full closure, the full boot matrix and physical qualification
+remain open.

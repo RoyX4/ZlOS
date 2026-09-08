@@ -279,6 +279,9 @@ await_guard || exit 2
 run "CPU double-fault IST capture native UEFI64 QEMU" "$WT/kernel" \
     python3 tools/checks/verify-crash.py --run --route native-uefi64 --fault double-fault --no-build --selftest
 await_guard || exit 2
+run "CPU double-fault task-gate capture BIOS32 QEMU" "$WT/kernel" \
+    python3 tools/checks/verify-crash.py --run --route bios32 --fault double-fault --no-build --selftest
+await_guard || exit 2
 run "app routes QEMU" "$WT/kernel" python3 tools/probes/probe-app-routes.py --no-build \
     --receipt docs/receipts/app-routes-qemu-2026-08-22.json
 await_guard || exit 2

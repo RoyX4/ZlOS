@@ -33,6 +33,17 @@ CASES = {
         "vector": 6, "has_error": 0, "error": 0,
         "symbol_register": None,
     },
+    ("bios32", "double-fault"): {
+        "route": "grub-bios32-qemu",
+        "artifact": "zlOS.iso",
+        "kernel": "kernel.elf",
+        "receipt": "cpu-fault-double-fault-qemu-2026-09-08.json",
+        "uefi": False,
+        "command": "crashdftest",
+        "trigger": "stack-segment fault on a one-byte SS whose delivery faults again, through typed crashdftest diagnostic",
+        "vector": 8, "has_error": 1, "error": 0,
+        "symbol_register": None,
+    },
     ("native-uefi64", "ud2"): {
         "route": "native-uefi64-qemu",
         "artifact": "zlOS-usb.img",
@@ -68,7 +79,7 @@ CASES = {
     },
 }
 SOURCES = ("src/core/crash.c", "src/core/crash.h", "src/arch/x86/idt.c",
-           "boot/gdt64.c",
+           "boot/gdt64.c", "boot/gdt.c",
            "src/graphics/windowing/term.c", "src/kernel.zl",
            "../freestanding/runtime_kernel.c", "tools/checks/verify-crash.py")
 LINE = re.compile(

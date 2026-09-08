@@ -70,6 +70,7 @@ REQUIRED_SNIPPETS = (
     'run "CPU fault capture native UEFI64 QEMU"',
     'run "CPU GP error-code capture native UEFI64 QEMU"',
     'run "CPU double-fault IST capture native UEFI64 QEMU"',
+    'run "CPU double-fault task-gate capture BIOS32 QEMU"',
     'run "app routes QEMU"',
     'run "rail register QEMU"',
     'python3 tools/probes/probe-rail.py --no-build',
@@ -150,6 +151,9 @@ HOST_BUILD_BENCHMARK_GUARD = re.compile(
 )
 
 
+BIOS32_DOUBLE_FAULT = "CPU double-fault task-gate capture BIOS32 QEMU"
+
+
 PROCESS_SCENARIOS = (
     ("userspace child fault and wait QEMU", False, None),
     ("userspace child signed exit and wait QEMU", True, None),
@@ -172,6 +176,12 @@ def failures(source: str, verify_net: str | None = None) -> list[str]:
         if snippet not in code
     ]
     logical_lines = code.replace("\\\n", " ").splitlines()
+    crash_commands = [line for line in logical_lines
+                      if line.startswith('run "' + BIOS32_DOUBLE_FAULT + '"')]
+    if len(crash_commands) != 1 or shlex.split(crash_commands[0])[3:] != [
+            "python3", "tools/checks/verify-crash.py", "--run", "--route", "bios32",
+            "--fault", "double-fault", "--no-build", "--selftest"]:
+        errors.append("BIOS32 double-fault gate is missing, repeated or selects the wrong mode")
     for title, normal_exit, orphan_order in PROCESS_SCENARIOS:
         commands = [line for line in logical_lines if line.startswith('run "' + title + '"')]
         if len(commands) != 1:
@@ -302,6 +312,15 @@ def selftest(source: str) -> None:
         ),
         "deleted-sleeping-user-process-command-gate",
     )
+    expect_failure(source.replace('run "' + BIOS32_DOUBLE_FAULT + '"',
+                                  '# removed BIOS32 double-fault gate', 1),
+                   "deleted-bios32-double-fault-gate")
+    crash_command = ("python3 tools/checks/verify-crash.py --run --route bios32 "
+                     "--fault double-fault --no-build --selftest")
+    for old, new in (("--route bios32", "--route native-uefi64"),
+                     ("--fault double-fault", "--fault ud2"), (" --run", "")):
+        expect_failure(source.replace(crash_command, crash_command.replace(old, new), 1),
+                       "wrong-bios32-double-fault-mode-" + old.strip())
     for title, _normal_exit, _orphan_order in PROCESS_SCENARIOS:
         expect_failure(source.replace('run "' + title + '"', '# removed ' + title, 1),
                        "deleted-" + title.replace(" ", "-"))
@@ -376,7 +395,8 @@ def selftest(source: str) -> None:
         "deleted-userspace-live-orphan-adoption-QEMU, deleted-userspace-terminal-orphan-adoption-QEMU, "
         "wrong-terminal-orphan-order, wrong-spawn-boot-mode-orphan-order, "
         "wrong-spawn-boot-mode-fixtures-only, wrong-spawn-boot-mode-normal-exit, "
-        "deleted-double-fault-gate, "
+        "deleted-double-fault-gate, deleted-bios32-double-fault-gate, "
+        "wrong-bios32-double-fault-route/fault/run-mode, "
         "deleted-bounded-resource-admission, "
         "deleted-synchronized-network-fetch, "
         "restored-network-command-race, masked-final-exit and masked-child-failure"

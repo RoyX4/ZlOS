@@ -10,7 +10,9 @@ process allocator. Its expanded host regression passes 555 checks; the prior
 image was then rebuilt as `52dc8b9c…`. All four parent/child scenarios, the
 native boot gate and the existing fault/exit/sleep probes now pass on that
 repaired image. The BIOS32 Run check and all 47 app lifecycle cycles also pass.
-The full boot matrix, later-main integration and hosted closure remain pending.
+Checkpoint `a5c3cac` is committed and main `bd75552` is reconciled. Fresh
+combined-source verification, the full boot matrix and hosted closure remain
+pending; publication will update draft PR #15.
 
 Full-system planning, 2026-09-08:
 [complete roadmap, phase chapters and next-step checklist](design/FULL-SYSTEM-ROADMAP.md).

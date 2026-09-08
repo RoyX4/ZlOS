@@ -79,9 +79,50 @@ struct tss_entry {
  * process, and that is 64-bit-only work - see docs/reference/system/memory-model.md, Stage 5.
  * Saying "ring 3" and meaning "isolated" is the confusion this comment exists
  * to prevent. */
-static struct gdt_entry gdt[6];
+/* Eight entries since 2026-09-08: 0x30 is the double-fault task's TSS and
+ * 0x38 a one-byte data segment the crashdftest diagnostic loads into SS so
+ * that its next push is a stack-segment fault whose delivery faults again. */
+static struct gdt_entry gdt[8];
 static struct gdt_ptr   gdtp;
 static struct tss_entry tss;
+
+/* THE DOUBLE-FAULT TASK. Long mode has IST; 32-bit protected mode has only
+ * this: a task gate at vector 8 that switches to a second TSS with its own
+ * stack, so #DF can be delivered when the interrupted stack is exactly the
+ * thing that failed. Until 2026-09-08 vector 8 was an ordinary interrupt
+ * gate on the raw/BIOS lane, so a kernel-stack overflow there was a triple
+ * fault - a silent reboot - while the 64-bit lanes got a diagnosed panic. */
+static struct tss_entry df_tss;
+#define DF_STACK_BYTES 16384
+static u8 df_stack[DF_STACK_BYTES] __attribute__((aligned(16)));
+u32 gdt_df_stack_low(void) { return (u32)df_stack; }
+u32 gdt_df_stack_top(void) { return (u32)df_stack + DF_STACK_BYTES; }
+
+/* On the task switch the CPU saves the interrupted context into the task it
+ * left - the main TSS - so the double-fault handler reads it back from here.
+ * Order: eip cs eflags esp ss eax ebx ecx edx esi edi ebp. */
+void gdt_interrupted_context(u32 out[12])
+{
+    out[0] = tss.eip; out[1] = tss.cs;  out[2] = tss.eflags;
+    out[3] = tss.esp; out[4] = tss.ss;
+    out[5] = tss.eax; out[6] = tss.ebx; out[7] = tss.ecx; out[8] = tss.edx;
+    out[9] = tss.esi; out[10] = tss.edi; out[11] = tss.ebp;
+}
+
+void gdt_df_task_init(void (*entry)(void))
+{
+    u8 *p = (u8 *)&df_tss;
+    for (unsigned i = 0; i < sizeof df_tss; i++) p[i] = 0;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(df_tss.cr3));   /* unused with PG=0, but exact */
+    df_tss.eip    = (u32)entry;
+    df_tss.eflags = 0x2;                    /* IF clear: the task runs with interrupts off */
+    df_tss.esp    = gdt_df_stack_top();
+    df_tss.esp0   = gdt_df_stack_top();
+    df_tss.ss0    = 0x10;
+    df_tss.cs     = 0x08;
+    df_tss.ss = df_tss.ds = df_tss.es = df_tss.fs = df_tss.gs = 0x10;
+    df_tss.iomap_base = sizeof df_tss;
+}
 
 /* The ring-0 stack the CPU switches to on entry from ring 3. It is a dedicated
  * 16 KiB, not the boot stack: the boot stack is whatever raw_entry.S or GRUB
@@ -122,6 +163,14 @@ void gdt_init(void)
      * 4 KiB granularity would describe a TSS 4096 times too large, which the
      * CPU accepts and then reads garbage out of. */
     set_entry(5, (u32)&tss, sizeof(tss) - 1, 0x89, 0x00);
+    /* 0x30: the double-fault task (gdt_df_task_init fills the TSS itself;
+     * idt_init calls it with the handler before installing the task gate).
+     * 0x38: base 0, limit 0, byte granularity - a ONE-byte writable segment.
+     * Loading it into SS is legal; the first push is then outside the limit
+     * (#SS), and delivering #SS pushes onto that same stack (#SS again), which
+     * is a double fault. crash_test_df uses it; nothing else names it. */
+    set_entry(6, (u32)&df_tss, sizeof(df_tss) - 1, 0x89, 0x00);
+    set_entry(7, 0, 0x00000000, 0x92, 0x00);
 
     /* Zero it by hand - .bss is zeroed on both boot paths, but gdt_init() is
      * also callable twice and a stale esp0 is a fault that only happens after

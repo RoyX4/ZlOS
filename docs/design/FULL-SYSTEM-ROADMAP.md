@@ -20,7 +20,7 @@ Start with this page. Use the phase chapters for implementation work, the decisi
 
 ## Baseline and where work happens
 
-Current implementation checkout: `/home/roy/Documents/repos/zl-linux-spawn-wait-2026-09-08`, branch `codex/spawn-wait-reconcile-2026-09-08`, with a pending uncommitted merge of main `02180af`.
+Current implementation checkout: `/home/roy/Documents/repos/zl-linux-spawn-wait-2026-09-08`, branch `codex/spawn-wait-reconcile-2026-09-08`, with process checkpoint `a5c3cac` and a reconciled merge of main `bd75552`; fresh hosted verification is pending.
 
 Original planning checkpoint: `/home/roy/Documents/repos/zl-linux-integration-2026-09-06`, branch `codex/integrate-sweep-process`, starting commit `5a33421361c447b0a42fea75f2f82682630de2ca`. The separate `/home/roy/Documents/repos/zl` checkout is the language repository and is not this work location.
 
