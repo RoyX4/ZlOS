@@ -1,13 +1,13 @@
 {
   "schema": "zlos.physical-page-allocator-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_TYPED_ALLOCATOR_WITH_OPEN_GAPS",
-  "build_identity": "a71ce35ce558e982c4db79c577df9139af90acf23e7f6516bc26687dbd6556ba",
+  "build_identity": "e98f55543ae760d47021af78f2fed244562a1c55d5711b1b927b8d91001d4d02",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "d4f69ee71e05fbffde8ebb424f1ad647c84ca3b7dcf5eb839a0b4ac597340be8"
+    "sha256": "9519337a374ad218c0fe2123e0876ee3bb6f3729aafc6a54434f331826f6e8a2"
   },
-  "boot_log_sha256": "5660365d0acd0d846679206adbbb66db41eb883f665651ea583bbc61ba910ac0",
+  "boot_log_sha256": "7c7f67eae7cb44547ec668da6badbdfd39d611a278609e440e3316271809c659",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -23,11 +23,11 @@
     },
     {
       "path": "freestanding/runtime_kernel.c",
-      "sha256": "238c51e14d93b0969b4ac4c2bd8ffccd54ff12db25a1ed577cd88b4edf130d59"
+      "sha256": "1e18cbd936bae6f15161fd9192a00c6be9d2da2981801da54c70c3c5a1c5cc32"
     },
     {
       "path": "kernel/src/kernel.zl",
-      "sha256": "312401895ad0c2a8f9ebde8b3b420b87404d7fc61aee409f122f01bcb4e4e78b"
+      "sha256": "c36a72b5da75e8464ffb9d051b0692890dfdf46960c98c8a672296e3f363a658"
     },
     {
       "path": "kernel/tests/host/pmmtest.c",
@@ -36,14 +36,14 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "274aa334f7a0a1022803deedd8eb2e8c4ca42323498c7cd57da23cbb988227dd",
-    "target_id": "HT-058",
+    "sha256": "afc87752a1e78b58353a2e750a00dba1846234c8163a80c72308c3973795bf80",
+    "target_id": "HT-059",
     "target": "pmmtest",
     "checks": 177
   },
   "consumer_receipt": {
     "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-    "sha256": "0d0b1727212704a4f740a314aa8fe797f2c9cc7bfc69f0471b9b6f1bcf13b7da",
+    "sha256": "238992b8516bd4267a4c4ee9fb593630516eb2229319fe5c593378cc0e31ba8d",
     "assertions": [
       "process-frame-reclamation",
       "anonymous-reserve-commit-release",
@@ -56,8 +56,8 @@
       "id": "bounded-firmware-map-admission",
       "managed_floor_bytes": 335544320,
       "managed_limit_bytes": 1073741824,
-      "admitted_pages": 168143,
-      "free_pages_after_selftest": 168143,
+      "admitted_pages": 168134,
+      "free_pages_after_selftest": 168134,
       "firmware_conventional_memory_only": true,
       "fixed_zlos_region_excluded": true
     },

@@ -263,6 +263,15 @@ int xhci_find(void)
         xrt      = xbase + (rd32(xbase + XCAP_RTSOFF) & ~0x1Fu);
         xslots   = (int)(hcs1 & 0xFF);
         xports   = (int)((hcs1 >> 24) & 0xFF);
+        /* Per-port state here is 32 bits wide (port_slot[32], the re-plug
+         * bitmaps). A controller advertising more ports than that would have
+         * its high ports silently unmanaged - clamp, and say so. Real
+         * controllers stop around 26 (2026-09-08). */
+        if (xports > 31) {
+            zlt_event(ZLLOG_SUB_USB, ZLLOG_EV_DRIVER_STATE, ZLLOG_WARN,
+                      1u, (unsigned)xports, 31u);
+            xports = 31;
+        }
         /* CSZ: with it set every context structure is 64 bytes instead of 32.
          * Getting this wrong means every context field lands at the wrong
          * offset and nothing works, in a way that is very hard to see. */
@@ -702,6 +711,9 @@ static void kbd_event(u32 param, u32 status, u32 ctrl);  /* stage 5, below */
 static int ecm_event(u32 param, u32 status, u32 ctrl);   /* CDC-ECM, below */
 static int ecm_ready;
 static int ecm_port;           /* defined with the ECM state below; needed by port_owned_live */
+static int ecm_tx_inflight;    /* likewise */
+static int msc_ready;          /* mass storage, defined below; needed by port_detach */
+static int msc_init_port;
 
 /* Wait for the completion of ONE SPECIFIC command.
  *
@@ -2791,6 +2803,27 @@ static int replug_scans_found;      /* plugs the scan noticed that no event did 
 #define REPLUG_SCAN_TICKS 50u       /* 0.5 s at the 100 Hz PIT */
 #define REPLUG_DEBOUNCE_TICKS 12u   /* 120 ms at the 100 Hz PIT */
 
+static int port_owned_live(int port)
+{
+    if (kbd_ready && port == kbd_port) return 1;
+    if (ptr_ready && port == ptr_port) return 1;
+    if (ecm_ready && port == ecm_port) return 1;
+    if (msc_ready && port == msc_init_port) return 1;
+    return 0;
+}
+
+/* Everything a port's device held, released; its slot given back. The ECM
+ * and mass-storage drivers had no unplug path at all: forgetting the slot
+ * under them left ecm_rx_post ringing a disabled slot (2026-09-08). */
+static void port_detach(int port)
+{
+    if (kbd_ready && port == kbd_port) kbd_detach();
+    if (ptr_ready && port == ptr_port) ptr_detach();
+    if (ecm_ready && port == ecm_port) { ecm_ready = 0; ecm_tx_inflight = 0; }
+    if (msc_ready && port == msc_init_port) msc_ready = 0;
+    xhci_forget_port(port);
+}
+
 static void port_change(u32 param)
 {
     int port = (int)((param >> 24) & 0xFF);
@@ -2804,6 +2837,16 @@ static void port_change(u32 param)
      * every RW1C bit, so this write clears nothing it did not intend to. */
     wr32(reg, portsc_keep(port) | (v & PORTSC_RW1C));
     if (v & PORTSC_CCS) {
+        /* A BOUNCE: connected now, but the connect-status bit says it changed.
+         * The controller posts one event per 0->1 edge of CSC, so an unplug
+         * and re-plug that both happened before this read arrive as ONE event
+         * with CCS set. On a port a live device owns that is not "still
+         * here", it is "a different attachment": the device is back at
+         * address 0 and the old slot is dead. Detach and forget first, then
+         * treat it as the plug it also is (2026-09-08 adversarial pass). A
+         * port owned by a live driver never carries a stale CSC, because
+         * xhci_port_reset acknowledges every change bit on the way up. */
+        if ((v & PORTSC_CSC) && port_owned_live(port)) port_detach(port);
         if ((v & PORTSC_CSC) && port < 32) {
             replug_pending |= 1u << port;
             replug_seen_tick[port] = idt_ticks();
@@ -2812,10 +2855,8 @@ static void port_change(u32 param)
     }
     /* gone: release what it held, and give its slot back to the controller
      * so the next enumeration of this port cannot be handed the dead one */
-    if (kbd_ready && port == kbd_port) kbd_detach();
-    if (ptr_ready && port == ptr_port) ptr_detach();
+    port_detach(port);
     if (port < 32) replug_pending &= ~(1u << port);
-    xhci_forget_port(port);
 }
 
 u32 xhci_replug_pending(void) { return replug_pending; }
@@ -2834,13 +2875,6 @@ int xhci_kbd_port(void)       { return kbd_port; }
 
 /* Bring back whatever was plugged in, once the debounce has passed. Runs from
  * xhci_poll(), i.e. once per frame, never from the event handler. */
-static int port_owned_live(int port)
-{
-    if (kbd_ready && port == kbd_port) return 1;
-    if (ptr_ready && port == ptr_port) return 1;
-    if (ecm_ready && port == ecm_port) return 1;
-    return 0;
-}
 
 static void replug_scan(u32 now)
 {
@@ -2851,8 +2885,14 @@ static void replug_scan(u32 now)
     for (int port = 1; port < 32 && port <= xports; port++)
         if (xhci_port_connected(port)) conn |= 1u << port;
     u32 fresh = conn & ~port_conn_seen;
+    u32 gone  = port_conn_seen & ~conn;
     port_conn_seen = conn;
     if (first) return;                  /* baseline only: what is plugged at bring-up was enumerated by bring-up */
+    /* the symmetric miss: a device that left without an event. Its owner
+     * would otherwise keep a dead slot and mistake the next plug for a
+     * bounce on a live port (2026-09-08 adversarial pass) */
+    for (int port = 1; port < 32; port++)
+        if ((gone & (1u << port)) && port_owned_live(port)) { port_detach(port); replug_scans_found++; }
     for (int port = 1; port < 32; port++) {
         if (!(fresh & (1u << port))) continue;
         if (port_owned_live(port)) continue;
@@ -4051,6 +4091,7 @@ int xhci_ecm_device_class_candidate(int cls)
 int xhci_ecm_init(void)
 {
     if (ecm_ready) return 1;
+    ecm_tx_inflight = 0;                /* a new slot rebuilds the OUT ring; the old TRB can never complete on it */
     ecm_init_stage = 1;
     ecm_config_index = -1;
     ecm_parse_bits = 0;

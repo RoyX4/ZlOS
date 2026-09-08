@@ -134,7 +134,9 @@ host-verified, and awaiting its build/boot chain before commit:
 - [x] USB re-plug re-enumeration (2026-09-08; `verify-usb-replug.py` both routes; no hub support)
 - [x] Intel GGTT PTE save/restore (`ggttest`); ECM TX reuse (in-flight hold); 64-bit
       multiboot BAR above 4 GiB (`vmm_walk_present`, refused not faulted) - 2026-09-08
-- [ ] Intel PSR teardown order; physical ThinkPad boot
+- [ ] Intel PSR teardown order: deliberately NOT changed (the measured order is what
+      stopped the i915 hang); needs the laptop's host loop to test - see the receipt
+- [ ] physical ThinkPad boot (Zac; every fix since 2026-09-04 has only QEMU evidence)
 - [ ] seven of eight generated registries fail `--check` on `main` between
       landings (measured 2026-09-06; recorded in GUARDS §6, not changed)
 

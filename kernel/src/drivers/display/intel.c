@@ -1113,7 +1113,7 @@ int intel_wait_vblank(void)
  * is ever present with the wrong high half. One range is held at a time:
  * the bring-up maps exactly one, and a second call while one is held is
  * refused rather than merged, because a merge is where a restore goes wrong. */
-#define GGTT_SAVE_MAX 4096u                  /* 16 MiB of scanout at 4 KiB */
+#define GGTT_SAVE_MAX 16384u                 /* 64 MiB of scanout at 4 KiB: a 4K panel is 8100 pages, a 40 MiB back buffer 10240 */
 static u32 ggtt_saved[GGTT_SAVE_MAX][2];
 static u32 ggtt_saved_first, ggtt_saved_pages;
 static int ggtt_saved_held;
@@ -1127,6 +1127,22 @@ int intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages)
      * `phys_addr + i * 4096` are u32 sums that can wrap before it ever sees
      * them - and a wrapped pair is a perfectly valid-looking mapping of the
      * wrong page to the wrong frame. Refuse the whole range up front. */
+    if ((u32)pages > 0xFFFFFFFFu - gfx_page) return 0;
+    if ((u32)pages > (0xFFFFFFFFu - phys_addr) / 4096u) return 0;
+    for (int i = 0; i < pages; i++)
+        if (!intel_ggtt_map(gfx_page + (u32)i, phys_addr + (u32)i * 4096u)) return 0;
+    return 1;
+}
+
+/* The bring-up's variant: the same mapping, with the firmware's entries
+ * saved first so the teardown can put them back. ONLY intel_bringup_panel
+ * calls this. The plain intel_ggtt_map_range above holds nothing - the
+ * compositor maps its back and scan buffers back to back (gpuring.c), the
+ * cursor and the self-test map more, and a hold on the plain call refused
+ * every one of them (found by the 2026-09-08 adversarial pass). */
+int intel_ggtt_map_range_saved(u32 gfx_page, u32 phys_addr, int pages)
+{
+    if (!intel_present() || pages <= 0) return 0;
     if ((u32)pages > 0xFFFFFFFFu - gfx_page) return 0;
     if ((u32)pages > (0xFFFFFFFFu - phys_addr) / 4096u) return 0;
     if (ggtt_saved_held) return 0;            /* one range at a time */
@@ -4541,7 +4557,13 @@ uptr intel_bringup_panel(void)
         u32 ggtt = intel_ggtt_size();                 /* table bytes, 8/page */
         if (!ggtt || (gfx >> 12) > ggtt / 8u - pages) return 0;
     }
-    if (!intel_ggtt_map_range(gfx >> 12, stolen + skip, (int)pages)) return 0;
+    if (!intel_ggtt_map_range_saved(gfx >> 12, stolen + skip, (int)pages)) {
+        /* Before intel_modeset_run, so failed_at is never set: say so, or
+         * this is a silent "FAILED" with no step (2026-09-08). */
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                  4u, 3u /* ggtt window */, pages);
+        return 0;
+    }
 
     if (!intel_modeset_set_fb(gfx, stride)) return 0;
 

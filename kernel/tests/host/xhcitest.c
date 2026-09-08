@@ -1231,14 +1231,23 @@ static void test_unplug_releases_keys_and_modifiers(void)
     prev_keys[0] = 0x04;                   /* 'a' held */
     uptr reg = xop + XOP_PORTSC(3);
 
-    /* a change on ANOTHER port, and a change that leaves CCS set, do nothing */
+    /* a change on ANOTHER port does nothing to the keyboard */
     wr32(xop + XOP_PORTSC(2), PORTSC_CSC);
     ctl_post_event(2u << 24, 0, TRB_PORT_STATUS << 10);
+    xhci_poll(4);
+    ok("a change on another port leaves the keyboard alone", kbd_ready == 1 && kbd_mods == 0x02);
+    /* a change on OURS with CCS still set is a bounce - the device left and
+     * came back before we looked - so it is an unplug (below) and a plug.
+     * (Until the 2026-09-08 adversarial pass this case expected "still
+     * connected, leave it": a dead slot kept as live.) */
     wr32(reg, PORTSC_CCS | PORTSC_PED | PORTSC_CSC);
     ctl_post_event(3u << 24, 0, TRB_PORT_STATUS << 10);
     xhci_poll(4);
-    ok("a change on another port leaves the keyboard alone", kbd_ready == 1);
-    ok("...and so does a change on ours with the device still connected", kbd_ready == 1 && kbd_mods == 0x02);
+    ok("a change on ours with CCS still set is a bounce: detached", kbd_ready == 0 && kbd_mods == 0);
+    ok("...and queued as a plug", (xhci_replug_pending() & (1u << 3)) != 0);
+    /* re-arm the held keyboard for the unplug case below */
+    kbd_ready = 1; kbd_mods = 0x02; prev_keys[0] = 0x04; kevq_head = kevq_tail = 0;
+    replug_pending = 0;
     /* The fake's PORTSC is plain memory, so a write-1-to-clear cannot be seen
      * as a cleared bit. What CAN be seen: the driver writes the register back
      * through portsc_keep(), which drops PED (bit 1) - so PED gone proves the
@@ -1344,6 +1353,60 @@ static void test_unplug_releases_keys_and_modifiers(void)
     fake_ticks += 60;
     xhci_poll(4);
     okv("a port that stays connected is not queued twice", xhci_replug_scans_found(), 1);
+
+    /* A BOUNCE: one event, CCS still set, CSC set, on a port a live keyboard
+     * owns. That is an unplug and a re-plug seen as one; the old slot is
+     * dead. */
+    printf("\na bounce on an owned port is an unplug and a plug\n");
+    driver_reset();
+    xports = 4; owned = 1;
+    kbd_port = 3; kbd_slot = KBD_SLOT; kbd_ready = 1; kbd_mods = 0x02; port_slot[3] = KBD_SLOT;
+    ring_init(XMEM_CMDRING); cmd_enqueue = 0; cmd_cycle = 1;
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);    /* Disable Slot completes */
+    wr32(xop + XOP_PORTSC(3), PORTSC_CCS | PORTSC_PED | PORTSC_CSC);
+    ctl_post_event(3u << 24, 0, TRB_PORT_STATUS << 10);
+    fake_ticks = 9000;
+    xhci_poll(4);
+    okv("the keyboard is detached", kbd_ready, 0);
+    okv("...its modifiers released", (int)kbd_mods, 0);
+    okv("...its slot forgotten", port_slot[3], 0);
+    okv("...and the port queued as a plug", (int)xhci_replug_pending(), 1 << 3);
+
+    /* An unplug the ring never announced: the scan sees the owner's port
+     * go dark and detaches, so the next plug is not mistaken for a bounce
+     * on a live port. */
+    printf("\nan unplug with no event is found by the port scan\n");
+    driver_reset();
+    xports = 4; owned = 1;
+    kbd_port = 3; kbd_slot = KBD_SLOT; kbd_ready = 1; port_slot[3] = KBD_SLOT;
+    ring_init(XMEM_CMDRING); cmd_enqueue = 0; cmd_cycle = 1;
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);
+    wr32(xop + XOP_PORTSC(3), PORTSC_CCS | PORTSC_PED);
+    fake_ticks = 12000;
+    xhci_poll(4);                                          /* baseline: port 3 connected */
+    wr32(xop + XOP_PORTSC(3), 0);                          /* gone, silently */
+    fake_ticks += 60;
+    xhci_poll(4);
+    okv("the scan detaches the keyboard whose port went dark", kbd_ready, 0);
+    okv("...and forgets its slot", port_slot[3], 0);
+
+    /* ECM: an unplug of its port drops it; a re-init releases a TX hold left
+     * by a send that timed out on the old slot. */
+    printf("\nECM unplug and re-init\n");
+    driver_reset();
+    xports = 4; owned = 1;
+    ecm_ready = 1; ecm_slot = 5; ecm_port = 2; ecm_tx_inflight = 1; port_slot[2] = 5;
+    ring_init(XMEM_CMDRING); cmd_enqueue = 0; cmd_cycle = 1;
+    ctl_post_event(XMEM_CMDRING, 1u << 24, TRB_CMD_COMPLETION << 10);
+    wr32(xop + XOP_PORTSC(2), PORTSC_CSC);
+    ctl_post_event(2u << 24, 0, TRB_PORT_STATUS << 10);
+    xhci_poll(4);
+    okv("unplugging the ECM's port drops it", ecm_ready, 0);
+    okv("...and releases the TX hold", ecm_tx_inflight, 0);
+    okv("...and forgets its slot", port_slot[2], 0);
+    ecm_tx_inflight = 1; ecm_ready = 0;
+    (void)xhci_ecm_init();                                  /* finds nothing on the fake; must still reset the hold */
+    okv("a re-init releases a stale TX hold", ecm_tx_inflight, 0);
 }
 
 /* ONE TX BUFFER: a send that timed out is still in flight, and the next send

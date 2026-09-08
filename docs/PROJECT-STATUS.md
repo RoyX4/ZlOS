@@ -21,7 +21,7 @@ implementation state. They are not the same thing.
    `fable/whole-tree-sweep` with the gate that now pins it, the claims that
    survived, and what stayed open (physical boot above all).
    [`GUARDS-THAT-DID-NOT-GUARD.md`](GUARDS-THAT-DID-NOT-GUARD.md) §6 lists
-   the sixteen checks that sweep found reporting green while checking nothing (two added 2026-09-06).
+   the seventeen checks that sweep found reporting green while checking nothing (two added 2026-09-06, one 2026-09-08).
 8. [`oracle-harnesses-for-driver-verification.md`](oracle-harnesses-for-driver-verification.md)
    is the verification-harness plan for the H2 driver work: the phase-keyed modeset
    conformance oracle, IOMMU-as-verdict, and device-model fidelity — plus three harness
