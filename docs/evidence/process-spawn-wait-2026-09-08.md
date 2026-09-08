@@ -3,9 +3,10 @@
 Status: combined source `2bb71bad…` passes the rebuilt host suite, native
 UEFI boot, all four parent/child scenarios and existing external fault/exit/sleep
 probes. Published commit `4e7e283` includes main `bd75552` and the local launcher
-repair. Its ordinary hosted code, host and boot checks passed. Docs and the first
-full-closure run exposed evidence/documentation failures; the follow-up below
-repairs them. Complete hosted closure and the combined app matrix remain pending.
+repair. Follow-up `c546efc` passes all 20 ordinary hosted checks and the repaired
+sleep-evidence boundary. Its full run then stopped on an unavailable old runner
+dependency; the provisioning correction below addresses that failure. Complete
+hosted closure and the combined app matrix remain pending.
 Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`. No feature maturity promotion.
 
 The user accepted the full roadmap and authorized implementation on 2026-09-08.
@@ -549,3 +550,36 @@ The native/raw boot receipts refreshed by the successful pre-push run remain
 bound to its actual `4e7e283` source context and artifact hashes.
 A new full hosted closure must pass on the follow-up commit before this slice
 can be called integration-ready. No physical qualification is claimed.
+
+
+## Rolling runner dependency recovery, 2026-09-09
+
+Follow-up `c546efc3799807b0bb066fe04556c84b8babe327` was committed and
+normally pushed. All five pre-push gates passed in 460.41 monotonic seconds;
+the remote branch matched the exact commit. All 20 ordinary GitHub checks
+succeeded, including the previously failing docs job. The optional model-review
+workflow's success is not asserted as an independent code review.
+
+[Full run 34289622251](https://github.com/RoyX4/ZlOS/actions/runs/34289622251)
+passed the runner, allocator, sleep, toolchain and FP rejection boundaries,
+then failed while recovering binary archive 116 of 159: `libseccomp2:amd64`
+version `2.6.1-1`. The captured installed-package lock records that old version.
+The old archive returns HTTP 404, while current `2.6.1-1+b1` returns HTTP 200.
+A read-only APT simulation against the same installed old version selects the
+current binary when upgrading; no laptop packages were changed.
+
+Installing named tools alone can leave an older base-container dependency
+installed. The hosted workflow now upgrades the disposable rolling container,
+allowing new dependencies, before installing tools and measuring the dependency
+lock. It continues to require exact installed binary/source identities and
+complete offline archive verification. The remedy is provisioning fresh
+installed inputs, not substituting a different binary into an old lock.
+Actual recovery and full runtime closure must pass in a fresh hosted run.
+
+The failed run's uploaded lock and receipts, failed-step log, both live pool
+responses and APT simulation are retained in
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/`.
+All nine generated files from the successful `c546efc` pre-push run were copied
+byte-for-byte into its `post-push-generated/` artifact directory before restoring
+the tracked checkout to the published commit. This preserves exact latest boot
+output without pretending generated source-context changes are runtime edits.

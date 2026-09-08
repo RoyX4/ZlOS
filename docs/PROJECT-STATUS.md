@@ -12,8 +12,11 @@ now uses the same inventory runner as CI and preserves complete native-gate
 failure diagnostics. Normal push published `4e7e283` to draft PR #15; all five
 pre-push checks and ordinary hosted code/host/boot checks passed. The first
 hosted full closure failed at a stale sleep-evidence contract, and docs found
-two path references plus a managed-block error. The follow-up fixes pass local
-checks; fresh hosted closure and the combined app matrix remain pending.
+two path references plus a managed-block error. Published follow-up `c546efc`
+passes all 20 ordinary hosted checks, including docs. Its full run passed the
+repaired boundary tests, then stopped recovering an obsolete dependency from
+the rolling container. The runner now upgrades its packages before recording
+the dependency lock; fresh full closure and the combined app matrix remain pending.
 Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`.
 
 Full-system planning, 2026-09-08:

@@ -38,6 +38,9 @@ jobs:
       - name: install the measured Kali toolchain
         run: |
           apt-get update -qq
+          # The rolling container can retain base packages already removed from
+          # the pool. Upgrade before measuring the exact installed archive set.
+          DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq --with-new-pkgs
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
             ca-certificates curl git build-essential gcc-multilib \
             clang llvm lld nasm binutils \
