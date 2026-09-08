@@ -115,4 +115,24 @@ Two corrections worth keeping, both cost real time:
   land on the screen, which is why the command prints `RING_CTL`, `HEAD`, `TAIL`
   and the pixel count rather than a verdict.
 
+### Whole-tree sweep, follow-up batch (2026-09-06 .. 08)
+
+Sweep landed on `main` and pushed (`9212979`). The follow-up batch is written,
+host-verified, and awaiting its build/boot chain before commit:
+
+- [x] `zllog_e2e_test.py` wired in as `zllog-e2e.sh` (passed 5/5 on first run)
+- [x] `dpll_test` relinked and built by `tests/host/build.sh` (manual-hardware)
+- [x] `settingstest_zlfs`: the zlfs persistence branch, 30 cases; corrupt zlfs
+      record now named as the file, not "LBA 64"
+- [x] xHCI unplug detaches keyboard/pointer, releases held keys and modifiers
+- [x] `check-memmap.sh`: kernel.zl address above `ZL_LOW_END` is a FAIL, with a
+      planted-defect selftest
+- [x] one TSS per core on the 64-bit lanes (`gdt64.c`, `smp.c`, `gdt64test`)
+- [ ] 32-bit lane #DF task gate + a `bios32` double-fault route in `verify-crash.py`
+- [ ] USB re-plug re-enumeration (needs the Terminal `usb` command today)
+- [ ] Intel GGTT PTE save/restore; PSR teardown order; ECM TX reuse; 64-bit
+      multiboot BAR above 4 GiB; physical ThinkPad boot
+- [ ] seven of eight generated registries fail `--check` on `main` between
+      landings (measured 2026-09-06; recorded in GUARDS §6, not changed)
+
 <!-- END HAND-WRITTEN -->

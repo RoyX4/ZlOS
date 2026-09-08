@@ -43,7 +43,8 @@ u32  intel_dpll_status(void); u32 intel_pwr_well_driver(void); u32 intel_dc_stat
 
 static int cfg_fd = -1;
 u32 host_cfg_read(int b,int d,int f,int o){(void)b;(void)d;(void)f;u32 v=0;
-  if(cfg_fd>=0&&pread(cfg_fd,&v,4,o)==4)return v;return 0;}
+  if(cfg_fd>=0&&pread(cfg_fd,&v,4,o)==4)return v;
+  return 0;}
 /* intel.c needs real timing now (cpu.c provides it in the kernel; here we are
  * a Linux process, so nanosleep is both simpler and more accurate than any
  * spin). Without these three the link fails at cpu_delay_us. */
@@ -66,6 +67,12 @@ int pci_device(int i){(void)i;return 0;} int pci_class(int i){(void)i;return 0;}
 void pci_scan(void){} void pci_enable(int i){(void)i;}
 u32 pci_bar(int i,int w){(void)i;(void)w;return 0;}
 u32 pci_bar_size(int i,int w){(void)i;(void)w;return 0;}
+u32 pci_bar_hi(int i,int w){(void)i;(void)w;return 0;}
+/* intel.c moves the console onto the new scanout after a modeset; a DPLL
+ * program never reaches that, but the symbol must resolve (added 2026-09-06:
+ * this file had not linked since intel.c grew pci_bar_hi/console_init_fb). */
+void console_init_fb(unsigned long long addr,u32 pitch,u32 width,u32 height,u32 bpp)
+{ printf("  [console would move to 0x%llX, %ux%u, pitch %u, %u bpp]\n",addr,width,height,pitch,bpp); }
 u32 pci_read32(int b,int d,int f,int o){return host_cfg_read(b,d,f,o);}
 
 int main(int argc,char**argv)

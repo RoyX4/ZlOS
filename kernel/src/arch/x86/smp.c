@@ -117,6 +117,7 @@ struct ap_slot {
     volatile u32 done;         /* bumped by the AP: finished it              */
     volatile u32 wakes;
     int apic_id;
+    int tr;                    /* task register after gdt64_ap_init (64-bit) */
     int monitor_wait;
     fb_band_fn   fn;
     void        *ctx;
@@ -169,6 +170,22 @@ void smp_ap_main(void)
     if (slot < 1 || slot >= SMP_SLOTS) {
         for (;;) __asm__ volatile("cli; hlt");   /* more cores than slots    */
     }
+#ifdef ZL_64
+    /* Our GDT and this core's own TSS. The trampoline GDT has no TSS, and
+     * without one the #DF gate's IST1 is unreadable: a stack overflow here
+     * was a triple fault. Refuse to go live if TR did not take - a core with
+     * no TSS must not be counted as a band (2026-09-06). */
+    {
+        extern void gdt64_ap_init(int);
+        extern unsigned short gdt64_tss_selector(int);
+        gdt64_ap_init(slot);
+        unsigned short tr = 0;
+        __asm__ volatile("str %0" : "=r"(tr));
+        ap_slots[slot].tr = (int)tr;
+        if (tr != gdt64_tss_selector(slot))
+            for (;;) __asm__ volatile("cli; hlt");
+    }
+#endif
     ap_slots[slot].seq = ap_slots[slot].done = 0;
     ap_slots[slot].wakes = 0;
     ap_slots[slot].apic_id = id;
@@ -250,6 +267,7 @@ u32 smp_band_wakes(void)
     return n;
 }
 int smp_last_id(void)   { return ap_last_id; }
+int smp_slot_tr(int i)  { return (i >= 1 && i <= ap_slots_live) ? ap_slots[i].tr : 0; }
 u32 smp_mask(void)      { return ap_mask | 1u; }
 int smp_ready(void)     { return smp_started; }
 int smp_tramp_size(void){ return (int)(TRAMP_END - TRAMP_BEGIN); }

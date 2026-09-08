@@ -1,12 +1,12 @@
 {
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
-    "branch": "fable/whole-tree-sweep",
+    "branch": "main",
     "dirty": true,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "8fb1425777b184c762686a12161e3faf37e2095a"
+    "head": "921297911b340790cd8fd11635f28760cd89f67e"
   },
-  "identity_sha256": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "identity_sha256": "8b64cc2be3277323aefb7a3fc3a2bb9fd568bd760608793dd37cd0ac7fcc9ac2",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -33,7 +33,7 @@
     "kernel/boot/boot64.S": "56f7198cf6823afb69b63ab28684f8e61c38617571f07a3f3c17109ad1eb6e38",
     "kernel/boot/efi.c": "a929fa24338964571a4adab4d10916fe79a279c85451bb7375ba2e2dab69b41e",
     "kernel/boot/gdt.c": "4d367201d9be5cb0527784cefe3f89f4c66dda1d5572b255b540ad4755c3b6aa",
-    "kernel/boot/gdt64.c": "2789dc982dc7788d9cd8166aac59ccc4a0d60a166194fb4a08f7cbd0f2da70c3",
+    "kernel/boot/gdt64.c": "22362c5f2e7dd4f2abfed55694c8b3f93da0e3af1a3de2cdb52c5ecfc0d25284",
     "kernel/boot/link-raw.ld": "21dedfe1aec2e9a6064edfeb0fcf3ff379bbc3e871fe6530f99c9012b145e39c",
     "kernel/boot/link.ld": "4e7e4d8b6647d6653194ce97898d22edf160e0750d49942b3a9ada593340bae1",
     "kernel/boot/link64.ld": "3417945aa0616e311948d7a24033d8f67a0cd4d8ad29b759da0cb17f331f50fb",
@@ -56,7 +56,7 @@
     "kernel/src/arch/x86/paging.c": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
     "kernel/src/arch/x86/pci.c": "3edf9a875df14e3169d2b1aadb1e0c8c33abf3bd4c668777bcec535b21064983",
     "kernel/src/arch/x86/rtc.c": "03ebec78424f83a56717153b62484d76f1a1529bc7afdf5755989f0e88678b7a",
-    "kernel/src/arch/x86/smp.c": "ac7be937446b8fc696d0e1c91d85aae4208616d7cdd840138720e5e9495afc44",
+    "kernel/src/arch/x86/smp.c": "13249a42ddf6e9a684559dbb2aa721c20efc8f38c104c5e1f7d12633a8fab112",
     "kernel/src/arch/x86/support.c": "38dbcbe6ff360269f1bee94bc92dbb43a655d52596134b2030eb987d179c5053",
     "kernel/src/arch/x86/user_syscalls.json": "b7ad9c0a9567aec99e4c9d0a4203c5eb40312e9a6cf1fef267249729a4f701f5",
     "kernel/src/arch/x86/user_syscalls_generated.h": "16a8d11cb53e04cecdedd7b80c50aa6f1f2957101760153e0eac299d67ba9f6a",
@@ -100,7 +100,7 @@
     "kernel/src/drivers/input/i2c_touch.h": "c5fe14df2d9d9c050e03cc86469f50d515b6664866238bf773f27ec64664e52d",
     "kernel/src/drivers/input/input.c": "0be186ae96959ad536bfe6268df3b2c3d6b233a597fb79be955298baf0be0892",
     "kernel/src/drivers/input/keycodes.h": "e0ecb92e323475d21a4558f1dece6329dd4f7b17f6fac69b940daa560954e620",
-    "kernel/src/drivers/input/xhci.c": "7a7ad5b19a8cbe76bcf79492320220c24faa29a3d8ecd240553cea8b0fd1afa0",
+    "kernel/src/drivers/input/xhci.c": "d8e455994b56530a4e484523526d4ee32b1e176fae9258417f5906adf7bc83ac",
     "kernel/src/drivers/network/e1000.c": "f8a6d539a59453bce762cee89a06610af4636f552d3666f9ed70d75ff69d7086",
     "kernel/src/drivers/network/e1000.h": "2494d5ea9be18739f42903e04f69c5f0c56972da515b33cb0f67d1831b2b93ec",
     "kernel/src/drivers/network/iwlwifi.c": "4369558ad415d29a82386535e00aaf35f6138808297b021cf48e1b76ab537e45",
@@ -127,7 +127,7 @@
     "kernel/src/graphics/ui/ease.c": "e26757324e1ea7387eef66d5125dbb39fca059ba03d63d20e253be95e802dc50",
     "kernel/src/graphics/ui/ease.h": "531874c24f0225e1b7ac7dd980540ad089e7249a861cf2cf2c17938a3c2a65bf",
     "kernel/src/graphics/ui/notify.c": "1dc517f49bf2e0ee8a7309caf169cd0166f8d8e4ae6081d3906ecbd61c78632e",
-    "kernel/src/graphics/ui/settings.c": "bec8d5eee5d2525e108e592d528b5ecba7024ea46c18f59c2479b59e89da3397",
+    "kernel/src/graphics/ui/settings.c": "8c2c38bba9b671478a55205fb407cf292106b36e982ad7f0fd858d72fe5050d6",
     "kernel/src/graphics/ui/snap.c": "365b0c5503f38e3f92e3c7eaf1d757a190f212990275c9fea1910310aa34f28d",
     "kernel/src/graphics/ui/ui.c": "9dfc1dae3a28c614891af268df923f17631b8232d84a9ccd74811e1e965750c8",
     "kernel/src/graphics/ui/ui.h": "bbeb47fd8dd459c1e2cd8ab93481baf526977b85e4f48e312276dc45006d78ab",

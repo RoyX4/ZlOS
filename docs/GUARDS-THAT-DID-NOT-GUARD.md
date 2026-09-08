@@ -1,6 +1,6 @@
 # Guards that did not guard
 
-Written 2026-08-19; §6 added 2026-09-04. Five checks in this tree (nineteen with
+Written 2026-08-19; §6 added 2026-09-04. Five checks in this tree (twenty-one with
 §6) that reported green, or read as coverage, while checking nothing — each with the command that establishes it.
 
 This is not a list of embarrassments. It is a list of **shapes**, because the
@@ -265,7 +265,7 @@ bites even when nobody edits the same file.
 
 ---
 
-## 6. Seven more, from the 2026-09-04 whole-tree sweep
+## 6. Seven more, from the 2026-09-04 whole-tree sweep (two added 2026-09-06)
 
 Same shapes, found by telling reviewers to refute the tree's own claims and
 then reproducing each one before touching code
@@ -293,6 +293,8 @@ And the same day, a reviewer told to break the TEST LAYER itself found these
 | `tlstest` "a real TLS 1.3 handshake" | with no openssl it printed a skip and exited 0; the inventory classes it a gate, so the receipt said PASS. | `run-host-tests.py` policy: exit 0 is pass |
 | `check-ram.sh`, `check-dma.sh`, `wguard.sh` | nothing - not one gate, workflow or runner invoked them, and `check-ram.sh` was red on four false positives the day it was first wired. | grep over `gates/`, `.github/`, `tools/` |
 | `games4_rules.zl`, `games12_rules.zl` (244 checks) | nothing - documented with a cwd from which their imports do not resolve, invoked by no script. | `cd kernel && ../interp hosttest/games4_rules.zl` → module not found |
+| `zllog_e2e_test.py` (5 cases, ASan, torn writes and identity refusal against the shipping `zllog.c`) and `dpll_test.c` (the only DPLL write harness) | nothing - `gen-test-inventory.py` enumerates executable `.sh` files, so a `.py` gate is invisible to it, and a `.c` with no `build.sh` line has no compiled target to classify. Both written 2026-08-30. **2026-09-06:** the Python passed the first time anyone ran it (5/5, 16 s); the C had not linked since `intel.c` grew `pci_bar_hi`/`console_init_fb`. Now `zllog-e2e.sh` (gate, refuses without `sgdisk` instead of unittest's green SkipTest) and a `dpll_test` build line (manual-hardware). | `python3 tests/host/zllog_e2e_test.py`; `gcc ... dpll_test.c intel.c` → undefined reference |
+| The landing gate's `--write` then `--check` pairs (wrapper registry, dependency lock, license registry, toolchain manifest, build graph, source snapshot, test inventory, address-space registry) | that the second run reproduces the first. Not that the registry *in git* was current: **2026-09-06, measured on `main` as pushed, seven of the eight fail `--check`** before the gate's own `--write` (all but the test inventory), because each chains on the build identity that every build regenerates. Between landings the committed registries are stale by design and nothing says so. A pre-write `--check` would be red on every tree not landed from this machine, so this row records the limit rather than adding a check that can only fail. | `for g in gen-*; do python3 tools/generators/$g.py --check; done` on a clean checkout |
 
 Two more that are not guards but the same belief-without-execution: the
 kernel's `task_sleep` was a hint whenever nothing else was runnable

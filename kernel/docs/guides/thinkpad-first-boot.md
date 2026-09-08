@@ -15,15 +15,19 @@ its entry and chainloads the real kernel, `EFI/ZLOS/ZLOS.EFI`, which
 `buildefi.sh` compiles into a PE32+ EFI application. See `HANDOFF.md` §"The USB
 boot flight recorder".
 
-Verify it is ours, not GRUB's, before you write it:
+Verify it is ours, not GRUB's, before you write it, and check **`ZLOS.EFI`,
+not `BOOTX64.EFI`** (corrected 2026-09-01: the command below used to name the
+witness stub, which prints 0 because it is too small to carry the string):
 
 ```bash
 cd ~/Documents/repos/zl-linux/kernel && ./tools/images/mkusb.sh
-mtype -i zlOS-usb.img@@1M ::/EFI/BOOT/BOOTX64.EFI | strings | grep -c zlOS
+mtype -i zlOS-usb.img@@1M ::/EFI/ZLOS/ZLOS.EFI | strings | grep -c zlOS
 ```
 
-That should print a non-zero number. For contrast, the same check on the EFI
-binary inside `zlOS.iso` prints **0** — because that one is GRUB.
+That should print a non-zero number (17 on the 2026-09-01 build). Running the
+same check against `EFI/BOOT/BOOTX64.EFI` prints **0** — not because it is
+GRUB, but because the witness stub is too small to carry the string. The
+genuine GRUB contrast is the EFI binary inside `zlOS.iso`, which also prints **0**.
 
 ## The two things that waste an hour
 

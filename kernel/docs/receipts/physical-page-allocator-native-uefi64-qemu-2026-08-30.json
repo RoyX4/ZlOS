@@ -1,13 +1,13 @@
 {
   "schema": "zlos.physical-page-allocator-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_TYPED_ALLOCATOR_WITH_OPEN_GAPS",
-  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "build_identity": "8b64cc2be3277323aefb7a3fc3a2bb9fd568bd760608793dd37cd0ac7fcc9ac2",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "07be3fb66a86b1ba0e95e3514fafaca64d9a11da5b1aba822cb31fe089e96b23"
+    "sha256": "2369fc55aebc4c9b15f3354c5e06537c6ff17ac8380ea19aac2ba052a7e96a85"
   },
-  "boot_log_sha256": "8a41e1da60e10c63e09ff3adbabbdf94e6372788b7d1abe629d5b502bd0e9a87",
+  "boot_log_sha256": "ba4413affdfcfb63ca60d8a689c7165977f6b3ef4a30b0e3f6482bbacbcd443e",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -36,14 +36,14 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "7c8433a40ed014d9a56a5b3ecbe15cecf09469110f39d94cd442f6b12f827d63",
-    "target_id": "HT-056",
+    "sha256": "7fb0082b9c3f27267e1e7120d47a6790ce5712e7c7adf03209cbc3406bcbe16f",
+    "target_id": "HT-058",
     "target": "pmmtest",
     "checks": 177
   },
   "consumer_receipt": {
     "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-    "sha256": "5ab82168017dc0a4df8020c5b9bbf963a4a5b73eea7f4daac8f99b4367ce5cb0",
+    "sha256": "fbb2be9feb452a58827c419264bae7034f8f8cef0b9de3f262af3fff24456919",
     "assertions": [
       "process-frame-reclamation",
       "anonymous-reserve-commit-release",
@@ -56,8 +56,8 @@
       "id": "bounded-firmware-map-admission",
       "managed_floor_bytes": 335544320,
       "managed_limit_bytes": 1073741824,
-      "admitted_pages": 168169,
-      "free_pages_after_selftest": 168169,
+      "admitted_pages": 168140,
+      "free_pages_after_selftest": 168140,
       "firmware_conventional_memory_only": true,
       "fixed_zlos_region_excluded": true
     },

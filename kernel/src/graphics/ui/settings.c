@@ -767,6 +767,15 @@ static void s_putu(unsigned v)
 #define SET_COUNT    6u                       /* the six fields of struct settings */
 #define SET_BYTES    (12u + 4u * SET_COUNT)   /* 36 */
 
+/* Where a bad record came from. Until 2026-09-06 both refusals said "at LBA
+ * 64" even when the bytes were read from the zlfs file, which sent whoever
+ * read the log to the wrong sector. */
+static void s_where(int from_zlfs)
+{
+    if (from_zlfs) { s_puts("in " SETTINGS_FILE); return; }
+    s_puts("at LBA "); s_putu(SET_LBA);
+}
+
 /* FNV-1a, 32-bit. Not a CRC: this guards against a torn or stale block, not
  * against an adversary, and it is twelve lines instead of a table. */
 static unsigned set_hash(const unsigned char *p, unsigned n)
@@ -982,7 +991,7 @@ int settings_load(void)
 
     if (rec[0] != SET_MAGIC0 || rec[1] != SET_MAGIC1 ||
         rec[2] != SET_MAGIC2 || rec[3] != SET_MAGIC3) {
-        s_puts("  settings: no valid block at LBA "); s_putu(SET_LBA);
+        s_puts("  settings: no valid block "); s_where(from_zlfs);
         s_puts(" (bad magic), using defaults\n");
         return 0;
     }
@@ -1001,7 +1010,7 @@ int settings_load(void)
     unsigned stored = get32(rec + 8);
     put32(rec + 8, 0);
     if (set_hash(rec, SET_BYTES) != stored) {
-        s_puts("  settings: CHECKSUM MISMATCH at LBA "); s_putu(SET_LBA);
+        s_puts("  settings: CHECKSUM MISMATCH "); s_where(from_zlfs);
         s_puts(", using defaults\n");
         return 0;
     }
