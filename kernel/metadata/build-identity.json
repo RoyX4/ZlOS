@@ -4,9 +4,9 @@
     "branch": "main",
     "dirty": true,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "921297911b340790cd8fd11635f28760cd89f67e"
+    "head": "02180afcd7b58f4832c9cc8efede493c9545aeb3"
   },
-  "identity_sha256": "8b64cc2be3277323aefb7a3fc3a2bb9fd568bd760608793dd37cd0ac7fcc9ac2",
+  "identity_sha256": "a71ce35ce558e982c4db79c577df9139af90acf23e7f6516bc26687dbd6556ba",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -15,7 +15,7 @@
   ],
   "schema": "zlos.build-input-identity.v1",
   "source_files_sha256": {
-    "freestanding/runtime_kernel.c": "8d258c5faaf065eda0aea7967aee2435e9ef045e87cd6003cc8451e902d5c2fc",
+    "freestanding/runtime_kernel.c": "238c51e14d93b0969b4ac4c2bd8ffccd54ff12db25a1ed577cd88b4edf130d59",
     "freestanding/zl_freestanding.h": "20f647171e5c136f0f608671bd3f08cebf58398cdcf5c6fd0a9a30af84a53f6b",
     "kernel/SOURCES": "a4dfaf1370b12562841c71792be620652d14b9a02c8d97066d62ba2f1f2c37a5",
     "kernel/app_manifest_embed.zl": "9bdba91202bcf2fa341dd99d21102a309ae124c0ecebf97374459f42c87d2dd7",
@@ -32,7 +32,7 @@
     "kernel/boot/boot.S": "0949e1171f666158091663c701296a49da6a73db49c916bda1e3b5af756df4bc",
     "kernel/boot/boot64.S": "56f7198cf6823afb69b63ab28684f8e61c38617571f07a3f3c17109ad1eb6e38",
     "kernel/boot/efi.c": "a929fa24338964571a4adab4d10916fe79a279c85451bb7375ba2e2dab69b41e",
-    "kernel/boot/gdt.c": "4d367201d9be5cb0527784cefe3f89f4c66dda1d5572b255b540ad4755c3b6aa",
+    "kernel/boot/gdt.c": "09246f7a9509bf627622ece2abb482e334ada7c29bf86b9d9ccd57b6f3967ba6",
     "kernel/boot/gdt64.c": "22362c5f2e7dd4f2abfed55694c8b3f93da0e3af1a3de2cdb52c5ecfc0d25284",
     "kernel/boot/link-raw.ld": "21dedfe1aec2e9a6064edfeb0fcf3ff379bbc3e871fe6530f99c9012b145e39c",
     "kernel/boot/link.ld": "4e7e4d8b6647d6653194ce97898d22edf160e0750d49942b3a9ada593340bae1",
@@ -49,7 +49,7 @@
     "kernel/src/arch/x86/cpu.c": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa",
     "kernel/src/arch/x86/divmod.c": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
     "kernel/src/arch/x86/dma.h": "7974bc5732dfbaea1fb4b10e5c13d0fc2dc2466be7a65ef137d9d5eba2192c57",
-    "kernel/src/arch/x86/idt.c": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
+    "kernel/src/arch/x86/idt.c": "a8d23865a05bfc67787100b26a75b30c45018cd5e30b676280baf328be22d2c3",
     "kernel/src/arch/x86/memmap.h": "c80c04fcaf5f1c295eac712c4cb2b2bf1169bef2b95b3543c1a8418beca91d81",
     "kernel/src/arch/x86/page_table_txn.c": "a441080ba7041dd0270cf4f1b9d332f9a4edeaf75679a9aa574dfd7ad9f0975f",
     "kernel/src/arch/x86/page_table_txn.h": "fb61024acc4d16f1423bc3548497435e7089a98a35a5a3de1ba37035605cd608",
@@ -69,7 +69,7 @@
     "kernel/src/core/boot/boot_state.c": "261884c89f30c27a2364a1e74d60ba18557395b1b5dac08576ec2d7dee3411a3",
     "kernel/src/core/boot/boot_state.h": "b67d827be6baddd92a40d87e79822ada9e46f19c9bb7a478cadc55e57acf9f0c",
     "kernel/src/core/console.c": "0256cf8ae9db90e0b07f8de9feb3057d4f9ff557a86fedc0de01ce013a1b3b99",
-    "kernel/src/core/crash.c": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+    "kernel/src/core/crash.c": "6bb91ac589b455fba9f6c56865872e4c8a98513aee6621a384cf3b369c95be99",
     "kernel/src/core/crash.h": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
     "kernel/src/core/exec.c": "7d51629595ddbdc02a314f1d2caa3da2f927e483a1c547c45b26edb6b39ef0c3",
     "kernel/src/core/heap.c": "2f5ede5e2fe6cfd610df93d2336b2e9423e7c44af0e8f6935c55b1b707ca2bd4",

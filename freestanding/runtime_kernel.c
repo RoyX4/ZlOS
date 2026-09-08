@@ -91,9 +91,9 @@ extern void idt_init(void);
 extern unsigned int idt_ticks(void);
 extern int  idt_scan(void);
 extern void crash_test_ud2(void);
+extern void crash_test_df(void);      /* every lane since 2026-09-08 */
 #if defined(ZL_64)
 extern void crash_test_gp(void);
-extern void crash_test_df(void);
 #endif
 extern void console_at_num(int row, int col, long n, unsigned char attr);
 extern void console_fill_rgb(int x, int y, int w, int h, unsigned int rgb);
@@ -2614,9 +2614,7 @@ Value zl_calln(const char *name, int n, ...)
         return zl_num(-64.0);
     }
     if (streq(name, "crash_test_df")) {
-#if defined(ZL_64)
-        crash_test_df();
-#endif
+        crash_test_df();          /* every lane since 2026-09-08 */
         return zl_num(-64.0);
     }
 

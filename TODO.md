@@ -130,7 +130,7 @@ host-verified, and awaiting its build/boot chain before commit:
 - [x] `check-memmap.sh`: kernel.zl address above `ZL_LOW_END` is a FAIL, with a
       planted-defect selftest
 - [x] one TSS per core on the 64-bit lanes (`gdt64.c`, `smp.c`, `gdt64test`)
-- [ ] 32-bit lane #DF task gate + a `bios32` double-fault route in `verify-crash.py`
+- [x] 32-bit lane #DF task gate + a `bios32` double-fault route in `verify-crash.py` (2026-09-08)
 - [ ] USB re-plug re-enumeration (needs the Terminal `usb` command today)
 - [ ] Intel GGTT PTE save/restore; PSR teardown order; ECM TX reuse; 64-bit
       multiboot BAR above 4 GiB; physical ThinkPad boot

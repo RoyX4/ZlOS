@@ -1,21 +1,21 @@
 {
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "2369fc55aebc4c9b15f3354c5e06537c6ff17ac8380ea19aac2ba052a7e96a85"
+    "sha256": "d4f69ee71e05fbffde8ebb424f1ad647c84ca3b7dcf5eb839a0b4ac597340be8"
   },
-  "build_identity": "8b64cc2be3277323aefb7a3fc3a2bb9fd568bd760608793dd37cd0ac7fcc9ac2",
-  "crash_line": "ZLCRASH v=3 bytes=240 bits=64 regmask=0x000000000000ffff vec=8 haserr=1 err=0x0000000000000000 ip=0x000000003cece845 cs=0x0000000000000008 flags=0x0000000000010046 sp=0x0000000000000000 ss=0x0000000000000000 cr2=0xfffffffffffffff8 handlersp=0x000000003d064220 stacklo=0x000000003d0602d0 stackhi=0x000000003d0642d0 ax=0x0000000000000000 bx=0x0000000000000062 cx=0x000000003d0493b4 dx=0x000000003d0493a7 si=0x000000003fe562b0 di=0x000000003fe57660 bp=0x000000003fe57bd0 rsp=0x0000000000000000 r8=0x0000000000000000 r9=0x0000000000000000 r10=0x000000003d0493b5 r11=0x0000000000000067 r12=0x000000003fe57bc0 r13=0x000000003fe57be0 r14=0x000000003fe573e0 r15=0x000000003fe579a0 checksum=0xb4de5ba9927c8bd3 END\n",
-  "crash_line_sha256": "79ef46c36f8113daae4b907595a518f690768af52ca76839b7481e9bf4049907",
+  "build_identity": "a71ce35ce558e982c4db79c577df9139af90acf23e7f6516bc26687dbd6556ba",
+  "crash_line": "ZLCRASH v=3 bytes=240 bits=64 regmask=0x000000000000ffff vec=8 haserr=1 err=0x0000000000000000 ip=0x000000003cebe835 cs=0x0000000000000008 flags=0x0000000000010046 sp=0x0000000000000000 ss=0x0000000000000000 cr2=0xfffffffffffffff8 handlersp=0x000000003d054220 stacklo=0x000000003d0502d0 stackhi=0x000000003d0542d0 ax=0x0000000000000000 bx=0x0000000000000062 cx=0x000000003d0393b4 dx=0x000000003d0393a7 si=0x000000003fe562b0 di=0x000000003fe57660 bp=0x000000003fe57bd0 rsp=0x0000000000000000 r8=0x0000000000000000 r9=0x0000000000000000 r10=0x000000003d0393b5 r11=0x0000000000000067 r12=0x000000003fe57bc0 r13=0x000000003fe57be0 r14=0x000000003fe573e0 r15=0x000000003fe579a0 checksum=0xda6f6382c73d8190 END\n",
+  "crash_line_sha256": "ad918348ed5b92be72b4e84e0f6da86502ef82645831f21cd01930ec39045ba6",
   "evidence": "QEMU target execution of the exact current artifact; architectural vector/error shape, pre-prologue registers, bounded schema, checksum and halted state independently verified; the double-fault case additionally binds serial handler SP and QEMU halted RSP to IST1",
   "fault_case": "double-fault",
   "guest_halted_after_record": true,
   "halted_cpu": {
-    "register_dump_sha256": "9ae29dd1c74a334d69b7a3cd8d8224988036e0cb1f3b79b32eeaf90131eb651f",
-    "rsp": 1023819952
+    "register_dump_sha256": "acc1ee99989acffe55b53a49668145eddba356e1f21b5176342695feb2b882d3",
+    "rsp": 1023754416
   },
   "kernel": {
     "path": "kernel/ZLOS.EFI",
-    "sha256": "eae0a18d75d118ec890511d2febb39642d7e5a5520ca2a5c3415bfdd68bc5c31"
+    "sha256": "1f638513c2101c6ddc4c401bef60604041d448c210e434a39b7c7b90ba774a9f"
   },
   "kernel_symbol_ip": null,
   "record": {
@@ -24,20 +24,20 @@
     "bp": 1072004048,
     "bx": 98,
     "bytes": 240,
-    "checksum": 13032955155522030547,
+    "checksum": 15739908636022768016,
     "cr2": 18446744073709551608,
     "cs": 8,
-    "cx": 1023710132,
+    "cx": 1023644596,
     "di": 1072002656,
-    "dx": 1023710119,
-    "emergency_stack_high": 1023820496,
-    "emergency_stack_low": 1023804112,
+    "dx": 1023644583,
+    "emergency_stack_high": 1023754960,
+    "emergency_stack_low": 1023738576,
     "error": 0,
     "flags": 65606,
-    "handler_sp": 1023820320,
+    "handler_sp": 1023754784,
     "has_error": 1,
-    "ip": 1022158917,
-    "r10": 1023710133,
+    "ip": 1022093365,
+    "r10": 1023644597,
     "r11": 103,
     "r12": 1072004032,
     "r13": 1072004064,
@@ -62,14 +62,15 @@
   },
   "schema": "zlos.cpu-fault-qemu-receipt.v3",
   "source_sha256": {
-    "freestanding/runtime_kernel.c": "8d258c5faaf065eda0aea7967aee2435e9ef045e87cd6003cc8451e902d5c2fc",
+    "freestanding/runtime_kernel.c": "238c51e14d93b0969b4ac4c2bd8ffccd54ff12db25a1ed577cd88b4edf130d59",
+    "kernel/boot/gdt.c": "09246f7a9509bf627622ece2abb482e334ada7c29bf86b9d9ccd57b6f3967ba6",
     "kernel/boot/gdt64.c": "22362c5f2e7dd4f2abfed55694c8b3f93da0e3af1a3de2cdb52c5ecfc0d25284",
-    "kernel/src/arch/x86/idt.c": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e",
-    "kernel/src/core/crash.c": "13962b22bbc69636050f30840b0abb021f14175549fa3d2af7317001b97dae78",
+    "kernel/src/arch/x86/idt.c": "a8d23865a05bfc67787100b26a75b30c45018cd5e30b676280baf328be22d2c3",
+    "kernel/src/core/crash.c": "6bb91ac589b455fba9f6c56865872e4c8a98513aee6621a384cf3b369c95be99",
     "kernel/src/core/crash.h": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
     "kernel/src/graphics/windowing/term.c": "512a1dd9271ec8aa026e7f08cec9f58cc069424503e6e7fb931ca4467759e0e5",
     "kernel/src/kernel.zl": "312401895ad0c2a8f9ebde8b3b420b87404d7fc61aee409f122f01bcb4e4e78b",
-    "kernel/tools/checks/verify-crash.py": "d76a8606998ff5ca717b62deff4b77678f0446b5129896e644cecec4dc05ef23"
+    "kernel/tools/checks/verify-crash.py": "97837adec2f783cc44124cbce16a260244a2daaf0b6df795b85e66f9b14cc9ed"
   },
   "trigger": "page fault on unusable RSP through typed crashdftest diagnostic",
   "weakest_link": "the exercised matrix remains bounded; stack unwinding, durable dump storage, recovery policy and physical fault injection remain unimplemented"

@@ -1,13 +1,13 @@
 {
   "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY",
-  "build_identity": "8b64cc2be3277323aefb7a3fc3a2bb9fd568bd760608793dd37cd0ac7fcc9ac2",
+  "build_identity": "a71ce35ce558e982c4db79c577df9139af90acf23e7f6516bc26687dbd6556ba",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "2369fc55aebc4c9b15f3354c5e06537c6ff17ac8380ea19aac2ba052a7e96a85"
+    "sha256": "d4f69ee71e05fbffde8ebb424f1ad647c84ca3b7dcf5eb839a0b4ac597340be8"
   },
-  "boot_log_sha256": "ba4413affdfcfb63ca60d8a689c7165977f6b3ef4a30b0e3f6482bbacbcd443e",
+  "boot_log_sha256": "5660365d0acd0d846679206adbbb66db41eb883f665651ea583bbc61ba910ac0",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -63,7 +63,7 @@
     },
     {
       "path": "kernel/src/arch/x86/idt.c",
-      "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e"
+      "sha256": "a8d23865a05bfc67787100b26a75b30c45018cd5e30b676280baf328be22d2c3"
     },
     {
       "path": "kernel/boot/gdt64.c",
@@ -76,7 +76,7 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "7fb0082b9c3f27267e1e7120d47a6790ce5712e7c7adf03209cbc3406bcbe16f",
+    "sha256": "274aa334f7a0a1022803deedd8eb2e8c4ca42323498c7cd57da23cbb988227dd",
     "targets": {
       "processmemorytest": {
         "checks": 191

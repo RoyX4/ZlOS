@@ -7,6 +7,26 @@ Git stores the diff; this stores the context around it: outstanding hazard
 counts, whether the docs still agreed with the code, which files moved. That is
 the part that makes a change legible later, and the part nobody writes down.
 
+## 2026-09-08 — docs: journal/TODO ride-along; repo-relative paths in GUARDS §6; host README capsule [skip ci] (02180af)
+
+`main` · 4 files changed, 35 insertions(+), 2 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | agree |
+
+<details><summary>4 file(s)</summary>
+
+- `TODO.md`
+- `docs/GUARDS-THAT-DID-NOT-GUARD.md`
+- `docs/JOURNAL.md`
+- `kernel/tests/host/README.md`
+
+</details>
+
 ## 2026-09-08 — fix: sweep follow-up - orphaned tests wired, zlfs settings tested, xHCI unplug, memmap gate, one TSS per core (b24d111)
 
 `main` · 38 files changed, 1571 insertions(+), 574 deletions(-)

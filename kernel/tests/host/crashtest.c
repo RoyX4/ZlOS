@@ -174,6 +174,25 @@ int main(void)
           r.emergency_stack_low == 0x8000 && r.emergency_stack_high == 0x9000,
           "double-fault emergency-stack bounds survive byte-for-byte");
 
+    /* The 32-bit lane delivers #DF through a task gate onto its own stack
+     * since 2026-09-08. The recorder used to let a 32-bit double fault commit
+     * with NO emergency stack (the "32-bit has no IST" shortcut), which would
+     * have recorded a triple-fault-in-waiting as a diagnosed crash. */
+    crash_host_reset();
+    check(!crash_capture(8, 1, 0, 0, 8, 2, 0, 0, 0,
+                         0x8800, 0, 0, 32, &regs32),
+          "a 32-bit double fault without an emergency stack is refused");
+    check(!crash_capture(8, 1, 0, 0, 8, 2, 0, 0, 0,
+                         0x9000, 0x8000, 0x9000, 32, &regs32),
+          "...and one whose handler sits past the stack's top is refused");
+    check(crash_capture(8, 1, 0, 0x1234, 8, 2, 0x5678, 0x10, 0,
+                        0x8FF0, 0x8000, 0x9000, 32, &regs32),
+          "a 32-bit double fault on its task-gate stack commits");
+    check(crash_snapshot(&r) && r.vector == 8 && r.word_bits == 32 &&
+          r.handler_sp == 0x8FF0 && r.emergency_stack_low == 0x8000 &&
+          r.emergency_stack_high == 0x9000 && r.ip == 0x1234 && r.sp == 0x5678,
+          "...with the task-switched context and stack bounds intact");
+
     printf("\n%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;
 }
