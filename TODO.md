@@ -32,7 +32,7 @@ T-21** — T-21 named a link-list gap as a language limit.
 
 ## Open pull requests
 
-- [ ] #15 fix: integrate process service and whole-tree repairs  `codex/integrate-sweep-process`
+- [ ] #15 feat: add bounded spawn/wait and integrate process repairs  `codex/integrate-sweep-process`
 - [ ] #14 fix: preserve pending documentation during generation  `codex/cleanup-todo-atomic`
 - [ ] #13 feat: add bounded sleep for persistent user processes  `codex/process-sleep`
 - [ ] #12 feat: add persistent bounded user process service  `codex/persistent-user-scheduler`

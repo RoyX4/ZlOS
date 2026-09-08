@@ -1,13 +1,13 @@
 {
   "schema": "zlos.physical-page-allocator-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_TYPED_ALLOCATOR_WITH_OPEN_GAPS",
-  "build_identity": "e98f55543ae760d47021af78f2fed244562a1c55d5711b1b927b8d91001d4d02",
+  "build_identity": "b428b5ae680e164a76c105eecfbc53607c412a3ba717facecf54303da6997a8b",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "9519337a374ad218c0fe2123e0876ee3bb6f3729aafc6a54434f331826f6e8a2"
+    "sha256": "21e0df9d85a7fad27bf9b483561751838da4a131b72431653f6bab1a7a711731"
   },
-  "boot_log_sha256": "7c7f67eae7cb44547ec668da6badbdfd39d611a278609e440e3316271809c659",
+  "boot_log_sha256": "8c53483c3dd3a8c5519a99e84333f4cae4443ed52db45d230131b46791a3707f",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
@@ -36,14 +36,14 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "afc87752a1e78b58353a2e750a00dba1846234c8163a80c72308c3973795bf80",
+    "sha256": "e660ba97a6b395df05d774875e98cb7de58a1fbaac116341a60f099de51a0eb5",
     "target_id": "HT-059",
     "target": "pmmtest",
     "checks": 177
   },
   "consumer_receipt": {
     "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-    "sha256": "238992b8516bd4267a4c4ee9fb593630516eb2229319fe5c593378cc0e31ba8d",
+    "sha256": "51cb0b5ccacde71b7bc9f7ef19367bec589ccb8496844fe47e222ac9c5253abf",
     "assertions": [
       "process-frame-reclamation",
       "anonymous-reserve-commit-release",
@@ -56,8 +56,8 @@
       "id": "bounded-firmware-map-admission",
       "managed_floor_bytes": 335544320,
       "managed_limit_bytes": 1073741824,
-      "admitted_pages": 168134,
-      "free_pages_after_selftest": 168134,
+      "admitted_pages": 168107,
+      "free_pages_after_selftest": 168107,
       "firmware_conventional_memory_only": true,
       "fixed_zlos_region_excluded": true
     },

@@ -2,9 +2,9 @@
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
     "branch": "fable/usb-replug",
-    "dirty": true,
+    "dirty": false,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "14d75dd9b12ce9b87b4c40fe1804ce21d83a3646"
+    "head": "a0a72eb4a41fa0ed749eae0ee95bf2a57fd4f123"
   },
   "identity_sha256": "b428b5ae680e164a76c105eecfbc53607c412a3ba717facecf54303da6997a8b",
   "routes": [

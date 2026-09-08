@@ -2,7 +2,7 @@
   "build_identity": "b428b5ae680e164a76c105eecfbc53607c412a3ba717facecf54303da6997a8b",
   "derivation": "SHA-256 labels over build identity; UUID version/variant bits normalized",
   "schema": "zlos.boot-media-ids.v1",
-  "source_date_epoch": 1788837785,
+  "source_date_epoch": 1788908228,
   "usb_disk_guid": "8b6dd807-0df0-5408-bb70-83a3bad427f7",
   "usb_fat_volume_id": "2F740BBD",
   "usb_partition_guid": "da8520b9-0a91-5198-81aa-2d85d77c7035",
