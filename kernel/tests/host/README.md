@@ -57,6 +57,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `fuzz.c`
 - `games12_rules.zl`
 - `games4_rules.zl`
+- `gdt64test.c`
 - `gpu-dev.sh`
 - `gpu-ring-run.sh`
 - `gpu_aperture.c`
@@ -125,6 +126,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `x509test.c`
 - `xhcitest.c`
 - `zladdrs.sh`
+- `zllog-e2e.sh`
 - `zllog_e2e_test.py`
 - `zllogtest.c`
 

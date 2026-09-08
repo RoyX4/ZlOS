@@ -27,10 +27,12 @@ _none — every file the docs describe is tracked._
 
 ## Open tensions (.ultra/TENSIONS.md)
 
-_none open._
+- [ ] **T-23
+T-21** — T-21 named a link-list gap as a language limit.
 
 ## Open pull requests
 
+- [ ] #15 fix: integrate process service and whole-tree repairs  `codex/integrate-sweep-process`
 - [ ] #14 fix: preserve pending documentation during generation  `codex/cleanup-todo-atomic`
 - [ ] #13 feat: add bounded sleep for persistent user processes  `codex/process-sleep`
 - [ ] #12 feat: add persistent bounded user process service  `codex/persistent-user-scheduler`
