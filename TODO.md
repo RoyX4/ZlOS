@@ -131,9 +131,10 @@ host-verified, and awaiting its build/boot chain before commit:
       planted-defect selftest
 - [x] one TSS per core on the 64-bit lanes (`gdt64.c`, `smp.c`, `gdt64test`)
 - [x] 32-bit lane #DF task gate + a `bios32` double-fault route in `verify-crash.py` (2026-09-08)
-- [ ] USB re-plug re-enumeration (needs the Terminal `usb` command today)
-- [ ] Intel GGTT PTE save/restore; PSR teardown order; ECM TX reuse; 64-bit
-      multiboot BAR above 4 GiB; physical ThinkPad boot
+- [x] USB re-plug re-enumeration (2026-09-08; `verify-usb-replug.py` both routes; no hub support)
+- [x] Intel GGTT PTE save/restore (`ggttest`); ECM TX reuse (in-flight hold); 64-bit
+      multiboot BAR above 4 GiB (`vmm_walk_present`, refused not faulted) - 2026-09-08
+- [ ] Intel PSR teardown order; physical ThinkPad boot
 - [ ] seven of eight generated registries fail `--check` on `main` between
       landings (measured 2026-09-06; recorded in GUARDS §6, not changed)
 

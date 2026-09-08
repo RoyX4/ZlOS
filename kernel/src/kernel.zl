@@ -6134,6 +6134,34 @@ fn run_command(cmd, arg) {
     if cmd == 127 { crash_test()  return 0 }
     if cmd == 128 { crash_test_gp()  return 0 }
     if cmd == 129 { crash_test_df()  return 0 }
+    # Read-only USB status: the `usb` command re-runs bring-up, so it cannot
+    # witness the driver's own re-plug. This only reads.
+    if cmd == 130 {
+        put("  usbstat kbd_ready=")  put(usb_kbd_ok())
+        put(" kbd_slot=")  put(usb_kbd_slot())
+        put(" replug=")  put(usb_replug())
+        put(" tries=")  put(usb_replug_tries())
+        put(" pending=")  put(usb_replug_pending())
+        kp = usb_kbd_port()
+        put(" port=")  put(kp)
+        put(" stage=")  put(usb_enum_stage(kp))
+        put(" cc=")  put(usb_enum_cc(kp))
+        put(" events=")  put(usb_replug_events())
+        put(" lastport=")  put(usb_replug_last_port())
+        put(" lastv=")  hex(usb_replug_last_v(), 8)
+        put(" skips=")  put(usb_replug_skips())
+        put(" scans=")  put(usb_replug_scans())
+        put(" conn=")  hex(usb_conn_bits(), 4)
+        lt = usb_replug_last_try()
+        put(" try=")  put(lt)
+        put(" trystage=")  put(usb_enum_stage(lt))
+        put(" trycc=")  put(usb_enum_cc(lt))
+        put(" polls=")  put(usb_replug_polls())
+        put(" owned=")  put(usb_owned_flag())
+        put(" ticks=")  put(usb_ticks())
+        print("")
+        return 0
+    }
     if cmd == 113 { return 1 }
     color(C_RED)  print("  unknown command - press h for help")
     color(C_GREY) return 0

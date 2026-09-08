@@ -1,0 +1,38 @@
+{
+  "schema": "zlos.usb-replug-qemu-receipt.v1",
+  "result": "PASS",
+  "route": "native-uefi64",
+  "build_identity": "edf5dc08f3b805a34cc5a679a7c8d77764ca72967307b29bc583e27cadeb493b",
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "267e07ea0bbde0b08ad0a1d4c4ebeefa590cc04b98837634f1e5c3f056a1f7b8"
+  },
+  "kernel": {
+    "path": "kernel/ZLOS.EFI",
+    "sha256": "451af5eb7a4c4c2d2dd4bcd77f359f75de67b829bc45ca3d4f77f4942f253339"
+  },
+  "steps": [
+    {
+      "step": "boot",
+      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=4 lastport=8 lastv=00000603 skips=0 scans=0 conn=01C2 try=0 trystage=0 trycc=-1 polls=261 owned=1 ticks=177"
+    },
+    {
+      "step": "qemu-boot",
+      "line": "kbd0 on root port 2"
+    },
+    {
+      "step": "unplugged",
+      "line": "usbstat kbd_ready=0 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=5 lastport=6 lastv=000202A0 skips=0 scans=0 conn=0182 try=0 trystage=0 trycc=-1 polls=759 owned=1 ticks=338"
+    },
+    {
+      "step": "replugged",
+      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=1 tries=1 pending=0 port=6 stage=6 cc=1 events=7 lastport=6 lastv=00000E03 skips=0 scans=1 conn=01C2 try=6 trystage=6 trycc=1 polls=1669 owned=1 ticks=640"
+    },
+    {
+      "step": "qemu",
+      "line": "  Device 0.1, Port 1, Speed 5000 Mb/s, Product QEMU USB MSD |   Device 0.3, Port 3, Speed 480 Mb/s, Product QEMU USB Tablet |   Device 0.4, Port 4, Speed 12 Mb/s, Product QEMU USB Hub |   Device 0.5, Port 4.1, Speed 12 Mb/s, Product QEMU USB MSD |   Device 0.2, Port 2, Speed 480 Mb/s, Product QEMU USB Keyboard, ID: kbd0 | "
+    }
+  ],
+  "evidence": "QEMU device_del/device_add of the usb-kbd with no guest input in between; the read-only usbstat word shows kbd_ready 1 -> 0 -> 1, a new slot, and replug=1 counted by the driver's own poll path",
+  "weakest_link": "QEMU's xHCI model, and the same root port on purpose: the driver speaks no hubs, so a keyboard that comes back behind one (which is where QEMU puts a fifth device on four USB2 root ports) is not seen; a slow-to-settle physical keyboard is not exercised either"
+}

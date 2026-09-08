@@ -471,6 +471,7 @@ static const struct cmd table[] = {
     { "crashtest", 127 },
     { "crashgptest", 128 },
     { "crashdftest", 129 },
+    { "usbstat", 130 },      /* read-only: does not call usb_up() */
     /* Persistent zlfs. The kernel documents and dispatches single-key '.' as
      * code 46, but the compositor owns input after graphical boot, so leaving
      * it out here made the documented mount path unreachable. Keep the exact
