@@ -301,10 +301,10 @@ reading.
 T-21 closed on: *"the rail, raster strip and foot are `kernel.zl` and do not compile into
 [wmshot]."* Measured against the tree, that reads the wrong cause into a true symptom.
 
-`kernel/build.sh:25-36` compiles `src/kernel.zl` through the C backend to `out.c`, copies it
+`kernel/build.sh:25-36` compiles `kernel/src/kernel.zl` through the C backend to `out.c`, copies it
 to `_gen.c` — **2,769,545 bytes of C** — and links `_gen.o` into `kernel.elf` (line 76).
 `grep -rn "_gen" kernel/tests/host/build.sh` returns nothing. `wmshot`'s link line
-(`tests/host/build.sh:107`) is C sources only.
+(`kernel/tests/host/build.sh:107`) is C sources only.
 
 So `kernel.zl` does compile into C, for four separate targets. It has never been added to the
 host link line. **"The harness cannot render the shell" is nobody-wrote-the-link-step, not

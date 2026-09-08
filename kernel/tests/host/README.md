@@ -1,10 +1,4 @@
 <!-- Managed by tools/directory-docs.py. Edit only the LOCAL block. -->
-
-`run-all.sh` rebuilds every declared host executable and runs the same generated
-inventory as CI. It requires the root zl toolchain and standard kernel build
-prerequisites. Hardware omissions and instruments stay explicit non-runs;
-parameterized fixtures run with their declared arguments. The resulting receipt
-is bound to the current build identity and exact executable hashes.
 <!-- BEGIN GENERATED: directory-docs -->
 # kernel/tests/host
 
@@ -147,5 +141,11 @@ for repository-wide ownership.
 <!-- END GENERATED: directory-docs -->
 
 <!-- BEGIN LOCAL: directory-docs -->
+
+`run-all.sh` rebuilds every declared host executable and runs the same generated
+inventory as CI. It requires the root zl toolchain and standard kernel build
+prerequisites. Hardware omissions and instruments stay explicit non-runs;
+parameterized fixtures run with their declared arguments. The resulting receipt
+is bound to the current build identity and exact executable hashes.
 <!-- Add verified directory-specific notes here. -->
 <!-- END LOCAL: directory-docs -->

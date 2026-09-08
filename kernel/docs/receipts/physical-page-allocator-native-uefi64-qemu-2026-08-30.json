@@ -5,9 +5,9 @@
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "d553890a769a1e629f6688b4a0c7ddcf121010fc872b345ea864c53aadd8ba74"
+    "sha256": "b0147961eb07729eec3759b497309f2a1dafdab00412092d48d2089fbaf270ef"
   },
-  "boot_log_sha256": "5c3c0005556c96f9c83ad8815e6f8d0ada5681f347a340f842a673616c7aa0b3",
+  "boot_log_sha256": "8381559814200f7c5f6cd7e35c65998243c2002bac799869844d0482bb496211",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
     "sha256": "2179bbbb5584ff5d4ea157c9cb450ca900faf2d415aa6fda1f6dcc4ecf9177e0"
@@ -43,7 +43,7 @@
   },
   "consumer_receipt": {
     "path": "kernel/docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json",
-    "sha256": "279af528a31460f7b6654fb2d256657a35cb024e54d593335b71ca28a0288ba2",
+    "sha256": "1170dd0c013df8658732f16cbe9c52ea92528ef7c2b30317fd22b6730afe84b4",
     "assertions": [
       "process-frame-reclamation",
       "anonymous-reserve-commit-release",

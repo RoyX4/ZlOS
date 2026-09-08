@@ -637,10 +637,10 @@ OVERRIDES = {
                 "persistent external-file spawn, normal exit, contained fault and reap"),
                ("fixed two-process service",
                 "teardown is not exercised under concurrent service load",
-                "no userspace spawn/wait/process-handle ABI",
+                "the listed command-route receipts do not cover the separate userspace spawn/wait ABI",
                 "no concurrent PID-reuse receipt",
                 "no current physical-hardware receipt"),
-               "current host and native-UEFI64 QEMU receipts prove failure-atomic owned frames, two disjoint address spaces, successful external execution, persistent kernel-owned spawn/reap and exact reclamation; userspace authority, concurrent teardown/PID reuse and physical proof remain open"),
+               "current host and native-UEFI64 QEMU receipts prove failure-atomic owned frames, two disjoint address spaces, successful external execution, persistent kernel-owned spawn/reap and exact reclamation; these receipts do not cover the separate userspace ABI, concurrent teardown/PID reuse or physical hardware"),
     "KR-006": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/src/arch/x86/usermode.c"),
                    ("implementation", "kernel/src/arch/x86/idt.c"),
@@ -827,10 +827,10 @@ OVERRIDES = {
                ("the persistent Ring-3 service has exactly two fixed process slots",
                 "no general priority or deadline contract beyond bounded round robin",
                 "no per-CPU run-queue ownership or process migration",
-                "no userspace process-management or cancellation API",
+                "the listed scheduler receipts do not cover userspace spawn/wait; cancellation remains absent",
                 "the separate eight-slot kernel task demo is cooperative and lacks FPU/SSE state",
                 "no current physical-hardware scheduler receipt"),
-               "current host and native-UEFI64 QEMU receipts prove a bounded fair two-slot persistent process scheduler and command route; priorities, per-CPU ownership, migration, userspace authority and physical qualification remain open"),
+               "current host and native-UEFI64 QEMU receipts prove a bounded fair two-slot persistent process scheduler and command route; priorities, per-CPU ownership, migration and physical qualification remain open; userspace spawn/wait has separate evidence"),
     "KR-024": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/src/core/user_process_service.c"),
                    ("implementation", "kernel/src/arch/x86/usermode.c"),
@@ -872,11 +872,11 @@ OVERRIDES = {
                 "parent-only observation and child-safe reap", "terminal scheduler detach before reap",
                 "external fault observed then reaped through desktop commands",
                 "external normal exit status 37 observed then reaped through desktop commands"),
-               ("no userspace wait syscall or process-handle ABI",
-                "parent/child authority is host-proved but not exposed as a target service",
+               ("the listed command-route receipts do not cover the separate userspace wait ABI",
+                "these command-route receipts do not exercise parent/child userspace authority",
                 "no concurrent PID-reuse or cancellation receipt",
                 "no current physical-hardware receipt"),
-               "host and native-UEFI64 QEMU evidence retain exact exit/fault custody and bounded reap without stale-generation aliasing; userspace wait authority, concurrency and physical proof remain open"),
+               "host and native-UEFI64 QEMU evidence retain exact exit/fault custody and bounded reap without stale-generation aliasing; userspace wait has separate evidence, while concurrency and physical proof remain open"),
     "KR-028": ("PARTIAL_CURRENT", (
                    ("implementation", "kernel/src/core/process_lifecycle.h"),
                    ("implementation", "kernel/src/core/process_lifecycle.c"),
@@ -891,11 +891,11 @@ OVERRIDES = {
                ("slot plus nonzero generation identity", "stale-generation refusal",
                 "generation exhaustion retires slot", "scheduler owns exact lifecycle handle",
                 "resource release precedes identity reap"),
-               ("handles are kernel-internal and not an opaque userspace ABI",
+               ("the listed receipts exercise internal handles, not the separate userspace handle ABI",
                 "PID remains the current IPC selector",
                 "no cross-process delegated authority or revocation model",
                 "no current physical-hardware receipt"),
-               "exact generation-tagged handles now prevent internal stale-slot aliasing across lifecycle and scheduling; userspace exposure, delegated authority and physical proof remain open"),
+               "exact generation-tagged handles now prevent internal stale-slot aliasing across lifecycle and scheduling; userspace exposure has separate evidence, while delegated authority and physical proof remain open"),
     "KR-032": ("PARTIAL_CURRENT", (("implementation", "kernel/src/core/crash.c"),
                                      ("implementation", "kernel/src/arch/x86/idt.c"),
                                      ("implementation", "kernel/boot/gdt64.c"),
@@ -1664,9 +1664,15 @@ def validate_user_process_exit_receipt(receipt: dict, build_identity: str,
         raise ValueError("user-process normal-exit observations drifted")
     if len(receipt.get("serial_transcript_sha256", "")) != 64:
         raise ValueError("user-process exit transcript identity is absent")
-    gaps = receipt.get("known_gaps", [])
-    if len(gaps) != (5 if sleep else 4) or not any("physical" in gap for gap in gaps) \
-            or not any("process-handle" in gap for gap in gaps):
+    expected_gaps = [
+        "the service has exactly two fixed process slots",
+        "this administrative-command probe does not exercise the separate userspace spawn/wait ABI",
+        "the raw image contract has no relocations or shared libraries",
+        "there is no current physical-hardware command-route receipt",
+    ]
+    if sleep:
+        expected_gaps.append("no measured maximum wake latency, suspend behavior or physical timer receipt")
+    if receipt.get("known_gaps") != expected_gaps:
         raise ValueError("user-process exit receipt hides its known gaps")
 
 

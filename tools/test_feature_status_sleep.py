@@ -28,11 +28,15 @@ class SleepFeatureReceiptTests(unittest.TestCase):
         (self.root / 'kernel/zlOS-usb.img').write_bytes(b'synthetic build bytes\n')
         probe.REPO_ROOT = str(self.root)
         probe.KERNEL_ROOT = str(self.root / 'kernel')
-        fixture = self.root / 'user.bin'
-        fixture.write_bytes(probe.SLEEP_PROGRAM)
-        receipt = self.root / 'sleep.json'
-        probe.write_receipt(str(receipt), 'synthetic transcript', str(fixture), True)
-        self.receipt = json.loads(receipt.read_text())
+        self.probe = probe
+        self.receipt = self.make_receipt(sleep=True)
+
+    def make_receipt(self, *, sleep):
+        fixture = self.root / ('sleep.bin' if sleep else 'exit.bin')
+        fixture.write_bytes(self.probe.SLEEP_PROGRAM if sleep else self.probe.PROGRAM)
+        receipt = fixture.with_suffix('.json')
+        self.probe.write_receipt(str(receipt), 'synthetic transcript', str(fixture), sleep)
+        return json.loads(receipt.read_text())
 
     def validate(self, receipt):
         feature.validate_user_process_exit_receipt(
@@ -40,6 +44,31 @@ class SleepFeatureReceiptTests(unittest.TestCase):
 
     def test_current_sleep_receipt_contract(self):
         self.validate(self.receipt)
+
+    def test_current_normal_exit_receipt_contract(self):
+        feature.validate_user_process_exit_receipt(
+            self.make_receipt(sleep=False), 'f' * 64, self.root)
+
+    def test_each_gap_must_remain_exact(self):
+        for sleep in (False, True):
+            receipt = self.make_receipt(sleep=sleep)
+            for index in range(len(receipt['known_gaps'])):
+                for remove in (False, True):
+                    with self.subTest(sleep=sleep, index=index, remove=remove):
+                        mutant = copy.deepcopy(receipt)
+                        if remove:
+                            mutant['known_gaps'].pop(index)
+                        else:
+                            mutant['known_gaps'][index] = 'this obligation is fully proved'
+                        with self.assertRaisesRegex(ValueError, 'known gaps'):
+                            feature.validate_user_process_exit_receipt(
+                                mutant, 'f' * 64, self.root, sleep=sleep)
+
+    def test_keyword_stuffing_cannot_hide_scope_limits(self):
+        mutant = copy.deepcopy(self.receipt)
+        mutant['known_gaps'] = ['physical process-handle claim'] * 5
+        with self.assertRaisesRegex(ValueError, 'known gaps'):
+            self.validate(mutant)
 
     def test_removed_sleep_or_early_wake_claim_is_rejected(self):
         for field, value in [('minimum_guest_sleep_ticks', 0),

@@ -9,8 +9,11 @@ hardware skips, 14 explicit non-runs and zero failures. Native boot, all four
 parent/child scenarios and the existing external fault/exit/sleep probes pass.
 The shared allocator rollback regression passes 555 checks. The local launcher
 now uses the same inventory runner as CI and preserves complete native-gate
-failure diagnostics. Publication will update draft PR #15.
-The full combined-source boot/app matrix and hosted closure remain pending.
+failure diagnostics. Normal push published `4e7e283` to draft PR #15; all five
+pre-push checks and ordinary hosted code/host/boot checks passed. The first
+hosted full closure failed at a stale sleep-evidence contract, and docs found
+two path references plus a managed-block error. The follow-up fixes pass local
+checks; fresh hosted closure and the combined app matrix remain pending.
 Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`.
 
 Full-system planning, 2026-09-08:

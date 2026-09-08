@@ -2,10 +2,11 @@
 
 Status: combined source `2bb71bad…` passes the rebuilt host suite, native
 UEFI boot, all four parent/child scenarios and existing external fault/exit/sleep
-probes. Runtime commit `8365cbd` includes main `bd75552`; the local launcher
-repair and fresh receipts are being published with it. The full combined-source
-boot/app matrix and hosted closure remain pending. Earlier BIOS32 Run and
-47-app lifecycle results belong to `52dc8b9c…`. No feature maturity promotion.
+probes. Published commit `4e7e283` includes main `bd75552` and the local launcher
+repair. Its ordinary hosted code, host and boot checks passed. Docs and the first
+full-closure run exposed evidence/documentation failures; the follow-up below
+repairs them. Complete hosted closure and the combined app matrix remain pending.
+Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`. No feature maturity promotion.
 
 The user accepted the full roadmap and authorized implementation on 2026-09-08.
 This pass starts `M-03.03` with the audited parent/child process contract.
@@ -13,11 +14,11 @@ The original checkpoint remains in `/home/roy/Documents/repos/zl-linux-integrati
 branch `codex/integrate-sweep-process`. Current work is in the persistent
 `/home/roy/Documents/repos/zl-linux-spawn-wait-2026-09-08` checkout on
 `codex/spawn-wait-reconcile-2026-09-08`. Commit `a5c3cac` preserves the local
-implementation and main `02180af`; the next integration commit includes
+implementation and main `02180af`; integration commit `8365cbd` includes
 main `bd75552` and the strengthened BIOS32 double-fault gate.
 The user explicitly authorized commit/push of this batch on 2026-09-08.
 The approval-pending statements below describe earlier checkpoints. Publication
-will fast-forward the existing draft PR #15 after reconciliation and checks.
+fast-forwarded existing draft PR #15 through `4e7e283` after reconciliation and checks.
 The separate `zl` language checkout and other worktrees were left untouched.
 
 The live check at entry found draft [PR #15](https://github.com/RoyX4/ZlOS/pull/15)
@@ -500,7 +501,51 @@ are committed beside the earlier checkpoints:
 
 `process-publication-2026-09-08/combined-verification.json` checks the exact
 USB image, source and fixture hashes, raw transcripts, host executable hashes,
-canonical inventory and all eight target exits. The second normal push will
-rerun the repository's pre-push gates; none was disabled after the rejected
-attempt. Complete hosted closure and the full combined boot/app matrix remain
-pending. The earlier BIOS32 app sweep is retained with its earlier identity.
+canonical inventory and all eight target exits. The second normal push passed
+all five repository pre-push gates and published `4e7e283`; none was disabled
+after the rejected attempt. Complete hosted closure and the full combined
+boot/app matrix remain pending. The earlier BIOS32 app sweep is retained with its earlier identity.
+
+
+## Published checkpoint and hosted follow-up, 2026-09-09
+
+A normal push published `4e7e283bfb6487703b311834d13e52622282d52d`
+to `codex/integrate-sweep-process`; a fresh remote read matched that exact head.
+All five pre-push checks passed: build, language, engine parity, formatter and
+hazards. The retained monotonic duration was 566.62 seconds. The earlier LLVM
+claim also passed after the normal build supplied its compiler, with output 100.
+[PR #15](https://github.com/RoyX4/ZlOS/pull/15) remains open and draft.
+
+The ordinary GitHub code, host, desktop and four-route boot checks succeeded.
+[Docs run 34190191316](https://github.com/RoyX4/ZlOS/actions/runs/34190191316)
+failed because the host-launcher explanation was outside its managed README's
+local block and two historical tension notes used paths relative to `kernel/`.
+The explanation now lives in the preserved local block, and those two paths
+are repository-relative. Directory generation reports zero rewritten paths;
+its check covers 118 directories and eight navigation surfaces. The complete
+doc check passes, including all nine registered executable claims.
+
+[Full-closure run 34190249224](https://github.com/RoyX4/ZlOS/actions/runs/34190249224)
+failed before the complete landing gate, in the sleep receipt boundary tests.
+The consumer still demanded an obsolete `process-handle` absence phrase after
+the administrative probe correctly distinguished its own scope from the new
+userspace ABI. Its loose keyword test also accepted five copies of the invented
+gap `physical process-handle claim`. The consumer now checks every exact scope
+limit for both normal-exit and sleep receipts, independently of the producer.
+The regression reproduced one failure and two errors before repair; all eight
+tests pass afterward, including every removed/replaced gap and keyword stuffing.
+These are synthetic contract tests, not new runtime evidence.
+
+Four feature-contract summaries now describe the limits of their listed
+administrative/internal receipts instead of incorrectly saying the separate
+userspace ABI does not exist. Their maturity remains `PARTIAL_CURRENT`; this
+wording change does not join new receipts or promote any feature.
+
+The adjacent physical-allocator and toolchain joins each pass six tests, and
+the build-input check still reports 171 inputs and identity `2bb71bad…`.
+Follow-up logs and command exits are retained under
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/`.
+The native/raw boot receipts refreshed by the successful pre-push run remain
+bound to its actual `4e7e283` source context and artifact hashes.
+A new full hosted closure must pass on the follow-up commit before this slice
+can be called integration-ready. No physical qualification is claimed.

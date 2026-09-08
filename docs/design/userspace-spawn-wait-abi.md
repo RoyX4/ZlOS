@@ -1,10 +1,11 @@
 # Bounded userspace spawn/wait ABI
 
-Implemented locally on 2026-09-08; host checks and four native-UEFI QEMU
-scenarios passed again after the shared allocator rollback repair, on image
-`52dc8b9c…`. The BIOS32 Run and 47-app lifecycle checks also pass. Complete
-boot-matrix and integration verification remain pending;
-see the dated execution receipt for exact identities and limits.
+Published in draft PR #15 through `4e7e283` on 2026-09-08. The rebuilt host
+suite and four native-UEFI parent/child QEMU scenarios pass on combined source
+`2bb71bad…`, which includes main's BIOS32 double-fault repair. Ordinary hosted
+boot checks pass; full hosted closure and the combined app matrix remain
+pending. Earlier BIOS32 Run and 47-app lifecycle proof belongs to `52dc8b9c…`.
+See the dated execution receipt for exact identities and limits.
 [Execution receipt](../evidence/process-spawn-wait-2026-09-08.md) ·
 [Audited source contract](userspace-process-management-next.md) ·
 [Roadmap sequence](FULL-ROADMAP-NEXT-PROCESS.md).
