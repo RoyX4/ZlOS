@@ -2,17 +2,16 @@
 
 Implementation started, 2026-09-08:
 [userspace spawn/wait progress and exact evidence](evidence/process-spawn-wait-2026-09-08.md).
-The first roadmap slice now has local code, host failure/ownership checks and
-fresh native-UEFI parent/child QEMU proof. Complete regressions and hosted closure remain pending;
-the prior implementation's passing run does not cover these changes.
-The subsequent ownership review fixed a rollback-release refusal in the shared
-process allocator. Its expanded host regression passes 555 checks; the prior
-image was then rebuilt as `52dc8b9c…`. All four parent/child scenarios, the
-native boot gate and the existing fault/exit/sleep probes now pass on that
-repaired image. The BIOS32 Run check and all 47 app lifecycle cycles also pass.
-Checkpoint `a5c3cac` is committed and main `bd75552` is reconciled. Fresh
-combined-source verification, the full boot matrix and hosted closure remain
-pending; publication will update draft PR #15.
+The first roadmap slice has code, failure/ownership tests and native UEFI
+parent/child QEMU proof. Runtime commit `8365cbd` includes main `bd75552`.
+Combined source `2bb71bad…` passes the rebuilt host suite: 77 passed, three
+hardware skips, 14 explicit non-runs and zero failures. Native boot, all four
+parent/child scenarios and the existing external fault/exit/sleep probes pass.
+The shared allocator rollback regression passes 555 checks. The local launcher
+now uses the same inventory runner as CI and preserves complete native-gate
+failure diagnostics. Publication will update draft PR #15.
+The full combined-source boot/app matrix and hosted closure remain pending.
+Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`.
 
 Full-system planning, 2026-09-08:
 [complete roadmap, phase chapters and next-step checklist](design/FULL-SYSTEM-ROADMAP.md).

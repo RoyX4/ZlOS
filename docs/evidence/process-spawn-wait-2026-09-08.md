@@ -1,12 +1,11 @@
 # First roadmap implementation: userspace spawn and wait
 
-Status: local implementation with host proof and four native-UEFI parent/child
-QEMU passes repeated at `52dc8b9c…` after the shared allocator rollback repair.
-The full host run, native boot gate and existing fault/exit/sleep probes pass
-for that image. The BIOS32 Run check and all 47 app lifecycle cycles also pass.
-Main `bd75552` is now reconciled with checkpoint `a5c3cac`; fresh verification
-of that combined source and hosted closure remain pending. No feature maturity
-promotion.
+Status: combined source `2bb71bad…` passes the rebuilt host suite, native
+UEFI boot, all four parent/child scenarios and existing external fault/exit/sleep
+probes. Runtime commit `8365cbd` includes main `bd75552`; the local launcher
+repair and fresh receipts are being published with it. The full combined-source
+boot/app matrix and hosted closure remain pending. Earlier BIOS32 Run and
+47-app lifecycle results belong to `52dc8b9c…`. No feature maturity promotion.
 
 The user accepted the full roadmap and authorized implementation on 2026-09-08.
 This pass starts `M-03.03` with the audited parent/child process contract.
@@ -454,3 +453,54 @@ verification steps. The roadmap structural recheck passed 7,151 checks.
 Publication will update existing draft PR #15 without rewriting its history.
 Fresh hosted full closure, the full boot matrix and physical qualification
 remain open.
+
+## Publication checks and local launcher repair
+
+The first normal push of `8365cbd` was blocked by the pre-push hook.
+Build, engine parity, formatter and hazard checks passed. The language gate
+reached native UEFI Ring 3, then its scheduler receipt refused the historical
+host identity `52dc8b9c…` against combined source `2bb71bad…`. A direct call
+to the receipt validator reproduced `scheduler host receipt is from a foreign
+build`. The error was hidden by the language wrapper's eight-line truncation;
+`run_tests.sh` now retains the complete failed native-gate diagnostic.
+
+A fresh rebuild through the legacy `run-all.sh` built all 84 executables but
+its private dispatch list reported two false failures: `dpll_test` required
+physical-device access, and `zlfsseed` required its disk/name/fixture arguments.
+Both are explicit non-runs in the canonical inventory, while the separate
+`zllog-e2e.sh` exercises disk seeding with actual fixture arguments. The local
+launcher now regenerates source identity/inventory, removes the declared old
+executables, rebuilds, and delegates execution to the same inventory runner
+used by hosted CI. It no longer maintains a second hardware/fixture skip list.
+
+The corrected launcher passed end to end on the combined source: 94 targets,
+82 commands, 77 passed, three hardware skips, 14 explicit non-runs, zero failed
+and zero unavailable. This includes the shared allocator rollback regression
+and the newly integrated crash-record tests. The subsequent native UEFI gate
+passed, including every receipt validator and its negative controls. These
+correctness runs used a one-core CPU quota and 2 GiB memory limit; they do not
+close any quiet-host performance budget.
+
+The rejected first push, validator reproduction, old launcher, corrected full
+run and fresh target results are retained under
+`/home/roy/Documents/artifacts/zl-linux/process-publication-2026-09-08/`.
+The original integration checkout's 56 saved pending paths were rehashed and
+remain unchanged. The Git object bytes of all eight earlier raw transcripts
+were also checked against their recorded hashes.
+
+All eight target command exits subsequently passed for `2bb71bad…`. The four
+new scenarios each returned physical process frames from zero to zero, with
+zero allocator invariant failures. Their exact current transcripts and receipts
+are committed beside the earlier checkpoints:
+
+- [Combined-source signed exit](../../kernel/docs/receipts/user-spawn-wait-exit-native-uefi64-qemu-combined-2026-09-08.json).
+- [Combined-source private-page fault](../../kernel/docs/receipts/user-spawn-wait-fault-native-uefi64-qemu-combined-2026-09-08.json).
+- [Combined-source live orphan](../../kernel/docs/receipts/user-orphan-parent-first-native-uefi64-qemu-combined-2026-09-08.json).
+- [Combined-source terminal orphan](../../kernel/docs/receipts/user-orphan-child-first-native-uefi64-qemu-combined-2026-09-08.json).
+
+`process-publication-2026-09-08/combined-verification.json` checks the exact
+USB image, source and fixture hashes, raw transcripts, host executable hashes,
+canonical inventory and all eight target exits. The second normal push will
+rerun the repository's pre-push gates; none was disabled after the rejected
+attempt. Complete hosted closure and the full combined boot/app matrix remain
+pending. The earlier BIOS32 app sweep is retained with its earlier identity.

@@ -3,12 +3,13 @@
 Status: implementation started, with host evidence and fresh native-UEFI parent/child QEMU proof; full closure pending. This bounded slice is inside `M-03.03`; it does not declare the full process subsystem complete.
 
 [Current progress and proof boundaries](../evidence/process-spawn-wait-2026-09-08.md) · [Implemented ABI](userspace-spawn-wait-abi.md).
-Checkmarks below identify bounded target steps passed again by image
-`52dc8b9c…` after the shared allocator rollback repair. The progress receipt
-records the exact host/QEMU split; allocation and release-refusal injection
-remain host evidence. The host suite, native boot and external fault/exit/sleep
-probes also pass, along with the BIOS32 Run and 47-app lifecycle checks. The
-full boot matrix and complete integration verification remain open at
+Checkmarks below identify bounded target steps passed again by combined image
+`2bb71bad…`, after the allocator repair and reconciliation with main `bd75552`.
+The progress receipt records the exact host/QEMU split; allocation and release
+refusal injection remain host evidence. The rebuilt host suite, native boot,
+all four parent/child scenarios and external fault/exit/sleep probes pass.
+Earlier BIOS32 Run and 47-app lifecycle checks belong to `52dc8b9c…`. The full
+combined-source boot/app matrix and hosted closure remain open at
 `N-PROCESS.30`; passing the bounded local set does not close those larger gates.
 
 [Master roadmap](FULL-SYSTEM-ROADMAP.md) · [Original audited contract](userspace-process-management-next.md)
