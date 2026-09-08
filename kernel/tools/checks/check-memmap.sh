@@ -32,7 +32,21 @@ if [ "${1:-}" = "--selftest" ]; then
         tail -20 "$log"
         exit 1
     }
-    echo "check-memmap selftest: caught duplicate-address mutation"
+    # Second mutation: a kernel.zl buffer placed above ZL_LOW_END with no
+    # "# memmap.h NAME" declaration - the A7 class from the 2026-09-04 sweep,
+    # where 22 such buffers sat invisible to the EFI fixed-memory witness.
+    cp src/kernel.zl "$fixture"
+    printf '\nCODEX_HIGH = 0x03400000\n' >> "$fixture"
+    if "$SELF" "$fixture" >"$log" 2>&1; then
+        echo "FAIL: above-ZL_LOW_END mutation escaped"
+        exit 1
+    fi
+    grep -q "above ZL_LOW_END" "$log" || {
+        echo "FAIL: above-ZL_LOW_END mutation failed for the wrong reason"
+        tail -20 "$log"
+        exit 1
+    }
+    echo "check-memmap selftest: caught duplicate-address and above-ZL_LOW_END mutations"
     exit 0
 fi
 
@@ -80,6 +94,29 @@ for n in $(grep -oP '^\K[A-Z_]+(?=\s*=\s*0x0[0-9A-Fa-f]{5,})' "$SRC" | sort -u);
     case "$known" in *" $n "*) ;; *) unsized="$unsized $n";; esac
 done
 [ -n "$unsized" ] && echo "note: fixed addresses with no size check here:$unsized"
+
+# ---- THE BOUNDARY IS A GATE, NOT A NOTE (2026-09-06) ----------------------
+# memmap.h declares ZL_LOW_END as where kernel.zl's block ends and the C
+# regions begin. The 2026-09-04 sweep found 22 kernel.zl buffers above it,
+# checked by nothing: this script printed them and moved on. A kernel.zl
+# constant at or above ZL_LOW_END is allowed only as a DECLARED mirror of a
+# memmap.h name ("# memmap.h HI_IMG" on the same line - the convention
+# check-memmap-mirror.py verifies for equality). Anything else up there is a
+# buffer the C side cannot see, and fails here.
+ZL_LOW_END=$(grep -oP '^#define ZL_LOW_END\s+\K0x[0-9A-Fa-f]+' "$MEMMAP")
+[ -n "$ZL_LOW_END" ] || { echo "FAIL: ZL_LOW_END not found in $MEMMAP"; exit 1; }
+high=""
+while read -r name addr rest; do
+    [ -z "$name" ] && continue
+    if [ $((addr)) -ge $((ZL_LOW_END)) ]; then
+        case "$rest" in *"# memmap.h "*) ;; *) high="$high $name=$addr";; esac
+    fi
+done < <(grep -oP '^[A-Z_]+\s*=\s*0x0[0-9A-Fa-f]{5,}.*' "$SRC" | sed -E 's/^([A-Z_]+)\s*=\s*(0x[0-9A-Fa-f]+)/\1 \2/')
+if [ -n "$high" ]; then
+    echo "FAIL: kernel.zl fixed addresses at or above ZL_LOW_END ($ZL_LOW_END) that are not declared memmap.h mirrors:$high"
+    echo "      either move them below ZL_LOW_END, or write '# memmap.h NAME' on the line and let check-memmap-mirror.py hold them equal"
+    exit 1
+fi
 
 declare -A K
 for name in SNAKE_X SNAKE_Y \

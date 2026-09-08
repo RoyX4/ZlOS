@@ -83,6 +83,7 @@ src/core/pmm.c
 src/core/process_lifecycle.c
 src/core/user_process_service.c
 src/core/process_memory.c
+src/arch/x86/user_image64.c
 src/core/anon_memory.c
 src/arch/x86/page_table_txn.c
 src/arch/x86/paging.c

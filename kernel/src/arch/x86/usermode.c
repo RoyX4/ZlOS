@@ -447,6 +447,34 @@ typedef unsigned char u8_64;
 
 #include "user_syscalls_generated.h"
 
+/* Unknown syscall IDs must have one unsigned behavior. This Ring-3 image
+ * probes zero, the first gap, the sign bit and all bits set; each result
+ * is normalized by adding ENOSYS and ORed into RBX. A non-zero aggregate
+ * reaches UD2 instead of SYS_EXIT, making the target gate fail. */
+static const u8_64 unknown_syscalls[] = {
+    0x31,0xdb,
+    0xb8,0,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+    /* movabs RAX, first unknown number; retain all 64 bits of the ABI. */
+    0x48,0xb8,
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 0),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 8),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 16),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 24),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 32),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 40),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 48),
+    (u8_64)((ZLOS_U64_SYSCALL_LAST + 1ULL) >> 56),
+    0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+    0x48,0xb8, 0,0,0,0,0,0,0,0x80,
+    0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+    0x48,0xc7,0xc0, 0xff,0xff,0xff,0xff,
+    0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
+    0x48,0x85,0xdb, 0x75,0x09,
+    0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b,
+    0x0f,0x0b
+};
+
+
 #define U64_HANDLES 8
 #define U64_PROCS 2
 #define U64_SAVED_QWORDS 20
@@ -470,6 +498,8 @@ typedef unsigned char u8_64;
 #define U64_ENOSYS ((u64)-38)
 
 #include "core/process_memory.h"
+#include "user_image64.h"
+#include "user_process_abi.h"
 #include "core/anon_memory.h"
 #include "core/process_lifecycle.h"
 #include "core/user_process_service.h"
@@ -607,7 +637,12 @@ extern int userwin_has_wm_window(int owner, int handle);
 
 static u64 cr3_read64(void)
 {
+#if defined(USERMODE_HOSTTEST)
+    extern u64 usermode_host_cr3(void);
+    return usermode_host_cr3();
+#else
     u64 v; __asm__ volatile("mov %%cr3,%0" : "=r"(v)); return v;
+#endif
 }
 
 static int process64_flush_anonymous(void *context)
@@ -623,7 +658,24 @@ static int process64_flush_anonymous(void *context)
     return 1;
 }
 
-static void zero_page(u64 *p) { for (int i = 0; i < 512; i++) p[i] = 0; }
+static u64 process64_kernel_template[USER_IMAGE64_ENTRIES];
+static int process64_kernel_template_ready;
+
+static int process64_capture_kernel_template(void)
+{
+    if (process64_kernel_template_ready) return 1;
+    if (user64_running) return 0;
+    u64 root = cr3_read64() & U64_ADDR;
+    if (!root) return 0;
+    const u64 *entries = (const u64 *)(__UINTPTR_TYPE__)root;
+    for (unsigned int i = 0; i < USER_IMAGE64_ENTRIES; i++)
+        if ((entries[i] & (U64_P | U64_U)) == (U64_P | U64_U)) return 0;
+    for (unsigned int i = 0; i < USER_IMAGE64_ENTRIES; i++)
+        process64_kernel_template[i] = entries[i];
+    user64_kernel_cr3 = root;
+    process64_kernel_template_ready = 1;
+    return 1;
+}
 
 static void *process64_memory_pointer(const struct process_memory *memory,
                                       enum process_memory_page page)
@@ -686,6 +738,8 @@ static int process64_release_identity(struct process64 *process)
         process_lifecycle_exit(&proc_lifecycle, process->lifecycle_handle,
                                -125) != PROCESS_LIFECYCLE_OK)
         return 0;
+    if (process_lifecycle_adopt_orphans(&proc_lifecycle,
+            process->lifecycle_handle) != PROCESS_LIFECYCLE_OK) return 0;
     if (process_lifecycle_reap(&proc_lifecycle, snapshot.parent,
                                process->lifecycle_handle) !=
         PROCESS_LIFECYCLE_OK)
@@ -718,113 +772,91 @@ static int process64_release_slot(int index)
     return 1;
 }
 
-static int process64_prepare(int index, u32 pid)
+/* Prepare a successor without selecting it or borrowing the current CR3.
+ * Lifecycle and scheduler admission are preflighted against private copies.
+ * Current dispatch is single-CPU; syscall entry masks interrupts and kernel
+ * callers never run concurrently with a user step. No fallible operation is
+ * allowed between final publication and a prevalidated syscall copyout. */
+static int process64_construct(int index, u32 pid,
+                                process_lifecycle_handle parent,
+                                const u8_64 *code, u32 bytes,
+                                int replace, int admit)
 {
-    if (index < 0 || index >= U64_PROCS) return 0;
-    if (!process64_lifecycle_ready()) return 0;
-    u64 blob_bytes = (u64)(user64_blob_end - user64_blob);
-    if (!blob_bytes || blob_bytes > PMM_PAGE_BYTES) return 0;
-    u64 old = cr3_read64();
-    u64 *live = (u64 *)(old & U64_ADDR);
-    if (!live) return 0;
-    int slot = -1;
-    for (int i = 1; i < 255; i++) if (!(live[i] & U64_P)) { slot = i; break; }
-    if (slot < 0) return 0;
-
-    unsigned int process_owner = PROCESS_MEMORY_OWNER_BASE + (unsigned)index;
-    unsigned int anonymous_owner = ANON_MEMORY_OWNER_BASE + (unsigned)index;
-    /* Image replacement acquires the complete successor before releasing the
-     * predecessor, so the fixed-frame account admits exactly two images. The
-     * anonymous account is bounded to the one typed window it can publish. */
-    if (pmm_set_owner_limit(process_owner, U64_PROCESS_FRAME_LIMIT) != PMM_OK ||
-        pmm_set_owner_limit(anonymous_owner, U64_ANON_FRAME_LIMIT) != PMM_OK)
+    if (index < 0 || index >= U64_PROCS || !pid || !code || !bytes ||
+        bytes > U64_IO_MAX || (replace && user64_running) ||
+        !process64_lifecycle_ready() || !process64_capture_kernel_template())
+        return 0;
+    if (!replace && (procs64[index].state || procs64[index].lifecycle_handle ||
+                    process_memory_check(&procs64[index].memory) != PROCESS_MEMORY_OK ||
+                    procs64[index].memory.acquired ||
+                    !process64_anonymous_uninitialized(&procs64[index].anonymous))) return 0;
+    if (admit && (!proc_service_initialized ||
+        user_process_service_check(&proc_service) != USER_PROCESS_SERVICE_OK))
         return 0;
 
-    struct process_memory next = {0};
-    struct anon_memory next_anonymous = {0};
-    if (process_memory_acquire(&next, process_owner) != PROCESS_MEMORY_OK)
+    struct process_lifecycle_slot identities[U64_PROCS];
+    for (int i = 0; i < U64_PROCS; i++) identities[i] = proc_lifecycle_slots[i];
+    struct process_lifecycle_table candidate_table = {identities, U64_PROCS};
+    if (replace && identities[index].state != PROCESS_LIFECYCLE_EMPTY) {
+        process_lifecycle_handle old = procs64[index].lifecycle_handle;
+        if (identities[index].state == PROCESS_LIFECYCLE_RUNNABLE &&
+            process_lifecycle_exit(&candidate_table, old, -125) != PROCESS_LIFECYCLE_OK)
+            return 0;
+        process_lifecycle_handle owner = identities[index].parent;
+        if (process_lifecycle_adopt_orphans(&candidate_table, old) != PROCESS_LIFECYCLE_OK ||
+            process_lifecycle_reap(&candidate_table, owner, old) != PROCESS_LIFECYCLE_OK)
+            return 0;
+    }
+    process_lifecycle_handle handle = 0;
+    if (process_lifecycle_create_at(&candidate_table, (unsigned int)index,
+                                    pid, parent, &handle) != PROCESS_LIFECYCLE_OK)
         return 0;
-    u64 *pml4 = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PML4);
-    u64 *pdpt = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PDPT);
-    u64 *pd = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PD);
-    u64 *pt = (u64 *)process64_memory_pointer(&next, PROCESS_MEMORY_PT);
-    u8_64 *code = (u8_64 *)process64_memory_pointer(&next, PROCESS_MEMORY_CODE);
-    u8_64 *stack = (u8_64 *)process64_memory_pointer(&next,
-                                                      PROCESS_MEMORY_USER_STACK);
-    u8_64 *kstack_low = (u8_64 *)process64_memory_pointer(
-        &next, PROCESS_MEMORY_KERNEL_STACK_LOW);
-    u8_64 *kstack_high = (u8_64 *)process64_memory_pointer(
-        &next, PROCESS_MEMORY_KERNEL_STACK_HIGH);
-    if (!pml4 || !pdpt || !pd || !pt || !code || !stack ||
-        !kstack_low || !kstack_high) {
-        process_memory_release(&next);
+    struct scheduler_policy_slot schedule[U64_PROCS];
+    if (admit) {
+        for (int i = 0; i < U64_PROCS; i++) schedule[i] = proc_scheduler_slots[i];
+        struct user_process_service candidate_service = proc_service;
+        candidate_service.lifecycle = &candidate_table;
+        candidate_service.scheduler.slots = schedule;
+        if (user_process_service_admit(&candidate_service, handle) != USER_PROCESS_SERVICE_OK)
+            return 0;
+    }
+    unsigned int owner = PROCESS_MEMORY_OWNER_BASE + (unsigned int)index;
+    unsigned int anon_owner = ANON_MEMORY_OWNER_BASE + (unsigned int)index;
+    if (pmm_set_owner_limit(owner, U64_PROCESS_FRAME_LIMIT) != PMM_OK ||
+        pmm_set_owner_limit(anon_owner, U64_ANON_FRAME_LIMIT) != PMM_OK) return 0;
+    struct user_image64 image = {0};
+    int built = user_image64_build(&image, process64_kernel_template, owner, code, bytes);
+    if (built != USER_IMAGE64_OK) {
+        /* Corrupt allocation ownership cannot be silently discarded. */
+        if (image.memory.acquired) { up("process image allocation corrupt\n"); for (;;) __asm__ volatile("cli; hlt"); }
+        return built == USER_IMAGE64_E_NOMEM ? -12 : 0;
+    }
+    struct anon_memory anonymous = {0};
+    u64 *pt = (u64 *)process64_memory_pointer(&image.memory, PROCESS_MEMORY_PT);
+    if (!pt || anon_memory_init(&anonymous, anon_owner,
+            &pt[U64_ANON_PTE_FIRST], U64_P | U64_W | U64_U | U64_NX,
+            process64_flush_anonymous, &procs64[index].cr3) != ANON_MEMORY_OK ||
+        (replace && !process64_release_slot(index))) {
+        if (user_image64_discard(&image) != USER_IMAGE64_OK) {
+            up("process image rollback corrupt\n"); for (;;) __asm__ volatile("cli; hlt");
+        }
         return 0;
     }
-
-    for (int i = 0; i < 512; i++) pml4[i] = live[i];
-    zero_page(pdpt); zero_page(pd); zero_page(pt);
-    u64 base = (u64)(unsigned)slot << 39;
-    pml4[slot] = ((u64)pdpt & U64_ADDR) | U64_P | U64_W | U64_U;
-    pdpt[0] = ((u64)pd & U64_ADDR) | U64_P | U64_W | U64_U;
-    pd[0] = ((u64)pt & U64_ADDR) | U64_P | U64_W | U64_U;
-    pt[0] = ((u64)code & U64_ADDR) | U64_P | U64_U;
-    /* PTE 1 is intentionally absent: the stack's lower guard page. */
-    pt[2] = ((u64)stack & U64_ADDR) | U64_P | U64_W | U64_U | U64_NX;
-    /* PTE 3 is intentionally absent: the TSS kernel stack's lower guard. */
-    pt[4] = ((u64)kstack_low & U64_ADDR) | U64_P | U64_W | U64_NX;
-    pt[5] = ((u64)kstack_high & U64_ADDR) | U64_P | U64_W | U64_NX;
-
-    if (anon_memory_init(&next_anonymous, anonymous_owner,
-                         &pt[U64_ANON_PTE_FIRST], U64_P | U64_W | U64_U | U64_NX,
-                         process64_flush_anonymous, &procs64[index].cr3) !=
-        ANON_MEMORY_OK) {
-        process_memory_release(&next);
-        return 0;
-    }
-
-    for (u64 i = 0; i < blob_bytes; i++) code[i] = user64_blob[i];
-    for (u64 i = blob_bytes; i < PMM_PAGE_BYTES; i++) code[i] = 0xcc;
-    for (u32 i = 0; i < PMM_PAGE_BYTES; i++) stack[i] = 0;
-    for (u32 i = 0; i < PMM_PAGE_BYTES; i++) {
-        kstack_low[i] = U64_KSTACK_FILL;
-        kstack_high[i] = U64_KSTACK_FILL;
-    }
-
-    if (!process64_release_slot(index)) {
-        anon_memory_destroy(&next_anonymous);
-        process_memory_release(&next);
-        return 0;
-    }
-    process_lifecycle_handle lifecycle_handle = 0;
-    if (process_lifecycle_create_at(&proc_lifecycle, (unsigned int)index, pid,
-                                    PROCESS_LIFECYCLE_INVALID_HANDLE,
-                                    &lifecycle_handle) !=
-        PROCESS_LIFECYCLE_OK) {
-        anon_memory_destroy(&next_anonymous);
-        process_memory_release(&next);
-        return 0;
+    /* Single publication point: every failing admission/allocation is behind us.
+     * Do not assign proc64/proc64_index, active CR3, TSS or return/FP scratch. */
+    struct process64 *next = &procs64[index];
+    *next = (struct process64){0};
+    next->memory = image.memory; next->anonymous = anonymous;
+    next->pid = pid; next->state = PROCESS_LIFECYCLE_RUNNABLE;
+    next->lifecycle_handle = handle; next->cr3 = image.cr3;
+    next->user_base = image.user_base; next->user_stack_top = image.user_stack_top;
+    next->kernel_stack_top = image.kernel_stack_top;
+    for (int i = 0; i < U64_PROCS; i++) {
+        proc_lifecycle_slots[i] = identities[i];
+        if (admit) proc_scheduler_slots[i] = schedule[i];
     }
     proc_kstack_last_used[index] = 0;
-
-    proc64_index = index;
-    proc64 = &procs64[index];
-    proc64->memory = next;
-    proc64->anonymous = next_anonymous;
-    proc64->pid = pid; proc64->state = 1;
-    proc64->lifecycle_handle = lifecycle_handle;
-    proc64->cr3 = (u64)pml4 & U64_ADDR;
-    proc64->user_base = base;
-    proc64->user_stack_top = base + 3 * 4096ULL;
-    proc64->kernel_stack_top = base + 6 * 4096ULL;
-    proc64->calls = 0; proc64->fault_vector = 0; proc64->fault_error = 0;
-    proc64->exit_status = 0;
-    proc64->fault_address = 0; proc64->bad_pointer_refused = 0;
-    proc64->started = proc64->has_frame = 0;
-    for (int i = 0; i < U64_HANDLES; i++) proc64->handles[i] = 0;
-    proc64->inbox_head = proc64->inbox_tail = proc64->inbox_count = 0;
-    proc64->ipc_last_from = 0;
-    user64_kernel_cr3 = old;
-    user64_process_cr3 = proc64->cr3;
+    user64_fx_reset(procs64_fx[index]);
     return 1;
 }
 
@@ -1006,6 +1038,9 @@ static u64 user64_anonymous_status(int status)
     return U64_EINVAL;
 }
 
+static u64 user64_spawn(u64 name, u64 length, u64 output);
+static u64 user64_wait(u64 child, u64 output, u64 bytes);
+
 u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
                                               u64 arg2, u64 arg3)
 {
@@ -1048,6 +1083,8 @@ u64 __attribute__((sysv_abi)) user64_dispatch(u64 nr, u64 arg1,
         U64_RETURN(0);
     }
     if (nr == U64_SYS_TIME) U64_RETURN(idt_ticks());
+    if (nr == U64_SYS_SPAWN) U64_RETURN(user64_spawn(arg1, arg2, arg3));
+    if (nr == U64_SYS_WAIT) U64_RETURN(user64_wait(arg1, arg2, arg3));
     if (nr == U64_SYS_YIELD) {
         user64_yielded = 1;
         proc64->state = 1;
@@ -1256,13 +1293,7 @@ user64_timer_dispatch(u64 *frame)
 
 static int user64_load_process(int index, u32 pid, const u8_64 *code, u32 bytes)
 {
-    if (!code || !bytes || bytes > PMM_PAGE_BYTES ||
-        !process64_prepare(index, pid)) return 0;
-    u8_64 *page = (u8_64 *)process64_page_pointer(index, PROCESS_MEMORY_CODE);
-    if (!page) return 0;
-    for (u32 i = 0; i < bytes; i++) page[i] = code[i];
-    for (u32 i = bytes; i < PMM_PAGE_BYTES; i++) page[i] = 0xcc;
-    user64_fx_reset(procs64_fx[index]);
+    if (process64_construct(index, pid, 0, code, bytes, 1, 0) != 1) return 0;
     zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, pid,
                   ZLLOG_LIFE_START, 0u, bytes);
     return 1;
@@ -1320,6 +1351,9 @@ static int process64_service_step(
     (void)user64_step(index);
     user64_preempt_on = 0;
     *elapsed_ticks = (u32)(idt_ticks() - before);
+    if (procs64[index].state != PROCESS_LIFECYCLE_RUNNABLE &&
+        process_lifecycle_adopt_orphans(&proc_lifecycle, handle) != PROCESS_LIFECYCLE_OK)
+        return -1;
     return process64_lifecycle_contract(index) ? 0 : -1;
 }
 
@@ -1362,35 +1396,75 @@ static u32 process64_service_allocate_pid(void)
     return 0;
 }
 
-int user64_service_spawn_default_file(void)
+static int process64_spawn_file(const char *name,
+                                 process_lifecycle_handle parent,
+                                 process_lifecycle_handle *handle)
 {
-    static const char name[] = "/system/user.bin";
-    if (!fs_mounted()) return -1;
+    if (!name || !handle) return -22;
+    if (!fs_mounted()) return -5;
     int file = fs_find(name);
     if (file < 0) return -2;
     u32 bytes = fs_size(file);
-    if (!bytes || bytes > U64_IO_MAX) return -3;
+    if (!bytes || bytes > U64_IO_MAX) return -22;
     if (!process64_service_ready()) return -5;
-
     int index = -1;
     for (int i = 0; i < U64_PROCS; i++)
-        if (!procs64[i].state && !procs64[i].lifecycle_handle) {
+        if (!procs64[i].state && !procs64[i].lifecycle_handle &&
+            proc_lifecycle_slots[i].state == PROCESS_LIFECYCLE_EMPTY &&
+            proc_lifecycle_slots[i].generation != 0xffffffffU) {
             index = i;
             break;
         }
     if (index < 0) return -28;
-    if (fs_read(file, proc_io[index], bytes) != (int)bytes) return -4;
+    if (fs_read(file, proc_io[index], bytes) != (int)bytes) return -5;
+    u32 previous_pid = proc_service_next_pid;
     u32 pid = process64_service_allocate_pid();
-    if (!pid || !user64_load_process(index, pid, proc_io[index], bytes))
-        return -5;
-    if (user_process_service_admit(&proc_service,
-                                   procs64[index].lifecycle_handle) !=
-        USER_PROCESS_SERVICE_OK) {
-        (void)process64_release_slot(index);
-        return -5;
+    int status = pid ? process64_construct(index, pid, parent,
+                                            proc_io[index], bytes, 0, 1) : 0;
+    if (status != 1) {
+        proc_service_next_pid = previous_pid;
+        return status == -12 ? -12 : -5;
     }
+    *handle = procs64[index].lifecycle_handle;
     proc_service_last_error = 0;
-    return (int)pid;
+    zlt_lifecycle(ZLLOG_SUB_SCHED, ZLLOG_OBJ_PROCESS, pid,
+                  ZLLOG_LIFE_START, 0u, bytes);
+    return 0;
+}
+
+int user64_service_spawn_default_file(void)
+{
+    process_lifecycle_handle handle = 0;
+    int status = process64_spawn_file("/system/user.bin", 0, &handle);
+    /* Keep the existing desktop command's invalid-image diagnostic. */
+    if (status == -22) return -3;
+    if (status) return status;
+    int index = process64_service_index(handle);
+    return index >= 0 ? (int)procs64[index].pid : -5;
+}
+
+/* Output ranges are checked before any acquisition or reap. The bounded
+ * single-CPU syscall path has interrupts masked, no concurrent user mappings,
+ * and no caller remapping in these operations. Copyout is therefore a final
+ * non-failing byte store, not a fallible step after custody was consumed. */
+static void user64_store_validated(u64 output, const void *source, u32 bytes)
+{
+    const u8_64 *input = source;
+    u8_64 *destination = (u8_64 *)(__UINTPTR_TYPE__)output;
+    for (u32 i = 0; i < bytes; i++) destination[i] = input[i];
+}
+
+static u64 user64_spawn(u64 name_pointer, u64 name_length, u64 output)
+{
+    char name[U64_NAME_MAX];
+    if (!user64_running || !proc64 ||
+        !user64_range(output, USER_PROCESS_HANDLE_BYTES, 1) ||
+        !user64_name(name, name_pointer, name_length)) return U64_EINVAL;
+    process_lifecycle_handle handle = 0;
+    int status = process64_spawn_file(name, proc64->lifecycle_handle, &handle);
+    if (status) return (u64)(s64)status;
+    user64_store_validated(output, &handle, USER_PROCESS_HANDLE_BYTES);
+    return 0;
 }
 
 int user64_service_work(void)
@@ -1453,7 +1527,7 @@ int user64_service_termination_code(int index)
 
 int user64_service_last_failure(void) { return proc_service_last_error; }
 
-int user64_service_reap(int index)
+static int process64_reap_owned(int index, process_lifecycle_handle requester)
 {
     proc_service_reap_stage = 0;
     if (index < 0 || index >= U64_PROCS) return -22;
@@ -1462,7 +1536,7 @@ int user64_service_reap(int index)
     proc_service_reap_stage = 1;
     struct process_lifecycle_snapshot snapshot;
     int status = process_lifecycle_observe(
-        &proc_lifecycle, PROCESS_LIFECYCLE_INVALID_HANDLE,
+        &proc_lifecycle, requester,
         process->lifecycle_handle, &snapshot);
     if (status == PROCESS_LIFECYCLE_E_PENDING) return -11;
     if (status != PROCESS_LIFECYCLE_OK) return -5;
@@ -1483,6 +1557,35 @@ int user64_service_reap(int index)
     proc_service_reap_stage = 4;
     if (!process64_release_slot(index)) return -5;
     proc_service_reap_stage = 5;
+    return 0;
+}
+
+int user64_service_reap(int index)
+{
+    return process64_reap_owned(index, PROCESS_LIFECYCLE_INVALID_HANDLE);
+}
+
+static u64 user64_wait(u64 child, u64 output, u64 bytes)
+{
+    if (!user64_running || !proc64 || bytes != USER_PROCESS_WAIT_BYTES ||
+        !user64_range(output, USER_PROCESS_WAIT_BYTES, 1)) return U64_EINVAL;
+    struct process_lifecycle_snapshot snapshot;
+    int status = process_lifecycle_observe(&proc_lifecycle,
+        proc64->lifecycle_handle, child, &snapshot);
+    if (status == PROCESS_LIFECYCLE_E_PENDING) return U64_EAGAIN;
+    if (status == PROCESS_LIFECYCLE_E_PERMISSION) return (u64)-1;
+    if (status == PROCESS_LIFECYCLE_E_STALE) return U64_ENOENT;
+    if (status == PROCESS_LIFECYCLE_E_ARGUMENT) return U64_EINVAL;
+    if (status != PROCESS_LIFECYCLE_OK) return U64_EIO;
+    int index = process64_service_index(child);
+    if (index < 0 || index == proc64_index) return U64_EIO;
+    struct user_process_wait_result result = {
+        USER_PROCESS_WAIT_VERSION, snapshot.termination.kind,
+        snapshot.termination.exit_status, snapshot.termination.fault_vector,
+        snapshot.termination.fault_error, 0, snapshot.termination.fault_address
+    };
+    if (process64_reap_owned(index, proc64->lifecycle_handle)) return U64_EIO;
+    user64_store_validated(output, &result, sizeof result);
     return 0;
 }
 
@@ -1555,22 +1658,6 @@ void user_selftest(void)
         first_lifecycle_snapshot.state == PROCESS_LIFECYCLE_EXITED &&
         first_lifecycle_snapshot.termination.exit_status == -7;
 
-    /* Unknown syscall IDs must have one unsigned behavior. This Ring-3 image
-     * probes zero, the first gap, the sign bit and all bits set; each result
-     * is normalized by adding ENOSYS and ORed into RBX. A non-zero aggregate
-     * reaches UD2 instead of SYS_EXIT, making the target gate fail. */
-    static const u8_64 unknown_syscalls[] = {
-        0x31,0xdb,
-        0xb8,0,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
-        0xb8,26,0,0,0, 0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
-        0x48,0xb8, 0,0,0,0,0,0,0,0x80,
-        0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
-        0x48,0xc7,0xc0, 0xff,0xff,0xff,0xff,
-        0xcd,0x80, 0x48,0x83,0xc0,0x26, 0x48,0x09,0xc3,
-        0x48,0x85,0xdb, 0x75,0x09,
-        0xb8,3,0,0,0, 0xcd,0x80, 0x0f,0x0b,
-        0x0f,0x0b
-    };
     int unknown_result = user64_run_probe(unknown_syscalls, sizeof unknown_syscalls);
     struct process_lifecycle_snapshot stale_snapshot;
     int generation_reuse = first_lifecycle_custody &&
@@ -1929,7 +2016,8 @@ void user_selftest(void)
     int dw = user64_run_probe(write_device, sizeof write_device);
 
     /* mov rbx, stack_top-4; mov rcx,8; SYS_COPY; SYS_EXIT */
-    if (!process64_prepare(0, 1)) { up("  ring 3 hostile probes: setup refused\n"); return; }
+    if (!user64_load_process(0, 1, user64_blob, (u32)(user64_blob_end - user64_blob))) { up("  ring 3 hostile probes: setup refused\n"); return; }
+    process64_select(0);
     u8_64 cross[] = {
         0x48,0xbb, 0,0,0,0,0,0,0,0,
         0x48,0xc7,0xc1, 8,0,0,0,

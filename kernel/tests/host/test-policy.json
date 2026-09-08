@@ -22,6 +22,7 @@
       "fbtext",
       "fstest",
       "fuzz",
+      "gdt64test",
       "gputest",
       "heaptest",
       "htmltest",
@@ -43,16 +44,17 @@
       "pagingtest",
       "palette",
       "pmmtest",
-      "processlifecycletest",
       "pngtest",
+      "processlifecycletest",
       "processmemorytest",
       "retest",
       "rtctest",
       "runtest",
-      "schedulerpolicytest",
       "schedtest",
       "schedtest_ms",
+      "schedulerpolicytest",
       "settingstest",
+      "settingstest_zlfs",
       "systest",
       "tartest",
       "tcptest",
@@ -63,7 +65,9 @@
       "toasttest",
       "tritest",
       "uitest",
+      "userimage64test",
       "userprocessservicetest",
+      "userspawnwaittest",
       "walltest",
       "wmtest",
       "wmtest_feel",
@@ -84,6 +88,7 @@
       "zlfsseed"
     ],
     "manual-hardware": [
+      "dpll_test",
       "intel_probe",
       "modeset_test"
     ],
@@ -96,7 +101,8 @@
       "killtest.sh",
       "memmap-guard-test.sh",
       "user-syscalls-test.sh",
-      "zladdrs.sh"
+      "zladdrs.sh",
+      "zllog-e2e.sh"
     ],
     "manual-hardware": [
       "gpu-dev.sh",
@@ -130,7 +136,8 @@
   },
   "source_overrides": {
     "browsertest_san": "browsertest.c",
-    "jmptest32": "jmptest.c"
+    "jmptest32": "jmptest.c",
+    "settingstest_zlfs": "settingstest.c"
   },
   "optional_build": [
     "gpu_blt",

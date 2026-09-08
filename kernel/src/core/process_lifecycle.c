@@ -317,3 +317,23 @@ int process_lifecycle_find_runnable(
         }
     return PROCESS_LIFECYCLE_E_NOT_FOUND;
 }
+
+int process_lifecycle_adopt_orphans(struct process_lifecycle_table *table,
+                                   process_lifecycle_handle terminal_parent)
+{
+    if (!handle_shape(table, terminal_parent))
+        return PROCESS_LIFECYCLE_E_ARGUMENT;
+    if (process_lifecycle_check(table) != PROCESS_LIFECYCLE_OK)
+        return PROCESS_LIFECYCLE_E_STATE;
+    const struct process_lifecycle_slot *parent = find_slot_const(table, terminal_parent);
+    if (!parent) return PROCESS_LIFECYCLE_E_STALE;
+    if (parent->state == PROCESS_LIFECYCLE_RUNNABLE)
+        return PROCESS_LIFECYCLE_E_PENDING;
+    /* No fallible operation follows preflight. The caller serializes mutation;
+     * grandchildren retain their living/terminal direct parent's custody. */
+    for (unsigned int i = 0; i < table->capacity; i++)
+        if (table->slots[i].state != PROCESS_LIFECYCLE_EMPTY &&
+            table->slots[i].parent == terminal_parent)
+            table->slots[i].parent = PROCESS_LIFECYCLE_INVALID_HANDLE;
+    return PROCESS_LIFECYCLE_OK;
+}

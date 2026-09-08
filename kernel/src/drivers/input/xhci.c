@@ -2699,6 +2699,49 @@ static void kbd_event(u32 param, u32 status, u32 ctrl)
  *
  * `max` bounds the WHOLE loop, not the transfer events found, so a burst of
  * port-status changes cannot hold the caller either. */
+/* ---- unplug -------------------------------------------------------------
+ * The controller posts a Port Status Change Event whenever a port moves,
+ * including when the device goes away (CCS clears). Until 2026-09-06
+ * xhci_poll() consumed those and did nothing, so a keyboard pulled with shift
+ * held left kbd_mods at "shift" for every later key from any source, and a
+ * key held at the moment of unplug never got its release - input.c clears a
+ * held key only on a release event, so it auto-repeated until another key was
+ * pressed. Detaching means: release what was held, forget the device, and
+ * acknowledge the change bits (write-1-to-clear) so the port can report the
+ * next plug. Re-enumeration on re-plug is xhci_bringup()'s job: it retries
+ * xhci_kbd_init()/xhci_ptr_init() whenever a device is not ready. */
+static void kbd_detach(void)
+{
+    for (int i = 0; i < 6; i++) {
+        int usage = prev_keys[i];
+        if (usage > 3) kevq_push(KEV(0, (int)kbd_mods, usage));
+        prev_keys[i] = 0;
+    }
+    if (kbd_mods) kevq_push(KEV_MOD(0));
+    kbd_mods  = 0;
+    kbd_ready = 0;
+}
+
+static void ptr_detach(void)
+{
+    ptr_btn   = 0;
+    ptr_ready = 0;
+}
+
+static void port_change(u32 param)
+{
+    int port = (int)((param >> 24) & 0xFF);
+    if (port < 1 || port > xports) return;
+    uptr reg = xop + XOP_PORTSC(port);
+    u32  v   = rd32(reg);
+    /* Acknowledge exactly the change bits that are set. portsc_keep() drops
+     * every RW1C bit, so this write clears nothing it did not intend to. */
+    wr32(reg, portsc_keep(port) | (v & PORTSC_RW1C));
+    if (v & PORTSC_CCS) return;                /* still connected */
+    if (kbd_ready && port == kbd_port) kbd_detach();
+    if (ptr_ready && port == ptr_port) ptr_detach();
+}
+
 int xhci_poll(int max)
 {
     if (!ptr_ready && !kbd_ready && !ecm_ready) return 0;
@@ -2708,6 +2751,7 @@ int xhci_poll(int max)
         u32 param = 0, status = 0, ctrl = 0;
         int type = event_poll(&param, &status, &ctrl, 1);
         if (!type) break;                    /* the ring is empty - done */
+        if (type == TRB_PORT_STATUS) { port_change(param); continue; }
         if (type != TRB_TRANSFER_EVENT) continue;   /* consumed, ignored */
         kbd_event(param, status, ctrl);
         got++;

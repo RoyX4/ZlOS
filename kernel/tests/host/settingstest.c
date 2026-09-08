@@ -96,6 +96,39 @@ int nvme_write_block(unsigned lo, unsigned hi)
     return 1;
 }
 
+#ifdef SETTINGS_ZLFS
+/* ---- the block seam fs.c drives (the same fake disk, counted separately) --
+ * settings.c reaches the disk two ways: nvme_read/write_block for the raw
+ * LBA 64 fallback above, and fs.c's block_read/write/flush once a zlfs is
+ * mounted. Counting them apart is what lets a case assert WHICH path ran. */
+static int bwrites = 0, breads = 0, flushes = 0;
+static int flush_budget = -1;          /* >= 0: flushes beyond this many fail */
+int nvme_setup(void) { return ready; }
+int block_read(unsigned lba, void *buf)
+{
+    breads++;
+    if (fail_read || lba >= nblocks) return 0;
+    memcpy(buf, disk[lba], BLKSZ);
+    return 1;
+}
+int block_write(unsigned lba, const void *buf)
+{
+    bwrites++;
+    if (fail_write || lba >= nblocks) return 0;
+    memcpy(disk[lba], buf, BLKSZ);
+    return 1;
+}
+int block_flush(void)
+{
+    flushes++;
+    return flush_budget < 0 || flushes <= flush_budget;
+}
+int fs_mkfs(void); int fs_mount(void); int fs_mounted(void);
+int fs_find(const char *name); int fs_create(const char *name, unsigned bytes);
+int fs_write(int idx, const void *src, unsigned bytes);
+int fs_read(int idx, void *dst, unsigned max); int fs_delete(int idx);
+#endif
+
 /* ---- the rest of settings.c's world --------------------------------------- */
 static char logbuf[4096];
 static int  loglen;
@@ -203,10 +236,9 @@ static void ok(const char *what, int cond)
  * There is no setter API either - the app owns its state, which is ui.c's whole
  * design - so this is also the only way in that does not add kernel code whose
  * sole caller is a test. */
-static void mk_block(int accent,int scale,int speed,int accel,int sub,int anim)
+static void mk_record(unsigned char *r,int accent,int scale,int speed,int accel,int sub,int anim)
 {
-    unsigned char r[RECLEN];
-    memset(r, 0, sizeof r);
+    memset(r, 0, RECLEN);
     r[0]='z'; r[1]='l'; r[2]='S'; r[3]='1';
     r[4]=1; r[5]=0;                 /* version 1 */
     r[6]=6; r[7]=0;                 /* six fields */
@@ -218,6 +250,12 @@ static void mk_block(int accent,int scale,int speed,int accel,int sub,int anim)
     unsigned h = 2166136261u;                    /* FNV-1a, checksum field zero */
     for (int i=0;i<RECLEN;i++){ h ^= r[i]; h *= 16777619u; }
     for (int i=0;i<4;i++) r[8+i] = (unsigned char)((h >> (8*i)) & 0xFF);
+}
+
+static void mk_block(int accent,int scale,int speed,int accel,int sub,int anim)
+{
+    unsigned char r[RECLEN];
+    mk_record(r, accent, scale, speed, accel, sub, anim);
     memset(disk[LBA], 0, BLKSZ);
     memcpy(disk[LBA], r, RECLEN);
 }
@@ -648,6 +686,105 @@ int main(void)
         ok("...and reaches its maximum", hi_seen == SPD_MAX);
         printf("       (swept %d..%d over the card's track)\n", lo_seen, hi_seen);
     }
+
+#ifdef SETTINGS_ZLFS
+    /* ---- the zlfs branch: the path a graphical boot actually takes -------
+     * Everything above ran with fs.c LINKED but nothing MOUNTED, so
+     * settings.c took the raw-sector fallback - the only path the old
+     * settingstest could reach, and not the one the Files-mounted kernel
+     * uses. Found 2026-09-04 ("settingstest never runs the zlfs branch"),
+     * closed here. */
+    printf("\n  -- zlfs branch --\n");
+    {
+        unsigned char before[BLKSZ];
+        ok("nothing above mounted a zlfs", fs_mounted() == 0);
+        memcpy(before, disk[LBA], BLKSZ);
+        ok("mkfs on the fake disk", fs_mkfs() == 1);
+        ok("...and it mounts", fs_mount() == 1);
+        ok("...and mkfs left the raw settings sector alone",
+           memcmp(before, disk[LBA], BLKSZ) == 0);
+
+        /* no file yet: a load still falls through to the sector */
+        set_all(1, 3, 300, 1, 1, 0);
+        ok("with no settings file yet, a load still takes the raw sector",
+           settings_scale() == 3 && settings_speed() == 300);
+
+        logclear(); writes = 0; bwrites = 0; flushes = 0;
+        ok("saving with a zlfs mounted reports success", settings_save() == 1);
+        int idx = fs_find("/system/settings");
+        ok("...and creates /system/settings", idx >= 0);
+        ok("...through the block layer, not the raw sector path",
+           writes == 0 && bwrites > 0);
+        ok("...and flushed it", flushes > 0);
+        {
+            unsigned char want[RECLEN], got[RECLEN];
+            mk_record(want, 1, 3, 300, 1, 1, 0);
+            memset(got, 0, sizeof got);
+            ok("...and the file is byte-identical to the independently built record",
+               fs_read(idx, got, RECLEN) == RECLEN && memcmp(want, got, RECLEN) == 0);
+        }
+
+        /* the file wins over a valid sector that disagrees */
+        mk_block(2, 2, 100, 0, 0, 1);
+        logclear(); writes = 0; bwrites = 0;
+        ok("a load takes the zlfs file over a valid raw sector that disagrees",
+           settings_load() == 1 && settings_scale() == 3 && settings_speed() == 300);
+        ok("...and LOADING NEVER WRITES, on either path", writes == 0 && bwrites == 0);
+
+        /* corruption in the file is refused, and the log names the FILE */
+        {
+            unsigned char bad[RECLEN];
+            mk_record(bad, 1, 3, 300, 1, 1, 0);
+            bad[20] ^= 1;                              /* one bit of speed */
+            ok("the harness can rewrite the file", fs_write(idx, bad, RECLEN) == 1);
+            logclear(); writes = 0; bwrites = 0;
+            ok("a flipped bit in the zlfs file is refused", settings_load() == 0);
+            ok("...and says CHECKSUM", strstr(logtext(), "CHECKSUM") != NULL);
+            ok("...and names /system/settings, not LBA 64",
+               strstr(logtext(), "/system/settings") != NULL &&
+               strstr(logtext(), "LBA 64") == NULL);
+            ok("...and does not fall back to the sector silently",
+               settings_scale() == 3 && settings_speed() == 300);
+            ok("...and still never writes", writes == 0 && bwrites == 0);
+        }
+
+        /* a short file is a refusal, not a partial load */
+        ok("the harness can delete the file", fs_delete(idx) == 1);
+        idx = fs_create("/system/settings", 10u);
+        ok("...and create a 10-byte one", idx >= 0 && fs_write(idx, "0123456789", 10u) == 1);
+        logclear();
+        ok("a short zlfs settings file is refused", settings_load() == 0);
+        ok("...and says so", strstr(logtext(), "short zlfs") != NULL);
+        fs_delete(idx);
+
+        /* write and flush failures are reported, not swallowed */
+        logclear(); fail_write = 1;
+        ok("a failed zlfs write reports failure", settings_save() == 0);
+        ok("...and says so", strstr(logtext(), "zlfs write FAILED") != NULL);
+        fail_write = 0;
+        /* fs_write flushes on its own before settings.c's final fs_sync, so a
+         * flush that always fails is reported as a WRITE failure. The flush
+         * branch is the last flush of a save failing on its own: measure how
+         * many one save does and let exactly that many minus one succeed. */
+        logclear();
+        ok("a save with the disk healthy succeeds", settings_save() == 1);
+        /* Measure the STEADY-STATE save (file exists, same size): creating the
+         * file flushes more often than overwriting it, and a budget measured
+         * on the create path let every flush of the overwrite path succeed. */
+        flushes = 0;
+        ok("...and so does the next one", settings_save() == 1);
+        {
+            int per_save = flushes;
+            ok("...and flushes at least twice (inside the write, then the sync)", per_save >= 2);
+            logclear(); flushes = 0; flush_budget = per_save - 1;
+            ok("the final sync failing reports not-durable", settings_save() == 0);
+            ok("...and says so", strstr(logtext(), "not durable") != NULL);
+            flush_budget = -1;
+        }
+        logclear();
+        ok("and once the disk behaves, saving succeeds again", settings_save() == 1);
+    }
+#endif
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);
     return fails ? 1 : 0;

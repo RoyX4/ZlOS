@@ -73,6 +73,7 @@ Runtime probes that inspect QEMU or retained evidence outputs.
 - `probe-usb-keys.py`
 - `probe-user-process-exit.py`
 - `probe-user-process.py`
+- `probe-user-spawn-wait.py`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../docs/CODE-MAP.md)
 for repository-wide ownership.

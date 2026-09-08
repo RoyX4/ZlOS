@@ -40,6 +40,9 @@ x86 and x86-64 CPU, interrupt, paging, syscall, and low-level support.
 - `rtc.c`
 - `smp.c`
 - `support.c`
+- `user_image64.c`
+- `user_image64.h`
+- `user_process_abi.h`
 - `user_syscalls.json`
 - `user_syscalls_generated.h`
 - `usermode.c`

@@ -1,21 +1,77 @@
 {
   "schema": "zlos.user-process-native-uefi64-qemu-receipt.v1",
   "result": "PASS_BOUNDED_USER_PROCESS_BOUNDARY",
-  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "build_identity": "52dc8b9c468cc8b2945f0b447f78480c5b94df3613ca4494ac16bc65ca27ec0e",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "07be3fb66a86b1ba0e95e3514fafaca64d9a11da5b1aba822cb31fe089e96b23"
+    "sha256": "ccdb86b0c2895a39bafc45b4aa4d06191ca09b135c4d80391f98e363ce47739b"
   },
-  "boot_log_sha256": "8a41e1da60e10c63e09ff3adbabbdf94e6372788b7d1abe629d5b502bd0e9a87",
+  "boot_log_sha256": "6c76a96495b774dd001811813ab0f0d6b9bc33771358bffe84938a617b12d9d6",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
-    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+    "sha256": "2179bbbb5584ff5d4ea157c9cb450ca900faf2d415aa6fda1f6dcc4ecf9177e0"
   },
   "implementation": [
     {
       "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "ed969991203fc677815c90627353f94c04bee5c74fa9d0126e9d3f438be56414"
+      "sha256": "94de295537484e511bf860cdacc4237f971e96f729933a25350985982715a938"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.h",
+      "sha256": "2296f9483924ba0f8f0b61b5fb1b17ebd8558e48eda7e0bc075e3bc9a302ebe3"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_process_abi.h",
+      "sha256": "835c96ecb29b2e38824c554b9c2c9f3dcbde603bb03600cda8532ffc4ca912ba"
+    },
+    {
+      "path": "kernel/tests/host/userspawnwaittest.c",
+      "sha256": "9d77b52335dbe113c3b95b9398cf5823554568328e29d320a3dc20ab4aba15d5"
+    },
+    {
+      "path": "kernel/tools/generators/gen-user-syscalls.py",
+      "sha256": "d62f5c2bbd0c0d6387ef4b0db57bc7ca040d2846921099b5cf66eeb15b6651b8"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.h",
+      "sha256": "e2d224fa9a31e5871aee08178c3c920e551af93c00a0c5d8153f6a6bde901e50"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.c",
+      "sha256": "b5ba0380451273fba1914d62cc8441947d0b15a25c8f93b0021cc50ad5a0ed6a"
+    },
+    {
+      "path": "kernel/tests/host/processlifecycletest.c",
+      "sha256": "2324a7ffd9d47e642fa4c035c3585b287f712807f3e48f57cfbdb76fcc451518"
+    },
+    {
+      "path": "kernel/src/core/scheduler_policy.h",
+      "sha256": "236da3b516d4905f225954571c15b23cdddbb2b10ff85932cb8fa8967ed9d0d2"
+    },
+    {
+      "path": "kernel/src/core/scheduler_policy.c",
+      "sha256": "f4167cfe29def979904320faa67377b46e086b12a319fec8df50916463afb030"
+    },
+    {
+      "path": "kernel/tests/host/schedulerpolicytest.c",
+      "sha256": "3899c6a4f2f1c60c30ff90049cf9bcd0ecce33a7cf24c7e462dfb1f7e991b598"
+    },
+    {
+      "path": "kernel/src/core/user_process_service.h",
+      "sha256": "db639c03d406cdc8037524159f458edba6ac15c46019ee35c0884ac519f90c8a"
+    },
+    {
+      "path": "kernel/src/core/user_process_service.c",
+      "sha256": "491fde314cd02f3dded14630151d7d41bb58b9bba16ac95f59f6186fc22ac822"
+    },
+    {
+      "path": "kernel/tests/host/userprocessservicetest.c",
+      "sha256": "955dc1aa86032cd6d1af58b8393e689e71e13509c33d95d89fb1e1f546cea8d0"
     },
     {
       "path": "kernel/src/core/process_memory.h",
@@ -23,11 +79,11 @@
     },
     {
       "path": "kernel/src/core/process_memory.c",
-      "sha256": "b9a874c4139b613224ee74546e2b63c8ff6a2ac3faeca108f13986c49f0a2b63"
+      "sha256": "5ed29d117b97bcb051666c8be0965970e344d09b662585b6a25a2fc851a035ca"
     },
     {
       "path": "kernel/tests/host/processmemorytest.c",
-      "sha256": "6e538516ef96987fcec1b503768bce955fcabc34ff52bfd8722993f80483fc6b"
+      "sha256": "2a1f6293ef03acc2e479cd80d61ad3455ba05d79f17fcd3d4b2a7180553a0a97"
     },
     {
       "path": "kernel/src/core/pmm.h",
@@ -55,11 +111,11 @@
     },
     {
       "path": "kernel/src/arch/x86/user_syscalls.json",
-      "sha256": "b7ad9c0a9567aec99e4c9d0a4203c5eb40312e9a6cf1fef267249729a4f701f5"
+      "sha256": "44e91463e90d214da22b4744bec7b605c4769ea73c68ded41b43554a0162aed6"
     },
     {
       "path": "kernel/src/arch/x86/user_syscalls_generated.h",
-      "sha256": "16a8d11cb53e04cecdedd7b80c50aa6f1f2957101760153e0eac299d67ba9f6a"
+      "sha256": "6c26c243bcaf241e798f951c8684b5e96837993074b82c9688584922c655d55f"
     },
     {
       "path": "kernel/src/arch/x86/idt.c",
@@ -67,19 +123,28 @@
     },
     {
       "path": "kernel/boot/gdt64.c",
-      "sha256": "2789dc982dc7788d9cd8166aac59ccc4a0d60a166194fb4a08f7cbd0f2da70c3"
+      "sha256": "22362c5f2e7dd4f2abfed55694c8b3f93da0e3af1a3de2cdb52c5ecfc0d25284"
     },
     {
       "path": "kernel/docs/architecture/system/user-process-abi.md",
-      "sha256": "2f905f4fa179d8ee5590d6a538a68499c0268c7fbcc7c20ccf4bae1c97b1707e"
+      "sha256": "fba4da41be03a9b72c4d81d37250c828a6afac032a2576c4fb6fb845b072783f"
     }
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "7c8433a40ed014d9a56a5b3ecbe15cecf09469110f39d94cd442f6b12f827d63",
+    "sha256": "d8c4c88047bc2f9dea8a3a9f5b628f7b7da6cf04dea1cefb006116908d0ec834",
     "targets": {
+      "processlifecycletest": {
+        "checks": 109
+      },
+      "schedulerpolicytest": {
+        "checks": 126
+      },
+      "userprocessservicetest": {
+        "checks": 144
+      },
       "processmemorytest": {
-        "checks": 191
+        "checks": 555
       },
       "anonmemorytest": {
         "checks": 243
@@ -102,11 +167,22 @@
       "abi_version": 1,
       "probes": [
         0,
-        25,
+        28,
         9223372036854775808,
         18446744073709551615
       ],
       "result": "ENOSYS"
+    },
+    {
+      "id": "generation-safe-process-identity",
+      "marker": "<- process lifecycle generation reuse rejected the stale handle and retained exact exit custody",
+      "handle_fields": [
+        "slot",
+        "generation"
+      ],
+      "stale_handle_refused": true,
+      "exit_status_retained": true,
+      "observed_exit_status": -7
     },
     {
       "id": "anonymous-reserve-commit-release",
@@ -164,6 +240,21 @@
       "sibling_exited": true
     },
     {
+      "id": "fault-and-exit-custody",
+      "marker": "<- process lifecycle retained exact GP-fault custody and independent sibling exit",
+      "fault_fields": [
+        "vector",
+        "error",
+        "address"
+      ],
+      "fault_vector": 13,
+      "fault_error": 0,
+      "fault_address": 0,
+      "fault_exit_distinct": true,
+      "sibling_exit_retained": true,
+      "sibling_exit_status": 7
+    },
+    {
       "id": "lower-stack-guard-fault-containment",
       "marker": "<- lower stack guard PF error 6 at exact address; sibling G exited",
       "offender_vector": 14,
@@ -189,8 +280,8 @@
       ],
       "high_water_limit_bytes": 8192,
       "observed_high_water_bytes": {
-        "slot0": 1536,
-        "slot1": 776
+        "slot0": 1584,
+        "slot1": 824
       }
     },
     {
@@ -222,10 +313,43 @@
       "failure_atomic_acquire": true,
       "two_processes_disjoint": true,
       "baseline_restored": true
+    },
+    {
+      "id": "process-identity-reclamation",
+      "marker": "<- process lifecycle slots reaped with generation history retained",
+      "live_slots_after_reap": 0,
+      "generation_history_retained": true,
+      "resource_release_before_reap": true
+    },
+    {
+      "id": "persistent-process-service",
+      "marker": "<- persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped",
+      "processes": 2,
+      "kernel_turns": 4,
+      "trace": "ST12",
+      "selection": "round-robin exact lifecycle handle",
+      "turn_boundary": "cooperative yield or exit; timer preemption is proved by the independent non-yielding-process assertion",
+      "exit_statuses": [
+        11,
+        22
+      ],
+      "terminal_custody_observed": true,
+      "scheduler_detached_before_identity_reap": true,
+      "physical_frame_baseline_restored": true
     }
   ],
   "source_contracts": {
     "process_slots": 2,
+    "process_identity": "generation-tagged slot handle",
+    "process_id_reuse": "allowed only after reap; stale generation rejected",
+    "generation_exhaustion": "slot permanently retired before wrap",
+    "termination_record": "distinct signed exit status or exact fault vector/error/address",
+    "reap_order": "resources first, identity last; terminal-parent children adopted by kernel",
+    "persistent_service": "one bounded preemptible Ring-3 turn per kernel work-loop call",
+    "scheduler_owner": "exact generation-tagged lifecycle handle",
+    "scheduler_policy": "fixed-capacity round robin with one running owner",
+    "scheduler_accounting": "64-bit saturating run, dispatch, switch and work counters",
+    "scheduler_failure": "lifecycle-policy disagreement fail-stops subsequent work",
     "user_code": "read-execute",
     "user_stack": "read-write-no-execute",
     "lower_stack_guard_pte": "absent",
@@ -256,13 +380,13 @@
     "syscall_numbers": {
       "abi_version": 1,
       "first": 1,
-      "last": 24,
+      "last": 27,
       "dispatch": "generated unsigned admission",
       "unknown_result": "ENOSYS"
     }
   },
   "known_gaps": [
-    "fixed two-process diagnostic rather than persistent process lifecycle services",
+    "external userspace spawn/wait is covered by its separate disk-loaded parent/child receipts, not this built-in boot receipt",
     "no SMEP or SMAP enablement receipt",
     "kernel-stack guards are selected and use-observed but not overflow-fault-injected",
     "the emergency IST stack has no guard page",
@@ -273,9 +397,9 @@
     "ABI version 1 has no compatibility, deprecation or migration tooling",
     "no current physical-hardware user-process receipt"
   ],
-  "evidence_ceiling": "exact current native-UEFI64 QEMU artifact plus source-bound fixed-layout and bounded kernel-stack-use contracts; not a general process service, stable compatibility promise, or physical-hardware qualification",
+  "evidence_ceiling": "exact current native-UEFI64 QEMU artifact plus source-bound fixed-layout, bounded persistent-service and kernel-stack-use contracts; not a userspace-managed general process API, stable compatibility promise, or physical-hardware qualification",
   "generator": {
     "path": "kernel/tools/checks/write-user-process-receipt.py",
-    "sha256": "ea771aaeb954e1d0629e3a6e683a26eb77dc7c48ceeb2da1680189d89c413289"
+    "sha256": "4fd8b0e332aac96c3a53304df2cdbff34c93bde161ef38c9bc5ce2695b27f688"
   }
 }

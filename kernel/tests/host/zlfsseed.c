@@ -17,6 +17,7 @@ int fs_mkfs(void);
 int fs_mount(void);
 int fs_create(const char *name, u32 bytes);
 int fs_find(const char *name);
+u32 fs_size(int index);
 int fs_write(int index, const void *source, u32 bytes);
 int fs_read(int index, void *destination, u32 bytes);
 int fs_sync(void);
@@ -91,8 +92,11 @@ static unsigned char *read_fixture(const char *path, u32 *bytes)
 
 int main(int argc, char **argv)
 {
+    int append = argc == 5 && strcmp(argv[1], "--append") == 0;
+    int verify = argc == 5 && strcmp(argv[1], "--verify") == 0;
+    if (append || verify) { argc--; argv++; }
     if (argc != 4) {
-        fprintf(stderr, "usage: %s DISK-IMAGE ZLFS-NAME FIXTURE\n", argv[0]);
+        fprintf(stderr, "usage: zlfsseed [--append|--verify] DISK-IMAGE ZLFS-NAME FIXTURE\n");
         return 2;
     }
 
@@ -100,7 +104,7 @@ int main(int argc, char **argv)
     unsigned char *fixture = read_fixture(argv[3], &fixture_bytes);
     if (!fixture) return 2;
 
-    image_fd = open(argv[1], O_RDWR);
+    image_fd = open(argv[1], verify ? O_RDONLY : O_RDWR);
     if (image_fd < 0) {
         fprintf(stderr, "zlfsseed: cannot open image: %s\n", strerror(errno));
         free(fixture);
@@ -126,10 +130,11 @@ int main(int argc, char **argv)
     }
     int index = -1;
     int readback_index = -1;
-    int ok = fs_mkfs() && fs_mount() &&
-             (index = fs_create(argv[2], fixture_bytes)) >= 0 &&
-             fs_write(index, fixture, fixture_bytes) && fs_sync() &&
+    int ok = (verify || append || fs_mkfs()) && fs_mount() &&
+             (verify || ((index = fs_create(argv[2], fixture_bytes)) >= 0 &&
+                         fs_write(index, fixture, fixture_bytes) && fs_sync())) &&
              fs_mount() && (readback_index = fs_find(argv[2])) >= 0 &&
+             fs_size(readback_index) == fixture_bytes &&
              fs_read(readback_index, readback, fixture_bytes) ==
                  (int)fixture_bytes &&
              memcmp(readback, fixture, fixture_bytes) == 0;
@@ -141,6 +146,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "zlfsseed: write or readback verification failed\n");
         return 1;
     }
-    printf("zlfsseed: wrote %u bytes as %s\n", fixture_bytes, argv[2]);
+    printf("zlfsseed: %s %u bytes as %s\n", verify ? "verified" : "wrote",
+           fixture_bytes, argv[2]);
     return 0;
 }

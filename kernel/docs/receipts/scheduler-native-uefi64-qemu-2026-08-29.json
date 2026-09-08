@@ -1,27 +1,78 @@
 {
   "schema": "zlos.scheduler-native-uefi64-qemu-receipt.v1",
-  "result": "PASS_BOUNDED_TWO_PROCESS_GATE",
-  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "result": "PASS_BOUNDED_PERSISTENT_PROCESS_GATE",
+  "build_identity": "52dc8b9c468cc8b2945f0b447f78480c5b94df3613ca4494ac16bc65ca27ec0e",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "07be3fb66a86b1ba0e95e3514fafaca64d9a11da5b1aba822cb31fe089e96b23"
+    "sha256": "ccdb86b0c2895a39bafc45b4aa4d06191ca09b135c4d80391f98e363ce47739b"
   },
-  "boot_log_sha256": "8a41e1da60e10c63e09ff3adbabbdf94e6372788b7d1abe629d5b502bd0e9a87",
+  "boot_log_sha256": "6c76a96495b774dd001811813ab0f0d6b9bc33771358bffe84938a617b12d9d6",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
-    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+    "sha256": "2179bbbb5584ff5d4ea157c9cb450ca900faf2d415aa6fda1f6dcc4ecf9177e0"
   },
   "implementation": [
     {
       "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "ed969991203fc677815c90627353f94c04bee5c74fa9d0126e9d3f438be56414"
+      "sha256": "94de295537484e511bf860cdacc4237f971e96f729933a25350985982715a938"
     },
     {
       "path": "kernel/src/arch/x86/idt.c",
       "sha256": "a67b97164dd9ae67f6f7ee9c4a712255ac634e7e41b01a9a93852ffa957e9c2e"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.h",
+      "sha256": "e2d224fa9a31e5871aee08178c3c920e551af93c00a0c5d8153f6a6bde901e50"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.c",
+      "sha256": "b5ba0380451273fba1914d62cc8441947d0b15a25c8f93b0021cc50ad5a0ed6a"
+    },
+    {
+      "path": "kernel/tests/host/processlifecycletest.c",
+      "sha256": "2324a7ffd9d47e642fa4c035c3585b287f712807f3e48f57cfbdb76fcc451518"
+    },
+    {
+      "path": "kernel/src/core/scheduler_policy.h",
+      "sha256": "236da3b516d4905f225954571c15b23cdddbb2b10ff85932cb8fa8967ed9d0d2"
+    },
+    {
+      "path": "kernel/src/core/scheduler_policy.c",
+      "sha256": "f4167cfe29def979904320faa67377b46e086b12a319fec8df50916463afb030"
+    },
+    {
+      "path": "kernel/tests/host/schedulerpolicytest.c",
+      "sha256": "3899c6a4f2f1c60c30ff90049cf9bcd0ecce33a7cf24c7e462dfb1f7e991b598"
+    },
+    {
+      "path": "kernel/src/core/user_process_service.h",
+      "sha256": "db639c03d406cdc8037524159f458edba6ac15c46019ee35c0884ac519f90c8a"
+    },
+    {
+      "path": "kernel/src/core/user_process_service.c",
+      "sha256": "491fde314cd02f3dded14630151d7d41bb58b9bba16ac95f59f6186fc22ac822"
+    },
+    {
+      "path": "kernel/tests/host/userprocessservicetest.c",
+      "sha256": "955dc1aa86032cd6d1af58b8393e689e71e13509c33d95d89fb1e1f546cea8d0"
     }
   ],
+  "host_receipt": {
+    "path": "kernel/tests/host/test-run-receipt.json",
+    "sha256": "d8c4c88047bc2f9dea8a3a9f5b628f7b7da6cf04dea1cefb006116908d0ec834",
+    "targets": {
+      "processlifecycletest": {
+        "checks": 109
+      },
+      "schedulerpolicytest": {
+        "checks": 126
+      },
+      "userprocessservicetest": {
+        "checks": 144
+      }
+    }
+  },
   "assertions": [
     {
       "id": "cooperative-context-resume",
@@ -45,18 +96,47 @@
       "fault_vector": 13,
       "sibling_trace": "K",
       "kernel_survived": true
+    },
+    {
+      "id": "persistent-process-service",
+      "marker": "<- persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped",
+      "processes": 2,
+      "kernel_turns": 4,
+      "trace": "ST12",
+      "selection": "round-robin exact lifecycle handle",
+      "turn_boundary": "cooperative yield or exit; timer preemption is proved by the independent non-yielding-process assertion",
+      "exit_statuses": [
+        11,
+        22
+      ],
+      "terminal_custody_observed": true,
+      "scheduler_detached_before_identity_reap": true,
+      "physical_frame_baseline_restored": true
+    },
+    {
+      "id": "persistent-process-sleep",
+      "marker": "<- persistent sleep LSW: injected deadline held, sibling exited, wake and frames reclaimed",
+      "trace": "LSW",
+      "clock": "injected scheduler ticks; no wall-clock latency claim",
+      "syscall": 25,
+      "zero_delay_refused": true,
+      "no_early_dispatch": true,
+      "sibling_exit_status": 44,
+      "wake_exit_status": 33,
+      "physical_frame_baseline_restored": true
     }
   ],
   "known_gaps": [
-    "the preemptive Ring-3 gate has exactly two fixed process slots",
-    "there is no general priority, fairness or deadline contract",
+    "the persistent Ring-3 service has exactly two fixed process slots",
+    "there is no general priority or deadline contract beyond bounded round robin",
     "there is no per-CPU run-queue ownership or process migration",
-    "spawn, reap, cancellation and resource reclamation are not persistent services",
+    "spawn and reap are kernel commands; there is no userspace process-management or cancellation API",
+    "the separate eight-slot kernel task demo is cooperative and lacks FPU/SSE state",
     "there is no current physical-hardware scheduler receipt"
   ],
-  "evidence_ceiling": "exact current native-UEFI64 QEMU artifact and three bounded two-process observations; not a general scheduler or physical-hardware qualification",
+  "evidence_ceiling": "exact current host policy/service tests and native-UEFI64 QEMU artifact with five bounded two-process observations; not a general per-CPU scheduler, userspace process API or physical-hardware qualification",
   "generator": {
     "path": "kernel/tools/checks/write-scheduler-receipt.py",
-    "sha256": "c5c8ec014013ac0de5fd40a0c37dc2fa11d073ae14a0dff88dc14f0f22130f82"
+    "sha256": "8c7c12c506be6b65e87677204901f7122f06fa8d8ad96ca3bf6ffd65c0a00116"
   }
 }

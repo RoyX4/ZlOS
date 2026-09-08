@@ -139,7 +139,7 @@ def write_receipt(path, transcript, screenshot):
         ),
         "known_gaps": [
             "the service has exactly two fixed process slots",
-            "the command route has no userspace spawn/wait or process-handle syscall",
+            "this administrative-command probe does not exercise the separate userspace spawn/wait ABI",
             "the fixture intentionally proves fault containment rather than normal exit",
             "there is no current physical-hardware command-route receipt",
         ],

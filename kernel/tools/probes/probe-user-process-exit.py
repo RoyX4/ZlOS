@@ -128,7 +128,7 @@ def write_receipt(path, transcript, fixture_path, sleep=False):
         ).hexdigest(),
         "known_gaps": [
             "the service has exactly two fixed process slots",
-            "the command route has no userspace spawn/wait or process-handle syscall",
+            "this administrative-command probe does not exercise the separate userspace spawn/wait ABI",
             "the raw image contract has no relocations or shared libraries",
             "there is no current physical-hardware command-route receipt",
         ],

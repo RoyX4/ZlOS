@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -45,6 +46,18 @@ GDT = KERNEL_ROOT / "boot/gdt64.c"
 ABI_DOC = KERNEL_ROOT / "docs/architecture/system/user-process-abi.md"
 DEFAULT_OUTPUT = KERNEL_ROOT / "docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
 
+# Reuse the generator's validation: evidence and Ring-3 admission share one
+# syscall number contract, including the first number outside its range.
+SYSCALL_GENERATOR = KERNEL_ROOT / "tools/generators/gen-user-syscalls.py"
+_spec = importlib.util.spec_from_file_location("user_syscall_generator", SYSCALL_GENERATOR)
+_syscalls = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_syscalls)
+SYSCALL_VALUE = _syscalls.load()
+_syscalls.validate(SYSCALL_VALUE)
+SYSCALL_VERSION = SYSCALL_VALUE["abi_version"]
+SYSCALL_FIRST = SYSCALL_VALUE["entries"][0]["number"]
+SYSCALL_LAST = SYSCALL_VALUE["entries"][-1]["number"]
+
 ASSERTIONS = (
     {
         "id": "ring3-syscall-lifecycle",
@@ -58,8 +71,8 @@ ASSERTIONS = (
     {
         "id": "unknown-syscall-admission",
         "marker": "syscall ABI: zero/gap/sign-bit/max refused with ENOSYS",
-        "abi_version": 1,
-        "probes": [0, 26, 1 << 63, (1 << 64) - 1],
+        "abi_version": SYSCALL_VERSION,
+        "probes": [0, SYSCALL_LAST + 1, 1 << 63, (1 << 64) - 1],
         "result": "ENOSYS",
     },
     {
@@ -208,7 +221,7 @@ SOURCE_CONTRACTS = {
     "process_id_reuse": "allowed only after reap; stale generation rejected",
     "generation_exhaustion": "slot permanently retired before wrap",
     "termination_record": "distinct signed exit status or exact fault vector/error/address",
-    "reap_order": "resources first, identity last; parent identity retained while children exist",
+    "reap_order": "resources first, identity last; terminal-parent children adopted by kernel",
     "persistent_service": "one bounded preemptible Ring-3 turn per kernel work-loop call",
     "scheduler_owner": "exact generation-tagged lifecycle handle",
     "scheduler_policy": "fixed-capacity round robin with one running owner",
@@ -237,9 +250,9 @@ SOURCE_CONTRACTS = {
     "anonymous_reclamation": "atomic unmap before owner-checked PMM release",
     "hardware_pte_bits": "accessed and dirty accepted without weakening ownership checks",
     "syscall_numbers": {
-        "abi_version": 1,
-        "first": 1,
-        "last": 25,
+        "abi_version": SYSCALL_VERSION,
+        "first": SYSCALL_FIRST,
+        "last": SYSCALL_LAST,
         "dispatch": "generated unsigned admission",
         "unknown_result": "ENOSYS",
     },
@@ -290,6 +303,11 @@ def validate_log(log: str) -> None:
 def expected_files() -> list[dict]:
     return [
         {"path": "kernel/src/arch/x86/usermode.c", "sha256": digest(USERMODE)},
+        {"path": "kernel/src/arch/x86/user_image64.c", "sha256": digest(KERNEL_ROOT / "src/arch/x86/user_image64.c")},
+        {"path": "kernel/src/arch/x86/user_image64.h", "sha256": digest(KERNEL_ROOT / "src/arch/x86/user_image64.h")},
+        {"path": "kernel/src/arch/x86/user_process_abi.h", "sha256": digest(KERNEL_ROOT / "src/arch/x86/user_process_abi.h")},
+        {"path": "kernel/tests/host/userspawnwaittest.c", "sha256": digest(KERNEL_ROOT / "tests/host/userspawnwaittest.c")},
+        {"path": "kernel/tools/generators/gen-user-syscalls.py", "sha256": digest(KERNEL_ROOT / "tools/generators/gen-user-syscalls.py")},
         {"path": "kernel/src/core/process_lifecycle.h", "sha256": digest(PROCESS_LIFECYCLE_HEADER)},
         {"path": "kernel/src/core/process_lifecycle.c", "sha256": digest(PROCESS_LIFECYCLE)},
         {"path": "kernel/tests/host/processlifecycletest.c", "sha256": digest(PROCESS_LIFECYCLE_TEST)},
@@ -377,7 +395,7 @@ def build(log_path: Path) -> dict:
         "assertions": assertions,
         "source_contracts": copy.deepcopy(SOURCE_CONTRACTS),
         "known_gaps": [
-            "persistent service is kernel-owned; there is no userspace spawn/wait syscall or process-handle ABI",
+            "external userspace spawn/wait is covered by its separate disk-loaded parent/child receipts, not this built-in boot receipt",
             "no SMEP or SMAP enablement receipt",
             "kernel-stack guards are selected and use-observed but not overflow-fault-injected",
             "the emergency IST stack has no guard page",

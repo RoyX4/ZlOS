@@ -293,3 +293,42 @@ this the right colour"*. Both questions get asked of the same picture, which is 
 makes them easy to conflate. Sample the framebuffer for the second one - the instrument
 is three lines of Python and it has been right every time against a confident wrong
 reading.
+
+---
+
+## T-23 — T-21 named a link-list gap as a language limit. OPEN.
+
+T-21 closed on: *"the rail, raster strip and foot are `kernel.zl` and do not compile into
+[wmshot]."* Measured against the tree, that reads the wrong cause into a true symptom.
+
+`kernel/build.sh:25-36` compiles `src/kernel.zl` through the C backend to `out.c`, copies it
+to `_gen.c` — **2,769,545 bytes of C** — and links `_gen.o` into `kernel.elf` (line 76).
+`grep -rn "_gen" kernel/tests/host/build.sh` returns nothing. `wmshot`'s link line
+(`tests/host/build.sh:107`) is C sources only.
+
+So `kernel.zl` does compile into C, for four separate targets. It has never been added to the
+host link line. **"The harness cannot render the shell" is nobody-wrote-the-link-step, not
+the-language-cannot-do-this** — and those two cost different fixes.
+
+**What closing it looks like:** a `zlshell` target that compiles `kernel.zl` to `_gen.c`,
+builds it and `freestanding/runtime_kernel.c` at `-m32` *without* `-DZL_KERNEL_SERIAL` (so
+`print` reaches stdout — which also retires the "output cannot reach serial because the shell
+is a window" constraint), and links against wmshot's object list. The resulting `nm -u` output
+is committed verbatim as the stub contract **before any stub is written**; it is the only
+measured statement of what `kernel.zl` demands from hardware.
+
+**Two hazards, both already-known classes:**
+
+- `kernel.zl` pokes absolute physical addresses raw through `runtime_kernel.c`'s poke8/16/32
+  (`LINE_BUF 0x02030000`, `PAINT_BUF 0x02100000`, `DISK_SCRATCH 0x02040000`, boards at
+  `0x02200000`). Hosted, every one is unmapped. `mmap(MAP_FIXED_NOREPLACE)` exactly the
+  `memmap.h` ranges and leave the gaps unmapped, so a stray write still faults rather than
+  landing in a neighbouring mapping and passing — see the no-fault-is-not-in-bounds finding.
+- T-21's frame banner must be rewritten, not deleted: a capability line naming which of
+  {GPU, NVMe, xHCI, RTC, RDRAND, port I/O} are stubbed, asserted by `render-desktop.sh`.
+  A stub that returns plausible success recreates T-21 one layer deeper.
+
+**Adjacent, verified, filed here so it is not lost:** `src/runtime/interp.c` is 2,494 lines
+and `kernel/src/runtime/interp_kernel.c` is a 740-line copy of it with host functions
+hardcoded as externs. The interpreter has been embedded once, by forking. A second fork makes
+the conformance oracle ambiguous.

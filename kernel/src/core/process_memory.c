@@ -65,10 +65,11 @@ int process_memory_acquire(struct process_memory *memory, unsigned int owner)
         pmm_u64 page = pmm_alloc(owner);
         if (!page) {
             while (memory->acquired) {
-                unsigned int index = --memory->acquired;
+                unsigned int index = memory->acquired - 1U;
                 if (pmm_release(memory->pages[index], owner) != PMM_OK)
                     return PROCESS_MEMORY_E_CORRUPT;
                 memory->pages[index] = 0;
+                memory->acquired--;
             }
             clear_memory(memory);
             return PROCESS_MEMORY_E_NOMEM;

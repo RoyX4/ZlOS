@@ -1,17 +1,17 @@
 {
   "schema": "zlos.page-table-native-uefi64-qemu-receipt.v1",
   "result": "PASS_TRANSACTION_CORE_AND_NATIVE_HEAP_WINDOW_WITH_OPEN_GAPS",
-  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "build_identity": "52dc8b9c468cc8b2945f0b447f78480c5b94df3613ca4494ac16bc65ca27ec0e",
   "route": "native-uefi64",
   "artifact": {
     "path": "kernel/zlOS-usb.img",
-    "sha256": "07be3fb66a86b1ba0e95e3514fafaca64d9a11da5b1aba822cb31fe089e96b23"
+    "sha256": "ccdb86b0c2895a39bafc45b4aa4d06191ca09b135c4d80391f98e363ce47739b"
   },
-  "boot_log_sha256": "8a41e1da60e10c63e09ff3adbabbdf94e6372788b7d1abe629d5b502bd0e9a87",
-  "boot_journal_sha256": "7a45a8083d93d62bd9db262a42b441ff79e646e309eb89c82e6ded0085546b66",
+  "boot_log_sha256": "6c76a96495b774dd001811813ab0f0d6b9bc33771358bffe84938a617b12d9d6",
+  "boot_journal_sha256": "965f92606551447c04bc32a12e997a8d53cfeb626b7f4637ac9deef1561022e5",
   "harness": {
     "path": "kernel/tools/checks/verify-efi.sh",
-    "sha256": "3cc669f311644ad0d3dd3f3e46dbeea5abbe624a404a044f42a50c379035a3be"
+    "sha256": "2179bbbb5584ff5d4ea157c9cb450ca900faf2d415aa6fda1f6dcc4ecf9177e0"
   },
   "implementation": [
     {
@@ -29,8 +29,8 @@
   ],
   "host_receipt": {
     "path": "kernel/tests/host/test-run-receipt.json",
-    "sha256": "7c8433a40ed014d9a56a5b3ecbe15cecf09469110f39d94cd442f6b12f827d63",
-    "target_id": "HT-052",
+    "sha256": "d8c4c88047bc2f9dea8a3a9f5b628f7b7da6cf04dea1cefb006116908d0ec834",
+    "target_id": "HT-054",
     "target": "pagetxntest",
     "injected_write_positions": 512,
     "checks": 26

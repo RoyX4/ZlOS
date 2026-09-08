@@ -2,7 +2,10 @@
 
 Source audited at `7e395d5` on 2026-09-05. This is the next implementation
 contract for Wave 3 / KR-027 and KR-028 after persistent scheduling and sleep.
-It does not implement or advertise userspace spawn/wait.
+This document retains the original audit and contract. Implementation began on
+2026-09-08; see the [current ABI](userspace-spawn-wait-abi.md) and
+[execution receipt](../evidence/process-spawn-wait-2026-09-08.md) for local code,
+host evidence and the outstanding target proof.
 
 ## Existing pieces to reuse
 
@@ -16,7 +19,7 @@ timer queue or generic agent framework is needed.
 
 ## First dependency: separate image preparation from active execution
 
-The current architecture loader has a kernel-caller contract:
+At the audited source revision, the architecture loader had a kernel-caller contract:
 
 - `process64_prepare` reads the active CR3 at lines 688-689 of
   `kernel/src/arch/x86/usermode.c` and copies all 512 PML4 entries at line 725.
@@ -28,7 +31,7 @@ The current architecture loader has a kernel-caller contract:
   replace the caller's active context while its syscall frame is still live.
 
 These are extension hazards found by source inspection, not evidence of an
-existing userspace spawn exploit: that syscall does not exist.
+existing userspace spawn exploit: that syscall did not exist at the audited revision.
 
 Before adding spawn, construct a candidate image from an explicitly captured
 supervisor-only kernel template, keeping all active caller state unchanged.

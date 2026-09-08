@@ -5007,7 +5007,11 @@ fn run_command(cmd, arg) {
             }
             ui = ui + 1
         }
-        if un == 0 { print("    empty") }
+        if un == 0 {
+            print("    empty")
+            put("    physical frames in use: ")  put(pmm_used())
+            put("; allocator faults: ")  print(pmm_chk())
+        }
         uf = user_fail()
         if uf != 0 {
             color(C_RED)  put("    scheduler fail-stop status: ")  print(uf)

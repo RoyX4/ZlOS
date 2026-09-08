@@ -1,25 +1,25 @@
 {
-  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "build_identity": "52dc8b9c468cc8b2945f0b447f78480c5b94df3613ca4494ac16bc65ca27ec0e",
   "counts": {
-    "commands_executed": 74,
+    "commands_executed": 82,
     "failed": 0,
-    "not-run": 12,
-    "passed": 69,
+    "not-run": 14,
+    "passed": 77,
     "skipped-hardware": 3,
-    "targets": 84,
+    "targets": 94,
     "unavailable": 0
   },
   "evidence_ceiling": "current build-input-bound host execution only; exact executables and runner are identified, instruments/manual hardware are explicit non-runs, and exit 77 is not a pass",
   "git": {
-    "branch": "fable/whole-tree-sweep",
+    "branch": "codex/spawn-wait-reconcile-2026-09-08",
     "dirty": true,
-    "head": "8fb1425777b184c762686a12161e3faf37e2095a"
+    "head": "5a33421361c447b0a42fea75f2f82682630de2ca"
   },
   "host": {
-    "platform": "Linux-7.0.12+kali-amd64-x86_64-with-glibc2.42",
+    "platform": "Linux-7.0.12+kali-amd64-x86_64-with-glibc2.43",
     "python": "3.14.6"
   },
-  "inventory_sha256": "72db5806b9ed034e83f11c8c84db84ed51f0682f74e1e83f5fcc880681bf151c",
+  "inventory_sha256": "7e020c92ed24815288e6f4c8b4743831d94a4b5c19abfc013a2da159532001db",
   "outcome": "PASS",
   "results": [
     {
@@ -29,7 +29,7 @@
           "argv": [
             "./anonmemorytest"
           ],
-          "elapsed_ns": 3875206,
+          "elapsed_ns": 10312064,
           "exit_code": 0,
           "output_bytes": 108,
           "output_sha256": "43c561badedd2d5a994503ea874097fabab51539f0398d8fb31782df40b526c4",
@@ -37,7 +37,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "d20ba2764901beadeb8570a128d140b193c63d1d1884b14ce611fb3c9962478a",
+      "executable_sha256": "b50820ab92d7370ac8808d7c170c77b6e3b39f0a56a62ff8c950806f4739859d",
       "id": "HT-001",
       "kind": "gate",
       "name": "anonmemorytest",
@@ -50,7 +50,7 @@
           "argv": [
             "./arenatest"
           ],
-          "elapsed_ns": 4196294,
+          "elapsed_ns": 23351528,
           "exit_code": 0,
           "output_bytes": 116,
           "output_sha256": "ae9f12796a6af38be52505b93074412c36f7b8a45664259456bf394d948d0566",
@@ -71,7 +71,7 @@
           "argv": [
             "./blocktest"
           ],
-          "elapsed_ns": 1663661,
+          "elapsed_ns": 3382921,
           "exit_code": 0,
           "output_bytes": 744,
           "output_sha256": "ebcd428d2e5658227c41812f9f65453cd000d80177d8658429069c6540715167",
@@ -92,7 +92,7 @@
           "argv": [
             "./boot_handover_test"
           ],
-          "elapsed_ns": 1272566,
+          "elapsed_ns": 2168635,
           "exit_code": 0,
           "output_bytes": 83,
           "output_sha256": "9e1008a4788ace1848f37acdf1a72f122edf5824284857521b0a9f41a53d301c",
@@ -100,7 +100,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "8b796e1e30b47d0574f6b4c6755e6000e01fc81c8e6f189dac6d17f9cdd018fb",
+      "executable_sha256": "b41ffc52c9048ad0470132d29bf5a9efc495ea18f30efb15a3330f40f695f93c",
       "id": "HT-004",
       "kind": "gate",
       "name": "boot_handover_test",
@@ -113,7 +113,7 @@
           "argv": [
             "./boot_state_test"
           ],
-          "elapsed_ns": 1065486,
+          "elapsed_ns": 2891330,
           "exit_code": 0,
           "output_bytes": 83,
           "output_sha256": "ce8a9d15d2a1568802163eb0d6bfe8b03f487d7da28213d104af3434c78b2e9c",
@@ -121,7 +121,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "03d6222dff2d0b663f9c4b0f9bc3422c56734fad5026a21f396715afd1e25042",
+      "executable_sha256": "f2bb51d8964028dc6e2093a66b801f4b10e047fac51ebfba13c2812e10363286",
       "id": "HT-005",
       "kind": "gate",
       "name": "boot_state_test",
@@ -143,7 +143,7 @@
           "argv": [
             "./browsertest"
           ],
-          "elapsed_ns": 51432137,
+          "elapsed_ns": 86534881,
           "exit_code": 0,
           "output_bytes": 304,
           "output_sha256": "8758a66c8d52cc40119530affc995d0cb47d736d847b33dfbe49d8b7295b524b",
@@ -151,7 +151,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "0fe790b770f2f219960421e92f0b28434236b1712a181cdddee4583d6583cd21",
+      "executable_sha256": "81f861ce8b88a6b0f8acc3633e1c95cc6aaabdd3b5c652782473b56d89e81e37",
       "id": "HT-007",
       "kind": "gate",
       "name": "browsertest",
@@ -164,7 +164,7 @@
           "argv": [
             "./browsertest_san"
           ],
-          "elapsed_ns": 154926816,
+          "elapsed_ns": 183327714,
           "exit_code": 0,
           "output_bytes": 304,
           "output_sha256": "8758a66c8d52cc40119530affc995d0cb47d736d847b33dfbe49d8b7295b524b",
@@ -172,7 +172,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "514de6d69c89664ca5d9b0951342be9f8a3ea1d78b390743fcc63cd72a75da1f",
+      "executable_sha256": "3124a3aa9718220d9ccdac5ce36558855cab9cfb812102cde8f14eb7f6bd6206",
       "id": "HT-008",
       "kind": "gate",
       "name": "browsertest_san",
@@ -194,7 +194,7 @@
           "argv": [
             "./crashtest"
           ],
-          "elapsed_ns": 14004140,
+          "elapsed_ns": 13473603,
           "exit_code": 0,
           "output_bytes": 2248,
           "output_sha256": "bd697543810d2a0a11102e271c3c155da36c93153d740014f3b428c4474e836b",
@@ -202,7 +202,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "6022b5005e33e658c985fdcd550e6c635bac669a1e8a8cdb4398776edb3ca410",
+      "executable_sha256": "7d78cca73eb2b20213f9b142d6608dbc2b8564e2951717d781fef975302c3c62",
       "id": "HT-010",
       "kind": "gate",
       "name": "crashtest",
@@ -215,15 +215,15 @@
           "argv": [
             "./cryptotest"
           ],
-          "elapsed_ns": 408719467,
+          "elapsed_ns": 364452719,
           "exit_code": 0,
           "output_bytes": 1092,
-          "output_sha256": "8a9fa68db08cdbe744ff930faadf4098af9e557317fca34892ce457a39656179",
-          "output_tail": "  ok   len 0\n  ok   len 16\n  ok   len 40 (partial final block)\n  ok   len 64 (complete final block)\n\n=== AES-CTR round-trip ===\n  ok   encrypt then decrypt restores plaintext\n\n=== WPA2 PMK (IEEE 802.11i-2004) ===\n  ok   PMK(\"password\", \"IEEE\")\n  ok   PMK(\"ThisIsAPassword\", \"ThisIsASSID\")\n\n=== constant-time compare ===\n  ok   equal/unequal both correct\n\n=== cost of one PMK (4096 iterations) ===\n  29.1 ms per PMK  -> cache it; do not recompute per handshake\n\n---------------------------------------------\n  27 passed, 0 failed",
+          "output_sha256": "d700e2b9562ffd7b9cea7f98ca35fb1a9d78c7b4c043bf366ea85218ab11cf8d",
+          "output_tail": "  ok   len 0\n  ok   len 16\n  ok   len 40 (partial final block)\n  ok   len 64 (complete final block)\n\n=== AES-CTR round-trip ===\n  ok   encrypt then decrypt restores plaintext\n\n=== WPA2 PMK (IEEE 802.11i-2004) ===\n  ok   PMK(\"password\", \"IEEE\")\n  ok   PMK(\"ThisIsAPassword\", \"ThisIsASSID\")\n\n=== constant-time compare ===\n  ok   equal/unequal both correct\n\n=== cost of one PMK (4096 iterations) ===\n  26.1 ms per PMK  -> cache it; do not recompute per handshake\n\n---------------------------------------------\n  27 passed, 0 failed",
           "timed_out": false
         }
       ],
-      "executable_sha256": "8b48e82c2e6227faa7888d19b7f1c81bf9e8298517ebe83a4ab4fe99b5d9c5e8",
+      "executable_sha256": "b43584bccc2161c7eb799accb8ea497333486e5efdc6998cb80bfbf455e1b594",
       "id": "HT-011",
       "kind": "gate",
       "name": "cryptotest",
@@ -236,7 +236,7 @@
           "argv": [
             "./csstest"
           ],
-          "elapsed_ns": 32655167,
+          "elapsed_ns": 33996300,
           "exit_code": 0,
           "output_bytes": 611,
           "output_sha256": "d38328d76eccd3512fa37098c4daf1dd4d7a19c9bb44ba9bc7d2f50fa8c8671a",
@@ -244,7 +244,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "53703758d07ee1358f8ba854021d648de8f80b99f2d5ac9e83df8fd5b0b1da32",
+      "executable_sha256": "03ec2a65e9b6f1e29282335a5f1977c2d46e6d155f82b1a606fb568c9883c27d",
       "id": "HT-012",
       "kind": "gate",
       "name": "csstest",
@@ -257,7 +257,7 @@
           "argv": [
             "./dhcptest"
           ],
-          "elapsed_ns": 1084424,
+          "elapsed_ns": 1258040,
           "exit_code": 0,
           "output_bytes": 67,
           "output_sha256": "4ef0d832fae6d0e850190cc7a8d004ad4d2d980f630ff74d85a887a4535ffb08",
@@ -265,7 +265,7 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "a72ebefcebcafae6e583e36668382cb55b6874b318835e10c12d628c4e8937f3",
+      "executable_sha256": "1858ddd46d6e4d7b0045f4fa375a69b656217e2e7cce0d90211d2967dc71ba75",
       "id": "HT-013",
       "kind": "gate",
       "name": "dhcptest",
@@ -278,7 +278,7 @@
           "argv": [
             "./dnstest"
           ],
-          "elapsed_ns": 1127352,
+          "elapsed_ns": 898544,
           "exit_code": 0,
           "output_bytes": 191,
           "output_sha256": "0369eab77e2cc55f164525eea6ac825b011c0c590867d606185080b224ef1c51",
@@ -286,11 +286,20 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "22c249d107357aca36d5c65139137d19d8adaa9c3877573d5c63eaddd15b7d15",
+      "executable_sha256": "b32c743cf611522cfd7d5398eac8a7692d44b6a0a6cf9f5bbbbad230933d7519",
       "id": "HT-014",
       "kind": "gate",
       "name": "dnstest",
       "status": "passed"
+    },
+    {
+      "auto_run": false,
+      "commands": [],
+      "id": "HT-015",
+      "kind": "manual-hardware",
+      "name": "dpll_test",
+      "reason": "manual physical-hardware action",
+      "status": "not-run"
     },
     {
       "auto_run": true,
@@ -299,7 +308,7 @@
           "argv": [
             "./e1000test"
           ],
-          "elapsed_ns": 75278366,
+          "elapsed_ns": 75342392,
           "exit_code": 0,
           "output_bytes": 64,
           "output_sha256": "bd3616573fca27bd02690bd825832dee212b87baaa2df9bbadbbcad639c825d6",
@@ -307,8 +316,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "bb626e7683458ac71d882ea22fd0beb310432d34233a44a7d7dec711e5baebab",
-      "id": "HT-015",
+      "executable_sha256": "854907444ab2dfbeb9c49f4c7245c13b4aea1256fcff7f7e8eead3b9ad97c5e5",
+      "id": "HT-016",
       "kind": "gate",
       "name": "e1000test",
       "status": "passed"
@@ -320,7 +329,7 @@
           "argv": [
             "./easetest"
           ],
-          "elapsed_ns": 5017147,
+          "elapsed_ns": 4587299,
           "exit_code": 0,
           "output_bytes": 1160,
           "output_sha256": "eea1ee2ea50f69f1ddf97179e69a0178658bf2ea3a3d7886b31e76b1f2ad31b0",
@@ -329,7 +338,7 @@
         }
       ],
       "executable_sha256": "aade2371e596c3612eac2a8ff5f9ec39f695b2df51bf127104ad5a2c5939e18d",
-      "id": "HT-016",
+      "id": "HT-017",
       "kind": "gate",
       "name": "easetest",
       "status": "passed"
@@ -341,7 +350,7 @@
           "argv": [
             "./ecdsatest"
           ],
-          "elapsed_ns": 2193808365,
+          "elapsed_ns": 2532535014,
           "exit_code": 0,
           "output_bytes": 1091,
           "output_sha256": "7605f59145ff0c7b06c7c0e839a6f0c24ffef866750a49f33d0f10d5983d65f6",
@@ -349,8 +358,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "f3bf928f6827efa95e0392accb8323958557608116b3e0e2cd887d03ac790b8d",
-      "id": "HT-017",
+      "executable_sha256": "7e5d73f1050727327a3cbfdd2e27e0941a3719f1d244a8b10fa4db401bcf2a6f",
+      "id": "HT-018",
       "kind": "gate",
       "name": "ecdsatest",
       "status": "passed"
@@ -362,7 +371,7 @@
           "argv": [
             "./exectest"
           ],
-          "elapsed_ns": 855038,
+          "elapsed_ns": 1085912,
           "exit_code": 0,
           "output_bytes": 124,
           "output_sha256": "159cb4e34041b9a6a494c03e09aa64fd109fce61a5a8368c1d2c493b4de087f6",
@@ -371,7 +380,7 @@
         }
       ],
       "executable_sha256": "74e4903d2b4d0ac99af4458d0dd1e734bd43d0d1da3b9b561147f225268215a5",
-      "id": "HT-018",
+      "id": "HT-019",
       "kind": "gate",
       "name": "exectest",
       "status": "passed"
@@ -383,16 +392,16 @@
           "argv": [
             "./fbbench"
           ],
-          "elapsed_ns": 5945672549,
+          "elapsed_ns": 33346738428,
           "exit_code": 0,
           "output_bytes": 9818,
-          "output_sha256": "9c3159bd59347dee4a6bca234242a255f88ff292e691d0d3c2135e5297bce179",
+          "output_sha256": "2b21a918cad671ab1848608f3f181a2d93ac84806a2b4b15fe3755f319fb30b8",
           "output_tail": "  blur: a checkerboard averages to grey ok\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  fb: blur refused - every slot is in use\n  blur: slots are a ceiling, full refuses ok (4 granted, 5 refused)\n  clip: scissor holds                ok  (every primitive, all four edges)\n  two corners (clock + monitor)      2 rects, 33000 px   (one box: 8056000 px, 244.1x more)\n    ...and present blits them all    ok\n  four corners                       4 rects, 48000 px   (one box: 8294400 px, 172.8x more)\n    ...and present blits them all    ok\n  L-shape contact stays disjoint     ok (2 rects, 2880 px)\n  full-edge chain coalesces          ok (1 rects, 2400 px)\n  far cursor move stays two patches  ok (2 rects, 1654 px)\n  unchanged cursor has zero damage   ok\n  scene hash (VRAM)                  FNV 29897d8953098d3b   (1 rects, 8294400 px presented)\n\nnote: 'present' writes to ordinary RAM here. On the real machine\nit crosses PCIe into write-combining VRAM, so it is a FLOOR.",
           "timed_out": false
         }
       ],
       "executable_sha256": "efafec1ced2e23d6ba3e78eed1dbd8d1226416c6841acf7a4329d6e563bf12ef",
-      "id": "HT-019",
+      "id": "HT-020",
       "kind": "gate",
       "name": "fbbench",
       "status": "passed"
@@ -404,7 +413,7 @@
           "argv": [
             "./fbtext"
           ],
-          "elapsed_ns": 69772240,
+          "elapsed_ns": 123153612,
           "exit_code": 0,
           "output_bytes": 617,
           "output_sha256": "6c26afba1a5237f54d8c5c6228b73b132523eb647330aba67a4c6224f3d96e65",
@@ -412,8 +421,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "b2a6ce63985ccd7cabd6a63f22ee7d09bebff0c390afcb85636aeedf1fc311f1",
-      "id": "HT-020",
+      "executable_sha256": "82e217840c5292bf7f2b73f069abd9bc9e3360dcea1107e924aa3e68ff13493e",
+      "id": "HT-021",
       "kind": "gate",
       "name": "fbtext",
       "status": "passed"
@@ -425,7 +434,7 @@
           "argv": [
             "./fstest"
           ],
-          "elapsed_ns": 95245398,
+          "elapsed_ns": 150876577,
           "exit_code": 0,
           "output_bytes": 9391,
           "output_sha256": "9664807e47c68892337f6b468de1984fc7ea496afe0747e51494f753904d7bf4",
@@ -433,8 +442,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "67825da780b515fe3d0432a9d4c28adff32813ff6939f435542777b08a888b34",
-      "id": "HT-021",
+      "executable_sha256": "f9d3ac863ee5b9151e39d52eb28e1627943e71c8a40e3ba4dd6231729d6ad414",
+      "id": "HT-022",
       "kind": "gate",
       "name": "fstest",
       "status": "passed"
@@ -446,7 +455,7 @@
           "argv": [
             "./fuzz"
           ],
-          "elapsed_ns": 777559195,
+          "elapsed_ns": 942562615,
           "exit_code": 0,
           "output_bytes": 125,
           "output_sha256": "20f6f2f5a830a05fea25c9aa2f75619ff01fe4ddb58784204c2810e5918ad776",
@@ -454,16 +463,37 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "289c19344b5f0496fdaa8bc0079e3e0e7203bf31d72c6c51ec1c11e8bcdbfbc6",
-      "id": "HT-022",
+      "executable_sha256": "f48e55a900266b5cf0f03394e40dbd920847f3992bb862e70bff914579e66a3a",
+      "id": "HT-023",
       "kind": "gate",
       "name": "fuzz",
       "status": "passed"
     },
     {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
+            "./gdt64test"
+          ],
+          "elapsed_ns": 3292668,
+          "exit_code": 0,
+          "output_bytes": 920,
+          "output_sha256": "8662a20753951a87fa752d148558421ec70e651e6cd4d649f941ee02a3901c16",
+          "output_tail": "gdt64test - one TSS per core\n\n  the slot count matches smp.c's SMP_SLOTS                         ok\n       (gdt64 8, smp.c 8)\n  a TSS descriptor decodes to the base it was built from           ok\n  ...and to its limit                                              ok\n  ...as an available 64-bit TSS (type 9)                           ok\n  ...present, DPL 0, byte granularity                              ok\n  the top of the address space and a 20-bit limit survive          ok\n  every slot's selector is 0x28 + 16*slot and inside the GDT       ok\n  every slot's descriptor names its own 104-byte TSS               ok\n  every slot's IST1 is the 16-aligned top of its own 16 KiB stack  ok\n  no two slots share a TSS, an IST1, or a stack                    ok\n  only the BSP has a ring-0 stack in RSP0; APs carry 0             ok\n  preparing a slot past the table changes nothing                  ok\n\nall good: 0 failure(s)",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "d643e9bab8f0962ef3e65463472cf6e7c3eff8ad351d1ad667cf4102db5db92b",
+      "id": "HT-024",
+      "kind": "gate",
+      "name": "gdt64test",
+      "status": "passed"
+    },
+    {
       "auto_run": false,
       "commands": [],
-      "id": "HT-023",
+      "id": "HT-025",
       "kind": "manual-hardware",
       "name": "gpu-dev.sh",
       "reason": "manual physical-hardware action",
@@ -472,7 +502,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-024",
+      "id": "HT-026",
       "kind": "manual-hardware",
       "name": "gpu-ring-run.sh",
       "reason": "manual physical-hardware action",
@@ -485,7 +515,7 @@
           "argv": [
             "./gpu_aperture"
           ],
-          "elapsed_ns": 936334,
+          "elapsed_ns": 2964937,
           "exit_code": 77,
           "output_bytes": 36,
           "output_sha256": "815819b086ee8bcc893f330208d4e592039263e521861914b335226a4a237c8e",
@@ -493,8 +523,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "d32fe0497a09ec8c5edd247377098c2e70b47c3980b1ac159f8e96ca800bcb2b",
-      "id": "HT-025",
+      "executable_sha256": "60b8bf1af2334261eba7ee8bad171218264e13a7284254c37782fd4f5522c54a",
+      "id": "HT-027",
       "kind": "hardware-gate",
       "name": "gpu_aperture",
       "reason": "target reported hardware/device unavailable (77)",
@@ -507,11 +537,11 @@
           "argv": [
             "./gpu_blt"
           ],
-          "elapsed_ns": 23299291,
+          "elapsed_ns": 38673783,
           "exit_code": 0,
           "output_bytes": 867,
-          "output_sha256": "0de14dbe9318caaa47152bac7f1947fe861aa97af1e36a1a7feeb90e7f628581",
-          "output_tail": "gpu_blt: the Intel blitter, through the render node, alongside i915\n\nprobe:\n  device        0x9B41  (CometLake-U GT2, Gen9.5 - the ThinkPad panel)\n  HAS_BLT       1\n  engines       4\n    class 0 instance 0   RCS  render\n    class 1 instance 0   BCS  copy/blitter\n    class 2 instance 0   VCS  video decode\n    class 3 instance 0   VECS video enhance\n  ok    a COPY engine exists - there is a blitter to submit to\n\nblit:\n  batch         32 bytes: DW0=0x54300005 BR13=0x03F03C00\n  rect          (100,50)..(700,500) in a 3840x2160 32bpp surface, pitch 15360\n  inside        270000/270000 pixels are 0x60D2EB\n  outside       0 pixels clobbered (want 0)\n  submit+wait   0.535 ms\n  load average  3.79   <-- CONTENDED. Treat these numbers as indicative only; re-run on a quiet box before quoting them.\n  ok    THE BLITTER DREW IT. Command stream is correct on this silicon.",
+          "output_sha256": "df2d074764a2f56a3021e3f640a9fdbd8566a7d8fae32d6fa7e0684c85346e86",
+          "output_tail": "gpu_blt: the Intel blitter, through the render node, alongside i915\n\nprobe:\n  device        0x9B41  (CometLake-U GT2, Gen9.5 - the ThinkPad panel)\n  HAS_BLT       1\n  engines       4\n    class 0 instance 0   RCS  render\n    class 1 instance 0   BCS  copy/blitter\n    class 2 instance 0   VCS  video decode\n    class 3 instance 0   VECS video enhance\n  ok    a COPY engine exists - there is a blitter to submit to\n\nblit:\n  batch         32 bytes: DW0=0x54300005 BR13=0x03F03C00\n  rect          (100,50)..(700,500) in a 3840x2160 32bpp surface, pitch 15360\n  inside        270000/270000 pixels are 0x60D2EB\n  outside       0 pixels clobbered (want 0)\n  submit+wait   0.622 ms\n  load average  5.50   <-- CONTENDED. Treat these numbers as indicative only; re-run on a quiet box before quoting them.\n  ok    THE BLITTER DREW IT. Command stream is correct on this silicon.",
           "timed_out": false
         },
         {
@@ -519,16 +549,16 @@
             "./gpu_blt",
             "--negative"
           ],
-          "elapsed_ns": 23413225,
+          "elapsed_ns": 42126962,
           "exit_code": 0,
           "output_bytes": 1042,
-          "output_sha256": "92aa721e4a49b251b5989dcb82d53a5169331360fc53549bbbbb0ea86e191ac3",
-          "output_tail": "probe:\n  device        0x9B41  (CometLake-U GT2, Gen9.5 - the ThinkPad panel)\n  HAS_BLT       1\n  engines       4\n    class 0 instance 0   RCS  render\n    class 1 instance 0   BCS  copy/blitter\n    class 2 instance 0   VCS  video decode\n    class 3 instance 0   VECS video enhance\n  ok    a COPY engine exists - there is a blitter to submit to\n\nnegative control (BLT_WRITE_RGB cleared - the blit MUST NOT fill):\n  batch         32 bytes: DW0=0x54200005 BR13=0x03F03C00\n  rect          (100,50)..(700,500) in a 3840x2160 32bpp surface, pitch 15360\n  inside        0/270000 pixels are 0x60D2EB\n  outside       0 pixels clobbered (want 0)\n  submit+wait   0.546 ms\n  load average  3.79   <-- CONTENDED. Treat these numbers as indicative only; re-run on a quiet box before quoting them.\n  FAIL  the blit did not produce the expected rectangle\n        nothing was written at all - the batch ran but drew nothing\n  ok    the check REJECTED a blit that wrote nothing - it can fail",
+          "output_sha256": "90605bb53eee07136d9c9e41a84146c3cf8d3ee7a6537d7bf48ea00873fd9e25",
+          "output_tail": "probe:\n  device        0x9B41  (CometLake-U GT2, Gen9.5 - the ThinkPad panel)\n  HAS_BLT       1\n  engines       4\n    class 0 instance 0   RCS  render\n    class 1 instance 0   BCS  copy/blitter\n    class 2 instance 0   VCS  video decode\n    class 3 instance 0   VECS video enhance\n  ok    a COPY engine exists - there is a blitter to submit to\n\nnegative control (BLT_WRITE_RGB cleared - the blit MUST NOT fill):\n  batch         32 bytes: DW0=0x54200005 BR13=0x03F03C00\n  rect          (100,50)..(700,500) in a 3840x2160 32bpp surface, pitch 15360\n  inside        0/270000 pixels are 0x60D2EB\n  outside       0 pixels clobbered (want 0)\n  submit+wait   0.566 ms\n  load average  5.50   <-- CONTENDED. Treat these numbers as indicative only; re-run on a quiet box before quoting them.\n  FAIL  the blit did not produce the expected rectangle\n        nothing was written at all - the batch ran but drew nothing\n  ok    the check REJECTED a blit that wrote nothing - it can fail",
           "timed_out": false
         }
       ],
-      "executable_sha256": "970a27fc12ed5d98a58aa2eba0ddec23910b7eb3fe16e1c2be8173ffc1476b34",
-      "id": "HT-026",
+      "executable_sha256": "8c396016fbef02e51532a0acbb1da59142d9daad9697d0b7f2e370f9fa823736",
+      "id": "HT-028",
       "kind": "hardware-gate",
       "name": "gpu_blt",
       "status": "passed"
@@ -536,7 +566,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-027",
+      "id": "HT-029",
       "kind": "optional-instrument",
       "name": "gpu_fillrate",
       "reason": "measurement/artifact only; not a pass",
@@ -549,7 +579,7 @@
           "argv": [
             "./gpu_planes"
           ],
-          "elapsed_ns": 1105413,
+          "elapsed_ns": 2790342,
           "exit_code": 77,
           "output_bytes": 46,
           "output_sha256": "2d33c602e22daf9825ec0ef69d2fe08263847e855b8a9a4705434bf22cf74ac5",
@@ -557,8 +587,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "0897c3a72649ec23b7f84d6afdece92c8052d4f4e8a669b9b65d71d976b9786f",
-      "id": "HT-028",
+      "executable_sha256": "1ba785766a71bc54c10262a40625bf45e1c0b68561c59860776d842f7ed93f05",
+      "id": "HT-030",
       "kind": "hardware-gate",
       "name": "gpu_planes",
       "reason": "target reported hardware/device unavailable (77)",
@@ -571,7 +601,7 @@
           "argv": [
             "./gpu_ring"
           ],
-          "elapsed_ns": 1114099,
+          "elapsed_ns": 1739484,
           "exit_code": 77,
           "output_bytes": 47,
           "output_sha256": "aaebe8ac758b23d6cc140d5dd24af83859875068816d7f345bb263850bb9c5ca",
@@ -579,8 +609,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "66ea16f299a6121668cbc3753d16bd41f0d6f3d48898d5c584fcee8e5491997f",
-      "id": "HT-029",
+      "executable_sha256": "92738748d2689f2190502dcb5d5a61b730216e9ea88f5d4e91a8277fcfecfe3d",
+      "id": "HT-031",
       "kind": "hardware-gate",
       "name": "gpu_ring",
       "reason": "target reported hardware/device unavailable (77)",
@@ -593,7 +623,7 @@
           "argv": [
             "./gputest"
           ],
-          "elapsed_ns": 1008921,
+          "elapsed_ns": 2508238,
           "exit_code": 0,
           "output_bytes": 134,
           "output_sha256": "78dbd949e60b48c679c128493ce7f19c52a0e759cda3b33c4e8cdecb356a4cd0",
@@ -601,8 +631,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "2cfceb559b610cff21f9756200897fee3d6b27df933ee4b21cf186501df968b2",
-      "id": "HT-030",
+      "executable_sha256": "f99bc5b262ebee5cb0536a8484c46004c8d8a92849c5bf91f9045bc9f2863fd5",
+      "id": "HT-032",
       "kind": "gate",
       "name": "gputest",
       "status": "passed"
@@ -614,7 +644,7 @@
           "argv": [
             "./heaptest"
           ],
-          "elapsed_ns": 13098907,
+          "elapsed_ns": 28749523,
           "exit_code": 0,
           "output_bytes": 689,
           "output_sha256": "db6e8ecbbeb540922edc8b5567dc4635bad8fbb2668a187c4cae6b3e4ca14b6e",
@@ -622,8 +652,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "8b3ede8b6efea2475f1fc1b5f644c0c1c6c092e4e422d167c6d5ad9daf204164",
-      "id": "HT-031",
+      "executable_sha256": "cf78ea6a600fe90d441d56ff4ab946591249a43f0da0932d0735c0ce0a53daab",
+      "id": "HT-033",
       "kind": "gate",
       "name": "heaptest",
       "status": "passed"
@@ -635,7 +665,7 @@
           "argv": [
             "./htmltest"
           ],
-          "elapsed_ns": 15107088,
+          "elapsed_ns": 55529991,
           "exit_code": 0,
           "output_bytes": 551,
           "output_sha256": "4b5b51833de89ece80177b20376c17cb127d85a30e1a5c5f5441e2600309368f",
@@ -643,8 +673,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "4880f0456c47a5d89c3a85f7fcbf85d8e25c6d1d6e5f12f460f83699ebe1f01c",
-      "id": "HT-032",
+      "executable_sha256": "26361a4f7f6577e78a3389a38c6da7fdac9e2ed737c9e51c7c0f3a3a6560c68c",
+      "id": "HT-034",
       "kind": "gate",
       "name": "htmltest",
       "status": "passed"
@@ -656,7 +686,7 @@
           "argv": [
             "./httptest"
           ],
-          "elapsed_ns": 1388236,
+          "elapsed_ns": 8232780,
           "exit_code": 0,
           "output_bytes": 366,
           "output_sha256": "8e98221a40aaba1e8a5fc84c59984ef4db5413ee5f3739fc2dde0e6efba9fc8f",
@@ -664,8 +694,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "f596e03d3f243f8f8b37d7c6067b231f7ec11b87ab7a129985f3f0483fee562a",
-      "id": "HT-033",
+      "executable_sha256": "e957dfe03b2eee6dbe7edb77fb515d312712975b6614a718d3bce24a2616ab00",
+      "id": "HT-035",
       "kind": "gate",
       "name": "httptest",
       "status": "passed"
@@ -677,7 +707,7 @@
           "argv": [
             "./i2c_touchtest"
           ],
-          "elapsed_ns": 815842,
+          "elapsed_ns": 3034104,
           "exit_code": 0,
           "output_bytes": 976,
           "output_sha256": "dbeb58eceaa908e8d07e14999620ee49842a574adb72c346105a4391829fc5be",
@@ -686,7 +716,7 @@
         }
       ],
       "executable_sha256": "a8e62ed8d7ba12d87cb0928347ce8fd8bdb3f967b9a242766e95bd58f580323e",
-      "id": "HT-034",
+      "id": "HT-036",
       "kind": "gate",
       "name": "i2c_touchtest",
       "status": "passed"
@@ -698,7 +728,7 @@
           "argv": [
             "./i2ctest"
           ],
-          "elapsed_ns": 963127,
+          "elapsed_ns": 4107212,
           "exit_code": 0,
           "output_bytes": 878,
           "output_sha256": "509f21147dccc91f0c66075006914ffb9ab0c5bfbfd90bd1ce5a3b84e0fa4e5c",
@@ -707,7 +737,7 @@
         }
       ],
       "executable_sha256": "aa3af4145bc5c2232cf19f11d99f5416ef3d3d69d68a5d11f7a37642c0368fe6",
-      "id": "HT-035",
+      "id": "HT-037",
       "kind": "gate",
       "name": "i2ctest",
       "status": "passed"
@@ -719,7 +749,7 @@
           "argv": [
             "./inputtest"
           ],
-          "elapsed_ns": 931191,
+          "elapsed_ns": 3499868,
           "exit_code": 0,
           "output_bytes": 1489,
           "output_sha256": "05806a38fdaecc57af1f96a48679bd0292a32e30b5bb2bfb6034410bab96dc60",
@@ -727,8 +757,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "d6177a4ce7dfeda2d1cc8b2e603b30d306f09492471d9ca619b6d47353a637a0",
-      "id": "HT-036",
+      "executable_sha256": "e46ab394ad047ab5bd066b1a88983a32d9a6e511fa9655e00c7757398516f594",
+      "id": "HT-038",
       "kind": "gate",
       "name": "inputtest",
       "status": "passed"
@@ -740,7 +770,7 @@
           "argv": [
             "./inputtest_feel"
           ],
-          "elapsed_ns": 1055546,
+          "elapsed_ns": 3010623,
           "exit_code": 0,
           "output_bytes": 2160,
           "output_sha256": "e9c476f8c579a322c865534e06f481442f0907ef5919bc081ec3cc1260f5cdfe",
@@ -748,8 +778,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "fbd9e65f7eefade4464bb1611f33dc81d363948d44f6cae7df41b49b9c3f5b7f",
-      "id": "HT-037",
+      "executable_sha256": "36117552de3cc8c278d9139739007fa03f347deadb346209377bd7c98b0e1a48",
+      "id": "HT-039",
       "kind": "gate",
       "name": "inputtest_feel",
       "status": "passed"
@@ -761,7 +791,7 @@
           "argv": [
             "./inputtest_hid"
           ],
-          "elapsed_ns": 923294,
+          "elapsed_ns": 3051738,
           "exit_code": 0,
           "output_bytes": 3155,
           "output_sha256": "cd5eca41e5232b817e04c064353943370634451508b3f235703c6881f18d26ab",
@@ -770,7 +800,7 @@
         }
       ],
       "executable_sha256": "97aa6bc8aba6eaaf7afbe283d032df7d9ac3cac2299950ea397756157f0a5a7a",
-      "id": "HT-038",
+      "id": "HT-040",
       "kind": "gate",
       "name": "inputtest_hid",
       "status": "passed"
@@ -778,7 +808,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-039",
+      "id": "HT-041",
       "kind": "manual-hardware",
       "name": "intel_probe",
       "reason": "manual physical-hardware action",
@@ -791,7 +821,7 @@
           "argv": [
             "./iwlwifitest"
           ],
-          "elapsed_ns": 25605639,
+          "elapsed_ns": 48789406,
           "exit_code": 0,
           "output_bytes": 170,
           "output_sha256": "f8c8a4af663f5c6a3f58fc56d984ab23871e513f7c9bd36a8224cb257f867f2f",
@@ -799,8 +829,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "fcaf3520cce3e7b7bd0aff9243bbe6023f443f74a5512f2856eaf6d935d6152a",
-      "id": "HT-040",
+      "executable_sha256": "fd36814334a784efd045aa76bc69e1a02c0ae2bdd7575a0cc2fee189d8528dcc",
+      "id": "HT-042",
       "kind": "gate",
       "name": "iwlwifitest",
       "status": "passed"
@@ -812,7 +842,7 @@
           "argv": [
             "./jmptest"
           ],
-          "elapsed_ns": 943760,
+          "elapsed_ns": 1296275,
           "exit_code": 0,
           "output_bytes": 111,
           "output_sha256": "63b1970eb583f0502ffd1ad194ab0290a867ffc2f79051c37a9fa1a8d9c873e0",
@@ -821,7 +851,7 @@
         }
       ],
       "executable_sha256": "e767b570b5cdc1d7d9906100a4e2c9fa74fb7f5408ec202c570224ced4192355",
-      "id": "HT-041",
+      "id": "HT-043",
       "kind": "gate",
       "name": "jmptest",
       "status": "passed"
@@ -833,7 +863,7 @@
           "argv": [
             "./jmptest32"
           ],
-          "elapsed_ns": 6813970,
+          "elapsed_ns": 2632396,
           "exit_code": 0,
           "output_bytes": 111,
           "output_sha256": "562b1c2c9dfa9054e11ff4a1151e6bb6ae9d0d925105cb8c9fb0d36971f11ddf",
@@ -842,7 +872,7 @@
         }
       ],
       "executable_sha256": "9ab80b7b8caf1a2a65f41e3a45463d08db424f3eaa07bd26fbbd437d3e72d0c0",
-      "id": "HT-042",
+      "id": "HT-044",
       "kind": "gate",
       "name": "jmptest32",
       "status": "passed"
@@ -854,7 +884,7 @@
           "argv": [
             "./jstest"
           ],
-          "elapsed_ns": 43173630,
+          "elapsed_ns": 64495530,
           "exit_code": 0,
           "output_bytes": 299,
           "output_sha256": "ae244de0d6b4c8c93d1ce8f620cc7e647b1b0bcfdc959203a6b92bb949910960",
@@ -862,8 +892,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "ebacb1c0eea3acd025fcd4513ce8ef311416708009123e8fd2b7733c20848404",
-      "id": "HT-043",
+      "executable_sha256": "67d904b70acaf324ec7ecd1e0c52670dc64e428dc1a13359ce591dc43f3b62ab",
+      "id": "HT-045",
       "kind": "gate",
       "name": "jstest",
       "status": "passed"
@@ -875,7 +905,7 @@
           "argv": [
             "./killtest.sh"
           ],
-          "elapsed_ns": 222245681,
+          "elapsed_ns": 312391620,
           "exit_code": 0,
           "output_bytes": 1552,
           "output_sha256": "98172799a9ba40c0815049c11b8c1bda0cfb260b25b30a6dce57c435df2e88a2",
@@ -884,7 +914,7 @@
         }
       ],
       "executable_sha256": "23f0ebec1fb1aec189b595b517673fd08d68b1ae0c89baa98e0e1637f97380c7",
-      "id": "HT-044",
+      "id": "HT-046",
       "kind": "gate",
       "name": "killtest.sh",
       "status": "passed"
@@ -896,7 +926,7 @@
           "argv": [
             "./libctest"
           ],
-          "elapsed_ns": 75577140,
+          "elapsed_ns": 111976601,
           "exit_code": 0,
           "output_bytes": 868,
           "output_sha256": "918e5598adaa699e9259d34ec634fcbbbcba45f9a6c9e0f836e64dbf061cebd8",
@@ -904,8 +934,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "7fb7a071d7a6e4fb8a7030e852f8a1e3a074d4696a6f4944fdd103f54cde81f1",
-      "id": "HT-045",
+      "executable_sha256": "01071e9eea09d0996d387e140ad09936c5ae1f1e7a6314608c76586bdce22929",
+      "id": "HT-047",
       "kind": "gate",
       "name": "libctest",
       "status": "passed"
@@ -917,16 +947,16 @@
           "argv": [
             "./memmap-guard-test.sh"
           ],
-          "elapsed_ns": 8313623142,
+          "elapsed_ns": 11724180353,
           "exit_code": 0,
-          "output_bytes": 2676,
-          "output_sha256": "e7a31240bbdce7cadb05585b09d85a75f1d1b657f605ac40bcdde28c7004c90d",
+          "output_bytes": 2668,
+          "output_sha256": "600910f0d6ecc18508b03b54568d38fa68f695c906f5cfa5aa76d28d8681185c",
           "output_tail": "        caught by: \"the browser\\'s storage no longer fits its region in memmap.h - raise HI_DOM_END and check it against HI_BACK, do not shave a cap to make this line pass\"\n  ok    the browser's storage placed on virtio_net.c's rings at 64 MiB\n        caught by: \"virtio_net.c\\'s rings have grown into the browser\\'s storage\"\n  ok    the real bug, again: EDID scratch back at 0x0C980000\n        caught by: \"intel.c\\'s EDID scratch has grown into virtio_net.c\\'s rings\"\n  ok    the program arena grown into kernel.zl's block at 32 MiB\n        caught by: \"arena.c\\'s program arena has grown into kernel.zl\\'s block at 32 MiB (SNAKE_X/FS_DATA/HIST_BUF - see check-memmap.sh)\"\n\nand the rebased addresses must still be the numbers they always were:\n  ok    src/core/sched.c - all 2 addresses identical to the literals\n  ok    src/drivers/storage/nvme.c - all 6 addresses identical to the literals\n  ok    src/drivers/input/xhci.c - all 15 addresses identical to the literals\n  ok    src/drivers/display/virtio_gpu.c - all 7 addresses identical to the literals\n  ok    src/graphics/framebuffer/fb.c - all 4 addresses identical to the literals\n  ok    src/drivers/network/virtio_net.c - all 6 addresses identical to the literals\n  ok    src/core/arena.c - all 4 addresses identical to the literals\n  ok    src/drivers/input/i2c_hid.c - all 4 addresses identical to the literals\n  ok    src/drivers/display/intel.c - all 4 addresses identical to the literals\n\npassed 21, failed 0",
           "timed_out": false
         }
       ],
       "executable_sha256": "5f416d9005b749639902a2b4c45da0f15d0a8e6021f0b71ed0230754f438d9d7",
-      "id": "HT-046",
+      "id": "HT-048",
       "kind": "gate",
       "name": "memmap-guard-test.sh",
       "status": "passed"
@@ -938,7 +968,7 @@
           "argv": [
             "./memtypetest"
           ],
-          "elapsed_ns": 889511,
+          "elapsed_ns": 993638,
           "exit_code": 0,
           "output_bytes": 22,
           "output_sha256": "c29db813cd79477d5f16f3b99c7b50306236ff7ceefe1a842e74d9a531d0788e",
@@ -946,8 +976,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "212fb47d69f5886b3890e06c2bb7c12cbfe4d59673e07e1ddcfa6a0de8a57291",
-      "id": "HT-047",
+      "executable_sha256": "ad6daedd9c9f7da92e533f842d317c2bc5c5b2aee778b1bf79f002c87b4b67c5",
+      "id": "HT-049",
       "kind": "gate",
       "name": "memtypetest",
       "status": "passed"
@@ -955,7 +985,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-048",
+      "id": "HT-050",
       "kind": "manual-hardware",
       "name": "modeset-run.sh",
       "reason": "manual physical-hardware action",
@@ -964,7 +994,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-049",
+      "id": "HT-051",
       "kind": "manual-hardware",
       "name": "modeset_test",
       "reason": "manual physical-hardware action",
@@ -977,7 +1007,7 @@
           "argv": [
             "./msctest"
           ],
-          "elapsed_ns": 1082867,
+          "elapsed_ns": 1114960,
           "exit_code": 0,
           "output_bytes": 3246,
           "output_sha256": "8e45094d53a46010d274cba0470ce2e3e17953e4c8528b689f54719dfc8e374c",
@@ -985,8 +1015,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "a38e84afe3116aae595822042e839215ce67815561e1b1407d56dab725a7a70e",
-      "id": "HT-050",
+      "executable_sha256": "ab6c7ec916bc7c630c72f263a43356600457cb72beb9446acbad5bb3634041da",
+      "id": "HT-052",
       "kind": "gate",
       "name": "msctest",
       "status": "passed"
@@ -998,7 +1028,7 @@
           "argv": [
             "./nettest"
           ],
-          "elapsed_ns": 7808772,
+          "elapsed_ns": 8165638,
           "exit_code": 0,
           "output_bytes": 172,
           "output_sha256": "b64da3b01dfa4d82c73fae1bf96904579a63e80ac1a1b656e68e0b89638102c9",
@@ -1006,8 +1036,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "7d6ee7f69df54c403c24a4fb472d776d2d4c798877b92a0d0184adff1e04883f",
-      "id": "HT-051",
+      "executable_sha256": "2be40cdfaf4dd42ffebcfb0ebee36c8f59bd988596c83c57aa3e9ed71c3ec99a",
+      "id": "HT-053",
       "kind": "gate",
       "name": "nettest",
       "status": "passed"
@@ -1019,7 +1049,7 @@
           "argv": [
             "./pagetxntest"
           ],
-          "elapsed_ns": 37776076,
+          "elapsed_ns": 47159473,
           "exit_code": 0,
           "output_bytes": 172,
           "output_sha256": "209205b9456e6c18c8fc4084fff916b83d2d6212583d8c26ab682db6a3218f4b",
@@ -1027,8 +1057,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "7f4cba4e5c0e0a902f56e8ee4b053bd249f7a8d4b4371dcc3d83bff3b229d044",
-      "id": "HT-052",
+      "executable_sha256": "c46629006c55924f8e3531fd7254fd6c9b182df1b9c6c323b89a115d6f12bcc7",
+      "id": "HT-054",
       "kind": "gate",
       "name": "pagetxntest",
       "status": "passed"
@@ -1040,7 +1070,7 @@
           "argv": [
             "./pagingtest"
           ],
-          "elapsed_ns": 947468,
+          "elapsed_ns": 1060503,
           "exit_code": 0,
           "output_bytes": 192,
           "output_sha256": "1d26c8856e2e466a568899ac59a63eb288fd27c3232a6fbff68e15613e1b5d0f",
@@ -1048,8 +1078,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "99748b1fc789dcbeeb4fd03cff279dfd3e2090d5effe42ead3870b4507431c96",
-      "id": "HT-053",
+      "executable_sha256": "6df0f1cade98c8d4885cc7033400397ca3a6996ab25b5ca1c57a42d85f9a6e6e",
+      "id": "HT-055",
       "kind": "gate",
       "name": "pagingtest",
       "status": "passed"
@@ -1061,7 +1091,7 @@
           "argv": [
             "./palette"
           ],
-          "elapsed_ns": 4207341,
+          "elapsed_ns": 5214236,
           "exit_code": 0,
           "output_bytes": 5120,
           "output_sha256": "c9e815dc989449a82476351898c2d84d0a69b318240c29f20e0393a2b01597ee",
@@ -1070,7 +1100,7 @@
         }
       ],
       "executable_sha256": "4737f556491988e03fdc8ca4d31e654b52a12f8dc7f58d4b8a9c112551ba8850",
-      "id": "HT-054",
+      "id": "HT-056",
       "kind": "gate",
       "name": "palette",
       "status": "passed"
@@ -1078,7 +1108,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-055",
+      "id": "HT-057",
       "kind": "instrument",
       "name": "parsestat",
       "reason": "measurement/artifact only; not a pass",
@@ -1091,7 +1121,7 @@
           "argv": [
             "./pmmtest"
           ],
-          "elapsed_ns": 2444640,
+          "elapsed_ns": 2965904,
           "exit_code": 0,
           "output_bytes": 134,
           "output_sha256": "795c8859b6be4df6fc51ec1a9828105c50580c91fd8a21f33bd8dbebc8a6c741",
@@ -1099,8 +1129,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "bb5ca8ca8b4138f62985e5f9833cf86189bef12d791d703f0979fe78d5c77b6a",
-      "id": "HT-056",
+      "executable_sha256": "68d147f931dc397186adf7ad051e0e1e3e10c11f59072a28adbfd3c83b3ad63f",
+      "id": "HT-058",
       "kind": "gate",
       "name": "pmmtest",
       "status": "passed"
@@ -1112,7 +1142,7 @@
           "argv": [
             "./pngtest"
           ],
-          "elapsed_ns": 18982302,
+          "elapsed_ns": 21812681,
           "exit_code": 0,
           "output_bytes": 6609,
           "output_sha256": "2bb2f45f865b357a04b6455fdc7164ab50680f2eb424e90f80377152182e16b5",
@@ -1120,8 +1150,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "5eece82d740278049ae64c01e4eb5caa6d267efb4f70501ff0c638b33be03c48",
-      "id": "HT-057",
+      "executable_sha256": "9582242509395eb5ae6820bf6d72d6ba60119f4c2ca59f274d9d02ba4c345bdd",
+      "id": "HT-059",
       "kind": "gate",
       "name": "pngtest",
       "status": "passed"
@@ -1131,18 +1161,39 @@
       "commands": [
         {
           "argv": [
-            "./processmemorytest"
+            "./processlifecycletest"
           ],
-          "elapsed_ns": 4104984,
+          "elapsed_ns": 950089,
           "exit_code": 0,
-          "output_bytes": 114,
-          "output_sha256": "6060602e412ec13efbeb45eb70e972ed4d53a60d67233e6b45dd7e6df64d7b7f",
-          "output_tail": "processmemorytest: 191 checks, 0 failures\nprocess frames acquire atomically, remain disjoint, and reclaim exactly",
+          "output_bytes": 124,
+          "output_sha256": "1d89f34d1d0190cc59fd99d772958c520518d65fd011287a68f2206cb28846e5",
+          "output_tail": "processlifecycletest: 109 checks, 0 failures\nprocess handles reject stale generations and preserve exact exit/fault custody",
           "timed_out": false
         }
       ],
-      "executable_sha256": "9ed81b846c60c311a50ffc433098572d04218272c7808991173bd087b5368644",
-      "id": "HT-058",
+      "executable_sha256": "f342a6570934e160027e12e8bff166908bd9ccc81aca765f777c8b37da5303e1",
+      "id": "HT-060",
+      "kind": "gate",
+      "name": "processlifecycletest",
+      "status": "passed"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
+            "./processmemorytest"
+          ],
+          "elapsed_ns": 17639521,
+          "exit_code": 0,
+          "output_bytes": 114,
+          "output_sha256": "321e2e5ef458fc00bd89ec516eda9bdef987749f48829d8fd27ee1d80a222cc1",
+          "output_tail": "processmemorytest: 555 checks, 0 failures\nprocess frames acquire atomically, remain disjoint, and reclaim exactly",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "53eb627be74729d9c735c75c85fd307723a041680998722b4f3128288465e1b2",
+      "id": "HT-061",
       "kind": "gate",
       "name": "processmemorytest",
       "status": "passed"
@@ -1154,7 +1205,7 @@
           "argv": [
             "./retest"
           ],
-          "elapsed_ns": 1993349587,
+          "elapsed_ns": 2444566401,
           "exit_code": 0,
           "output_bytes": 848,
           "output_sha256": "798f3a04f23c083af3b0062cbcfeffc7e111384244877c4e9103edf5b7eff0f7",
@@ -1163,7 +1214,7 @@
         }
       ],
       "executable_sha256": "62301da4c750b0e45a82a64c0f933e74c08af6892ec245a0f9d070b3920414cb",
-      "id": "HT-059",
+      "id": "HT-062",
       "kind": "gate",
       "name": "retest",
       "status": "passed"
@@ -1175,7 +1226,7 @@
           "argv": [
             "./rtctest"
           ],
-          "elapsed_ns": 1586024,
+          "elapsed_ns": 2016457,
           "exit_code": 0,
           "output_bytes": 3974,
           "output_sha256": "109b94ebf14ceedc3bf7aed47eac26fa62c54e8f3b5bb3313c1a38f08f2a9f48",
@@ -1183,8 +1234,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "2385163286f60adfd1c9b04233bcc0e036994d5b6213574558c9a4f6b478e16a",
-      "id": "HT-060",
+      "executable_sha256": "979f36ea3f2262a98936c8d6b9936a3dd42ffb4647ce84a172bab6424e9c6561",
+      "id": "HT-063",
       "kind": "gate",
       "name": "rtctest",
       "status": "passed"
@@ -1192,7 +1243,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-061",
+      "id": "HT-064",
       "kind": "builder",
       "name": "run-all.sh",
       "reason": "host behavior only",
@@ -1205,7 +1256,7 @@
           "argv": [
             "./runtest"
           ],
-          "elapsed_ns": 890508,
+          "elapsed_ns": 1101483,
           "exit_code": 0,
           "output_bytes": 114,
           "output_sha256": "ff3836f64d6f2ea83111a31193401d5d8b27cc61ce84cacbfccc3034f9ded237",
@@ -1214,7 +1265,7 @@
         }
       ],
       "executable_sha256": "0f09cd662633b22889db10a52ca66fb8d1205cb89a6b82fb038870f85f0e1dbc",
-      "id": "HT-062",
+      "id": "HT-065",
       "kind": "gate",
       "name": "runtest",
       "status": "passed"
@@ -1226,7 +1277,7 @@
           "argv": [
             "./schedtest"
           ],
-          "elapsed_ns": 846043,
+          "elapsed_ns": 1290692,
           "exit_code": 0,
           "output_bytes": 260,
           "output_sha256": "3c77b938cd91f4de5a30e5de26483ecd18de226443cd88ffc458e118d7b13fc0",
@@ -1234,8 +1285,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "14abbe312b1d83e0dc2f3a2a3375ac887523ddd7167aaac58be5f76edce31392",
-      "id": "HT-063",
+      "executable_sha256": "2b3c721a09f8a190309a6be12fedbc30fedda913022c522b0261aa64f3d663ce",
+      "id": "HT-066",
       "kind": "gate",
       "name": "schedtest",
       "status": "passed"
@@ -1247,7 +1298,7 @@
           "argv": [
             "./schedtest_ms"
           ],
-          "elapsed_ns": 791253,
+          "elapsed_ns": 1260820,
           "exit_code": 0,
           "output_bytes": 121,
           "output_sha256": "54bdbceb264b6e81ee6f16bae17ed73c3caa7c1fda4cdae0adc808893f6deec4",
@@ -1255,8 +1306,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "c9ab0fbd89ac85aee398f9b7bc1e39f48d7a2465fe658a6fc6debe74c35a3ac4",
-      "id": "HT-064",
+      "executable_sha256": "befc7d4fd3fec63a22dae094fdf0e4e1d10d0f318f9fbcf4fad13d604bbdf8c0",
+      "id": "HT-067",
       "kind": "gate",
       "name": "schedtest_ms",
       "status": "passed"
@@ -1266,9 +1317,30 @@
       "commands": [
         {
           "argv": [
+            "./schedulerpolicytest"
+          ],
+          "elapsed_ns": 1166026,
+          "exit_code": 0,
+          "output_bytes": 126,
+          "output_sha256": "7595e7a053b5e238f1fd0acb7acbb34562b3e8cbec48ce7fdbabf00954cbcf11",
+          "output_tail": "schedulerpolicytest: 126 checks, 0 failures\nbounded scheduler policy preserves fairness, deadlines and exact owner accounting",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "8e7c18149d0e17f139bf36d9fe67b483fd79e4f0bd233db115e8eb50cf4aa4f0",
+      "id": "HT-068",
+      "kind": "gate",
+      "name": "schedulerpolicytest",
+      "status": "passed"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
             "./settingstest"
           ],
-          "elapsed_ns": 1310283,
+          "elapsed_ns": 1832735,
           "exit_code": 0,
           "output_bytes": 5307,
           "output_sha256": "f919f616293f3b2b44fef440e675fd58bdcb71ff52a2f35831c9cb9201cc9fea",
@@ -1276,8 +1348,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "2eb58577d071a4a9fdd4c3d52c3a6876c16bfd31aab10b2688f579375b928803",
-      "id": "HT-065",
+      "executable_sha256": "93bf28264d19f017470664ecaa1710f3f8a56322813e5b94894a44129e40642e",
+      "id": "HT-069",
       "kind": "gate",
       "name": "settingstest",
       "status": "passed"
@@ -1287,9 +1359,30 @@
       "commands": [
         {
           "argv": [
+            "./settingstest_zlfs"
+          ],
+          "elapsed_ns": 1858568,
+          "exit_code": 0,
+          "output_bytes": 7271,
+          "output_sha256": "5c1c637ff8a5ee1e9eceaf362bb608f8c57ce94de4d58fa9659808fb7da59dd9",
+          "output_tail": "  the harness can rewrite the file                           ok\n  a flipped bit in the zlfs file is refused                  ok\n  ...and says CHECKSUM                                       ok\n  ...and names /system/settings, not LBA 64                  ok\n  ...and does not fall back to the sector silently           ok\n  ...and still never writes                                  ok\n  the harness can delete the file                            ok\n  ...and create a 10-byte one                                ok\n  a short zlfs settings file is refused                      ok\n  ...and says so                                             ok\n  a failed zlfs write reports failure                        ok\n  ...and says so                                             ok\n  a save with the disk healthy succeeds                      ok\n  ...and so does the next one                                ok\n  ...and flushes at least twice (inside the write, then the sync) ok\n  the final sync failing reports not-durable                 ok\n  ...and says so                                             ok\n  and once the disk behaves, saving succeeds again           ok\n\nall good: 0 failure(s)",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "a2a1066b80ec42c3ae94b904e0b4c756e6d150356626323ec20893b2ddba525c",
+      "id": "HT-070",
+      "kind": "gate",
+      "name": "settingstest_zlfs",
+      "status": "passed"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
             "./systest"
           ],
-          "elapsed_ns": 810157,
+          "elapsed_ns": 1764114,
           "exit_code": 0,
           "output_bytes": 7955,
           "output_sha256": "62d2cfff8052be775dffa65596fa3b6729527e048fcd5f84bab4f2c1cf61ea86",
@@ -1297,8 +1390,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "9d526fd75ff40f3fbc75d3e825fd7ef5c08cce91ca446063d140b78f4bbd01c7",
-      "id": "HT-066",
+      "executable_sha256": "256f8019a6ee54e75e10f85d2aa53a04990ddce8742fb3309a0d5bb07baadc69",
+      "id": "HT-071",
       "kind": "gate",
       "name": "systest",
       "status": "passed"
@@ -1310,7 +1403,7 @@
           "argv": [
             "./tartest"
           ],
-          "elapsed_ns": 19468162,
+          "elapsed_ns": 23887880,
           "exit_code": 0,
           "output_bytes": 766,
           "output_sha256": "c0deb5847ddd1d6bc9fe1e98f4cac751be907d5e91b4e5c8ec4b84533870f074",
@@ -1318,8 +1411,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "f20b333fb200029bbb555a6ea9f1310ccd556c817cfed5ab88ea68fd01e9cd8b",
-      "id": "HT-067",
+      "executable_sha256": "6614e88807713f4e5d26b592eb3a8363eed4a32ec26374d63a913a09ca276a9d",
+      "id": "HT-072",
       "kind": "gate",
       "name": "tartest",
       "status": "passed"
@@ -1331,7 +1424,7 @@
           "argv": [
             "./tcptest"
           ],
-          "elapsed_ns": 931636,
+          "elapsed_ns": 1190586,
           "exit_code": 0,
           "output_bytes": 439,
           "output_sha256": "916d6caf91939bfac268141e7f32626a77249f9564827af5e8a89f675ae9e5d5",
@@ -1339,8 +1432,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "a1bd248074b5a0edc41d47b3aea4b517e61e80cafa5b93aa93167dcb3bd8f335",
-      "id": "HT-068",
+      "executable_sha256": "fd31d93e2563eeb46ba1448c572ac280d938b7e92ad799d549d7e2e067bde88d",
+      "id": "HT-073",
       "kind": "gate",
       "name": "tcptest",
       "status": "passed"
@@ -1352,7 +1445,7 @@
           "argv": [
             "./termwrap"
           ],
-          "elapsed_ns": 820419,
+          "elapsed_ns": 1047580,
           "exit_code": 0,
           "output_bytes": 3236,
           "output_sha256": "9d1ac7aec00e56d6aa366d028edb5dbc3dfc67883880e1c89a2e6f1ebadc3380",
@@ -1360,8 +1453,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "f849bb6d38f859c3817dc2e3e25654f3b57f104e94b8c3ae8cf532c9ff8457a9",
-      "id": "HT-069",
+      "executable_sha256": "bd4cb192d331b45111d7cd2ddc9a8311c2da35be28e6f7d515155aa90b65b4e4",
+      "id": "HT-074",
       "kind": "gate",
       "name": "termwrap",
       "status": "passed"
@@ -1373,7 +1466,7 @@
           "argv": [
             "./tlscryptotest"
           ],
-          "elapsed_ns": 7107718,
+          "elapsed_ns": 14571216,
           "exit_code": 0,
           "output_bytes": 1070,
           "output_sha256": "2ed88e4130466083b192aa23417042ae5ff1eda903279c218de3ae8d8c884f99",
@@ -1381,8 +1474,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "fb1b9380d9690988ce8633947487fd8170396d0ee8c448deb246250d51c35cfa",
-      "id": "HT-070",
+      "executable_sha256": "eccd03037b4bbb0d40be8f70bd22494e4338acfe4b8620e285d631c81fc930c8",
+      "id": "HT-075",
       "kind": "gate",
       "name": "tlscryptotest",
       "status": "passed"
@@ -1394,7 +1487,7 @@
           "argv": [
             "./tlsstatetest"
           ],
-          "elapsed_ns": 5455276,
+          "elapsed_ns": 7754403,
           "exit_code": 0,
           "output_bytes": 623,
           "output_sha256": "efa2f2fe180d2edcc619e1ff3547b57f0441a7414b0b0c88899628b1e9f81061",
@@ -1402,8 +1495,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "b223cc6d8c2fd249b5329503b70454355a8fe704981089367c010f2b18af8640",
-      "id": "HT-071",
+      "executable_sha256": "648060f39488e45f7f2dc333c54456919ad12d0c3a5cba2740a313faf0595d3a",
+      "id": "HT-076",
       "kind": "gate",
       "name": "tlsstatetest",
       "status": "passed"
@@ -1415,7 +1508,7 @@
           "argv": [
             "./tlstest"
           ],
-          "elapsed_ns": 2074036617,
+          "elapsed_ns": 2128035444,
           "exit_code": 0,
           "output_bytes": 505,
           "output_sha256": "12e0d2e7e9444936d5f2dfbbf199b85075ead99076640177f3602cf7a82f7963",
@@ -1423,8 +1516,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "307dc06341dcb3d0e4530b9e03749729ee254656f5962832cf90bfa8055afe9f",
-      "id": "HT-072",
+      "executable_sha256": "b16521e9149ced59f176399da5b7f9fd00a3f204d3b84a1dc64716af34a28e71",
+      "id": "HT-077",
       "kind": "gate",
       "name": "tlstest",
       "status": "passed"
@@ -1436,7 +1529,7 @@
           "argv": [
             "./toasttest"
           ],
-          "elapsed_ns": 92028926,
+          "elapsed_ns": 132047028,
           "exit_code": 0,
           "output_bytes": 2298,
           "output_sha256": "724f5b5d351f7895dd044d6c36d2c64ed7ae6c855fb52787456c4a933c9bb8b4",
@@ -1444,8 +1537,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "7c0b4fff5dc71fe199212502c6442f778567d8e5035765f9c1bb5581f23789fa",
-      "id": "HT-073",
+      "executable_sha256": "2440322c3d9436f692c6f688d73241e463420e31e2610d89e39d7b89a6a77396",
+      "id": "HT-078",
       "kind": "gate",
       "name": "toasttest",
       "status": "passed"
@@ -1457,16 +1550,16 @@
           "argv": [
             "./tritest"
           ],
-          "elapsed_ns": 111190384,
+          "elapsed_ns": 243049506,
           "exit_code": 0,
           "output_bytes": 1800,
-          "output_sha256": "79bd8dff5f98dae48bf000765b797b315cffe0a43144fb2dfafc23b6966e0085",
-          "output_tail": "  a degenerate zero-area triangle                ok    (1 px differ: 0 scanline-only, 1 tiled-only)\n  hanging off the top-left corner                ok    (357 px differ: 356 scanline-only, 1 tiled-only)\n  hanging off the bottom-right corner            ok    (0 px differ: 0 scanline-only, 0 tiled-only)\n  the tiled path honours fb3d's clip             ok    (0 px outside)\n\n  mesh cube       counts                        ok    (12 tris, 8 verts)\n  mesh pyramid    counts                        ok    (6 tris, 5 verts)\n  mesh octahedron counts                        ok    (8 tris, 6 verts)\n  mesh cylinder   counts                        ok    (44 tris, 24 verts)\n  mesh cube       draws                         ok    (103041 px)\n  mesh pyramid    draws                         ok    (45481 px)\n  mesh octahedron draws                         ok    (29041 px)\n  mesh cylinder   draws                         ok    (73435 px)\n  the four are four different solids            ok    (0 identical pairs)\n  37 degrees of yaw changes it                 ok    (14341 px moved)\n  the mesh path honours fb3d's clip            ok    (0 px outside)\n\n  400 large triangles:  scanline 45.7 us   tiled 111.1 us   -59%\n\nall good: 0 failure(s)",
+          "output_sha256": "7f0efc874e81eac5a47d3837fd0c9e1d7fd3d0c3dfd6547250ed77df7eb25af3",
+          "output_tail": "  a degenerate zero-area triangle                ok    (1 px differ: 0 scanline-only, 1 tiled-only)\n  hanging off the top-left corner                ok    (357 px differ: 356 scanline-only, 1 tiled-only)\n  hanging off the bottom-right corner            ok    (0 px differ: 0 scanline-only, 0 tiled-only)\n  the tiled path honours fb3d's clip             ok    (0 px outside)\n\n  mesh cube       counts                        ok    (12 tris, 8 verts)\n  mesh pyramid    counts                        ok    (6 tris, 5 verts)\n  mesh octahedron counts                        ok    (8 tris, 6 verts)\n  mesh cylinder   counts                        ok    (44 tris, 24 verts)\n  mesh cube       draws                         ok    (103041 px)\n  mesh pyramid    draws                         ok    (45481 px)\n  mesh octahedron draws                         ok    (29041 px)\n  mesh cylinder   draws                         ok    (73435 px)\n  the four are four different solids            ok    (0 identical pairs)\n  37 degrees of yaw changes it                 ok    (14341 px moved)\n  the mesh path honours fb3d's clip            ok    (0 px outside)\n\n  400 large triangles:  scanline 99.5 us   tiled 243.0 us   -59%\n\nall good: 0 failure(s)",
           "timed_out": false
         }
       ],
       "executable_sha256": "0c0f67257f7af988f66f2da48e72b3d36819d386c2fd59b8b45b3e5d548eaf0c",
-      "id": "HT-074",
+      "id": "HT-079",
       "kind": "gate",
       "name": "tritest",
       "status": "passed"
@@ -1478,7 +1571,7 @@
           "argv": [
             "./uitest"
           ],
-          "elapsed_ns": 1965564,
+          "elapsed_ns": 3555767,
           "exit_code": 0,
           "output_bytes": 12282,
           "output_sha256": "283d5ac47acbea6ff8bbc148db0882b52b3635b080f03e2d0ce7b383ab1df497",
@@ -1486,8 +1579,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "f14d3f4f3bbbc14811d248aafee1e1864d5ab7d8ab60aa1cb79e354d84be73fc",
-      "id": "HT-075",
+      "executable_sha256": "4d63042ea6a74d1f72c5ee429c4a5a8b0a8496298cc5b820760874839d2b6614",
+      "id": "HT-080",
       "kind": "gate",
       "name": "uitest",
       "status": "passed"
@@ -1499,16 +1592,16 @@
           "argv": [
             "./user-syscalls-test.sh"
           ],
-          "elapsed_ns": 165999971,
+          "elapsed_ns": 318155046,
           "exit_code": 0,
-          "output_bytes": 251,
-          "output_sha256": "c1721530c29749e8af0fb54164659ba7c323b2316438a395e9ee0c1a7054c320",
-          "output_tail": "user-syscalls selftest: caught duplicate-number, undeclared-gap, sign-bit-number, syscall-zero, malformed-constant, unadmitted-version\nuser-syscalls: PASS: ABI 1, 24 entries, unsigned unknown IDs -> ENOSYS\nuser-syscalls host gate: 34 checks, 0 failed",
+          "output_bytes": 303,
+          "output_sha256": "5c1e60b49840172f05fe9d34cd3608352c8d703ddc95ab67bf34163450d9b6bf",
+          "output_tail": "user-syscalls selftest: caught duplicate-number, undeclared-gap, sign-bit-number, syscall-zero, malformed-constant, unadmitted-version\nuser-syscalls: PASS: ABI 1, 27 entries, unsigned unknown IDs -> ENOSYS\nuser-syscalls host gate: 40 checks, 0 failed\nuser-syscalls receipt range and unknown probe: PASS",
           "timed_out": false
         }
       ],
-      "executable_sha256": "acb25d3e0edc46fda1f77f947cf92ba0875c874c7a85b5c4d3c0e8cc8a7e6d7b",
-      "id": "HT-076",
+      "executable_sha256": "067d3dc86077dd8e68912d6b83fd2edd4454c18c1a7bc2ff0ba9d1931ac6b896",
+      "id": "HT-081",
       "kind": "gate",
       "name": "user-syscalls-test.sh",
       "status": "passed"
@@ -1518,9 +1611,72 @@
       "commands": [
         {
           "argv": [
+            "./userimage64test"
+          ],
+          "elapsed_ns": 6665063,
+          "exit_code": 0,
+          "output_bytes": 41,
+          "output_sha256": "deb6666800e1b2e8ec971705caf8cf4f75b2a78b627f41e2dc0a15b0f376d4c8",
+          "output_tail": "userimage64test: 5248 checks, 0 failures",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "b28ceecb0e1fcc3db027e254da2683135a42f042cee915ce5d6c6f12f2f4c9b3",
+      "id": "HT-082",
+      "kind": "gate",
+      "name": "userimage64test",
+      "status": "passed"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
+            "./userprocessservicetest"
+          ],
+          "elapsed_ns": 1124553,
+          "exit_code": 0,
+          "output_bytes": 128,
+          "output_sha256": "1565b16c744e120216e62046160e3c59b10a32073a82deec72ac0a9fcba01970",
+          "output_tail": "userprocessservicetest: 144 checks, 0 failures\nlifecycle custody and bounded dispatch remain generation-exact across every turn",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "4cb2796f6c48fcd4b0a2ad53edac0e7aa242613d023209aae1509b7ce11d5a54",
+      "id": "HT-083",
+      "kind": "gate",
+      "name": "userprocessservicetest",
+      "status": "passed"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
+            "./userspawnwaittest"
+          ],
+          "elapsed_ns": 6768322,
+          "exit_code": 0,
+          "output_bytes": 42,
+          "output_sha256": "499cf6f0b5577d00fdc829ccf6fb3059cb93a2ad2e7c0cb7f171294720899bbd",
+          "output_tail": "userspawnwaittest: 632 checks, 0 failures",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "003206b41f17dc2920c6a10603ccac562ab6853ce3cae5ed83afd57bb6ae94a7",
+      "id": "HT-084",
+      "kind": "gate",
+      "name": "userspawnwaittest",
+      "status": "passed"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
             "./walltest"
           ],
-          "elapsed_ns": 151067846,
+          "elapsed_ns": 241444201,
           "exit_code": 0,
           "output_bytes": 3550,
           "output_sha256": "030a05aa96ac0546f1aa50e1e64f880f1f343e666505de109108a28455b3361b",
@@ -1529,7 +1685,7 @@
         }
       ],
       "executable_sha256": "492a38d713bb18725e34fe9865889ebe960920ba5bb8979d67fe435a2e16b627",
-      "id": "HT-077",
+      "id": "HT-085",
       "kind": "gate",
       "name": "walltest",
       "status": "passed"
@@ -1537,7 +1693,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-078",
+      "id": "HT-086",
       "kind": "instrument",
       "name": "wmbench",
       "reason": "measurement/artifact only; not a pass",
@@ -1546,7 +1702,7 @@
     {
       "auto_run": false,
       "commands": [],
-      "id": "HT-079",
+      "id": "HT-087",
       "kind": "instrument",
       "name": "wmshot",
       "reason": "measurement/artifact only; not a pass",
@@ -1559,16 +1715,16 @@
           "argv": [
             "./wmtest"
           ],
-          "elapsed_ns": 494769527,
+          "elapsed_ns": 844766693,
           "exit_code": 0,
-          "output_bytes": 10037,
-          "output_sha256": "c552f26aa598329988005fd369e559f7fd8bd0a8bba90f1a32ca4e6c49d14a90",
-          "output_tail": "  the partially updated retained surface survives a move   ok\n  resize invalidates and redraws exactly that client       ok\n  minimize releases its retained allocation                ok\n  close releases every retained allocation                 ok\n  allocation refusal is not retried inside the frame       ok\n  allocation refusal uses the direct renderer, never a blank ok\n  allocation refusal is counted and consumes no surface budget ok\n  an idle frame emits no flight-recorder record            ok\n  healthy painted-frame logging is bounded to one in sixty ok\n  the bounded records are periodic samples, not fake late frames ok\n  a frame sample carries bounded non-fullscreen damage evidence ok\n  a late painted frame is always recorded, between samples ok\n  a cursor-only present retains its input sequence         ok\n  a cursor-only present retains hardware-to-present time   ok\n  the recorder identifies the cursor-only present          ok\n  the following repaint does not claim the old input again ok\n  a window shorter than title_h keeps its chrome inside the frame ok\n  control: the header foot rule IS drawn, inside the frame ok\n\nall good: 0 failure(s)",
+          "output_bytes": 10543,
+          "output_sha256": "2f56cacb12cdfa278ff2c0da3a8f866021a8a6e630a7f95a16ec0da7aff60aa1",
+          "output_tail": "  healthy painted-frame logging is bounded to one in sixty ok\n  the bounded records are periodic samples, not fake late frames ok\n  a frame sample carries bounded non-fullscreen damage evidence ok\n  a late painted frame is always recorded, between samples ok\n  a cursor-only present retains its input sequence         ok\n  a cursor-only present retains hardware-to-present time   ok\n  the recorder identifies the cursor-only present          ok\n  the following repaint does not claim the old input again ok\n  a window shorter than title_h keeps its chrome inside the frame ok\n  control: the header foot rule IS drawn, inside the frame ok\n  a draw-hook close waits until drawing has finished       ok\n  control: the replacement reuses the old window slot      ok\n  explicit close cancels the old deferred close before slot reuse ok\n  a draw-hook close waits until drawing has finished       ok\n  control: the replacement reuses the old window slot      ok\n  WM reset cancels pending closes from the old table       ok\n  a draw-hook close waits until drawing has finished       ok\n  an uncancelled draw-hook close still runs on the next frame ok\n\nall good: 0 failure(s)",
           "timed_out": false
         }
       ],
-      "executable_sha256": "271638dd66a6ad991d1340d7f832d5df09e197ac69d0c7f19c537100bd0de054",
-      "id": "HT-080",
+      "executable_sha256": "f20db32ab4956f39a85378a7014af97cf51ec37a0f97e69e9f3ac75b02c2ddc8",
+      "id": "HT-088",
       "kind": "gate",
       "name": "wmtest",
       "status": "passed"
@@ -1580,7 +1736,7 @@
           "argv": [
             "./wmtest_feel"
           ],
-          "elapsed_ns": 85483885,
+          "elapsed_ns": 190513976,
           "exit_code": 0,
           "output_bytes": 7198,
           "output_sha256": "c3641fda55780733c6c9dee4b8a35df46b9643194da51743d23745c838f5cf2d",
@@ -1588,8 +1744,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "54f6932fb9392b65cc2aa338ff777d5f9748c3cd8053d9cbafec54bfb24aff78",
-      "id": "HT-081",
+      "executable_sha256": "835dd14ff053070a333a8a7903359bf48d87186d91066bcabb0821bea7c1af10",
+      "id": "HT-089",
       "kind": "gate",
       "name": "wmtest_feel",
       "status": "passed"
@@ -1601,7 +1757,7 @@
           "argv": [
             "./x509test"
           ],
-          "elapsed_ns": 3071480411,
+          "elapsed_ns": 3886110342,
           "exit_code": 0,
           "output_bytes": 1860,
           "output_sha256": "bd6e3176fc20c16b43b3b4c896cb9048ba253373fd9252042369d38ec7b43289",
@@ -1609,8 +1765,8 @@
           "timed_out": false
         }
       ],
-      "executable_sha256": "3e58ded92d855e785290b3ae45b8e97463f8d9e799668aa6268bb14009cc6ff9",
-      "id": "HT-082",
+      "executable_sha256": "127204588c2851e804c7c4c4cb9dc75b67564418de1c716644f2ac463cdbf7d2",
+      "id": "HT-090",
       "kind": "gate",
       "name": "x509test",
       "status": "passed"
@@ -1622,16 +1778,16 @@
           "argv": [
             "./xhcitest"
           ],
-          "elapsed_ns": 125584257,
+          "elapsed_ns": 127765297,
           "exit_code": 0,
-          "output_bytes": 10558,
-          "output_sha256": "c6f8de2cd50a9859134cb7c3253a4ff83e4b5a745c479469fac39831fd8707db",
-          "output_tail": "A DISK READ MUST NOT KILL THE POINTER\n\n  a pointer report is waiting on the ring                    ok\n  it does not mistake the pointer's completion for its own   ok\n  ...the pointer's report was decoded anyway                 ok\n  ...and its endpoint was re-armed, so it still works        ok\n  both reports were decoded, neither swallowed               ok\n  ...and the pointer actually moved                          ok\n\nA LATE EP0 EVENT MUST NOT COMPLETE THE NEXT REQUEST\n\n  same-slot EP0 completion from the previous TD is ignored   ok\n  the current status TRB is the completion retained          ok\n\n  reports the driver takes per frame: 8\n  pointer travel available in one frame: 799 px\n  therefore at 100 Hz (the PIT gate on wm_frame) the pointer\n  cannot exceed 79900 px/s, and a brisk hand is 3000-10000 px/s.\n\nall good: 0 failure(s)",
+          "output_bytes": 11471,
+          "output_sha256": "9f289cbed0b454ca8258e8fa1677096165a2f8fc90154a1cd579837e39edfcda",
+          "output_tail": "  a change on another port leaves the keyboard alone         ok\n  ...and so does a change on ours with the device still connected ok\n  ...but the change was acknowledged (written back through portsc_keep, CSC as 1) ok\n  the keyboard is no longer ready                            ok\n  the held key was released into the queue                   ok\n  ...then the modifiers were released                        ok\n  ...and nothing else was queued                             ok\n  the modifier bitmap is clear                               ok\n  the held-key state is clear                                ok\n  the pointer, on another port, is untouched                 ok\n  the change was acknowledged (written back through portsc_keep, CSC as 1) ok\n  unplugging the pointer's port drops it                     ok\n  ...with its button released                                ok\n\n  reports the driver takes per frame: 8\n  pointer travel available in one frame: 799 px\n  therefore at 100 Hz (the PIT gate on wm_frame) the pointer\n  cannot exceed 79900 px/s, and a brisk hand is 3000-10000 px/s.\n\nall good: 0 failure(s)",
           "timed_out": false
         }
       ],
-      "executable_sha256": "0b346b5bf049906bd003032a9099732ded599e8c43a1db4468c1574f69fce038",
-      "id": "HT-083",
+      "executable_sha256": "fdc69ff13b94786888043a9e1b7655d0f4c0abcb1654aeba93389a6569d3ceab",
+      "id": "HT-091",
       "kind": "gate",
       "name": "xhcitest",
       "status": "passed"
@@ -1643,7 +1799,7 @@
           "argv": [
             "./zladdrs.sh"
           ],
-          "elapsed_ns": 17595041,
+          "elapsed_ns": 20399550,
           "exit_code": 0,
           "output_bytes": 2138,
           "output_sha256": "d485b84c328d76811c1ff3da85b78ec99aba333529baf35fa221fbde510086be",
@@ -1655,7 +1811,7 @@
             "./zladdrs.sh",
             "--selftest"
           ],
-          "elapsed_ns": 18498203,
+          "elapsed_ns": 17271879,
           "exit_code": 0,
           "output_bytes": 2715,
           "output_sha256": "b1da62dc6a1eff115ef9f04a20139ea631551e31eeac7b74c5aa07a6b2c7dc67",
@@ -1664,9 +1820,39 @@
         }
       ],
       "executable_sha256": "7bf44ee33771e4da9354e45c0f4ccb098838fdb47864df2cc539c7a44e4ef048",
-      "id": "HT-084",
+      "id": "HT-092",
       "kind": "gate",
       "name": "zladdrs.sh",
+      "status": "passed"
+    },
+    {
+      "auto_run": false,
+      "commands": [],
+      "id": "HT-093",
+      "kind": "instrument",
+      "name": "zlfsseed",
+      "reason": "measurement/artifact only; not a pass",
+      "status": "not-run"
+    },
+    {
+      "auto_run": true,
+      "commands": [
+        {
+          "argv": [
+            "./zllog-e2e.sh"
+          ],
+          "elapsed_ns": 16399630289,
+          "exit_code": 0,
+          "output_bytes": 939,
+          "output_sha256": "950eae4d754fabffd3b6573dedff9413ca308a9de440220d6510737d596225b9",
+          "output_tail": "test_full_slot_seals_and_continues_without_stopping_telemetry (__main__.KernelZllogEndToEnd.test_full_slot_seals_and_continues_without_stopping_telemetry) ... ok\ntest_kernel_refuses_mismatched_or_corrupt_identity_without_any_write (__main__.KernelZllogEndToEnd.test_kernel_refuses_mismatched_or_corrupt_identity_without_any_write) ... ok\ntest_real_writer_stays_in_partition_and_recovers_from_torn_metadata (__main__.KernelZllogEndToEnd.test_real_writer_stays_in_partition_and_recovers_from_torn_metadata) ... ok\ntest_recorder_hot_path_overflow_privacy_and_reusable_irq_lane (__main__.KernelZllogEndToEnd.test_recorder_hot_path_overflow_privacy_and_reusable_irq_lane) ... ok\ntest_transient_msc_failure_retries_and_drains_without_a_command (__main__.KernelZllogEndToEnd.test_transient_msc_failure_retries_and_drains_without_a_command) ... ok\n\n----------------------------------------------------------------------\nRan 5 tests in 16.217s\n\nOK",
+          "timed_out": false
+        }
+      ],
+      "executable_sha256": "21af6be3362d813efaa49e0b543ab80c7434cac46709b7c0ce59a047ae23f183",
+      "id": "HT-094",
+      "kind": "gate",
+      "name": "zllog-e2e.sh",
       "status": "passed"
     }
   ],

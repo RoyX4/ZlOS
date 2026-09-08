@@ -269,6 +269,63 @@ static void test_corruption_detection(void)
            "repaired ancestor chain restores valid table");
 }
 
+static void test_orphan_custody(void)
+{
+    process_lifecycle_handle parent = 0, live = 0, dead = 0, grandchild = 0;
+    struct process_lifecycle_slot before[TEST_SLOTS];
+    struct process_lifecycle_snapshot snapshot;
+    reset_table();
+    slots[0].generation = 0x7fffffffU;
+    slots[1].generation = 0xfffffffeU;
+    expect(process_lifecycle_create(&table, 1, 0, &parent) == PROCESS_LIFECYCLE_OK &&
+           parent == 0x8000000000000001ULL, "high-bit parent identity preserved");
+    expect(process_lifecycle_create(&table, 2, parent, &live) == PROCESS_LIFECYCLE_OK &&
+           live == 0xffffffff00000002ULL, "maximum-generation child identity preserved");
+    expect(process_lifecycle_create(&table, 3, parent, &dead) == PROCESS_LIFECYCLE_OK &&
+           process_lifecycle_fault(&table, dead, 14, 4, 0x123456789ULL) == PROCESS_LIFECYCLE_OK,
+           "second child holds exact terminal fault");
+    expect(process_lifecycle_create(&table, 4, live, &grandchild) == PROCESS_LIFECYCLE_OK,
+           "live child owns a descendant");
+    memcpy(before, slots, sizeof slots);
+    expect(process_lifecycle_adopt_orphans(&table, parent) == PROCESS_LIFECYCLE_E_PENDING &&
+           !memcmp(before, slots, sizeof slots), "living parent's custody is not stolen");
+    expect(process_lifecycle_exit(&table, parent, -37) == PROCESS_LIFECYCLE_OK,
+           "parent exits while children remain");
+    slots[3].parent = 0x700000004ULL;
+    memcpy(before, slots, sizeof slots);
+    expect(process_lifecycle_adopt_orphans(&table, parent) == PROCESS_LIFECYCLE_E_STATE &&
+           !memcmp(before, slots, sizeof slots), "whole-table corruption refuses all adoption writes");
+    slots[3].parent = live;
+    expect(process_lifecycle_adopt_orphans(&table, parent) == PROCESS_LIFECYCLE_OK &&
+           slots[1].parent == 0 && slots[2].parent == 0 && slots[3].parent == live,
+           "only direct children transfer to kernel custody");
+    expect(process_lifecycle_snapshot(&table, live, &snapshot) == PROCESS_LIFECYCLE_OK &&
+           snapshot.state == PROCESS_LIFECYCLE_RUNNABLE,
+           "maximum-generation adopted child remains runnable and identifiable");
+    expect(process_lifecycle_observe(&table, parent, dead, &snapshot) == PROCESS_LIFECYCLE_E_PERMISSION,
+           "old parent cannot exercise transferred custody");
+    expect(process_lifecycle_observe(&table, 0, dead, &snapshot) == PROCESS_LIFECYCLE_OK &&
+           snapshot.termination.fault_vector == 14 && snapshot.termination.fault_error == 4 &&
+           snapshot.termination.fault_address == 0x123456789ULL,
+           "kernel observes the adopted child's unchanged fault record");
+    expect(process_lifecycle_reap(&table, 0, parent) == PROCESS_LIFECYCLE_OK,
+           "terminal parent now reaps without losing children");
+    memcpy(before, slots, sizeof slots);
+    expect(process_lifecycle_adopt_orphans(&table, parent) == PROCESS_LIFECYCLE_E_STALE &&
+           !memcmp(before, slots, sizeof slots), "stale parent cannot adopt again");
+    expect(process_lifecycle_exit(&table, live, -19) == PROCESS_LIFECYCLE_OK &&
+           process_lifecycle_adopt_orphans(&table, live) == PROCESS_LIFECYCLE_OK,
+           "later death transfers the remaining descendant into kernel custody");
+    expect(process_lifecycle_observe(&table, 0, live, &snapshot) == PROCESS_LIFECYCLE_OK &&
+           snapshot.termination.exit_status == -19, "signed adopted exit status survives");
+    expect(process_lifecycle_reap(&table, 0, live) == PROCESS_LIFECYCLE_OK &&
+           process_lifecycle_reap(&table, 0, dead) == PROCESS_LIFECYCLE_OK &&
+           process_lifecycle_exit(&table, grandchild, 0) == PROCESS_LIFECYCLE_OK &&
+           process_lifecycle_reap(&table, 0, grandchild) == PROCESS_LIFECYCLE_OK &&
+           process_lifecycle_check(&table) == PROCESS_LIFECYCLE_OK,
+           "every adopted descendant remains reachable and reclaimable");
+}
+
 int main(void)
 {
     test_arguments();
@@ -276,6 +333,7 @@ int main(void)
     test_fault_and_parent_order();
     test_capacity_and_generation_exhaustion();
     test_corruption_detection();
+    test_orphan_custody();
     printf("processlifecycletest: %d checks, %d failures\n", checks, failures);
     if (!failures)
         puts("process handles reject stale generations and preserve exact exit/fault custody");

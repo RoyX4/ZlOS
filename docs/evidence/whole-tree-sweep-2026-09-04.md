@@ -120,7 +120,7 @@ returns.
 | T5 MEDIUM | `tlstest` printed a skip and returned 0 when openssl was missing; the inventory classes it a gate, so a box with no openssl recorded PASS. Red now. | `kernel/tests/host/tlstest.c` | - |
 | T6 LOW | `run-all.sh` never ran `jmptest32` (announced on a shared line); the reverse-SOURCES sweep matched bare basenames. | `kernel/tests/host/build.sh`, `land-gate.sh` | - |
 
-Still open from that wave: `zllogtest.c`, `zllog_e2e_test.py` and `dpll_test.c` exist and nothing builds or runs them (`gen-test-inventory.py` enumerates `.sh` only); the `--write` then `--check` pairs in the landing gate prove determinism, not that the committed registry was current; hardware skips roll up to a green label; CI boots four of nine routes; the docs-versus-tree corrections are in the same commit (see `GUARDS-THAT-DID-NOT-GUARD.md` §6 and the per-file dated corrections).
+Still open from that wave (**corrected 2026-09-06:** `zllog_e2e_test.py` is now `zllog-e2e.sh` in the gate list and passed 5/5 on first run; `dpll_test` has a `build.sh` line after two missing stubs were added; the `--write`/`--check` limit was measured - seven of eight registries fail `--check` on `main` as pushed - and recorded in `GUARDS-THAT-DID-NOT-GUARD.md` §6 rather than changed, because every one chains on the per-build identity): `zllogtest.c`, `zllog_e2e_test.py` and `dpll_test.c` exist and nothing builds or runs them (`gen-test-inventory.py` enumerates `.sh` only); the `--write` then `--check` pairs in the landing gate prove determinism, not that the committed registry was current; hardware skips roll up to a green label; CI boots four of nine routes; the docs-versus-tree corrections are in the same commit (see `GUARDS-THAT-DID-NOT-GUARD.md` §6 and the per-file dated corrections).
 
 ### Language toolchain (builder agent)
 
@@ -214,11 +214,11 @@ No physical ThinkPad boot was performed.
 - Intel: PTE save/restore in teardown (only relocation landed); PSR restore
   order in teardown (suspected); `intel_dpll_program_*` and the AUX stack
   are still ungated - the CLAUDE.md table now says so.
-- xHCI: no disconnect handling (modifiers stick on unplug); the 64-bit
+- xHCI: no disconnect handling (modifiers stick on unplug) - **closed 2026-09-06:** `xhci_poll` now handles Port Status Change Events: a port whose CCS cleared detaches the keyboard (every held key released into the event queue, then `KEV_MOD(0)`, `kbd_mods` = 0, `kbd_ready` = 0) or the pointer (button released, `ptr_ready` = 0) and acknowledges the RW1C bits through `portsc_keep`; `xhcitest` "unplug releases held keys and modifiers" is red on the old driver (8 of 13 assertions) and green now. Re-plug is not automatic: `xhci_bringup` re-enumerates a not-ready device only when `usb_up()` runs again, and `kernel.zl` calls that at boot (`usb_boot`) and from the Terminal `usb` and `/` commands, never periodically - so a plugged-back keyboard needs the `usb` command typed (from the PS/2 or a second keyboard). Still open: the 64-bit
   multiboot build takes a BAR above 4 GiB it has not mapped; ECM TX buffer
   reuse after a timeout.
-- 32-bit lane has no double-fault stack; 64-bit APs have no TSS.
-- `settingstest` never runs the zlfs branch the kernel uses.
+- 32-bit lane has no double-fault stack; 64-bit APs have no TSS. **APs closed 2026-09-06:** `gdt64.c` builds one TSS per slot (8, held equal to smp.c's `SMP_SLOTS` by `gdt64test`, which reads the number out of `smp.c`), each with its own 16 KiB IST1 stack, and `smp_ap_main` loads OUR GDT and its slot's TSS before going live - an AP whose `str` does not read back its selector parks instead of joining the band count, so `verify-64`/`verify-efi` (`-smp 2`) witness the ltr. The #DF stack classifier in `idt.c` now resolves the faulting core's stack through `str`. APs keep RSP0 = 0: only the BSP runs ring 3. The 32-bit lane still has no #DF task gate.
+- `settingstest` never runs the zlfs branch the kernel uses. **Closed 2026-09-06:** `settingstest_zlfs` links `fs.c`, mounts a zlfs on the same fake disk and runs 30 cases on that branch (file wins over a valid sector, corruption named as the file not "LBA 64" - a message fix in `settings.c` - short file, write and final-sync failures, never-writes-on-load). 0 failures.
 - compilel/nativegen locals do not write through to globals (a design
   decision, now documented, not a fix).
-- `check-memmap.sh` still only "notes" zl constants above `ZL_LOW_END`.
+- `check-memmap.sh` still only "notes" zl constants above `ZL_LOW_END`. **Closed 2026-09-06:** a kernel.zl fixed address at or above `ZL_LOW_END` (parsed from `memmap.h`) now fails unless the line declares `# memmap.h NAME`; the selftest plants `CODEX_HIGH = 0x03400000` and requires the red. Today's tree has one such constant, `RULER_DMA`, and it is declared.

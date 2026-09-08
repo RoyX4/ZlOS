@@ -302,6 +302,22 @@ run "sleeping user-process command QEMU" "$WT/kernel" \
     python3 tools/probes/probe-user-process-exit.py --no-build --sleep \
     --receipt docs/receipts/user-process-sleep-native-uefi64-qemu-2026-09-05.json
 await_guard || exit 2
+run "userspace child fault and wait QEMU" "$WT/kernel" \
+    python3 tools/probes/probe-user-spawn-wait.py --no-build \
+    --receipt docs/receipts/user-spawn-wait-fault-native-uefi64-qemu-2026-09-08.json
+await_guard || exit 2
+run "userspace child signed exit and wait QEMU" "$WT/kernel" \
+    python3 tools/probes/probe-user-spawn-wait.py --no-build --normal-exit \
+    --receipt docs/receipts/user-spawn-wait-exit-native-uefi64-qemu-2026-09-08.json
+await_guard || exit 2
+run "userspace live orphan adoption QEMU" "$WT/kernel" \
+    python3 tools/probes/probe-user-spawn-wait.py --no-build --normal-exit --orphan-order parent-first \
+    --receipt docs/receipts/user-orphan-parent-first-native-uefi64-qemu-2026-09-08.json
+await_guard || exit 2
+run "userspace terminal orphan adoption QEMU" "$WT/kernel" \
+    python3 tools/probes/probe-user-spawn-wait.py --no-build --orphan-order child-first \
+    --receipt docs/receipts/user-orphan-child-first-native-uefi64-qemu-2026-09-08.json
+await_guard || exit 2
 run "page-table QEMU receipt check" "$WT/kernel" \
     python3 tools/checks/write-page-table-receipt.py --check --selftest
 run "physical allocator QEMU receipt check" "$WT/kernel" \

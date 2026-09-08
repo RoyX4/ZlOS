@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 from pathlib import Path
 
 
@@ -81,6 +82,12 @@ REQUIRED_SNIPPETS = (
     'python3 tools/probes/probe-user-process-exit.py --no-build',
     'run "sleeping user-process command QEMU"',
     'python3 tools/probes/probe-user-process-exit.py --no-build --sleep',
+    'run "userspace child fault and wait QEMU"',
+    'run "userspace child signed exit and wait QEMU"',
+    'run "userspace live orphan adoption QEMU"',
+    'run "userspace terminal orphan adoption QEMU"',
+    'python3 tools/probes/probe-user-spawn-wait.py --no-build',
+    'python3 tools/probes/probe-user-spawn-wait.py --no-build --normal-exit',
     'run "page-table QEMU receipt check"',
     'run "physical allocator QEMU receipt check"',
     'run "application evidence registry write"',
@@ -143,6 +150,14 @@ HOST_BUILD_BENCHMARK_GUARD = re.compile(
 )
 
 
+PROCESS_SCENARIOS = (
+    ("userspace child fault and wait QEMU", False, None),
+    ("userspace child signed exit and wait QEMU", True, None),
+    ("userspace live orphan adoption QEMU", True, "parent-first"),
+    ("userspace terminal orphan adoption QEMU", False, "child-first"),
+)
+
+
 def failures(source: str, verify_net: str | None = None) -> list[str]:
     if verify_net is None:
         verify_net = VERIFY_NET.read_text()
@@ -156,6 +171,21 @@ def failures(source: str, verify_net: str | None = None) -> list[str]:
         for snippet in REQUIRED_SNIPPETS
         if snippet not in code
     ]
+    logical_lines = code.replace("\\\n", " ").splitlines()
+    for title, normal_exit, orphan_order in PROCESS_SCENARIOS:
+        commands = [line for line in logical_lines if line.startswith('run "' + title + '"')]
+        if len(commands) != 1:
+            errors.append("missing or repeated process boot scenario: " + title)
+            continue
+        arguments = shlex.split(commands[0])
+        orders = [arguments[index + 1] if index + 1 < len(arguments) else ""
+                  for index, arg in enumerate(arguments) if arg == "--orphan-order"]
+        expected_orders = [] if orphan_order is None else [orphan_order]
+        if (arguments[3:5] != ["python3", "tools/probes/probe-user-spawn-wait.py"] or
+                "--no-build" not in arguments or "--fixtures-only" in arguments or
+                ("--normal-exit" in arguments) != normal_exit or orders != expected_orders or
+                any(arg.startswith("--orphan-order=") for arg in arguments)):
+            errors.append("process boot scenario is downgraded or selects the wrong fixture: " + title)
     if OPTIONAL_AUTHORITY.search(source):
         errors.append("kernel authority is hidden behind an existence guard")
     if OPTIONAL_BOOT.search(source):
@@ -272,6 +302,15 @@ def selftest(source: str) -> None:
         ),
         "deleted-sleeping-user-process-command-gate",
     )
+    for title, _normal_exit, _orphan_order in PROCESS_SCENARIOS:
+        expect_failure(source.replace('run "' + title + '"', '# removed ' + title, 1),
+                       "deleted-" + title.replace(" ", "-"))
+    expect_failure(source.replace("--orphan-order child-first", "--orphan-order parent-first", 1),
+                   "wrong-terminal-orphan-order")
+    for flag in ("--fixtures-only", "--normal-exit", "--orphan-order parent-first"):
+        expect_failure(source.replace("probe-user-spawn-wait.py --no-build",
+                                      "probe-user-spawn-wait.py --no-build " + flag, 1),
+                       "wrong-spawn-boot-mode-" + flag)
     expect_failure(
         source.replace(
             'run "host benchmark receipt" "$WT/kernel" python3 tools/run/run-benchmarks.py --run --selftest\n'
@@ -332,6 +371,11 @@ def selftest(source: str) -> None:
         "deleted-rail-gate, deleted-user-process-command-gate, "
         "deleted-normal-exit-user-process-command-gate, "
         "deleted-sleeping-user-process-command-gate, "
+        "deleted-userspace-child-fault-and-wait-QEMU, "
+        "deleted-userspace-child-signed-exit-and-wait-QEMU, "
+        "deleted-userspace-live-orphan-adoption-QEMU, deleted-userspace-terminal-orphan-adoption-QEMU, "
+        "wrong-terminal-orphan-order, wrong-spawn-boot-mode-orphan-order, "
+        "wrong-spawn-boot-mode-fixtures-only, wrong-spawn-boot-mode-normal-exit, "
         "deleted-double-fault-gate, "
         "deleted-bounded-resource-admission, "
         "deleted-synchronized-network-fetch, "

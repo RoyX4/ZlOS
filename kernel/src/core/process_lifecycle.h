@@ -90,6 +90,11 @@ int process_lifecycle_snapshot(const struct process_lifecycle_table *table,
 int process_lifecycle_reap(struct process_lifecycle_table *table,
                            process_lifecycle_handle requester,
                            process_lifecycle_handle child);
+/* Privileged kernel operation; never accept its parent argument as authority
+ * from userspace. Preflight the complete table before adopting direct children
+ * of an exact terminal parent. Child handles and termination records survive. */
+int process_lifecycle_adopt_orphans(struct process_lifecycle_table *table,
+                                   process_lifecycle_handle terminal_parent);
 int process_lifecycle_find_runnable(
     const struct process_lifecycle_table *table, unsigned int id,
     process_lifecycle_handle *handle);

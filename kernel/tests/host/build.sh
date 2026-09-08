@@ -10,6 +10,13 @@ gcc $HOST_INCLUDES -O1 -g -Wall -DZL_64 -Wno-unused-function -o intel_probe \
     intel_probe.c ../../src/drivers/display/intel.c
 echo "built ./intel_probe   (run: sudo ./intel_probe [--unsafe])"
 
+# The DPLL write harness: programs an UNUSED DPLL on the real GPU and watches
+# it lock. Written 2026-08-30, first built by this file 2026-09-06 - until then
+# it linked against no stub for pci_bar_hi/console_init_fb and nothing noticed.
+gcc $HOST_INCLUDES -O1 -g -Wall -DZL_64 -Wno-unused-function -o dpll_test \
+    dpll_test.c ../../src/drivers/display/intel.c
+echo "built ./dpll_test     (run: sudo ./dpll_test 2 148500 - WRITES to the display engine)"
+
 # The modeset harness holds its own mmap and reads raw offsets, because the
 # whole point of stage 1 is to settle which offsets are right - it must not go
 # through the driver's opinion of where things live.
@@ -122,6 +129,20 @@ echo "built ./wmbench       (run: ./wmbench)"
 # record gets a fake NVMe instead, and every single-bit flip of it is walked.
 gcc $HOST_INCLUDES -O2 -w -o settingstest settingstest.c ../../src/graphics/ui/settings.c ../../src/graphics/ui/ui.c ../../src/graphics/ui/uikit.c
 echo "built ./settingstest  (run: ./settingstest)"
+# The same harness with fs.c linked and a zlfs mounted for the last section:
+# the persistence path a graphical boot takes. Until 2026-09-06 only the raw
+# LBA 64 fallback had ever been exercised, because fs_* are weak in settings.c
+# and nothing linked the filesystem in.
+gcc $HOST_INCLUDES -O2 -w -DSETTINGS_ZLFS -o settingstest_zlfs settingstest.c ../../src/graphics/ui/settings.c ../../src/graphics/ui/ui.c ../../src/graphics/ui/uikit.c ../../src/fs/fs.c
+echo "built ./settingstest_zlfs (run: ./settingstest_zlfs)"
+
+# One TSS per core (2026-09-06): gdt64.c's descriptor builder against an
+# independent decoder, and its slot count against smp.c's SMP_SLOTS - read out
+# of smp.c here, not restated in the test. ltr itself is QEMU's job
+# (verify-64 / verify-efi boot with -smp 2).
+gcc -O2 -Wall -Wextra -DZL_64 -DSMP_SLOTS_EXPECT=$(grep -oP '^#define SMP_SLOTS\s+\K[0-9]+' ../../src/arch/x86/smp.c) \
+    -o gdt64test gdt64test.c ../../boot/gdt64.c
+echo "built ./gdt64test     (run: ./gdt64test)"
 
 # The tiled rasterizer against the scanline one it does NOT replace. Two ways
 # to fill a polygon are only worth having if they draw the same pixels, and a
@@ -488,9 +509,29 @@ echo "built ./userprocessservicetest (run: ./userprocessservicetest)"
 # code, user stack and two kernel-stack pages. Drive allocation rollback at
 # every short-pool boundary and exact two-process reclamation on the host.
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
-    -o processmemorytest processmemorytest.c ../../src/core/process_memory.c \
+    -Wl,--wrap=pmm_release -o processmemorytest processmemorytest.c ../../src/core/process_memory.c \
     ../../src/core/pmm.c ../../src/core/boot/boot_handover.c
 echo "built ./processmemorytest (run: ./processmemorytest)"
+
+# Build inactive page tables from a supervisor template without selecting a
+# process. Check disjoint frames, permissions, guards and every allocation cut.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
+    -o userimage64test userimage64test.c ../../src/arch/x86/user_image64.c \
+    ../../src/core/process_memory.c ../../src/core/pmm.c \
+    ../../src/core/boot/boot_handover.c
+echo "built ./userimage64test (run: ./userimage64test)"
+
+# Execute the actual x86-64 spawn/wait dispatcher, with only privileged state
+# reads and devices replaced. Real PMM, page tables, identity and policy remain.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -Wno-unused-parameter \
+    -DPMM_HOSTTEST -DUSERMODE_HOSTTEST -DZL_64 -ffunction-sections \
+    -fdata-sections -Wl,--gc-sections -no-pie -o userspawnwaittest \
+    userspawnwaittest.c ../../src/arch/x86/user_image64.c \
+    ../../src/core/process_memory.c ../../src/core/anon_memory.c \
+    ../../src/arch/x86/page_table_txn.c ../../src/core/pmm.c \
+    ../../src/core/boot/boot_handover.c ../../src/core/process_lifecycle.c \
+    ../../src/core/scheduler_policy.c ../../src/core/user_process_service.c
+echo "built ./userspawnwaittest (run: ./userspawnwaittest)"
 
 # Anonymous process memory keeps virtual reservation separate from physical
 # commitment. Exercise OOM at every short-pool position, PTE collisions,

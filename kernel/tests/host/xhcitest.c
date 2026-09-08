@@ -1215,6 +1215,61 @@ static void report_ceiling(void)
            per_frame * 100);
 }
 
+/* Pull the keyboard out with shift and 'a' held. The controller posts a
+ * Port Status Change Event with CCS clear; until 2026-09-06 xhci_poll()
+ * consumed it and did nothing, so kbd_mods stayed at "shift" for every later
+ * key from any source and 'a' auto-repeated until something else was pressed
+ * (input.c only clears a held key on a release event, and none ever came). */
+static void test_unplug_releases_keys_and_modifiers(void)
+{
+    printf("\nunplug releases held keys and modifiers\n");
+    driver_reset();
+    xports   = 4;
+    kbd_port = 3;
+    ptr_port = 1;
+    kbd_mods = 0x02;                       /* left shift held */
+    prev_keys[0] = 0x04;                   /* 'a' held */
+    uptr reg = xop + XOP_PORTSC(3);
+
+    /* a change on ANOTHER port, and a change that leaves CCS set, do nothing */
+    wr32(xop + XOP_PORTSC(2), PORTSC_CSC);
+    ctl_post_event(2u << 24, 0, TRB_PORT_STATUS << 10);
+    wr32(reg, PORTSC_CCS | PORTSC_PED | PORTSC_CSC);
+    ctl_post_event(3u << 24, 0, TRB_PORT_STATUS << 10);
+    xhci_poll(4);
+    ok("a change on another port leaves the keyboard alone", kbd_ready == 1);
+    ok("...and so does a change on ours with the device still connected", kbd_ready == 1 && kbd_mods == 0x02);
+    /* The fake's PORTSC is plain memory, so a write-1-to-clear cannot be seen
+     * as a cleared bit. What CAN be seen: the driver writes the register back
+     * through portsc_keep(), which drops PED (bit 1) - so PED gone proves the
+     * acknowledging write happened, and CSC still set proves it was written
+     * as a 1 (which is what clears it on silicon). */
+    ok("...but the change was acknowledged (written back through portsc_keep, CSC as 1)",
+       (rd32(reg) & PORTSC_PED) == 0 && (rd32(reg) & PORTSC_CSC) != 0);
+
+    /* now the real unplug: CCS clear, CSC set (PED set as the write marker) */
+    wr32(reg, PORTSC_CSC | PORTSC_PED);
+    ctl_post_event(3u << 24, 0, TRB_PORT_STATUS << 10);
+    xhci_poll(4);
+    ok("the keyboard is no longer ready", kbd_ready == 0);
+    ok("the held key was released into the queue", kevq_pop() == KEV(0, 0x02, 0x04));
+    ok("...then the modifiers were released", kevq_pop() == KEV_MOD(0));
+    ok("...and nothing else was queued", kevq_head == kevq_tail);
+    okv("the modifier bitmap is clear", (int)kbd_mods, 0);
+    okv("the held-key state is clear", (int)prev_keys[0], 0);
+    ok("the pointer, on another port, is untouched", ptr_ready == 1);
+    ok("the change was acknowledged (written back through portsc_keep, CSC as 1)",
+       (rd32(reg) & PORTSC_PED) == 0 && (rd32(reg) & PORTSC_CSC) != 0);
+
+    /* and the pointer's port */
+    ptr_btn = 1;
+    wr32(xop + XOP_PORTSC(1), PORTSC_CSC);
+    ctl_post_event(1u << 24, 0, TRB_PORT_STATUS << 10);
+    xhci_poll(4);
+    ok("unplugging the pointer's port drops it", ptr_ready == 0);
+    okv("...with its button released", ptr_btn, 0);
+}
+
 int main(void)
 {
     printf("xhcitest - the shipping xhci.c and input.c, against a fake controller\n");
@@ -1241,6 +1296,7 @@ int main(void)
     test_relative_is_relative();
     test_transfer_wait_is_addressed();
     test_ep0_wait_rejects_stale_same_endpoint_event();
+    test_unplug_releases_keys_and_modifiers();
     report_ceiling();
 
     printf("\n%s: %d failure(s)\n", fails ? "FAILED" : "all good", fails);

@@ -1,5 +1,23 @@
 # Project Status
 
+Implementation started, 2026-09-08:
+[userspace spawn/wait progress and exact evidence](evidence/process-spawn-wait-2026-09-08.md).
+The first roadmap slice now has local code, host failure/ownership checks and
+fresh native-UEFI parent/child QEMU proof. Complete regressions and hosted closure remain pending;
+the prior implementation's passing run does not cover these changes.
+The subsequent ownership review fixed a rollback-release refusal in the shared
+process allocator. Its expanded host regression passes 555 checks; the prior
+image was then rebuilt as `52dc8b9c…`. All four parent/child scenarios, the
+native boot gate and the existing fault/exit/sleep probes now pass on that
+repaired image. The BIOS32 Run check and all 47 app lifecycle cycles also pass.
+The full boot matrix, later-main integration and hosted closure remain pending.
+
+Full-system planning, 2026-09-08:
+[complete roadmap, phase chapters and next-step checklist](design/FULL-SYSTEM-ROADMAP.md).
+This proposal retains all 906 features, 611 named targets and 174 original
+contracts, adds explicit decisions and bounded handoffs, and expands the next
+process-management slice. It changes no implementation maturity claims.
+
 Current integration, 2026-09-06:
 [process/sweep/cleanup hosted closure and worktree snapshot](evidence/integration-hosted-closure-2026-09-06.md).
 Draft PR #15 combines PRs #12–#14 and Claude's committed sweep. Implementation
@@ -42,7 +60,11 @@ implementation state. They are not the same thing.
    `fable/whole-tree-sweep` with the gate that now pins it, the claims that
    survived, and what stayed open (physical boot above all).
    [`GUARDS-THAT-DID-NOT-GUARD.md`](GUARDS-THAT-DID-NOT-GUARD.md) §6 lists
-   the fourteen checks that sweep found reporting green while checking nothing.
+   the sixteen checks that sweep found reporting green while checking nothing (two added 2026-09-06).
+8. [`oracle-harnesses-for-driver-verification.md`](oracle-harnesses-for-driver-verification.md)
+   is the verification-harness plan for the H2 driver work: the phase-keyed modeset
+   conformance oracle, IOMMU-as-verdict, and device-model fidelity — plus three harness
+   ideas killed for having tautological or vacuous oracles.
 
 ## Repository State
 
