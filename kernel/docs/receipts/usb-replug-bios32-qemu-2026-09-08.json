@@ -2,19 +2,19 @@
   "schema": "zlos.usb-replug-qemu-receipt.v1",
   "result": "PASS",
   "route": "bios32",
-  "build_identity": "6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c",
+  "build_identity": "aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d",
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "22f081f16dcf8e74e8ac06ab8e445195c65ab73ce04f5811428f7085565b585e"
+    "sha256": "3ebaa28ab8f22995accade136595fd18b446a96670c93a1a86c62b9d14a12fe5"
   },
   "kernel": {
     "path": "kernel/kernel.elf",
-    "sha256": "f6f096388bee63ccea6b5cd718414a70641be2aaecbeec13775618333cff7faf"
+    "sha256": "22333a7a2806665c448242443b4a8415a1728e9fa9f31553909df5672a37e90b"
   },
   "steps": [
     {
       "step": "boot",
-      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=3 lastport=7 lastv=00000E03 skips=0 scans=0 conn=00C2 try=0 trystage=0 trycc=-1 polls=179 owned=1 ticks=160"
+      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=3 lastport=7 lastv=00000E03 skips=0 scans=0 conn=00C2 try=0 trystage=0 trycc=-1 polls=229 owned=1 ticks=176"
     },
     {
       "step": "qemu-boot",
@@ -22,11 +22,11 @@
     },
     {
       "step": "unplugged",
-      "line": "usbstat kbd_ready=0 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=4 lastport=6 lastv=000202A0 skips=0 scans=0 conn=0082 try=0 trystage=0 trycc=-1 polls=655 owned=1 ticks=322"
+      "line": "usbstat kbd_ready=0 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=4 lastport=6 lastv=000202A0 skips=0 scans=0 conn=0082 try=0 trystage=0 trycc=-1 polls=553 owned=1 ticks=339"
     },
     {
       "step": "replugged",
-      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=1 tries=1 pending=0 port=6 stage=6 cc=1 events=6 lastport=6 lastv=00000E03 skips=0 scans=1 conn=00C2 try=6 trystage=6 trycc=1 polls=1425 owned=1 ticks=625"
+      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=1 tries=1 pending=0 port=6 stage=6 cc=1 events=6 lastport=6 lastv=00000E03 skips=0 scans=0 conn=00C2 try=6 trystage=6 trycc=1 polls=1389 owned=1 ticks=640"
     },
     {
       "step": "qemu",

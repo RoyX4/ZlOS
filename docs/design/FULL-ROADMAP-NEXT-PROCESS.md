@@ -2,9 +2,16 @@
 
 Status: implementation started, with host evidence and fresh native-UEFI parent/child QEMU proof; full closure pending. This bounded slice is inside `M-03.03`; it does not declare the full process subsystem complete.
 
+Current verification repair: source `aafe2635…` closes the IRQ window that
+corrupted saved process state in the hosted EFI lane at `79d9248d`. The
+controlled failing/passing QEMU reproduction and boundary regressions pass,
+alongside 78 host targets and all 11 focused normal boot/process checks.
+`N-PROCESS.30` remains open for the full matrix and hosted failures recorded
+in the evidence note.
+
 [Current progress and proof boundaries](../evidence/process-spawn-wait-2026-09-08.md) · [Implemented ABI](userspace-spawn-wait-abi.md).
 Checkmarks below identify bounded target steps passed again by combined image
-`6ae68572…`, after the allocator and command-route repairs and reconciliation
+`aafe2635…`, after the allocator, command-route and IRQ repairs and reconciliation
 with main `9c4cb509`.
 The progress receipt records the exact host/QEMU split; allocation and release
 refusal injection remain host evidence. The rebuilt host suite, native boot,

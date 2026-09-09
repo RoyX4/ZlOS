@@ -97,6 +97,82 @@ class SleepFeatureReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'identity drifted'):
             self.validate(self.receipt)
 
+    def test_missing_or_changed_boot_validator_cannot_reuse_receipt(self):
+        for relative in ('kernel/tools/probes/exercise.py',
+                         'kernel/tools/checks/write-user-process-receipt.py',
+                         'kernel/tools/checks/write-scheduler-receipt.py'):
+            with self.subTest(path=relative):
+                mutant = copy.deepcopy(self.receipt)
+                mutant['implementation'] = [row for row in mutant['implementation']
+                                            if row['path'] != relative]
+                with self.assertRaisesRegex(ValueError, 'identity drifted'):
+                    self.validate(mutant)
+                path = self.root / relative
+                original = path.read_bytes()
+                path.write_bytes(original + b'\n# changed boot admission\n')
+                with self.assertRaisesRegex(ValueError, 'identity drifted'):
+                    self.validate(self.receipt)
+                path.write_bytes(original)
+
+
+class UserProcessBoundaryReceiptTests(unittest.TestCase):
+    """Synthetic source-bound records test the producer/consumer contract."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='process-boundary-receipt-')
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        spec = importlib.util.spec_from_file_location('boundary_receipt_fixture',
+            feature.ROOT / 'kernel/tools/checks/write-user-process-receipt.py')
+        producer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(producer)
+        receipt = json.loads(producer.DEFAULT_OUTPUT.read_text())
+        receipt['build_identity'] = 'f' * 64
+        receipt['implementation'] = producer.expected_files()
+        receipt['source_contracts'] = copy.deepcopy(producer.SOURCE_CONTRACTS)
+        receipt['assertions'] = copy.deepcopy(list(producer.ASSERTIONS))
+        guarded = next(row for row in receipt['assertions']
+                       if row['id'] == 'guarded-supervisor-tss-stacks')
+        guarded['observed_high_water_bytes'] = {'slot0': 512, 'slot1': 512}
+        for row in [receipt['artifact'], receipt['harness'], receipt['generator'],
+                    receipt['host_receipt'], *receipt['implementation']]:
+            path = self.root / row['path']
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((feature.ROOT / row['path']).read_bytes()
+                             if row['path'].endswith('user_syscalls.json')
+                             else ('synthetic evidence for ' + row['path']).encode())
+            row['sha256'] = feature.digest(path)
+        self.receipt = receipt
+
+    def validate(self, receipt):
+        feature.validate_user_process_receipt(receipt, 'f' * 64, self.root)
+
+    def test_current_producer_contract_is_accepted(self):
+        self.validate(self.receipt)
+
+    def test_stale_syscall_range_or_admitted_unknown_probe_is_rejected(self):
+        for stale_range in (True, False):
+            with self.subTest(stale_range=stale_range):
+                mutant = copy.deepcopy(self.receipt)
+                if stale_range:
+                    mutant['source_contracts']['syscall_numbers']['last'] -= 2
+                else:
+                    mutant['assertions'][1]['probes'][1] -= 2
+                with self.assertRaises(ValueError):
+                    self.validate(mutant)
+
+    def test_missing_spawn_loader_binding_is_rejected(self):
+        for relative in ('kernel/src/arch/x86/user_image64.c',
+                         'kernel/src/arch/x86/user_image64.h',
+                         'kernel/src/arch/x86/user_process_abi.h',
+                         'kernel/tests/host/userspawnwaittest.c',
+                         'kernel/tools/generators/gen-user-syscalls.py'):
+            with self.subTest(path=relative):
+                mutant = copy.deepcopy(self.receipt)
+                mutant['implementation'] = [row for row in mutant['implementation']
+                                            if row['path'] != relative]
+                with self.assertRaisesRegex(ValueError, 'identity drifted'):
+                    self.validate(mutant)
+
 
 if __name__ == '__main__':
     unittest.main()

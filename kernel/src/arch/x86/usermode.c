@@ -2278,6 +2278,9 @@ __asm__(
     "  mov %rsp,user64_return_rsp(%rip)\n"
     "  lea 9f(%rip),%rax\n  mov %rax,user64_return_rip(%rip)\n"
     "  pushfq\n  pop %rax\n  mov %rax,user64_return_rflags(%rip)\n"
+    /* Keep the caller's IF, then mask IRQs until IRET installs the user's
+     * flags. Otherwise an IRQ after restoring user FP state borrows it. */
+    "  cli\n"
     "  mov user64_process_cr3(%rip),%rax\n  mov %rax,%cr3\n"
     "  pushq $0x1b\n  push %rsi\n  pushfq\n  orq $0x200,(%rsp)\n"
     "  pushq $0x23\n  push %rdi\n"
@@ -2296,6 +2299,9 @@ __asm__(
     "  mov %rsp,user64_return_rsp(%rip)\n"
     "  lea 7f(%rip),%rax\n  mov %rax,user64_return_rip(%rip)\n"
     "  pushfq\n  pop %rax\n  mov %rax,user64_return_rflags(%rip)\n"
+    /* saved_frame is inside process64, not an interrupt-capable stack. A
+     * timer between the RSP switch and IRET would overwrite process custody. */
+    "  cli\n"
     "  mov user64_process_cr3(%rip),%rax\n  mov %rax,%cr3\n"
     "  mov %rdi,%rsp\n  jmp 6f\n"
     "7:\n"

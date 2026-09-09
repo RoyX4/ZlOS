@@ -20,14 +20,11 @@ HERE = Path(__file__).resolve().parent
 KERNEL = HERE.parent.parent
 ROOT = KERNEL.parent
 sys.path.insert(0, str(HERE))
-from exercise import Qmp, Serial, build, qemu_argv, qtype
+from exercise import Qmp, Serial, build, qemu_argv, qtype, validate_process_boot
 
 spec = importlib.util.spec_from_file_location("existing_exit_probe", HERE / "probe-user-process-exit.py")
 exit_probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(exit_probe)
-spec = importlib.util.spec_from_file_location("user_process_receipt", KERNEL / "tools/checks/write-user-process-receipt.py")
-boundary_receipt = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(boundary_receipt)
 PARENT = "/system/user.bin"
 CHILD = "/system/child.bin"
 SOURCES = [
@@ -43,6 +40,7 @@ SOURCES = [
     "kernel/tools/probes/probe-user-spawn-wait.py",
     "kernel/tools/probes/exercise.py", "kernel/tools/probes/probe-user-process-exit.py",
     "kernel/tools/checks/write-user-process-receipt.py",
+    "kernel/tools/checks/write-scheduler-receipt.py",
     "kernel/tools/generators/gen-user-syscalls.py",
 ]
 
@@ -151,9 +149,7 @@ def main():
                 expect(serial, "ready.", args.boot_timeout)
                 if "build-identity: schema=1 id=" + identity not in transcript:
                     raise RuntimeError("booted identity does not match the current source-bound image")
-                boundary_receipt.validate_log(transcript.replace("\r", ""))
-                if "persistent sleep deadline FAILED" in transcript:
-                    raise RuntimeError("existing sleep selftest failed")
+                validate_process_boot(transcript)
                 settle = 0.12 if os.access("/dev/kvm", os.R_OK | os.W_OK) else 0.8
                 qtype(qmp, ".\n", settle=settle)
                 expect(serial, "mounted:", args.step_timeout)

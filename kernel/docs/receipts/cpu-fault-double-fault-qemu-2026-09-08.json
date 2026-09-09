@@ -1,9 +1,9 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "22f081f16dcf8e74e8ac06ab8e445195c65ab73ce04f5811428f7085565b585e"
+    "sha256": "3ebaa28ab8f22995accade136595fd18b446a96670c93a1a86c62b9d14a12fe5"
   },
-  "build_identity": "6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c",
+  "build_identity": "aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d",
   "crash_line": "ZLCRASH v=3 bytes=240 bits=32 regmask=0x00000000000000ff vec=8 haserr=1 err=0x0000000000000000 ip=0x00000000004fae50 cs=0x0000000000000008 flags=0x0000000000010046 sp=0x0000000000000000 ss=0x0000000000000038 cr2=0x0000000000000000 handlersp=0x00000000008485f4 stacklo=0x00000000008446e0 stackhi=0x00000000008486e0 ax=0x0000000000560038 bx=0x0000000000838720 cx=0x0000000000000000 dx=0x000000000056c2a2 si=0x000000000056c2a2 di=0x000000000056c2af bp=0x00000000008386b8 rsp=0x0000000000000000 r8=0x0000000000000000 r9=0x0000000000000000 r10=0x0000000000000000 r11=0x0000000000000000 r12=0x0000000000000000 r13=0x0000000000000000 r14=0x0000000000000000 r15=0x0000000000000000 checksum=0x0d33deb88003f01d END\n",
   "crash_line_sha256": "e589ec7cb2512483767390c7ccab1ac9dcb27c83de178993e76a33000671cc6f",
   "evidence": "QEMU target execution of the exact current artifact; architectural vector/error shape, pre-prologue registers, bounded schema, checksum and halted state independently verified; the double-fault case additionally binds serial handler SP and QEMU halted RSP to IST1",
@@ -15,7 +15,7 @@
   },
   "kernel": {
     "path": "kernel/kernel.elf",
-    "sha256": "f6f096388bee63ccea6b5cd718414a70641be2aaecbeec13775618333cff7faf"
+    "sha256": "22333a7a2806665c448242443b4a8415a1728e9fa9f31553909df5672a37e90b"
   },
   "kernel_symbol_ip": null,
   "record": {

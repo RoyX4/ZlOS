@@ -1,5 +1,92 @@
 # First roadmap implementation: userspace spawn and wait
 
+## Interrupt-race follow-up, 2026-09-09
+
+Published `79d9248d4b369b7d587eb045959400cb0adff156` retains the runtime of
+`99953083` and extends the host harness to 658 checks. Its ordinary GitHub
+checks finished 19 passed, one failed: native EFI job `102291153998` in
+[boot run 34295511032](https://github.com/RoyX4/ZlOS/actions/runs/34295511032).
+The external program exited with status 37, but a damaged boot-test entry
+occupied slot 1 (`pid 0`, invalid lifecycle handle). This is a real failed
+lane; the earlier 20-check pass does not close it.
+
+The resume assembly changed RSP to `process64.saved_frame` with interrupts
+enabled. That array follows the process ID, state, lifecycle handle and CR3;
+it is not a kernel interrupt stack. A PIT interrupt in that window pushes
+registers and calls C over the process record. Initial entry also restored
+user FP controls before its final return while IRQs remained enabled.
+Both stubs now save the caller's flags, mask IRQs before switching CR3, and
+allow the final IRET to install the user's flags. The ordinary kernel return
+still restores the caller's saved flags.
+
+Retained diagnostic directory:
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/main-reconciliation/after-command-repair/process-boundary-followup/interrupt-race/`.
+`diagnose.py` links a copied object set with a temporary instrumented usermode
+object. It inserts 50,000 PAUSE iterations only at the first borrowed-stack
+resume, with the same four-vCPU TCG device profile in both cases. No delay or
+instrumentation is in the shipping source. `red-once/interrupts.log` records
+17 hardware IRQ0 deliveries on the saved-frame stack, followed by a corrupted
+CR3, page fault and double fault; the guest does not reach ready.
+`green-once/serial.txt` reaches ready and completes all process and scheduler
+boot checks under the same injection. Its input manifest binds the changed
+object, all retained base objects and exact diagnostic image. The embedded
+identity still describes the base build: these are diagnostic binaries,
+**not** fresh source-identity receipts. An earlier overlong repeated-delay
+attempt was inconclusive and is not counted as the reproduction.
+
+`tools/test_user_fpu_boundary.py` passes eight tests: the existing executed
+FP/DF boundaries, entry-mask ordering and negative mutations, and complete
+boot-log admission. The structural entry tests fail on the original source.
+All three process probes now reuse the existing process and scheduler log
+validators, requiring every success milestone exactly once. A ready prompt
+without completed self-checks is refused before any desktop command is sent.
+Their receipts bind the shared helper and both validators.
+
+The feature-evidence consumer also had a stale syscall ceiling (25), unknown
+probe (26), and source set predating the separate image constructor. It now
+validates the bound syscall schema with the existing trusted generator and
+requires the constructor, ABI and harness inputs. Twelve synthetic receipt
+tests pass, including the failing-before/passing-after current producer
+contract and missing/changed dependency refusals. Those fixture tests are
+consumer validation, not target execution.
+
+Uninstrumented source identity is `aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d`.
+Its canonical host rebuild passes 78 targets with zero failed or unavailable.
+All 11 normal target checks pass: native EFI, signed child exit, private-page
+fault isolation, both orphan orders, external fault/exit/sleep, USB re-plug on
+native UEFI64 and BIOS32, and BIOS32 double-fault capture. The four parent/child
+scenarios each return physical frame use from zero to zero with no allocator
+faults. `interrupt-race/verification/combined-verification.json` binds those
+results, host executable hashes, source files, serial transcripts and the exact
+native image. The four committed scenario receipts use the `-irq-2026-09-09`
+suffix; the feature consumer also accepts the actual fresh boot/fault/exit/sleep
+records after checking their image and source bindings.
+
+An additional forced-TCG parent/child fault run passes on this same source
+identity and image, with frame use returning from zero to zero. Its recorded
+QEMU arguments confirm software CPU emulation; the earlier hosted mount-marker
+loss did not reproduce in this run. The separate BIOS32 double-fault test
+**does still fail under TCG** on the repaired source: the captured record is
+vector 6 rather than the required vector 8. The successful normal BIOS32 run
+used KVM. `verification/forced-tcg-crash-result.json` retains that refusal and
+the unvalidated observation separately from the passing KVM receipt. This
+checkpoint repairs process entry; it does not close the remaining crash-test
+or hosted validation failures.
+
+The older full run `34295555901` completed with 17 failing steps on `79d9248d`.
+The downloaded 134-file artifact matches GitHub's archive digest. Root issues
+are stale source assertions in the address-space and observability registries,
+BIOS32 double-fault capture returning vector 6 on hosted TCG, and four
+parent/child probes losing the initial mount marker in truncated terminal
+output. Eight release/provenance/joined/feature failures follow those upstream
+registry failures. The dependency archive itself matches the current identity
+and lock: 159 binary packages, 103 source packages, 333 source files, zero
+unindexed fallbacks or undeclared edges. `full-79d9248d-triage.json` records
+the open investigations. This run does not test the IRQ repair. No feature
+maturity or physical-hardware qualification is promoted.
+
+## Prior publication checkpoints
+
 Published reconciliation: `9995308318c0862aab2db7f5312c5811c4d92e65`
 includes main `9c4cb509`. All five required pre-push gates passed in 628.27
 monotonic seconds, and the remote ref matched that commit. GitHub reports

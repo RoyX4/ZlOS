@@ -2,11 +2,11 @@
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
     "branch": "codex/spawn-wait-reconcile-2026-09-08",
-    "dirty": false,
+    "dirty": true,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "9995308318c0862aab2db7f5312c5811c4d92e65"
+    "head": "79d9248d4b369b7d587eb045959400cb0adff156"
   },
-  "identity_sha256": "6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c",
+  "identity_sha256": "aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -63,7 +63,7 @@
     "kernel/src/arch/x86/user_process_abi.h": "835c96ecb29b2e38824c554b9c2c9f3dcbde603bb03600cda8532ffc4ca912ba",
     "kernel/src/arch/x86/user_syscalls.json": "44e91463e90d214da22b4744bec7b605c4769ea73c68ded41b43554a0162aed6",
     "kernel/src/arch/x86/user_syscalls_generated.h": "6c26c243bcaf241e798f951c8684b5e96837993074b82c9688584922c655d55f",
-    "kernel/src/arch/x86/usermode.c": "94de295537484e511bf860cdacc4237f971e96f729933a25350985982715a938",
+    "kernel/src/arch/x86/usermode.c": "811774ef65131cd1d0027e921ae228cfaa7c73cb7680949b1c84b63301ac15b5",
     "kernel/src/core/anon_memory.c": "5415297acc8c30530cd63fd13f953292c597835374ed3ac6e1b27f72b29a2c1f",
     "kernel/src/core/anon_memory.h": "ed2c24adc62af909c535713eb35f794ff407559a855e127b023963c315db64e8",
     "kernel/src/core/arena.c": "19165eff77c31731bef6d7d7b91c8a283b4ad61ce39647ae9d9f10414314f8a2",

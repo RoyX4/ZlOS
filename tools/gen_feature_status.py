@@ -7,6 +7,7 @@ import argparse
 import ast
 import copy
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -1382,6 +1383,11 @@ def validate_user_process_receipt(receipt: dict, build_identity: str,
         "kernel/src/core/anon_memory.c",
         "kernel/tests/host/anonmemorytest.c",
         "kernel/tests/host/test-run-receipt.json",
+        "kernel/src/arch/x86/user_image64.c",
+        "kernel/src/arch/x86/user_image64.h",
+        "kernel/src/arch/x86/user_process_abi.h",
+        "kernel/tests/host/userspawnwaittest.c",
+        "kernel/tools/generators/gen-user-syscalls.py",
         "kernel/src/arch/x86/user_syscalls.json",
         "kernel/src/arch/x86/user_syscalls_generated.h",
         "kernel/src/arch/x86/idt.c",
@@ -1392,6 +1398,16 @@ def validate_user_process_receipt(receipt: dict, build_identity: str,
     if set(expected_files) != required or any(
             digest(evidence_root / path) != expected_files[path] for path in required):
         raise ValueError("user-process QEMU receipt source or artifact identity drifted")
+    # Read the bound schema as data; execute only this checkout's validator.
+    # Spawn/wait extended the ABI, so the first unknown ID is no longer 26.
+    spec = importlib.util.spec_from_file_location('feature_syscall_schema',
+        ROOT / 'kernel/tools/generators/gen-user-syscalls.py')
+    syscall_schema = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(syscall_schema)
+    syscalls = json.loads((evidence_root / 'kernel/src/arch/x86/user_syscalls.json').read_text())
+    syscall_schema.validate(syscalls)
+    syscall_first = syscalls['entries'][0]['number']
+    syscall_last = syscalls['entries'][-1]['number']
     assertions = receipt.get("assertions", [])
     if [row.get("id") for row in assertions] != [
             "ring3-syscall-lifecycle", "unknown-syscall-admission",
@@ -1410,7 +1426,7 @@ def validate_user_process_receipt(receipt: dict, build_identity: str,
     if assertions[0].get("syscalls") != 6 \
             or assertions[0].get("returned_to_kernel") is not True \
             or assertions[1].get("abi_version") != 1 \
-            or assertions[1].get("probes") != [0, 26, 1 << 63, (1 << 64) - 1] \
+            or assertions[1].get("probes") != [0, syscall_last + 1, 1 << 63, (1 << 64) - 1] \
             or assertions[1].get("result") != "ENOSYS" \
             or assertions[2].get("stale_handle_refused") is not True \
             or assertions[2].get("observed_exit_status") != -7 \
@@ -1536,7 +1552,7 @@ def validate_user_process_receipt(receipt: dict, build_identity: str,
             or contracts.get("hardware_pte_bits") != \
             "accessed and dirty accepted without weakening ownership checks" \
             or contracts.get("syscall_numbers") != {
-                "abi_version": 1, "first": 1, "last": 25,
+                "abi_version": syscalls['abi_version'], "first": syscall_first, "last": syscall_last,
                 "dispatch": "generated unsigned admission",
                 "unknown_result": "ENOSYS"}:
         raise ValueError("user-process QEMU receipt source contract drifted")
@@ -1559,6 +1575,9 @@ def validate_user_process_command_receipt(receipt: dict, build_identity: str,
     required = {
         "kernel/zlOS-usb.img",
         "kernel/tools/probes/probe-user-process.py",
+        "kernel/tools/probes/exercise.py",
+        "kernel/tools/checks/write-user-process-receipt.py",
+        "kernel/tools/checks/write-scheduler-receipt.py",
         "freestanding/runtime_kernel.c",
         "kernel/src/kernel.zl",
         "kernel/src/graphics/windowing/term.c",
@@ -1612,6 +1631,9 @@ def validate_user_process_exit_receipt(receipt: dict, build_identity: str,
     required = {
         "kernel/zlOS-usb.img",
         "kernel/tools/probes/probe-user-process-exit.py",
+        "kernel/tools/probes/exercise.py",
+        "kernel/tools/checks/write-user-process-receipt.py",
+        "kernel/tools/checks/write-scheduler-receipt.py",
         "kernel/tests/host/zlfsseed.c",
         "kernel/src/fs/fs.c",
         "freestanding/runtime_kernel.c",

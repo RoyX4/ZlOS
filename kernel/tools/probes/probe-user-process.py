@@ -24,7 +24,7 @@ PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.abspath(os.path.join(PROBE_DIR, "..", ".."))
 sys.path.insert(0, PROBE_DIR)
 
-from exercise import Qmp, Serial, build, qemu_argv, qtype  # noqa: E402
+from exercise import Qmp, Serial, build, qemu_argv, qtype, validate_process_boot  # noqa: E402
 
 NAME = "/system/user.bin"
 BODY = "aaaa"
@@ -42,6 +42,9 @@ SOURCE_FILES = (
     "kernel/src/core/process_lifecycle.c",
     "kernel/src/core/scheduler_policy.c",
     "kernel/src/core/user_process_service.c",
+    "kernel/tools/probes/exercise.py",
+    "kernel/tools/checks/write-user-process-receipt.py",
+    "kernel/tools/checks/write-scheduler-receipt.py",
     "kernel/tools/probes/probe-user-process.py",
 )
 
@@ -199,6 +202,13 @@ def main():
 
         if not transcript.expect("ready.", args.boot_timeout):
             print("UEFI guest did not reach ready.\n" + transcript.log[-2500:])
+            return 1
+
+        try:
+            validate_process_boot(transcript.log)
+        except ValueError as error:
+            print("FAIL boot-time persistent process service self-check: " + str(error))
+            print(transcript.log[-2500:])
             return 1
 
         match = re.search(

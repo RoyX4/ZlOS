@@ -34,7 +34,7 @@ by the PREVIOUS run's picture, which silently compares against stale pixels.
   ./exercise.py --uefi          same, but through OVMF like the real laptop
   ./exercise.py --only k,u,o    just those steps
 """
-import argparse, json, os, shutil, socket, subprocess, sys, tempfile, time
+import argparse, importlib.util, json, os, shutil, socket, subprocess, sys, tempfile, time
 
 PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.abspath(os.path.join(PROBE_DIR, "..", ".."))
@@ -330,6 +330,17 @@ def frame_delta(before, after):
     a, b = before[2], after[2]
     diff = sum(1 for i in range(len(a)) if a[i] != b[i])
     return diff / len(a) if a else 0.0
+
+
+def validate_process_boot(transcript):
+    """Require the existing complete process and scheduler boot contracts."""
+    log = transcript.replace("\r", "")
+    for name in ("write-user-process-receipt", "write-scheduler-receipt"):
+        path = os.path.join(KERNEL_ROOT, "tools", "checks", name + ".py")
+        spec = importlib.util.spec_from_file_location(name, path)
+        validator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(validator)
+        validator.validate_log(log)
 
 
 def build(uefi):

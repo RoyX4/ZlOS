@@ -1,5 +1,11 @@
 # Bounded userspace spawn/wait ABI
 
+Current verification repair `aafe2635…` masks IRQs during entry/resume before
+CR3, the borrowed saved-register stack or user FP state can change. Caller
+flags are saved first and the final IRET restores user flags. The controlled
+IRQ-window reproduction passes with this repair, as do 78 host targets and all
+11 focused normal boot/process checks. Complete hosted closure remains open.
+
 Published in draft PR #15 through `99953083`; current reconciliation includes
 main `9c4cb509`. Corrected combined source `6ae68572…` passes 78 host targets
 and all 11 focused boot/process checks, including four native-UEFI parent/child

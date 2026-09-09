@@ -1,5 +1,17 @@
 # Project Status
 
+Current repair, 2026-09-09: published `79d9248d` passed 19 ordinary hosted
+checks but its native-UEFI exit probe exposed an interrupt race during process
+resume. Source `aafe2635…` masks IRQs before switching address space and borrowing
+the saved register frame. A controlled QEMU reproduction records 17 timer
+interrupts on that frame followed by corrupted CR3 and a double fault; the same
+injected delay passes the complete boot self-check with the fix. Eight boundary
+tests and twelve receipt-consumer tests pass. The fresh canonical suite passes
+78 host targets with zero failed or unavailable, and all 11 focused normal
+boot/process checks pass. Complete hosted closure remains open.
+The [process evidence record](evidence/process-spawn-wait-2026-09-08.md)
+separates that instrumented reproduction from normal image proof.
+
 Current reconciliation, 2026-09-09: published merge `99953083` includes main's
 USB/display work at `9c4cb509`. All five required pre-push gates and all 20
 ordinary hosted checks passed; GitHub reports PR #15 mergeable again. A

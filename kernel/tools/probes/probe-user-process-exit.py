@@ -49,11 +49,14 @@ SOURCE_FILES = (
     "kernel/src/core/user_process_service.c",
     "kernel/src/fs/fs.c",
     "kernel/tests/host/zlfsseed.c",
+    "kernel/tools/probes/exercise.py",
+    "kernel/tools/checks/write-user-process-receipt.py",
+    "kernel/tools/checks/write-scheduler-receipt.py",
     "kernel/tools/probes/probe-user-process-exit.py",
 )
 
 sys.path.insert(0, PROBE_DIR)
-from exercise import Qmp, Serial, build, qemu_argv, qtype  # noqa: E402
+from exercise import Qmp, Serial, build, qemu_argv, qtype, validate_process_boot  # noqa: E402
 
 
 def sha256(path):
@@ -207,9 +210,10 @@ def main():
         if not passed:
             print(transcript[-2500:])
             return 1
-        if "persistent user-process service FAILED" in transcript or \
-                "persistent sleep deadline FAILED" in transcript:
-            print("  FAIL  boot-time persistent process service self-check", flush=True)
+        try:
+            validate_process_boot(transcript)
+        except ValueError as error:
+            print("  FAIL  boot-time persistent process service self-check: " + str(error), flush=True)
             print(transcript[-2500:])
             return 1
         print("  ok    boot-time persistent process service self-check", flush=True)
