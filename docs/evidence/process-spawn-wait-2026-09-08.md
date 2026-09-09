@@ -1,5 +1,63 @@
 # First roadmap implementation: userspace spawn and wait
 
+## Full-gate follow-up, 2026-09-09
+
+The interrupt repair is published as `1a005e482b7763f3c1273cd919006fe31314145b`
+on draft [PR #15](https://github.com/RoyX4/ZlOS/pull/15). All five required
+pre-push checks passed; the verified remote ref matches. The normal push took
+359.85 monotonic seconds after resource admission. Nine generated publication
+outputs were retained and rehashed before restoring the committed snapshots.
+All 20 ordinary GitHub checks pass on that exact commit, including the formerly
+failing native EFI lane. Its full hosted closure is not claimed.
+
+The next local source identity is
+`de24460febe45820fd1756c3689d790b273c38cc945ca2454fdc9c7afc7e6f18`.
+The old BIOS32 diagnostic depended on a one-byte stack segment: it passed on
+KVM but reached UD2 and reported vector 6 under TCG. The replacement disables
+the general-protection gate, makes the interrupted stack unusable and loads a
+null stack selector. The CPU's protection fault then encounters the absent
+gate, producing a second contributory exception and entering the double-fault
+task. This follows the exception classes in Intel's
+[system programming manual, tables 6-4 and 6-5](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-3a-part-1-manual.pdf).
+The unused diagnostic GDT entry is removed. Neither the crash recorder nor its
+vector/checksum/stack/halt requirements is weakened.
+
+Fresh BIOS32 runs pass on both KVM and TCG. The TCG trace records vector 13,
+`check_exception old: 0xd new 0xb`, then vector 8 while the interrupted ESP
+is zero. The resulting record has vector 8 and error 0; the recorded handler
+stack and independently queried halted stack are inside the separate 16 KiB
+emergency stack. Both runs reject the eight existing corrupted-receipt controls.
+The fresh canonical host suite passes 78 targets with zero failed or unavailable.
+Native UEFI passes with that matching host receipt; the first attempt correctly
+refused the preceding source identity's host record. All 11 local target checks
+pass: BIOS32 double fault on KVM and TCG, BIOS32 UD2, native UEFI boot and all
+three native crash cases, plus four parent/child scenarios under TCG. Every
+process scenario returns physical frame use from zero to zero with no allocator
+faults; the initial mount marker is present in all four. Their new committed
+receipts and serial logs use the `-closure-2026-09-09` suffix. The joined local
+verification record validates the five crash receipts, forced-TCG arguments and
+exception trace, host executable hashes, and every process source/image/fixture/
+transcript binding. These are local QEMU results, not physical or hosted closure.
+
+The address-space contract now follows `user_image64.c`, which owns the page
+tables after the constructor extraction. It still requires the same 24 source
+assertions, guarded stack layout and permissions. Eight source mutations test
+slot range, code/stack permissions, stack bounds and both absent guard pages.
+The observability source check now follows each core's TSS and emergency stack;
+seven mutations reject shared-stack substitutions and lost fault recording.
+
+A separate replay uses the retained files from failed hosted run
+`34295555901` and its exact `79d9248d` source. With only the two registry
+repairs, address-space, observability, release notes, provenance and joined
+evidence generation/checking all pass, including their existing selftests.
+This is historical receipt replay; its outputs are not copied into the current
+checkout as fresh runtime evidence. The feature-ledger and complete current
+hosted run remain open.
+
+Artifacts are under the interrupt diagnostic directory's
+`verification/closure-repair/`: the original failure, prepared source hashes,
+replay outputs, current target checks and raw TCG exception trace are retained.
+
 ## Interrupt-race follow-up, 2026-09-09
 
 Published `79d9248d4b369b7d587eb045959400cb0adff156` retains the runtime of

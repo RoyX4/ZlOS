@@ -40,7 +40,7 @@ CASES = {
         "receipt": "cpu-fault-double-fault-qemu-2026-09-08.json",
         "uefi": False,
         "command": "crashdftest",
-        "trigger": "stack-segment fault on a one-byte SS whose delivery faults again, through typed crashdftest diagnostic",
+        "trigger": "null SS load causes general protection whose not-present gate causes a second contributory exception, through typed crashdftest diagnostic",
         "vector": 8, "has_error": 1, "error": 0,
         "symbol_register": None,
     },

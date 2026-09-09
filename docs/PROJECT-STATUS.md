@@ -1,5 +1,18 @@
 # Project Status
 
+Current full-gate follow-up, 2026-09-09: published interrupt repair
+`1a005e48` passes all 20 ordinary GitHub checks. Local source `de24460f…`
+repairs the BIOS32 diagnostic that failed under software CPU emulation and
+updates stale address-space and per-core emergency-stack validation. BIOS32
+double-fault capture now passes on both KVM and TCG; the fresh canonical host
+suite passes 78 targets, and native UEFI boots with matching evidence.
+All 11 local target checks pass, including all four parent/child cases under
+TCG with physical frame use returning from zero to zero. Fresh complete hosted
+verification remains pending.
+The active process checklist now marks implementation steps 01–25 complete,
+with their host/ABI/fixture evidence linked; step 30 remains open for full
+regression closure. [Current proof and limits](evidence/process-spawn-wait-2026-09-08.md).
+
 Current repair, 2026-09-09: published `79d9248d` passed 19 ordinary hosted
 checks but its native-UEFI exit probe exposed an interrupt race during process
 resume. Source `aafe2635…` masks IRQs before switching address space and borrowing

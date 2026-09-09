@@ -745,27 +745,28 @@ __asm__(
     ".size crash_test_ud2, .-crash_test_ud2\n"
 );
 
-/* Paging is off on this lane, so "RSP names an unmapped page" cannot be the
- * trigger. Selector 0x38 is a one-byte data segment: loading it into SS is
- * legal, the push is outside its limit (#SS), and delivering #SS pushes onto
- * the same one-byte stack (#SS again) - a double fault by the architectural
- * definition, with no page tables involved. Task gate 8 must switch stacks
- * before any push. Destructive and QEMU-only. */
-__asm__(
-    ".text\n"
-    ".globl crash_test_df\n"
-    ".type crash_test_df, @function\n"
-    "crash_test_df:\n"
-    "    cli\n"
-    "    mov $0x38, %ax\n"
-    "    mov %ax, %ss\n"
-    "    xor %esp, %esp\n"
-    ".globl crash_test_df_fault\n"
-    "crash_test_df_fault:\n"
-    "    push %eax\n"
-    "    ud2\n"
-    ".size crash_test_df, .-crash_test_df\n"
-);
+/* Paging is off on this lane. Force #GP with a null SS load after clearing
+ * the #GP gate's Present bit: its delivery raises #NP, a second contributory
+ * exception, so hardware dispatches #DF through task gate 8. The interrupted
+ * ESP is deliberately unusable; the handler must switch to the emergency TSS.
+ * This avoids relying on stack-segment limit checks, which the software CPU
+ * emulator did not enforce for the old one-byte-stack trigger. The diagnostic
+ * never returns or restores the disabled gate. QEMU-only, like the other crash
+ * commands. */
+__attribute__((noreturn)) void crash_test_df(void)
+{
+    __asm__ volatile("cli" ::: "memory");
+    idt[13].flags &= 0x7f; /* #GP is intentionally not present. */
+    __asm__ volatile(
+        "xor %%eax, %%eax\n"
+        "xor %%esp, %%esp\n"
+        ".globl crash_test_df_fault\n"
+        "crash_test_df_fault:\n"
+        "mov %%ax, %%ss\n"
+        "ud2\n"
+        ::: "eax", "memory");
+    __builtin_unreachable();
+}
 #endif
 
 /* usermode.c, in assembly. Declared as a function taking no arguments purely so

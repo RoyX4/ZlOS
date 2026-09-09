@@ -4,9 +4,9 @@
     "branch": "codex/spawn-wait-reconcile-2026-09-08",
     "dirty": true,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "79d9248d4b369b7d587eb045959400cb0adff156"
+    "head": "1a005e482b7763f3c1273cd919006fe31314145b"
   },
-  "identity_sha256": "aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d",
+  "identity_sha256": "de24460febe45820fd1756c3689d790b273c38cc945ca2454fdc9c7afc7e6f18",
   "routes": [
     "BIOS-multiboot32",
     "multiboot64",
@@ -32,7 +32,7 @@
     "kernel/boot/boot.S": "0949e1171f666158091663c701296a49da6a73db49c916bda1e3b5af756df4bc",
     "kernel/boot/boot64.S": "56f7198cf6823afb69b63ab28684f8e61c38617571f07a3f3c17109ad1eb6e38",
     "kernel/boot/efi.c": "a929fa24338964571a4adab4d10916fe79a279c85451bb7375ba2e2dab69b41e",
-    "kernel/boot/gdt.c": "09246f7a9509bf627622ece2abb482e334ada7c29bf86b9d9ccd57b6f3967ba6",
+    "kernel/boot/gdt.c": "c7ea71be4e5c8168d48b5ed34d74b74f645188b2ed14c9ab26c1d983d15ea8c1",
     "kernel/boot/gdt64.c": "22362c5f2e7dd4f2abfed55694c8b3f93da0e3af1a3de2cdb52c5ecfc0d25284",
     "kernel/boot/link-raw.ld": "21dedfe1aec2e9a6064edfeb0fcf3ff379bbc3e871fe6530f99c9012b145e39c",
     "kernel/boot/link.ld": "4e7e4d8b6647d6653194ce97898d22edf160e0750d49942b3a9ada593340bae1",
@@ -49,7 +49,7 @@
     "kernel/src/arch/x86/cpu.c": "961db5bf741cf1c60a3f5099a4d6610fbffbcf7878211427339be7ed8799b9aa",
     "kernel/src/arch/x86/divmod.c": "761ead808c0e59c5cf27be64d242f1c65c440ce3a19470482ed3d83378282fb7",
     "kernel/src/arch/x86/dma.h": "7974bc5732dfbaea1fb4b10e5c13d0fc2dc2466be7a65ef137d9d5eba2192c57",
-    "kernel/src/arch/x86/idt.c": "3356fd8e105cd009706ca0b292bb25ac61a434c3e79d16656f90601c0871086b",
+    "kernel/src/arch/x86/idt.c": "a3031bd63b9b94b5087fa248fba78b494156cd249f223450fe0e55cd8459aafe",
     "kernel/src/arch/x86/memmap.h": "c80c04fcaf5f1c295eac712c4cb2b2bf1169bef2b95b3543c1a8418beca91d81",
     "kernel/src/arch/x86/page_table_txn.c": "a441080ba7041dd0270cf4f1b9d332f9a4edeaf75679a9aa574dfd7ad9f0975f",
     "kernel/src/arch/x86/page_table_txn.h": "fb61024acc4d16f1423bc3548497435e7089a98a35a5a3de1ba37035605cd608",

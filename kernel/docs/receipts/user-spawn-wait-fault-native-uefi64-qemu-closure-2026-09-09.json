@@ -1,0 +1,153 @@
+{
+  "schema": "zlos.user-spawn-wait-proof.v1",
+  "result": "PASS_NATIVE_UEFI64_QEMU",
+  "scenario": "parent-private-page-fault",
+  "orphan_order": null,
+  "fixtures": [
+    {
+      "name": "/system/user.bin",
+      "bytes": 833,
+      "sha256": "fba8557c465750ba9c48c6ab82dfda286032f157f5965d6b38fdba1cd2b01fbb",
+      "source": "kernel/tests/fixtures/user-spawn-parent.asm",
+      "source_sha256": "55e1a5078b799761e3e9a5137b403e563628e3a45f676d392983b2d65004bdfb"
+    },
+    {
+      "name": "/system/child.bin",
+      "bytes": 110,
+      "sha256": "bb3498a4474b175839eee38b287a77c72181abccf7a7d4e44d17e6f627ac6b11",
+      "source": "kernel/tests/fixtures/user-spawn-child.asm",
+      "source_sha256": "b64afa818d56e2270ca239f4300cfcae62dcd8b517b8ec6efc54333bcc767cc1"
+    }
+  ],
+  "preboot_disk_sha256": "b4a4f40d1e6828583b70db48f03b46fcb3ad080a0e139ffed8d0bb717cfec813",
+  "implementation": [
+    {
+      "path": "kernel/src/kernel.zl",
+      "sha256": "2b2c6fb29fbf56c6f663c9ce22c07aa7029b05726ffe3759b00faa530c581ac8"
+    },
+    {
+      "path": "freestanding/runtime_kernel.c",
+      "sha256": "15f8e128d06b11875d3b0d68035e1c19a760c5eb97ff863a687bc8ad59fa6672"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "811774ef65131cd1d0027e921ae228cfaa7c73cb7680949b1c84b63301ac15b5"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.h",
+      "sha256": "2296f9483924ba0f8f0b61b5fb1b17ebd8558e48eda7e0bc075e3bc9a302ebe3"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_process_abi.h",
+      "sha256": "835c96ecb29b2e38824c554b9c2c9f3dcbde603bb03600cda8532ffc4ca912ba"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_syscalls.json",
+      "sha256": "44e91463e90d214da22b4744bec7b605c4769ea73c68ded41b43554a0162aed6"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_syscalls_generated.h",
+      "sha256": "6c26c243bcaf241e798f951c8684b5e96837993074b82c9688584922c655d55f"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.c",
+      "sha256": "b5ba0380451273fba1914d62cc8441947d0b15a25c8f93b0021cc50ad5a0ed6a"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.h",
+      "sha256": "e2d224fa9a31e5871aee08178c3c920e551af93c00a0c5d8153f6a6bde901e50"
+    },
+    {
+      "path": "kernel/src/core/user_process_service.c",
+      "sha256": "491fde314cd02f3dded14630151d7d41bb58b9bba16ac95f59f6186fc22ac822"
+    },
+    {
+      "path": "kernel/src/core/scheduler_policy.c",
+      "sha256": "f4167cfe29def979904320faa67377b46e086b12a319fec8df50916463afb030"
+    },
+    {
+      "path": "kernel/src/core/process_memory.c",
+      "sha256": "5ed29d117b97bcb051666c8be0965970e344d09b662585b6a25a2fc851a035ca"
+    },
+    {
+      "path": "kernel/src/core/anon_memory.c",
+      "sha256": "5415297acc8c30530cd63fd13f953292c597835374ed3ac6e1b27f72b29a2c1f"
+    },
+    {
+      "path": "kernel/src/fs/fs.c",
+      "sha256": "046a6c8e8cbbedcf7b2b7783320cb05fa538c044433a08bf6190b021d58ba0bb"
+    },
+    {
+      "path": "kernel/tests/host/zlfsseed.c",
+      "sha256": "c39a4254f05242cf9c69eb05a0c6ff9ade0d8106aeac967987a82d832969914b"
+    },
+    {
+      "path": "kernel/tests/fixtures/user-spawn-parent.asm",
+      "sha256": "55e1a5078b799761e3e9a5137b403e563628e3a45f676d392983b2d65004bdfb"
+    },
+    {
+      "path": "kernel/tests/fixtures/user-spawn-child.asm",
+      "sha256": "b64afa818d56e2270ca239f4300cfcae62dcd8b517b8ec6efc54333bcc767cc1"
+    },
+    {
+      "path": "kernel/tools/probes/probe-user-spawn-wait.py",
+      "sha256": "f2fc54be2f37f7b21a69aa9c0ca4c2d28a728a11ff0652cb138b4ec839c82a7f"
+    },
+    {
+      "path": "kernel/tools/probes/exercise.py",
+      "sha256": "dbd58e8786cf5092805a6ac024893100f357ce9ebc4211cd0dd59376f77be25c"
+    },
+    {
+      "path": "kernel/tools/probes/probe-user-process-exit.py",
+      "sha256": "1d59fb23c443f345e4d9d3cd83a1c09eb9a32063a4de008da88a1991592b96d5"
+    },
+    {
+      "path": "kernel/tools/checks/write-user-process-receipt.py",
+      "sha256": "4fd8b0e332aac96c3a53304df2cdbff34c93bde161ef38c9bc5ce2695b27f688"
+    },
+    {
+      "path": "kernel/tools/checks/write-scheduler-receipt.py",
+      "sha256": "8c7c12c506be6b65e87677204901f7122f06fa8d8ad96ca3bf6ffd65c0a00116"
+    },
+    {
+      "path": "kernel/tools/generators/gen-user-syscalls.py",
+      "sha256": "d62f5c2bbd0c0d6387ef4b0db57bc7ca040d2846921099b5cf66eeb15b6651b8"
+    }
+  ],
+  "assertions": [
+    "ready.",
+    "mounted:",
+    "persistent Ring-3 processes",
+    "empty",
+    "physical frames in use: ",
+    "\n",
+    "started /system/user.bin as pid 1000",
+    "SPAWN-WAIT-OK",
+    "slot 1: pid 1000 exited with status 37; ready to reap",
+    "released slot 1",
+    "persistent Ring-3 processes",
+    "empty",
+    "physical frames in use: ",
+    "\n",
+    "physical-frame baseline restored and allocator invariant passed"
+  ],
+  "known_gaps": [
+    "two fixed slots and 1..4096-byte raw images",
+    "no SMP process locking",
+    "physical hardware untested",
+    "allocation failure injection remains host-tested separately"
+  ],
+  "build_identity": "de24460febe45820fd1756c3689d790b273c38cc945ca2454fdc9c7afc7e6f18",
+  "virtual_cpus": 1,
+  "physical_frames": {
+    "before": 0,
+    "after": 0,
+    "allocator_faults": 0
+  },
+  "image_sha256": "f7b1bdc15737926d95c22a66cfd338b986a925afcd718d4055cc63f2a34485a4",
+  "transcript_sha256": "20778d6af87e1640ab3f8dcb1d3e0ac9e955bd2ad3f1330ee6a0a0b396f3e5ee"
+}

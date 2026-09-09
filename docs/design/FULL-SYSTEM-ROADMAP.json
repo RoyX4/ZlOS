@@ -3,7 +3,7 @@
   "status": "EXECUTION_STARTED",
   "execution": {
     "active_milestone": "M-03.03",
-    "state": "INTERRUPT_REPAIR_LOCAL_PASS_HOSTED_CLOSURE_OPEN",
+    "state": "CRASH_AND_REGISTRY_REPAIR_LOCAL_PASS_HOSTED_CLOSURE_OPEN",
     "next_target_step": "N-PROCESS.30",
     "receipt": "docs/evidence/process-spawn-wait-2026-09-08.md",
     "abi": "docs/design/userspace-spawn-wait-abi.md",

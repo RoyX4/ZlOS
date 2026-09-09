@@ -79,10 +79,9 @@ struct tss_entry {
  * process, and that is 64-bit-only work - see docs/reference/system/memory-model.md, Stage 5.
  * Saying "ring 3" and meaning "isolated" is the confusion this comment exists
  * to prevent. */
-/* Eight entries since 2026-09-08: 0x30 is the double-fault task's TSS and
- * 0x38 a one-byte data segment the crashdftest diagnostic loads into SS so
- * that its next push is a stack-segment fault whose delivery faults again. */
-static struct gdt_entry gdt[8];
+/* Seven entries: 0x30 is the double-fault task's TSS. The crash diagnostic
+ * now uses a not-present exception gate, so it needs no extra data segment. */
+static struct gdt_entry gdt[7];
 static struct gdt_ptr   gdtp;
 static struct tss_entry tss;
 
@@ -164,13 +163,8 @@ void gdt_init(void)
      * CPU accepts and then reads garbage out of. */
     set_entry(5, (u32)&tss, sizeof(tss) - 1, 0x89, 0x00);
     /* 0x30: the double-fault task (gdt_df_task_init fills the TSS itself;
-     * idt_init calls it with the handler before installing the task gate).
-     * 0x38: base 0, limit 0, byte granularity - a ONE-byte writable segment.
-     * Loading it into SS is legal; the first push is then outside the limit
-     * (#SS), and delivering #SS pushes onto that same stack (#SS again), which
-     * is a double fault. crash_test_df uses it; nothing else names it. */
+     * idt_init calls it with the handler before installing the task gate). */
     set_entry(6, (u32)&df_tss, sizeof(df_tss) - 1, 0x89, 0x00);
-    set_entry(7, 0, 0x00000000, 0x92, 0x00);
 
     /* Zero it by hand - .bss is zeroed on both boot paths, but gdt_init() is
      * also callable twice and a stale esp0 is a fault that only happens after
