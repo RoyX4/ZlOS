@@ -66,6 +66,7 @@ Deterministic static, host, image, and boot verification entry points.
 - `verify-net.sh`
 - `verify-raw.sh`
 - `verify-sources.sh`
+- `verify-usb-replug.py`
 - `wguard.sh`
 - `write-clock-receipt.py`
 - `write-page-table-receipt.py`

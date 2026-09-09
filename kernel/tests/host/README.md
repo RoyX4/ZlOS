@@ -58,6 +58,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `games12_rules.zl`
 - `games4_rules.zl`
 - `gdt64test.c`
+- `ggttest.c`
 - `gpu-dev.sh`
 - `gpu-ring-run.sh`
 - `gpu_aperture.c`

@@ -359,7 +359,7 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False,
         "-device", ("qemu-xhci,id=xhci,p2=8,p3=4" if net == "cdc" else
                     "qemu-xhci,id=xhci"),
         "-device", "usb-storage,bus=xhci.0,drive=stick",
-        "-device", "usb-kbd,bus=xhci.0",
+        "-device", "usb-kbd,bus=xhci.0,id=kbd0",   # id: verify-usb-replug.py hot-unplugs it
         # No usb-mouse (relative): zlOS would rather have the TABLET, which is
         # absolute - the guest is told the position instead of a delta to
         # accumulate, so the cursor cannot drift away from the host's. This is

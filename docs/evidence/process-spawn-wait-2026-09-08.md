@@ -1,13 +1,22 @@
 # First roadmap implementation: userspace spawn and wait
 
-Status: combined source `2bb71bad…` passes the rebuilt host suite, native
-UEFI boot, all four parent/child scenarios and existing external fault/exit/sleep
-probes. Published commit `4e7e283` includes main `bd75552` and the local launcher
-repair. Follow-up `c546efc` passes all 20 ordinary hosted checks and the repaired
-sleep-evidence boundary. Its full run then stopped on an unavailable old runner
-dependency; the provisioning correction below addresses that failure. Complete
-hosted closure and the combined app matrix remain pending.
+Status: corrected combined source `6ae68572…`, including main `9c4cb509`,
+passes 78 host targets and all 11 focused boot/process checks. These include
+four parent/child scenarios, external fault/exit/sleep, native/BIOS32 USB
+re-plug and BIOS32 double-fault capture. Published `c546efc` passed all 20
+ordinary hosted checks. The runner archive repair passed on GitHub at
+`e373dcb`; its older-source full run was cancelled for this reconciliation.
+Complete hosted closure and the combined app matrix remain pending.
 Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`. No feature maturity promotion.
+
+Current reconciliation, 2026-09-09: main advanced to `9c4cb509` while the
+runner repair was being published. The isolated checkout now combines that
+USB/display work with the process branch. All 15 conflicts are resolved;
+the first combined build was `3bca5417…`. Its host suite and eight process/boot
+checks passed, but USB re-plug exposed a shared command-number collision.
+That collision is fixed with a failing-before/passing-after regression. Fresh
+combined checks pass on corrected identity `6ae68572…`. Earlier results
+below remain bound to their recorded source.
 
 The user accepted the full roadmap and authorized implementation on 2026-09-08.
 This pass starts `M-03.03` with the audited parent/child process contract.
@@ -583,3 +592,104 @@ All nine generated files from the successful `c546efc` pre-push run were copied
 byte-for-byte into its `post-push-generated/` artifact directory before restoring
 the tracked checkout to the published commit. This preserves exact latest boot
 output without pretending generated source-context changes are runtime edits.
+
+
+## Concurrent main reconciliation, 2026-09-09
+
+Main advanced from `bd75552` to `9c4cb509335cc7f0bfdbac968e873ebdab895f8b`
+while `e373dcb` was undergoing publication. PR #15 became `CONFLICTING`; its
+six push checks passed, but the pull-request workflows did not start. This is
+separate from the earlier 20 successful ordinary checks on `c546efc`.
+
+The current isolated merge takes `e373dcb` and that exact new main tip. Runtime
+source merged without textual conflicts. Fifteen conflicts were resolved:
+both journal additions remain intact, the landing sequence retains the BIOS32
+double-fault and new native USB re-plug probes with bounded resource waits,
+and generated identity/app/inventory data was regenerated. Conflicting runtime
+receipts were retained whole as historical evidence until their fresh runs;
+no observations from different source identities were spliced together.
+
+The combined identity is
+`3bca5417f2c2b2f83f4988b7f156176bb5e7f32f88ef5dfd8ea4aa2a50c37561`.
+The regenerated inventory declares 85 compiled targets, ten scripts and 83
+automatic commands, including main's real Intel GGTT table test. Regeneration
+is structural evidence; execution results are recorded separately.
+
+The landing-authority checker previously accepted six broken versions of the
+new USB entry: deletion, omission of runtime execution, a different route,
+a different probe, a different working directory and a duplicate invocation.
+All six are now rejected. The intended gate passes 126 mandatory seams and
+the containment checker passes its 64 required controls. Existing spawn/wait,
+BIOS32 fault and resource-wait mutations remain enforced.
+
+Fresh artifacts are retained under
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/main-reconciliation/`.
+At this first merge checkpoint the host and target runs were still pending;
+their failure and the corrected run are recorded below. A further full hosted
+run is required for the merged source, regardless of the earlier run's outcome.
+Physical USB/display behavior remains outside the QEMU proof.
+
+
+Runner recovery was verified on GitHub in run `34290811066`: 159 exact binary
+archives, 103 source-package sets and 333 source files were recovered, with
+zero unindexed binaries, zero unindexed sources and no undeclared dependency
+edges. `libseccomp2 2.6.1-1+b1` came from the signed package index. The archived
+receipt and lock are retained under the follow-up's `runner-recovery/hosted-proof/`.
+The archive verifier's fixed historical claim about “two stale Linux archives”
+was removed from its limitation text; explicit measured counters remain the
+authority for whether fallback happened. The complete old-source gate was
+cancelled after recovery when main advanced, so it is not a runtime closure pass.
+
+
+## Command-number collision exposed by the combined target test
+
+The first combined `3bca5417…` run passed all 78 automatic host targets and
+eight native/process command checks. Its native USB test then failed: typing
+`usbstat` printed the persistent process table instead of USB status. This was
+a semantic merge conflict even though both source files merged cleanly.
+The process branch assigned `userps` to 130; main independently assigned
+`usbstat` to 130. Both matching kernel arms were present, and the earlier
+process arm returned before the USB arm could run.
+
+The existing terminal host harness now submits `userps`, `userreap 2` and
+`usbstat` through the real shipping word matcher. Before repair it reported
+one failure, exactly on the USB command. The word table and its kernel handler
+now assign USB status its own free code 132, preserving process status at 130
+and reap at 131. The host regression passes after repair. The actual failed
+QEMU transcript and both host runs are retained; no test was weakened.
+
+The corrected build identity is
+`6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c`.
+Fresh complete host and focused target checks pass for this changed source.
+Their artifacts live under the reconciliation's `after-command-repair/` folder.
+The failed first integration did not reach the two BIOS32 target checks and
+is not counted as a complete local pass.
+
+The corrected canonical host run executes 83 commands across 95 declared
+targets: 78 pass, three are hardware skips, 14 are explicit non-runs, and
+none fail or are unavailable. Its 197.17-second run used a one-CPU/two-GiB
+resource limit and is correctness evidence, not the quiet-host build budget.
+All 11 target commands exit zero: fresh native boot; signed child exit;
+parent-private page fault; parent-first and child-first orphan adoption;
+external fault, exit and sleep; native and BIOS32 USB re-plug; and BIOS32
+double-fault capture. The latter two checks were not reached by the failed
+first integration and were run afresh after the repair.
+
+`combined-verification.json` checks the current source, host inventory and
+executable hashes, all 11 command outcomes, both USB artifact/kernel hashes,
+and the four process receipts against the actual image, implementation,
+fixtures and raw serial bytes. The four process runs each return physical
+frame use from zero to zero, with zero allocator faults. Their JSON and serial
+files are retained in `kernel/docs/receipts/` with the suffix
+`native-uefi64-qemu-combined-2026-09-09`. They share USB image SHA-256
+`97a9a8597b0552ff3e9210552cff57ec1f59c532752cb47dc9d864bfe0554651`.
+These results do not close the full app matrix, hosted landing sequence,
+physical USB/display behavior or any wider feature-maturity contract.
+
+The final documentation check passes: 118 directory capsules, all local
+Markdown links and described source paths, and all nine registered executable
+claims. The roadmap recheck passes 7,151 structural assertions with all 174
+original contract bodies intact. The 56 saved pending files in the original
+integration checkout still match their original hashes. Tested native and
+BIOS images were retained as compressed artifacts and their decompressed
+hashes checked before publication can rebuild those output paths.

@@ -1,0 +1,38 @@
+{
+  "schema": "zlos.usb-replug-qemu-receipt.v1",
+  "result": "PASS",
+  "route": "bios32",
+  "build_identity": "6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c",
+  "artifact": {
+    "path": "kernel/zlOS.iso",
+    "sha256": "22f081f16dcf8e74e8ac06ab8e445195c65ab73ce04f5811428f7085565b585e"
+  },
+  "kernel": {
+    "path": "kernel/kernel.elf",
+    "sha256": "f6f096388bee63ccea6b5cd718414a70641be2aaecbeec13775618333cff7faf"
+  },
+  "steps": [
+    {
+      "step": "boot",
+      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=3 lastport=7 lastv=00000E03 skips=0 scans=0 conn=00C2 try=0 trystage=0 trycc=-1 polls=179 owned=1 ticks=160"
+    },
+    {
+      "step": "qemu-boot",
+      "line": "kbd0 on root port 2"
+    },
+    {
+      "step": "unplugged",
+      "line": "usbstat kbd_ready=0 kbd_slot=2 replug=0 tries=0 pending=0 port=6 stage=6 cc=1 events=4 lastport=6 lastv=000202A0 skips=0 scans=0 conn=0082 try=0 trystage=0 trycc=-1 polls=655 owned=1 ticks=322"
+    },
+    {
+      "step": "replugged",
+      "line": "usbstat kbd_ready=1 kbd_slot=2 replug=1 tries=1 pending=0 port=6 stage=6 cc=1 events=6 lastport=6 lastv=00000E03 skips=0 scans=1 conn=00C2 try=6 trystage=6 trycc=1 polls=1425 owned=1 ticks=625"
+    },
+    {
+      "step": "qemu",
+      "line": "  Device 0.1, Port 1, Speed 5000 Mb/s, Product QEMU USB MSD |   Device 0.3, Port 3, Speed 480 Mb/s, Product QEMU USB Tablet |   Device 0.2, Port 2, Speed 480 Mb/s, Product QEMU USB Keyboard, ID: kbd0 | "
+    }
+  ],
+  "evidence": "QEMU device_del/device_add of the usb-kbd with no guest input in between; the read-only usbstat word shows kbd_ready 1 -> 0 -> 1, a new slot, and replug=1 counted by the driver's own poll path",
+  "weakest_link": "QEMU's xHCI model, and the same root port on purpose: the driver speaks no hubs, so a keyboard that comes back behind one (which is where QEMU puts a fifth device on four USB2 root ports) is not seen; a slow-to-settle physical keyboard is not exercised either"
+}

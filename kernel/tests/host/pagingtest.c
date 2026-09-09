@@ -33,6 +33,7 @@ unsigned long long vmm_window_phys(void);
 unsigned long long vmm_window_bytes(void);
 void vmm_report(void);
 int vmm_pat_wc_index(unsigned long long pat);
+int vmm_walk_present(const unsigned long long *pml4, unsigned long long addr);
 unsigned long long vmm_pat_leaf_bits(int index, int huge);
 
 void zl_putc_pub(char c) { fputc(c, stdout); }
@@ -142,6 +143,32 @@ int main(void)
     eq(vmm_phys(0x0000800000200000ULL), 0x0000800000200000ULL, "one past it");
 
     vmm_set_window(0, 0, 0);
+
+    /* THE WALKER (2026-09-08). boot64.S identity-maps 4 GiB with 2 MiB
+     * leaves; a device BAR above that used to be taken on faith. Hand-build
+     * a table with every leaf size and a hole, and ask about each. */
+    {
+        static unsigned long long pml4[512] __attribute__((aligned(4096)));
+        static unsigned long long pdpt[512] __attribute__((aligned(4096)));
+        static unsigned long long pd[512]   __attribute__((aligned(4096)));
+        static unsigned long long pt[512]   __attribute__((aligned(4096)));
+        const unsigned long long P = 1ULL, PS = 1ULL << 7;
+        pml4[0] = (unsigned long long)(unsigned long)pdpt | P;
+        pdpt[0] = (unsigned long long)(unsigned long)pd | P;      /* 0..1 GiB via PD */
+        pdpt[1] = 0x40000000ULL | P | PS;                           /* 1..2 GiB: 1 GiB leaf */
+        /* pdpt[2], pdpt[3] absent: 2..4 GiB is a hole */
+        pd[0] = (unsigned long long)(unsigned long)pt | P;          /* first 2 MiB via PT */
+        pd[1] = 0x200000ULL | P | PS;                               /* 2..4 MiB: 2 MiB leaf */
+        pt[5] = 0x5000ULL | P;                                      /* one 4 KiB page */
+        ok(vmm_walk_present(pml4, 0x5000ULL) == 1,        "a mapped 4 KiB page is present");
+        ok(vmm_walk_present(pml4, 0x6000ULL) == 0,        "the next 4 KiB page, absent in the PT, is not");
+        ok(vmm_walk_present(pml4, 0x300000ULL) == 1,      "inside a 2 MiB leaf is present");
+        ok(vmm_walk_present(pml4, 0x500000ULL) == 0,      "an absent PD entry is not");
+        ok(vmm_walk_present(pml4, 0x7FFFFFFFULL) == 1,    "the last byte of a 1 GiB leaf is present");
+        ok(vmm_walk_present(pml4, 0x80000000ULL) == 0,    "the hole above it is not");
+        ok(vmm_walk_present(pml4, 0xC000000000ULL) == 0,  "OVMF's xHCI BAR address is not, with a 4 GiB map");
+        ok(vmm_walk_present(0, 0) == 0,                   "no table at all is not");
+    }
     printf("\n");
     vmm_report();
 

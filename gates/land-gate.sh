@@ -282,6 +282,12 @@ await_guard || exit 2
 run "CPU double-fault task-gate capture BIOS32 QEMU" "$WT/kernel" \
     python3 tools/checks/verify-crash.py --run --route bios32 --fault double-fault --no-build --selftest
 await_guard || exit 2
+# A USB keyboard pulled and plugged back must come back on its own: QEMU
+# device_del/device_add with no guest input in between, read through the
+# read-only `usbstat` word (the `usb` command would re-enumerate itself).
+run "USB keyboard re-plug native UEFI64 QEMU" "$WT/kernel" \
+    python3 tools/checks/verify-usb-replug.py --run --route native-uefi64 --no-build
+await_guard || exit 2
 run "app routes QEMU" "$WT/kernel" python3 tools/probes/probe-app-routes.py --no-build \
     --receipt docs/receipts/app-routes-qemu-2026-08-22.json
 await_guard || exit 2

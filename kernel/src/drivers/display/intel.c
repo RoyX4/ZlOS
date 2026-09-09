@@ -1104,6 +1104,22 @@ int intel_wait_vblank(void)
 
 /* ==== GGTT: mapping a whole range =======================================
  * One page at a time is fine for a proof; a framebuffer needs thousands. */
+/* WHAT THE FIRMWARE HAD IN THOSE ENTRIES (2026-09-08). The bring-up rewrites
+ * a run of GGTT PTEs to point at our scanout; until now the teardown left
+ * them pointing there, so after "bring-up FAILED at step N" - or a clean
+ * shutdown back to the firmware console - the firmware's own view of the
+ * GGTT was quietly different from what it had programmed. Save every entry
+ * before the first write and put it back, hi word then lo word, so no entry
+ * is ever present with the wrong high half. One range is held at a time:
+ * the bring-up maps exactly one, and a second call while one is held is
+ * refused rather than merged, because a merge is where a restore goes wrong. */
+#define GGTT_SAVE_MAX 16384u                 /* 64 MiB of scanout at 4 KiB: a 4K panel is 8100 pages, a 40 MiB back buffer 10240 */
+static u32 ggtt_saved[GGTT_SAVE_MAX][2];
+static u32 ggtt_saved_first, ggtt_saved_pages;
+static int ggtt_saved_held;
+
+int intel_ggtt_saved_pages(void) { return ggtt_saved_held ? (int)ggtt_saved_pages : 0; }
+
 int intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages)
 {
     if (!intel_present() || pages <= 0) return 0;
@@ -1115,6 +1131,50 @@ int intel_ggtt_map_range(u32 gfx_page, u32 phys_addr, int pages)
     if ((u32)pages > (0xFFFFFFFFu - phys_addr) / 4096u) return 0;
     for (int i = 0; i < pages; i++)
         if (!intel_ggtt_map(gfx_page + (u32)i, phys_addr + (u32)i * 4096u)) return 0;
+    return 1;
+}
+
+/* The bring-up's variant: the same mapping, with the firmware's entries
+ * saved first so the teardown can put them back. ONLY intel_bringup_panel
+ * calls this. The plain intel_ggtt_map_range above holds nothing - the
+ * compositor maps its back and scan buffers back to back (gpuring.c), the
+ * cursor and the self-test map more, and a hold on the plain call refused
+ * every one of them (found by the 2026-09-08 adversarial pass). */
+int intel_ggtt_map_range_saved(u32 gfx_page, u32 phys_addr, int pages)
+{
+    if (!intel_present() || pages <= 0) return 0;
+    if ((u32)pages > 0xFFFFFFFFu - gfx_page) return 0;
+    if ((u32)pages > (0xFFFFFFFFu - phys_addr) / 4096u) return 0;
+    if (ggtt_saved_held) return 0;            /* one range at a time */
+    if ((u32)pages > GGTT_SAVE_MAX) return 0; /* refuse, never partially save */
+    u32 ggtt = intel_ggtt_size();
+    if (!ggtt || gfx_page + (u32)pages > ggtt / 8u) return 0;
+    for (int i = 0; i < pages; i++) {
+        volatile u32 *pte = (volatile u32 *)(mmio + (uptr)GGTT_OFFSET + (uptr)(gfx_page + (u32)i) * 8u);
+        ggtt_saved[i][0] = pte[0];
+        ggtt_saved[i][1] = pte[1];
+    }
+    ggtt_saved_first = gfx_page;
+    ggtt_saved_pages = (u32)pages;
+    ggtt_saved_held  = 1;
+    for (int i = 0; i < pages; i++)
+        if (!intel_ggtt_map(gfx_page + (u32)i, phys_addr + (u32)i * 4096u)) return 0;
+    return 1;
+}
+
+/* Put the firmware's entries back. Called by the teardown after the plane
+ * and transcoder are off, and by the early-failure path, which is where the
+ * firmware keeps scanning and most needs its table intact. */
+int intel_ggtt_restore(void)
+{
+    if (!intel_present() || !ggtt_saved_held) return 0;
+    for (u32 i = 0; i < ggtt_saved_pages; i++) {
+        volatile u32 *pte = (volatile u32 *)(mmio + (uptr)GGTT_OFFSET + (uptr)(ggtt_saved_first + i) * 8u);
+        pte[0] = 0;                           /* not present while the high half changes */
+        pte[1] = ggtt_saved[i][1];
+        pte[0] = ggtt_saved[i][0];
+    }
+    ggtt_saved_held = 0;
     return 1;
 }
 
@@ -4384,6 +4444,8 @@ int intel_modeset_teardown(int port)
      * is about to remove. */
     if (!intel_transcoder_enable(0)) bad++;
 
+    intel_ggtt_restore();                 /* nothing scans our pages now */
+
     /* 8-11: transcoder function, then the port. The idle wait comes AFTER
      * both disables, not between them. */
     if (!intel_trans_ddi_ctl_disable()) bad++;
@@ -4495,7 +4557,13 @@ uptr intel_bringup_panel(void)
         u32 ggtt = intel_ggtt_size();                 /* table bytes, 8/page */
         if (!ggtt || (gfx >> 12) > ggtt / 8u - pages) return 0;
     }
-    if (!intel_ggtt_map_range(gfx >> 12, stolen + skip, (int)pages)) return 0;
+    if (!intel_ggtt_map_range_saved(gfx >> 12, stolen + skip, (int)pages)) {
+        /* Before intel_modeset_run, so failed_at is never set: say so, or
+         * this is a silent "FAILED" with no step (2026-09-08). */
+        zlt_event(ZLLOG_SUB_DISPLAY, ZLLOG_EV_DRIVER_STATE, ZLLOG_ERROR,
+                  4u, 3u /* ggtt window */, pages);
+        return 0;
+    }
 
     if (!intel_modeset_set_fb(gfx, stride)) return 0;
 
@@ -4515,6 +4583,7 @@ uptr intel_bringup_panel(void)
         if (at > 0 && at < 27) {
             intel_psr_restore();
             intel_backlight_restore();
+            intel_ggtt_restore();         /* the firmware is still scanning */
         } else {
             (void)intel_modeset_teardown(0);
         }

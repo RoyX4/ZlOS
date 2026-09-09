@@ -71,6 +71,7 @@ REQUIRED_SNIPPETS = (
     'run "CPU GP error-code capture native UEFI64 QEMU"',
     'run "CPU double-fault IST capture native UEFI64 QEMU"',
     'run "CPU double-fault task-gate capture BIOS32 QEMU"',
+    'run "USB keyboard re-plug native UEFI64 QEMU"',
     'run "app routes QEMU"',
     'run "rail register QEMU"',
     'python3 tools/probes/probe-rail.py --no-build',
@@ -152,6 +153,8 @@ HOST_BUILD_BENCHMARK_GUARD = re.compile(
 
 
 BIOS32_DOUBLE_FAULT = "CPU double-fault task-gate capture BIOS32 QEMU"
+USB_REPLUG = "USB keyboard re-plug native UEFI64 QEMU"
+USB_REPLUG_COMMAND = "python3 tools/checks/verify-usb-replug.py --run --route native-uefi64 --no-build"
 
 
 PROCESS_SCENARIOS = (
@@ -182,6 +185,11 @@ def failures(source: str, verify_net: str | None = None) -> list[str]:
             "python3", "tools/checks/verify-crash.py", "--run", "--route", "bios32",
             "--fault", "double-fault", "--no-build", "--selftest"]:
         errors.append("BIOS32 double-fault gate is missing, repeated or selects the wrong mode")
+    usb_commands = [line for line in logical_lines
+                    if line.startswith('run "' + USB_REPLUG + '"')]
+    if len(usb_commands) != 1 or shlex.split(usb_commands[0])[2:] != [
+            "$WT/kernel", *shlex.split(USB_REPLUG_COMMAND)]:
+        errors.append("USB re-plug gate is missing, repeated or selects the wrong runtime route")
     for title, normal_exit, orphan_order in PROCESS_SCENARIOS:
         commands = [line for line in logical_lines if line.startswith('run "' + title + '"')]
         if len(commands) != 1:
@@ -321,6 +329,18 @@ def selftest(source: str) -> None:
                      ("--fault double-fault", "--fault ud2"), (" --run", "")):
         expect_failure(source.replace(crash_command, crash_command.replace(old, new), 1),
                        "wrong-bios32-double-fault-mode-" + old.strip())
+    usb_title = 'run "' + USB_REPLUG + '"'
+    expect_failure(source.replace(usb_title, '# removed USB re-plug gate', 1),
+                   "deleted-usb-replug-gate")
+    for old, new in ((" --run", ""), ("native-uefi64", "bios32"),
+                     ("verify-usb-replug.py", "verify-crash.py")):
+        expect_failure(source.replace(USB_REPLUG_COMMAND,
+                                      USB_REPLUG_COMMAND.replace(old, new), 1),
+                       "wrong-usb-replug-mode-" + old.strip())
+    expect_failure(source.replace(usb_title + ' "$WT/kernel"', usb_title + ' "$WT"', 1),
+                   "wrong-usb-replug-directory")
+    expect_failure(source + '\n' + usb_title + ' "$WT/kernel" ' + USB_REPLUG_COMMAND + '\n',
+                   "duplicated-usb-replug-gate")
     for title, _normal_exit, _orphan_order in PROCESS_SCENARIOS:
         expect_failure(source.replace('run "' + title + '"', '# removed ' + title, 1),
                        "deleted-" + title.replace(" ", "-"))
@@ -390,6 +410,8 @@ def selftest(source: str) -> None:
         "deleted-rail-gate, deleted-user-process-command-gate, "
         "deleted-normal-exit-user-process-command-gate, "
         "deleted-sleeping-user-process-command-gate, "
+        "deleted-usb-replug-gate, wrong-usb-replug-mode, "
+        "wrong-usb-replug-directory, duplicated-usb-replug-gate, "
         "deleted-userspace-child-fault-and-wait-QEMU, "
         "deleted-userspace-child-signed-exit-and-wait-QEMU, "
         "deleted-userspace-live-orphan-adoption-QEMU, deleted-userspace-terminal-orphan-adoption-QEMU, "

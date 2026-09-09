@@ -558,6 +558,11 @@ void fault_stop32(const struct fault_frame32 *r)
  * to the double-fault TSS, so this runs on df_stack with the interrupted
  * context saved in the main TSS, not on any frame of ours. The error code
  * (always 0 for #DF) was pushed onto the new stack before entry. */
+/* A SECOND #DF while this task runs cannot be delivered: the task gate's TSS
+ * is Busy and the CPU would #GP on it - a triple fault. That is accepted on
+ * purpose: everything below halts without IRET (an IRET with NT=1 would
+ * task-switch back into the dead context), and the only faults reachable
+ * from here go through ordinary gates onto df_stack and halt the same way. */
 __attribute__((noreturn, noinline, used))
 void fault_df_task32(void)
 {

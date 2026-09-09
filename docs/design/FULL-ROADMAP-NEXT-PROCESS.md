@@ -4,10 +4,12 @@ Status: implementation started, with host evidence and fresh native-UEFI parent/
 
 [Current progress and proof boundaries](../evidence/process-spawn-wait-2026-09-08.md) · [Implemented ABI](userspace-spawn-wait-abi.md).
 Checkmarks below identify bounded target steps passed again by combined image
-`2bb71bad…`, after the allocator repair and reconciliation with main `bd75552`.
+`6ae68572…`, after the allocator and command-route repairs and reconciliation
+with main `9c4cb509`.
 The progress receipt records the exact host/QEMU split; allocation and release
 refusal injection remain host evidence. The rebuilt host suite, native boot,
 all four parent/child scenarios and external fault/exit/sleep probes pass.
+Native/BIOS32 USB re-plug and BIOS32 double-fault capture also pass locally.
 Earlier BIOS32 Run and 47-app lifecycle checks belong to `52dc8b9c…`. The full
 combined-source boot/app matrix and hosted closure remain open at
 `N-PROCESS.30`; passing the bounded local set does not close those larger gates.

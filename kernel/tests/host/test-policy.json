@@ -23,6 +23,7 @@
       "fstest",
       "fuzz",
       "gdt64test",
+      "ggttest",
       "gputest",
       "heaptest",
       "htmltest",

@@ -222,6 +222,12 @@ int main(void)
     ok(submit("fib 999999999999999999999999") == 1 &&
        term_cmd() == 102 && term_arg() == 2147483647,
        "an oversized numeric argument clamps without signed overflow");
+    ok(submit("userps") == 1 && term_cmd() == 130,
+       "process status keeps its command route");
+    ok(submit("userreap 2") == 1 && term_cmd() == 131 && term_arg() == 2,
+       "process reap keeps its route and slot argument");
+    ok(submit("usbstat") == 1 && term_cmd() == 132,
+       "read-only USB status has its own route, separate from process status");
     ok(submit("nonsense") == 0 && term_unknown() == 1,
        "an unknown typed command is reported, not silently accepted");
 

@@ -234,6 +234,18 @@ int xhci_find(void)
          * compiled there, where uptr is 32 bits and a shift by 32 is UB. */
         xbase = ((uptr)hi << 16 << 16) | (uptr)lo;
         if (!xbase) continue;
+        /* A 64-bit build can FORM the address; whether it can TOUCH it is
+         * the page tables' business. boot64.S identity-maps 4 GiB and no
+         * more, so a high BAR on the multiboot lane page-faulted on the
+         * first register read. Ask the tables first (2026-09-08). */
+        {
+            extern int vmm_identity_mapped(unsigned long long);
+            if (hi != 0 && !vmm_identity_mapped((unsigned long long)xbase)) {
+                xbar_high = 1;
+                xbase = 0;
+                continue;
+            }
+        }
 
         xhci_idx = i;
 
@@ -251,6 +263,15 @@ int xhci_find(void)
         xrt      = xbase + (rd32(xbase + XCAP_RTSOFF) & ~0x1Fu);
         xslots   = (int)(hcs1 & 0xFF);
         xports   = (int)((hcs1 >> 24) & 0xFF);
+        /* Per-port state here is 32 bits wide (port_slot[32], the re-plug
+         * bitmaps). A controller advertising more ports than that would have
+         * its high ports silently unmanaged - clamp, and say so. Real
+         * controllers stop around 26 (2026-09-08). */
+        if (xports > 31) {
+            zlt_event(ZLLOG_SUB_USB, ZLLOG_EV_DRIVER_STATE, ZLLOG_WARN,
+                      1u, (unsigned)xports, 31u);
+            xports = 31;
+        }
         /* CSZ: with it set every context structure is 64 bytes instead of 32.
          * Getting this wrong means every context field lands at the wrong
          * offset and nothing works, in a way that is very hard to see. */
@@ -689,6 +710,10 @@ static int event_poll(u32 *out_param_lo, u32 *out_status, u32 *out_ctrl, int spi
 static void kbd_event(u32 param, u32 status, u32 ctrl);  /* stage 5, below */
 static int ecm_event(u32 param, u32 status, u32 ctrl);   /* CDC-ECM, below */
 static int ecm_ready;
+static int ecm_port;           /* defined with the ECM state below; needed by port_owned_live */
+static int ecm_tx_inflight;    /* likewise */
+static int msc_ready;          /* mass storage, defined below; needed by port_detach */
+static int msc_init_port;
 
 /* Wait for the completion of ONE SPECIFIC command.
  *
@@ -697,6 +722,22 @@ static int ecm_ready;
  * reporting success for a command whose result it never saw, and staying one
  * event out of step forever. A Command Completion Event carries the address of
  * the Command TRB that produced it, so match on that and nothing else. */
+/* PORT EVENTS SEEN BY A WAITER ARE DEFERRED, NOT DROPPED (2026-09-08). The
+ * command and transfer waiters below take events off the one ring and used
+ * to discard every Port Status Change Event they met as "noise". Measured
+ * on the UEFI route: the plug event of a re-attached keyboard arrived while
+ * the unplug's own Disable Slot command was being waited for, was discarded,
+ * and the keyboard never came back. Waiters must not run port_change()
+ * themselves - it can issue commands, and a nested wait would eat the outer
+ * command's completion - so they note the port and xhci_poll() replays it. */
+static u32 port_deferred;
+static void port_change_defer(u32 param)
+{
+    int port = (int)((param >> 24) & 0xFF);
+    if (port >= 1 && port < 32) port_deferred |= 1u << port;
+}
+u32 xhci_port_deferred(void) { return port_deferred; }
+
 static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
 {
     for (int i = 0; i < 32; i++) {
@@ -713,7 +754,8 @@ static int cmd_wait(u32 trb_addr, u32 *status, u32 *ctrl, int spins)
             return 0;
         }
         if (t == TRB_TRANSFER_EVENT) { kbd_event(p, s, c); continue; }
-        if (t != TRB_CMD_COMPLETION) continue;      /* port change etc */
+        if (t == TRB_PORT_STATUS) { port_change_defer(p); continue; }
+        if (t != TRB_CMD_COMPLETION) continue;      /* anything else */
         /* p is a DEVICE address - the controller reports the address of the
          * Command TRB it completed. trb_addr is a KERNEL address. Identity
          * today; dma_kaddr() is what keeps this comparison true the day it is
@@ -770,7 +812,8 @@ static int xfer_wait_trbs(int slot, int dci, const u32 *trbs, int ntrbs,
         u32 p = 0, s = 0, c = 0;
         int t = event_poll(&p, &s, &c, spins);
         if (t == 0) return 0;                   /* nothing arrived at all */
-        if (t != TRB_TRANSFER_EVENT) continue;  /* port change etc - noise */
+        if (t == TRB_PORT_STATUS) { port_change_defer(p); continue; }
+        if (t != TRB_TRANSFER_EVENT) continue;  /* anything else */
 
         int es = (int)((c >> 24) & 0xFF);
         int ee = (int)((c >> 16) & 0x1F);
@@ -2358,6 +2401,11 @@ int xhci_kbd_init(void)
 
     for (int port = 1; port <= xports; port++) {
         if (!xhci_port_connected(port)) continue;
+        /* The pointer's port is live: xhci_enumerate() would hand back its
+         * cached slot and we would then read descriptors over a working
+         * device's EP0 for nothing. Re-plug re-runs this after bring-up, so
+         * the skip matters now (it did not while this ran once). */
+        if (ptr_ready && port == ptr_port) continue;
 
         int slot = xhci_enumerate(port);
         if (!slot || slot >= MAX_SLOTS) continue;
@@ -2728,23 +2776,167 @@ static void ptr_detach(void)
     ptr_ready = 0;
 }
 
+/* RE-PLUG (2026-09-08). A device that comes back gets a fresh slot, never
+ * the cached one: the unplug already disabled it (xhci_forget_port), and the
+ * plug is remembered here and acted on from xhci_poll() after a debounce -
+ * USB wants ~100 ms of stable connection before the reset that enumeration
+ * starts with. Nothing here enumerates inside the event handler. */
+static u32 replug_pending;          /* bit per port: plugged, not yet serviced */
+static u32 replug_seen_tick[32];    /* when the plug was seen, for the debounce */
+static int replug_count;            /* automatic re-attachments that succeeded */
+static int replug_tries;            /* debounced attempts, successful or not */
+/* diagnostics for the QEMU probe: what the last port event looked like */
+static u32 replug_events;           /* Port Status Change Events seen by port_change */
+static u32 replug_last_v;           /* PORTSC as read for the last one */
+static int replug_last_port;
+static int replug_skips;            /* serviced ports found not connected */
+static int replug_last_try;         /* the port the last attempt enumerated */
+static u32 replug_polls;            /* xhci_poll() calls, to see the frame pump is alive */
+/* EVENT-LESS FALLBACK. A plug the ring never announces (measured on the
+ * UEFI route: QEMU under OVMF posted nothing for the re-attached keyboard)
+ * is still visible in PORTSC. Every REPLUG_SCAN_TICKS the poll compares
+ * each port's CCS with what it saw last time; a port that became connected
+ * and belongs to no live device is treated exactly like a plug event. */
+static u32 port_conn_seen;          /* CCS bitmap at the last scan */
+static u32 replug_scan_tick;
+static int replug_scans_found;      /* plugs the scan noticed that no event did */
+#define REPLUG_SCAN_TICKS 50u       /* 0.5 s at the 100 Hz PIT */
+#define REPLUG_DEBOUNCE_TICKS 12u   /* 120 ms at the 100 Hz PIT */
+
+static int port_owned_live(int port)
+{
+    if (kbd_ready && port == kbd_port) return 1;
+    if (ptr_ready && port == ptr_port) return 1;
+    if (ecm_ready && port == ecm_port) return 1;
+    if (msc_ready && port == msc_init_port) return 1;
+    return 0;
+}
+
+/* Everything a port's device held, released; its slot given back. The ECM
+ * and mass-storage drivers had no unplug path at all: forgetting the slot
+ * under them left ecm_rx_post ringing a disabled slot (2026-09-08). */
+static void port_detach(int port)
+{
+    if (kbd_ready && port == kbd_port) kbd_detach();
+    if (ptr_ready && port == ptr_port) ptr_detach();
+    if (ecm_ready && port == ecm_port) { ecm_ready = 0; ecm_tx_inflight = 0; }
+    if (msc_ready && port == msc_init_port) msc_ready = 0;
+    xhci_forget_port(port);
+}
+
 static void port_change(u32 param)
 {
     int port = (int)((param >> 24) & 0xFF);
+    replug_events++;
+    replug_last_port = port;
     if (port < 1 || port > xports) return;
     uptr reg = xop + XOP_PORTSC(port);
     u32  v   = rd32(reg);
+    replug_last_v = v;
     /* Acknowledge exactly the change bits that are set. portsc_keep() drops
      * every RW1C bit, so this write clears nothing it did not intend to. */
     wr32(reg, portsc_keep(port) | (v & PORTSC_RW1C));
-    if (v & PORTSC_CCS) return;                /* still connected */
-    if (kbd_ready && port == kbd_port) kbd_detach();
-    if (ptr_ready && port == ptr_port) ptr_detach();
+    if (v & PORTSC_CCS) {
+        /* A BOUNCE: connected now, but the connect-status bit says it changed.
+         * The controller posts one event per 0->1 edge of CSC, so an unplug
+         * and re-plug that both happened before this read arrive as ONE event
+         * with CCS set. On a port a live device owns that is not "still
+         * here", it is "a different attachment": the device is back at
+         * address 0 and the old slot is dead. Detach and forget first, then
+         * treat it as the plug it also is (2026-09-08 adversarial pass). A
+         * port owned by a live driver never carries a stale CSC, because
+         * xhci_port_reset acknowledges every change bit on the way up. */
+        if ((v & PORTSC_CSC) && port_owned_live(port)) port_detach(port);
+        if ((v & PORTSC_CSC) && port < 32) {
+            replug_pending |= 1u << port;
+            replug_seen_tick[port] = idt_ticks();
+        }
+        return;
+    }
+    /* gone: release what it held, and give its slot back to the controller
+     * so the next enumeration of this port cannot be handed the dead one */
+    port_detach(port);
+    if (port < 32) replug_pending &= ~(1u << port);
+}
+
+u32 xhci_replug_pending(void) { return replug_pending; }
+int xhci_replug_count(void)   { return replug_count; }
+int xhci_replug_tries(void)   { return replug_tries; }
+int xhci_replug_events(void)  { return (int)replug_events; }
+int xhci_replug_last_v(void)  { return (int)replug_last_v; }
+int xhci_replug_last_port(void){ return replug_last_port; }
+int xhci_replug_skips(void)   { return replug_skips; }
+int xhci_replug_last_try(void) { return replug_last_try; }
+int xhci_replug_polls(void)   { return (int)replug_polls; }
+int xhci_owned_flag(void)     { return owned; }
+int xhci_replug_scans_found(void) { return replug_scans_found; }
+int xhci_port_conn_bitmap(void) { u32 c = 0; for (int p = 1; p < 32 && p <= xports; p++) if (xhci_port_connected(p)) c |= 1u << p; return (int)c; }
+int xhci_kbd_port(void)       { return kbd_port; }
+
+/* Bring back whatever was plugged in, once the debounce has passed. Runs from
+ * xhci_poll(), i.e. once per frame, never from the event handler. */
+
+static void replug_scan(u32 now)
+{
+    if (now - replug_scan_tick < REPLUG_SCAN_TICKS) return;
+    int first = replug_scan_tick == 0;
+    replug_scan_tick = now ? now : 1u;
+    u32 conn = 0;
+    for (int port = 1; port < 32 && port <= xports; port++)
+        if (xhci_port_connected(port)) conn |= 1u << port;
+    u32 fresh = conn & ~port_conn_seen;
+    u32 gone  = port_conn_seen & ~conn;
+    port_conn_seen = conn;
+    if (first) return;                  /* baseline only: what is plugged at bring-up was enumerated by bring-up */
+    /* the symmetric miss: a device that left without an event. Its owner
+     * would otherwise keep a dead slot and mistake the next plug for a
+     * bounce on a live port (2026-09-08 adversarial pass) */
+    for (int port = 1; port < 32; port++)
+        if ((gone & (1u << port)) && port_owned_live(port)) { port_detach(port); replug_scans_found++; }
+    for (int port = 1; port < 32; port++) {
+        if (!(fresh & (1u << port))) continue;
+        if (port_owned_live(port)) continue;
+        if (replug_pending & (1u << port)) continue;   /* the event got there first */
+        replug_pending |= 1u << port;
+        replug_seen_tick[port] = now;
+        replug_scans_found++;
+    }
+}
+
+static void replug_service(void)
+{
+    if (!owned) return;
+    u32 now = idt_ticks();
+    replug_scan(now);
+    if (!replug_pending) return;
+    for (int port = 1; port < 32 && port <= xports; port++) {
+        if (!(replug_pending & (1u << port))) continue;
+        if (now - replug_seen_tick[port] < REPLUG_DEBOUNCE_TICKS) continue;
+        replug_pending &= ~(1u << port);
+        if (!xhci_port_connected(port)) { replug_skips++; continue; }
+        replug_tries++;
+        replug_last_try = port;
+        int before = (kbd_ready ? 1 : 0) + (ptr_ready ? 2 : 0);
+        if (!kbd_ready) xhci_kbd_init();
+        if (!ptr_ready) xhci_ptr_init();
+        int after = (kbd_ready ? 1 : 0) + (ptr_ready ? 2 : 0);
+        if (after != before) replug_count++;
+    }
 }
 
 int xhci_poll(int max)
 {
-    if (!ptr_ready && !kbd_ready && !ecm_ready) return 0;
+    /* Drain whenever the controller is ours: with every device unplugged
+     * there is still the Port Status Change Event that announces the next
+     * plug, and returning early here is how a re-plug went unnoticed. */
+    replug_polls++;
+    if (!owned && !ptr_ready && !kbd_ready && !ecm_ready) return 0;
+    while (port_deferred) {
+        int port = __builtin_ctz(port_deferred);
+        port_deferred &= ~(1u << port);
+        port_change((u32)port << 24);
+    }
+    replug_service();
 
     int got = 0;
     for (int i = 0; i < max; i++) {
@@ -3834,13 +4026,17 @@ static void ecm_rx_post(int bi)
     doorbell((u32)ecm_slot, (u32)ecm_in_dci);
 }
 
+static int ecm_tx_inflight;
 static int ecm_event(u32 param, u32 status, u32 ctrl)
 {
     if (!ecm_ready) return 0;
     int slot = (int)((ctrl >> 24) & 0xFF);
     int dci = (int)((ctrl >> 16) & 0x1F);
     if (slot != ecm_slot) return 0;
-    if (dci == ecm_out_dci) return 1; /* stale completion after a TX timeout */
+    if (dci == ecm_out_dci) {          /* the TX completion, on time or stale */
+        ecm_tx_inflight = 0;
+        return 1;
+    }
     if (dci != ecm_in_dci) return 0;
 
     u32 pk = (u32)dma_kaddr(param);
@@ -3895,6 +4091,7 @@ int xhci_ecm_device_class_candidate(int cls)
 int xhci_ecm_init(void)
 {
     if (ecm_ready) return 1;
+    ecm_tx_inflight = 0;                /* a new slot rebuilds the OUT ring; the old TRB can never complete on it */
     ecm_init_stage = 1;
     ecm_config_index = -1;
     ecm_parse_bits = 0;
@@ -3987,9 +4184,18 @@ int xhci_ecm_init(void)
     return 0;
 }
 
+/* ONE TX BUFFER, SO ONE TRANSFER AT A TIME. A send that timed out has not
+ * finished: the controller may still be reading ECM_TX_BUF, and the old code
+ * let the next send overwrite it (and enqueue behind a TRB the controller
+ * still owned). Hold the buffer until the completion - on time or stale -
+ * arrives through ecm_event(), and refuse sends meanwhile (2026-09-08). */
+int xhci_ecm_tx_inflight(void) { return ecm_tx_inflight; }
+
 int xhci_ecm_send(const u8 *frame, int len)
 {
     if (!ecm_ready || !frame || len < 14 || len > (int)ECM_FRAME_MAX) return 0;
+    if (ecm_tx_inflight) { (void)xhci_poll(16); }       /* maybe it landed */
+    if (ecm_tx_inflight) { ecm_n_full++; return 0; }
     for (int i = 0; i < len; i++)
         *(volatile u8 *)(uptr)(ECM_TX_BUF + (u32)i) = frame[i];
     u32 ring = ECM_OUT_RING(ecm_slot);
@@ -4004,13 +4210,15 @@ int xhci_ecm_send(const u8 *frame, int len)
         ecm_out_enq = 0;
         ecm_out_cyc ^= 1;
     }
+    ecm_tx_inflight = 1;
     doorbell((u32)ecm_slot, (u32)ecm_out_dci);
     u32 status = 0, ctrl = 0;
     if (!xfer_wait_trbs_ms(ecm_slot, ecm_out_dci, &trb_addr, 1,
                            &status, &ctrl, 250)) {
-        ecm_n_full++;
+        ecm_n_full++;                 /* still in flight: the buffer stays held */
         return 0;
     }
+    ecm_tx_inflight = 0;
     ecm_last_cc = (int)((status >> 24) & 0xFF);
     if (ecm_last_cc != 1 && ecm_last_cc != 13) return 0;
     ecm_n_tx++;

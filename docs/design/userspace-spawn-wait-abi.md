@@ -1,10 +1,11 @@
 # Bounded userspace spawn/wait ABI
 
-Published in draft PR #15 through `4e7e283` on 2026-09-08. The rebuilt host
-suite and four native-UEFI parent/child QEMU scenarios pass on combined source
-`2bb71bad…`, which includes main's BIOS32 double-fault repair. Ordinary hosted
-boot checks pass; full hosted closure and the combined app matrix remain
-pending. Earlier BIOS32 Run and 47-app lifecycle proof belongs to `52dc8b9c…`.
+Published in draft PR #15 through `e373dcb`; current reconciliation includes
+main `9c4cb509`. Corrected combined source `6ae68572…` passes 78 host targets
+and all 11 focused boot/process checks, including four native-UEFI parent/child
+scenarios, native/BIOS32 USB re-plug and BIOS32 double-fault capture. Complete
+hosted closure and the combined app matrix remain pending. Earlier BIOS32 Run
+and 47-app lifecycle proof belongs to `52dc8b9c…`.
 See the dated execution receipt for exact identities and limits.
 [Execution receipt](../evidence/process-spawn-wait-2026-09-08.md) ·
 [Audited source contract](userspace-process-management-next.md) ·

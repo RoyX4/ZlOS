@@ -1,5 +1,19 @@
 # Project Status
 
+Current reconciliation, 2026-09-09: main's USB/display work landed at `9c4cb509`
+while the process publication was running. Its 15 conflicts with this branch
+are resolved locally. The first combined USB test exposed a command-number
+collision with process status; the repair has a failing-before/passing-after
+host regression. Corrected combined source `6ae68572…` passes 78 host targets
+(zero failed or unavailable) and all 11 focused boot/process checks, including
+USB re-plug on native UEFI64 and BIOS32 and the BIOS32 double-fault route.
+Four retained parent/child receipts bind the exact image and serial transcripts;
+each returns physical frame use from zero to zero with no allocator faults.
+The rolling-runner archive repair passed on GitHub at `e373dcb`; that older
+full run was cancelled to supersede it with this reconciled source. Fresh
+complete hosted closure remains pending. Details and limits are in
+the [process evidence record](evidence/process-spawn-wait-2026-09-08.md).
+
 Implementation started, 2026-09-08:
 [userspace spawn/wait progress and exact evidence](evidence/process-spawn-wait-2026-09-08.md).
 The first roadmap slice has code, failure/ownership tests and native UEFI
@@ -67,7 +81,7 @@ implementation state. They are not the same thing.
    `fable/whole-tree-sweep` with the gate that now pins it, the claims that
    survived, and what stayed open (physical boot above all).
    [`GUARDS-THAT-DID-NOT-GUARD.md`](GUARDS-THAT-DID-NOT-GUARD.md) §6 lists
-   the sixteen checks that sweep found reporting green while checking nothing (two added 2026-09-06).
+   the seventeen checks that sweep found reporting green while checking nothing (two added 2026-09-06, one 2026-09-08).
 8. [`oracle-harnesses-for-driver-verification.md`](oracle-harnesses-for-driver-verification.md)
    is the verification-harness plan for the H2 driver work: the phase-keyed modeset
    conformance oracle, IOMMU-as-verdict, and device-model fidelity — plus three harness

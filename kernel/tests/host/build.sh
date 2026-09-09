@@ -144,6 +144,13 @@ gcc -O2 -Wall -Wextra -DZL_64 -DSMP_SLOTS_EXPECT=$(grep -oP '^#define SMP_SLOTS\
     -o gdt64test gdt64test.c ../../boot/gdt64.c
 echo "built ./gdt64test     (run: ./gdt64test)"
 
+# The GGTT entries the bring-up overwrites come back byte-for-byte (2026-09-08):
+# intel.c against a 16 MiB anonymous BAR0 and a config hook that says "2 MiB
+# table". Pure table arithmetic, so it can be held exactly on the host.
+gcc $HOST_INCLUDES -O1 -g -Wall -DZL_64 -Wno-unused-function -o ggttest \
+    ggttest.c ../../src/drivers/display/intel.c
+echo "built ./ggttest       (run: ./ggttest)"
+
 # The tiled rasterizer against the scanline one it does NOT replace. Two ways
 # to fill a polygon are only worth having if they draw the same pixels, and a
 # rasterizer one pixel fat along an edge looks fine until two triangles share

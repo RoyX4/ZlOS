@@ -31,7 +31,7 @@ touching any `zl-linux-*` worktree.
 `docs/evidence/status-audits/STATE-OF-THE-PROJECT-2026-08-19.md`. Done
 2026-08-19; kept for method, not for work.
 
-**`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is twenty-one checks (five original, sixteen
+**`docs/GUARDS-THAT-DID-NOT-GUARD.md`** is twenty-two checks (five original, seventeen
 more in its §6 from the 2026-09-04 sweep) in this tree that
 reported green while checking nothing, each with the command that establishes
 it — including the `-w` claim this file used to make (below), a `check-memmap.sh`

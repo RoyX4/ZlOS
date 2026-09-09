@@ -221,6 +221,7 @@ unsigned long long vmm_pat_leaf_bits(int index, int huge)
 #define PD_ENTRIES  512            /* x 2 MiB = 1 GiB, the most one PD covers */
 #define TWO_MIB     0x200000ULL
 
+
 /* Our page directory. In .bss, which both 64-bit paths identity-map, so its
  * ADDRESS is its physical address - the assumption is stated because it is the
  * one thing here that is inherited rather than checked. On the multiboot path
@@ -246,6 +247,14 @@ static u64 fb_wc_pat;
 static u64 fb_wc_leaf_before, fb_wc_leaf_after;
 
 static u64 rd_cr3(void) { u64 v; __asm__ volatile("mov %%cr3, %0" : "=r"(v)); return v; }
+
+int vmm_walk_present(const unsigned long long *pml4, unsigned long long addr);
+int vmm_identity_mapped(unsigned long long addr)
+{
+    u64 cr3 = rd_cr3();
+    if (!(cr3 & ADDR_MASK)) return 0;
+    return vmm_walk_present((const u64 *)(uptr)(cr3 & ADDR_MASK), addr);
+}
 static void wr_cr3(u64 v) { __asm__ volatile("mov %0, %%cr3" :: "r"(v) : "memory"); }
 static int no_tlb_flush(void *context) { (void)context; return 1; }
 static int flush_named_cr3(void *context)
@@ -725,8 +734,36 @@ unsigned long long vmm_framebuffer_pat(void) { return 0; }
 unsigned long long vmm_framebuffer_leaf_before(void) { return 0; }
 unsigned long long vmm_framebuffer_leaf_after(void) { return 0; }
 void vmm_sync_framebuffer_pat(void) { }
+int vmm_identity_mapped(unsigned long long addr) { return addr < 0x100000000ULL; }
 
 #endif /* ZL_64 */
+
+/* Lane-independent: pagingtest builds this file without ZL_64. */
+/* Is `addr` reachable through THESE tables? A 4-level walk that stops at the
+ * first huge leaf. Pure - takes the PML4 as an argument - so pagingtest can
+ * hold it against a hand-built table; vmm_identity_mapped() below binds it
+ * to CR3. Written 2026-09-08 for the 64-bit multiboot lane, whose boot64.S
+ * identity map ends at 4 GiB: a device BAR above that (real xHCI, OVMF puts
+ * it at 0xC000000000) used to be taken and then page-faulted on its first
+ * register read. A walk says "unreachable" before the read. */
+int vmm_walk_present(const unsigned long long *pml4, unsigned long long addr)
+{
+    const u64 *t = pml4;
+    if (!t) return 0;
+    u64 e = t[(addr >> 39) & 0x1FF];
+    if (!(e & 1ULL)) return 0;
+    t = (const u64 *)(uptr)(e & 0x000FFFFFFFFFF000ULL);
+    e = t[(addr >> 30) & 0x1FF];
+    if (!(e & 1ULL)) return 0;
+    if (e & (1ULL << 7)) return 1;                       /* 1 GiB leaf */
+    t = (const u64 *)(uptr)(e & 0x000FFFFFFFFFF000ULL);
+    e = t[(addr >> 21) & 0x1FF];
+    if (!(e & 1ULL)) return 0;
+    if (e & (1ULL << 7)) return 1;                       /* 2 MiB leaf */
+    t = (const u64 *)(uptr)(e & 0x000FFFFFFFFFF000ULL);
+    e = t[(addr >> 12) & 0x1FF];
+    return (e & 1ULL) ? 1 : 0;
+}
 
 /* Called at boot after the heap knows what it wants. Prints one line with
  * ADDRESSES in it, the way fb.c and arena.c do, because "virtual memory is on"
