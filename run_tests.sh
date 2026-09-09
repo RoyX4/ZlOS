@@ -544,7 +544,7 @@ if command -v qemu-system-i386 >/dev/null; then
         if eout=$(./kernel/tools/checks/verify-efi.sh 2>&1); then
             echo "  ok    zlOS boots as its own UEFI application (64-bit)"
         else
-            echo "  FAIL  native-EFI gate"; echo "$eout" | head -8; fail=1
+            echo "  FAIL  native-EFI gate"; printf '%s\n' "$eout"; fail=1
         fi
     fi
 fi

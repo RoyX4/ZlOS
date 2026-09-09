@@ -262,7 +262,8 @@ def source_register_routes():
         if seam not in launch:
             fail(f"rail_launch does not route kernel-owned {app} through {owner}")
     cards = gen.function_body(kernel, "sys_cards")
-    if "wm_painted()" not in cards or "wm_frame()" in cards:
+    card_code = "\n".join(line.split("#", 1)[0] for line in cards.splitlines())
+    if "wm_painted()" not in card_code or "wm_frame()" in card_code:
         fail("System cards must read wm_painted(), never recursively drive wm_frame()")
     menu = gen.function_body(kernel, "menu_pick")
     for row, _, name in MENU_SURFACES:

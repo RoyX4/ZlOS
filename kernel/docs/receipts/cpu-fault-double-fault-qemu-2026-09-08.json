@@ -1,42 +1,42 @@
 {
   "artifact": {
     "path": "kernel/zlOS.iso",
-    "sha256": "869c047a98d27cfaa0f795aa01be0ffbb91149656b5006f66addbed1b4d322ff"
+    "sha256": "f58676450f45f007a7b608f0fe8b9982539e13e7af71fcdc3c13aca6593d56e5"
   },
-  "build_identity": "b428b5ae680e164a76c105eecfbc53607c412a3ba717facecf54303da6997a8b",
-  "crash_line": "ZLCRASH v=3 bytes=240 bits=32 regmask=0x00000000000000ff vec=8 haserr=1 err=0x0000000000000000 ip=0x00000000004f9090 cs=0x0000000000000008 flags=0x0000000000010046 sp=0x0000000000000000 ss=0x0000000000000038 cr2=0x0000000000000000 handlersp=0x00000000008427f4 stacklo=0x000000000083e8e0 stackhi=0x00000000008428e0 ax=0x0000000000560038 bx=0x0000000000832b60 cx=0x0000000000000000 dx=0x0000000000567ff6 si=0x0000000000567ff6 di=0x0000000000568003 bp=0x0000000000832af8 rsp=0x0000000000000000 r8=0x0000000000000000 r9=0x0000000000000000 r10=0x0000000000000000 r11=0x0000000000000000 r12=0x0000000000000000 r13=0x0000000000000000 r14=0x0000000000000000 r15=0x0000000000000000 checksum=0xdf1b042d5356f3ec END\n",
-  "crash_line_sha256": "7c82157800eecd1f4af8d91beba500c50fea69903f725bc8a5a9325030081f6c",
+  "build_identity": "de24460febe45820fd1756c3689d790b273c38cc945ca2454fdc9c7afc7e6f18",
+  "crash_line": "ZLCRASH v=3 bytes=240 bits=32 regmask=0x00000000000000ff vec=8 haserr=1 err=0x0000000000000000 ip=0x00000000004fbabc cs=0x0000000000000008 flags=0x0000000000010046 sp=0x0000000000000000 ss=0x0000000000000010 cr2=0x0000000000000000 handlersp=0x00000000008485f4 stacklo=0x00000000008446e0 stackhi=0x00000000008486e0 ax=0x0000000000000000 bx=0x0000000000838720 cx=0x0000000000000000 dx=0x000000000056c2a2 si=0x000000000056c2a2 di=0x000000000056c2af bp=0x00000000008386b8 rsp=0x0000000000000000 r8=0x0000000000000000 r9=0x0000000000000000 r10=0x0000000000000000 r11=0x0000000000000000 r12=0x0000000000000000 r13=0x0000000000000000 r14=0x0000000000000000 r15=0x0000000000000000 checksum=0x3d779524d7856a5f END\n",
+  "crash_line_sha256": "3ab4ac17b4f7c570c6aecd6448ec8731f2bd7f51d5f4d8df97e865daeb3f7623",
   "evidence": "QEMU target execution of the exact current artifact; architectural vector/error shape, pre-prologue registers, bounded schema, checksum and halted state independently verified; the double-fault case additionally binds serial handler SP and QEMU halted RSP to IST1",
   "fault_case": "double-fault",
   "guest_halted_after_record": true,
   "halted_cpu": {
-    "register_dump_sha256": "a52c9cdd79770220e3c2ab04250604d34afceeddf61e13259495fbf518274505",
-    "rsp": 8660992
+    "register_dump_sha256": "be6dc7fa3925a8f1ac4b2d6badb21e0c5190bdc85aa3b2db1945c9ad7720a655",
+    "rsp": 8685056
   },
   "kernel": {
     "path": "kernel/kernel.elf",
-    "sha256": "031cc7fd05bf8f3929ea7051436bc9e4e3eb10aa3f222cae2d49e525bbe3b921"
+    "sha256": "04a8cce7b2a2ccf7533514949a57ded7acb94c9cabe895cd87a512232e442666"
   },
   "kernel_symbol_ip": null,
   "record": {
-    "ax": 5636152,
+    "ax": 0,
     "bits": 32,
-    "bp": 8596216,
-    "bx": 8596320,
+    "bp": 8619704,
+    "bx": 8619808,
     "bytes": 240,
-    "checksum": 16076447887547364332,
+    "checksum": 4429172744009378399,
     "cr2": 0,
     "cs": 8,
     "cx": 0,
-    "di": 5668867,
-    "dx": 5668854,
-    "emergency_stack_high": 8661216,
-    "emergency_stack_low": 8644832,
+    "di": 5685935,
+    "dx": 5685922,
+    "emergency_stack_high": 8685280,
+    "emergency_stack_low": 8668896,
     "error": 0,
     "flags": 65606,
-    "handler_sp": 8660980,
+    "handler_sp": 8685044,
     "has_error": 1,
-    "ip": 5214352,
+    "ip": 5225148,
     "r10": 0,
     "r11": 0,
     "r12": 0,
@@ -47,9 +47,9 @@
     "r9": 0,
     "register_mask": 255,
     "register_sp": 0,
-    "si": 5668854,
+    "si": 5685922,
     "sp": 0,
-    "ss": 56,
+    "ss": 16,
     "vector": 8,
     "version": 3
   },
@@ -62,16 +62,16 @@
   },
   "schema": "zlos.cpu-fault-qemu-receipt.v3",
   "source_sha256": {
-    "freestanding/runtime_kernel.c": "1e18cbd936bae6f15161fd9192a00c6be9d2da2981801da54c70c3c5a1c5cc32",
-    "kernel/boot/gdt.c": "09246f7a9509bf627622ece2abb482e334ada7c29bf86b9d9ccd57b6f3967ba6",
+    "freestanding/runtime_kernel.c": "15f8e128d06b11875d3b0d68035e1c19a760c5eb97ff863a687bc8ad59fa6672",
+    "kernel/boot/gdt.c": "c7ea71be4e5c8168d48b5ed34d74b74f645188b2ed14c9ab26c1d983d15ea8c1",
     "kernel/boot/gdt64.c": "22362c5f2e7dd4f2abfed55694c8b3f93da0e3af1a3de2cdb52c5ecfc0d25284",
-    "kernel/src/arch/x86/idt.c": "3356fd8e105cd009706ca0b292bb25ac61a434c3e79d16656f90601c0871086b",
+    "kernel/src/arch/x86/idt.c": "a3031bd63b9b94b5087fa248fba78b494156cd249f223450fe0e55cd8459aafe",
     "kernel/src/core/crash.c": "6bb91ac589b455fba9f6c56865872e4c8a98513aee6621a384cf3b369c95be99",
     "kernel/src/core/crash.h": "ed6b4e46f425516e1b54af640aed73f1b5619cae7e35d010de268ef7f3658215",
-    "kernel/src/graphics/windowing/term.c": "6c79b6dbbf93f7e4dd77424481efb56959ce55dd10c2b84b49ef4ceda0b14470",
-    "kernel/src/kernel.zl": "c36a72b5da75e8464ffb9d051b0692890dfdf46960c98c8a672296e3f363a658",
-    "kernel/tools/checks/verify-crash.py": "97837adec2f783cc44124cbce16a260244a2daaf0b6df795b85e66f9b14cc9ed"
+    "kernel/src/graphics/windowing/term.c": "a588af552a09a49a45a2979320728f414857eef905aa93f84a0abc7a514ffda1",
+    "kernel/src/kernel.zl": "2b2c6fb29fbf56c6f663c9ce22c07aa7029b05726ffe3759b00faa530c581ac8",
+    "kernel/tools/checks/verify-crash.py": "dad9157a3835f4b14acb394f5d8af927de83610920fc8a5b24179d872a7b3b27"
   },
-  "trigger": "stack-segment fault on a one-byte SS whose delivery faults again, through typed crashdftest diagnostic",
+  "trigger": "null SS load causes general protection whose not-present gate causes a second contributory exception, through typed crashdftest diagnostic",
   "weakest_link": "the exercised matrix remains bounded; stack unwinding, durable dump storage, recovery policy and physical fault injection remain unimplemented"
 }

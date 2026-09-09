@@ -98,7 +98,8 @@ Open work remains:
 - production accounting covers only the fixed two-slot native-UEFI64 process
   path and its bounded anonymous window;
 - typed owner IDs are not per-allocation origin or call-site provenance;
-- general page-table services, drivers and persistent process creation do not consume it;
+- persistent two-slot process creation consumes it, but general page-table
+  services and drivers do not;
 - the ownership table is bounded to 320 MiB through the first 1 GiB;
 - no segmented metadata supports memory above 1 GiB;
 - no concurrent, interrupt-context or SMP locking contract exists;

@@ -26,6 +26,8 @@ Stable test inputs consumed by zlOS harnesses.
 ## Direct tracked contents
 
 - `golden.txt`
+- `user-spawn-child.asm`
+- `user-spawn-parent.asm`
 
 This inventory is local orientation, not a completion claim. See the [code map](../../../docs/CODE-MAP.md)
 for repository-wide ownership.

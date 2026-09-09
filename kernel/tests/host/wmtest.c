@@ -208,6 +208,7 @@ void zl_putc_pub(char c) { (void)c; }        /* fb.c's boot line: not wanted her
  * simply produces nothing. */
 #define APP_COLOUR(a) (0x00110000u * (unsigned)(a) + 0x00002200u)
 static int draw_calls[8];
+static int draw_close_window = -1;
 static unsigned int draw_variant[8];
 static int tick_returns;            /* what app_tick claims each frame */
 static int last_event_app = -1, last_event_type, last_event_x, last_event_y;
@@ -215,6 +216,11 @@ static int last_event_app = -1, last_event_type, last_event_x, last_event_y;
 static void t_draw(int app, int x, int y, int w, int h, int focused)
 {
     (void)focused;
+    if (draw_close_window >= 0 && wm_win_app(draw_close_window) == app) {
+        int closing = draw_close_window;
+        draw_close_window = -1;
+        wm_close(closing);
+    }
     if (app >= 0 && app < 8) draw_calls[app]++;
     fb_fill_px(x, y, w, h, APP_COLOUR(app) ^ draw_variant[app]);
     fb_fill_px(x - 500, y - 500, 400, 400, 0x00FF00FF);   /* must vanish */
@@ -1611,6 +1617,34 @@ int main(void)
         ok("control: the header foot rule IS drawn, inside the frame", present);
 
         wm_close(win);
+        frame();
+    }
+
+    /* A close requested while drawing belongs to that window's lifetime.
+     * An explicit close or a WM reset before the next frame must not transfer
+     * that request to a different app which reuses the same slot. */
+    for (int reset = 0; reset < 3; reset++) {
+        for (int i = 0; i < WM_MAX; i++) wm_close(i);
+        frame();
+        int old = wm_open(1, "self-close", 100, 100, 300, 200);
+        draw_close_window = old;
+        for (int n = 0; n < ANIM_SETTLE && draw_close_window >= 0; n++) frame();
+        ok("a draw-hook close waits until drawing has finished",
+           old >= 0 && draw_close_window == -1 && wm_is_open(old));
+        if (reset == 2) {
+            frame();
+            ok("an uncancelled draw-hook close still runs on the next frame",
+               !wm_is_open(old));
+            continue;
+        }
+        if (reset) wm_init(); else wm_close(old);
+        int replacement = wm_open(2, "replacement", 100, 100, 300, 200);
+        ok("control: the replacement reuses the old window slot", replacement == old);
+        frame();
+        ok(reset ? "WM reset cancels pending closes from the old table" :
+                   "explicit close cancels the old deferred close before slot reuse",
+           wm_is_open(replacement) && wm_win_app(replacement) == 2);
+        wm_close(replacement);
         frame();
     }
 

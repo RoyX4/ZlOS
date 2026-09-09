@@ -36,6 +36,35 @@ the part that makes a change legible later, and the part nobody writes down.
 
 </details>
 
+
+## 2026-09-08 — feat: add bounded userspace spawn and wait with full-system roadmap (a5c3cac)
+
+`codex/spawn-wait-reconcile-2026-09-08` · 121 files changed, 358398 insertions(+), 904 deletions(-)
+
+| | |
+|---|---|
+| EFI truncation sites | 0 |
+| pinned engine divergences | 4 |
+| baselined doc rot | 0 |
+| docs vs tree | STALE |
+
+<details><summary>96 file(s)</summary>
+
+- `docs/PROJECT-STATUS.md`
+- `docs/design/FULL-ROADMAP-COVERAGE.md`
+- `docs/design/FULL-ROADMAP-DECISIONS.md`
+- `docs/design/FULL-ROADMAP-MP-00.md`
+- `docs/design/FULL-ROADMAP-MP-01.md`
+- `docs/design/FULL-ROADMAP-MP-02.md`
+- `docs/design/FULL-ROADMAP-MP-03.md`
+- `docs/design/FULL-ROADMAP-MP-04.md`
+- `docs/design/FULL-ROADMAP-MP-05.md`
+- `docs/design/FULL-ROADMAP-MP-06.md`
+- `docs/design/FULL-ROADMAP-MP-07.md`
+- `docs/design/FULL-ROADMAP-MP-08.md`
+- _…and 84 more_
+
+</details>
 ## 2026-09-08 — docs: journal/TODO ride-along; repo-relative paths in GUARDS §6; host README capsule [skip ci] (02180af)
 
 `main` · 4 files changed, 35 insertions(+), 2 deletions(-)

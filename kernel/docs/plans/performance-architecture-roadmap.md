@@ -176,8 +176,8 @@ thesis; they should not be sold as a magic current-frame-rate switch.
 Software status on 2026-08-22: orders 1--7 are implemented and host/QEMU
 gated; order 8 has cooperative and PIT-preemptive two-process CR3/kernel-stack
 switching, bounded IPC, and an owner-bound text/window/input ABI plus the
-hostile/file ABI, but not a persistent spawn/reap desktop service or
-pixel/configure window depth;
+hostile/file ABI and a bounded persistent kernel-owned spawn/observe/reap desktop
+service, but not a userspace process-management ABI or pixel/configure window depth;
 order 9 has generic NIC selection, DHCP, virtio, e1000/e1000e and xHCI
 CDC-ECM, browser persistence, triple-duplicate-ACK fast retransmit, and guarded
 HTTP/1.0 keep-alive reuse, but not physical CDC-ECM/tether or I219 carrier;

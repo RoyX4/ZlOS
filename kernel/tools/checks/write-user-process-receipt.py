@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,15 @@ IDENTITY = KERNEL_ROOT / "metadata/build-identity.json"
 ARTIFACT = KERNEL_ROOT / "zlOS-usb.img"
 HARNESS = KERNEL_ROOT / "tools/checks/verify-efi.sh"
 USERMODE = KERNEL_ROOT / "src/arch/x86/usermode.c"
+PROCESS_LIFECYCLE_HEADER = KERNEL_ROOT / "src/core/process_lifecycle.h"
+PROCESS_LIFECYCLE = KERNEL_ROOT / "src/core/process_lifecycle.c"
+PROCESS_LIFECYCLE_TEST = KERNEL_ROOT / "tests/host/processlifecycletest.c"
+SCHEDULER_POLICY_HEADER = KERNEL_ROOT / "src/core/scheduler_policy.h"
+SCHEDULER_POLICY = KERNEL_ROOT / "src/core/scheduler_policy.c"
+SCHEDULER_POLICY_TEST = KERNEL_ROOT / "tests/host/schedulerpolicytest.c"
+PROCESS_SERVICE_HEADER = KERNEL_ROOT / "src/core/user_process_service.h"
+PROCESS_SERVICE = KERNEL_ROOT / "src/core/user_process_service.c"
+PROCESS_SERVICE_TEST = KERNEL_ROOT / "tests/host/userprocessservicetest.c"
 PROCESS_MEMORY_HEADER = KERNEL_ROOT / "src/core/process_memory.h"
 PROCESS_MEMORY = KERNEL_ROOT / "src/core/process_memory.c"
 PROCESS_MEMORY_TEST = KERNEL_ROOT / "tests/host/processmemorytest.c"
@@ -36,6 +46,18 @@ GDT = KERNEL_ROOT / "boot/gdt64.c"
 ABI_DOC = KERNEL_ROOT / "docs/architecture/system/user-process-abi.md"
 DEFAULT_OUTPUT = KERNEL_ROOT / "docs/receipts/user-process-native-uefi64-qemu-2026-08-29.json"
 
+# Reuse the generator's validation: evidence and Ring-3 admission share one
+# syscall number contract, including the first number outside its range.
+SYSCALL_GENERATOR = KERNEL_ROOT / "tools/generators/gen-user-syscalls.py"
+_spec = importlib.util.spec_from_file_location("user_syscall_generator", SYSCALL_GENERATOR)
+_syscalls = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_syscalls)
+SYSCALL_VALUE = _syscalls.load()
+_syscalls.validate(SYSCALL_VALUE)
+SYSCALL_VERSION = SYSCALL_VALUE["abi_version"]
+SYSCALL_FIRST = SYSCALL_VALUE["entries"][0]["number"]
+SYSCALL_LAST = SYSCALL_VALUE["entries"][-1]["number"]
+
 ASSERTIONS = (
     {
         "id": "ring3-syscall-lifecycle",
@@ -49,9 +71,17 @@ ASSERTIONS = (
     {
         "id": "unknown-syscall-admission",
         "marker": "syscall ABI: zero/gap/sign-bit/max refused with ENOSYS",
-        "abi_version": 1,
-        "probes": [0, 25, 1 << 63, (1 << 64) - 1],
+        "abi_version": SYSCALL_VERSION,
+        "probes": [0, SYSCALL_LAST + 1, 1 << 63, (1 << 64) - 1],
         "result": "ENOSYS",
+    },
+    {
+        "id": "generation-safe-process-identity",
+        "marker": "<- process lifecycle generation reuse rejected the stale handle and retained exact exit custody",
+        "handle_fields": ["slot", "generation"],
+        "stale_handle_refused": True,
+        "exit_status_retained": True,
+        "observed_exit_status": -7,
     },
     {
         "id": "anonymous-reserve-commit-release",
@@ -109,6 +139,17 @@ ASSERTIONS = (
         "sibling_exited": True,
     },
     {
+        "id": "fault-and-exit-custody",
+        "marker": "<- process lifecycle retained exact GP-fault custody and independent sibling exit",
+        "fault_fields": ["vector", "error", "address"],
+        "fault_vector": 13,
+        "fault_error": 0,
+        "fault_address": 0,
+        "fault_exit_distinct": True,
+        "sibling_exit_retained": True,
+        "sibling_exit_status": 7,
+    },
+    {
         "id": "lower-stack-guard-fault-containment",
         "marker": "<- lower stack guard PF error 6 at exact address; sibling G exited",
         "offender_vector": 14,
@@ -152,10 +193,40 @@ ASSERTIONS = (
         "two_processes_disjoint": True,
         "baseline_restored": True,
     },
+    {
+        "id": "process-identity-reclamation",
+        "marker": "<- process lifecycle slots reaped with generation history retained",
+        "live_slots_after_reap": 0,
+        "generation_history_retained": True,
+        "resource_release_before_reap": True,
+    },
+    {
+        "id": "persistent-process-service",
+        "marker": "<- persistent service scheduled cooperative ST12 across four kernel turns; exact exit custody reaped",
+        "processes": 2,
+        "kernel_turns": 4,
+        "trace": "ST12",
+        "selection": "round-robin exact lifecycle handle",
+        "turn_boundary": "cooperative yield or exit; timer preemption is proved by the independent non-yielding-process assertion",
+        "exit_statuses": [11, 22],
+        "terminal_custody_observed": True,
+        "scheduler_detached_before_identity_reap": True,
+        "physical_frame_baseline_restored": True,
+    },
 )
 
 SOURCE_CONTRACTS = {
     "process_slots": 2,
+    "process_identity": "generation-tagged slot handle",
+    "process_id_reuse": "allowed only after reap; stale generation rejected",
+    "generation_exhaustion": "slot permanently retired before wrap",
+    "termination_record": "distinct signed exit status or exact fault vector/error/address",
+    "reap_order": "resources first, identity last; terminal-parent children adopted by kernel",
+    "persistent_service": "one bounded preemptible Ring-3 turn per kernel work-loop call",
+    "scheduler_owner": "exact generation-tagged lifecycle handle",
+    "scheduler_policy": "fixed-capacity round robin with one running owner",
+    "scheduler_accounting": "64-bit saturating run, dispatch, switch and work counters",
+    "scheduler_failure": "lifecycle-policy disagreement fail-stops subsequent work",
     "user_code": "read-execute",
     "user_stack": "read-write-no-execute",
     "lower_stack_guard_pte": "absent",
@@ -179,9 +250,9 @@ SOURCE_CONTRACTS = {
     "anonymous_reclamation": "atomic unmap before owner-checked PMM release",
     "hardware_pte_bits": "accessed and dirty accepted without weakening ownership checks",
     "syscall_numbers": {
-        "abi_version": 1,
-        "first": 1,
-        "last": 24,
+        "abi_version": SYSCALL_VERSION,
+        "first": SYSCALL_FIRST,
+        "last": SYSCALL_LAST,
         "dispatch": "generated unsigned admission",
         "unknown_result": "ENOSYS",
     },
@@ -217,6 +288,10 @@ def validate_log(log: str) -> None:
         "sibling fault isolation FAILED",
         "lower stack guard fault containment FAILED",
         "guarded supervisor TSS stack proof FAILED",
+        "process lifecycle generation/exit custody FAILED",
+        "process lifecycle fault/exit custody FAILED",
+        "process lifecycle final teardown FAILED",
+        "persistent user-process service FAILED",
         "process frame reclamation FAILED",
         "process memory accounting FAILED",
     )
@@ -228,6 +303,20 @@ def validate_log(log: str) -> None:
 def expected_files() -> list[dict]:
     return [
         {"path": "kernel/src/arch/x86/usermode.c", "sha256": digest(USERMODE)},
+        {"path": "kernel/src/arch/x86/user_image64.c", "sha256": digest(KERNEL_ROOT / "src/arch/x86/user_image64.c")},
+        {"path": "kernel/src/arch/x86/user_image64.h", "sha256": digest(KERNEL_ROOT / "src/arch/x86/user_image64.h")},
+        {"path": "kernel/src/arch/x86/user_process_abi.h", "sha256": digest(KERNEL_ROOT / "src/arch/x86/user_process_abi.h")},
+        {"path": "kernel/tests/host/userspawnwaittest.c", "sha256": digest(KERNEL_ROOT / "tests/host/userspawnwaittest.c")},
+        {"path": "kernel/tools/generators/gen-user-syscalls.py", "sha256": digest(KERNEL_ROOT / "tools/generators/gen-user-syscalls.py")},
+        {"path": "kernel/src/core/process_lifecycle.h", "sha256": digest(PROCESS_LIFECYCLE_HEADER)},
+        {"path": "kernel/src/core/process_lifecycle.c", "sha256": digest(PROCESS_LIFECYCLE)},
+        {"path": "kernel/tests/host/processlifecycletest.c", "sha256": digest(PROCESS_LIFECYCLE_TEST)},
+        {"path": "kernel/src/core/scheduler_policy.h", "sha256": digest(SCHEDULER_POLICY_HEADER)},
+        {"path": "kernel/src/core/scheduler_policy.c", "sha256": digest(SCHEDULER_POLICY)},
+        {"path": "kernel/tests/host/schedulerpolicytest.c", "sha256": digest(SCHEDULER_POLICY_TEST)},
+        {"path": "kernel/src/core/user_process_service.h", "sha256": digest(PROCESS_SERVICE_HEADER)},
+        {"path": "kernel/src/core/user_process_service.c", "sha256": digest(PROCESS_SERVICE)},
+        {"path": "kernel/tests/host/userprocessservicetest.c", "sha256": digest(PROCESS_SERVICE_TEST)},
         {"path": "kernel/src/core/process_memory.h", "sha256": digest(PROCESS_MEMORY_HEADER)},
         {"path": "kernel/src/core/process_memory.c", "sha256": digest(PROCESS_MEMORY)},
         {"path": "kernel/tests/host/processmemorytest.c", "sha256": digest(PROCESS_MEMORY_TEST)},
@@ -249,9 +338,13 @@ def host_observation() -> dict:
     receipt = json.loads(HOST_RECEIPT.read_text())
     identity = json.loads(IDENTITY.read_text())["identity_sha256"]
     if receipt.get("build_identity") != identity:
-        raise ValueError("processmemorytest host receipt is from a foreign build")
+        raise ValueError("user-process host receipt is from a foreign build")
     observed = {}
-    for target, minimum in (("processmemorytest", 100), ("anonmemorytest", 240)):
+    for target, minimum in (("processlifecycletest", 80),
+                            ("schedulerpolicytest", 100),
+                            ("userprocessservicetest", 100),
+                            ("processmemorytest", 100),
+                            ("anonmemorytest", 240)):
         rows = [row for row in receipt.get("results", [])
                 if row.get("name") == target]
         if len(rows) != 1 or rows[0].get("status") != "passed":
@@ -302,7 +395,7 @@ def build(log_path: Path) -> dict:
         "assertions": assertions,
         "source_contracts": copy.deepcopy(SOURCE_CONTRACTS),
         "known_gaps": [
-            "fixed two-process diagnostic rather than persistent process lifecycle services",
+            "external userspace spawn/wait is covered by its separate disk-loaded parent/child receipts, not this built-in boot receipt",
             "no SMEP or SMAP enablement receipt",
             "kernel-stack guards are selected and use-observed but not overflow-fault-injected",
             "the emergency IST stack has no guard page",
@@ -314,8 +407,8 @@ def build(log_path: Path) -> dict:
             "no current physical-hardware user-process receipt",
         ],
         "evidence_ceiling": (
-            "exact current native-UEFI64 QEMU artifact plus source-bound fixed-layout "
-            "and bounded kernel-stack-use contracts; not a general process service, stable compatibility promise, or "
+            "exact current native-UEFI64 QEMU artifact plus source-bound fixed-layout, "
+            "bounded persistent-service and kernel-stack-use contracts; not a userspace-managed general process API, stable compatibility promise, or "
             "physical-hardware qualification"
         ),
         "generator": {
@@ -376,6 +469,10 @@ def selftest(value: dict) -> None:
     mapping = copy.deepcopy(value)
     mapping["source_contracts"]["user_stack"] = "read-write-execute"
     mutations["invented-executable-stack"] = mapping
+    generation = copy.deepcopy(value)
+    generation["source_contracts"]["generation_exhaustion"] = \
+        "generation wraps to one"
+    mutations["lost-generation-exhaustion"] = generation
     boundary = copy.deepcopy(value)
     next(assertion for assertion in boundary["assertions"]
          if assertion["id"] == "privilege-and-user-copy-boundary")[
@@ -398,6 +495,21 @@ def selftest(value: dict) -> None:
     lifecycle["assertions"] = [assertion for assertion in lifecycle["assertions"]
                                if assertion["id"] != "process-frame-reclamation"]
     mutations["missing-process-reclamation"] = lifecycle
+    identity_custody = copy.deepcopy(value)
+    identity_custody["assertions"] = [
+        assertion for assertion in identity_custody["assertions"]
+        if assertion["id"] != "generation-safe-process-identity"]
+    mutations["missing-generation-custody"] = identity_custody
+    fault_custody = copy.deepcopy(value)
+    next(assertion for assertion in fault_custody["assertions"]
+         if assertion["id"] == "fault-and-exit-custody")[
+             "fault_address"] = 0xdeadbeef
+    mutations["invented-gp-fault-address"] = fault_custody
+    identity_reap = copy.deepcopy(value)
+    next(assertion for assertion in identity_reap["assertions"]
+         if assertion["id"] == "process-identity-reclamation")[
+             "resource_release_before_reap"] = False
+    mutations["lost-resource-before-reap"] = identity_reap
     accounting = copy.deepcopy(value)
     next(assertion for assertion in accounting["assertions"]
          if assertion["id"] == "process-memory-accounting")[

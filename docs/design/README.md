@@ -16,6 +16,14 @@ references. It is not an implementation-status folder.
 Current delivery status lives in [`../PROJECT-STATUS.md`](../PROJECT-STATUS.md)
 and [`../program/`](../program/).
 
+## Complete system planning
+
+[Full-system roadmap](FULL-SYSTEM-ROADMAP.md) is the 2026-09-08 planning
+expansion of the complete programme: 21 phase chapters, all feature/contract/
+target requirements, explicit unresolved decisions, and the detailed next
+process-management sequence. Its [coverage report](FULL-ROADMAP-COVERAGE.md)
+separates structural validation from implementation proof.
+
 ## Desktop redesign archive
 
 **Status:** historical design exploration preserved as input and evidence. The

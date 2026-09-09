@@ -9,6 +9,18 @@
 static unsigned char backing[TEST_PAGES][PMM_PAGE_BYTES];
 static int checks;
 static int failures;
+static unsigned int refuse_release_at;
+static unsigned int release_calls;
+
+/* Inject a refusal at the allocator boundary, retaining the real allocator's
+ * pages and ownership. Normal calls still reach the shipping PMM. */
+int __real_pmm_release(pmm_u64 address, unsigned int owner);
+int __wrap_pmm_release(pmm_u64 address, unsigned int owner)
+{
+    if (refuse_release_at && ++release_calls == refuse_release_at)
+        return PMM_E_OWNER;
+    return __real_pmm_release(address, owner);
+}
 
 void zl_putc_pub(char c) { putchar(c); }
 
@@ -119,6 +131,39 @@ static void test_failure_atomic_acquire(void)
     }
 }
 
+static void test_rollback_release_refusal(void)
+{
+    for (unsigned int pages = 1; pages < PROCESS_MEMORY_PAGE_COUNT; pages++) {
+        for (unsigned int refused = 1; refused <= pages; refused++) {
+            struct process_memory memory = {0};
+            expect(setup_pages(pages) == PMM_OK, "rollback refusal pool initialized");
+            release_calls = 0;
+            refuse_release_at = refused;
+            int status = process_memory_acquire(&memory, PROCESS_MEMORY_OWNER_BASE);
+            refuse_release_at = 0;
+            unsigned int retained = pages - refused + 1;
+            expect(status == PROCESS_MEMORY_E_CORRUPT && release_calls == refused,
+                   "rollback stops at the injected allocator refusal");
+            expect(memory.acquired == retained && memory.owner == PROCESS_MEMORY_OWNER_BASE,
+                   "refused rollback retains the exact nonzero ownership count");
+            expect(pmm_used_pages() == retained && pmm_free_pages() == pages - retained &&
+                   pmm_check() == 0,
+                   "allocator still owns every refused or unvisited frame");
+            for (unsigned int i = 0; i < PROCESS_MEMORY_PAGE_COUNT; i++) {
+                if (i < retained)
+                    expect(memory.pages[i] &&
+                           pmm_page_owner(memory.pages[i]) == PROCESS_MEMORY_OWNER_BASE,
+                           "retained frame remains discoverable by its process owner");
+                else
+                    expect(!memory.pages[i], "released and unacquired roles stay empty");
+            }
+            expect(process_memory_check(&memory) == PROCESS_MEMORY_E_CORRUPT &&
+                   !process_memory_ready(&memory),
+                   "partial rollback custody is never a runnable or empty image");
+        }
+    }
+}
+
 static void test_two_processes_and_foreign_owner(void)
 {
     struct process_memory first = {0};
@@ -187,6 +232,7 @@ int main(void)
 {
     test_single_lifecycle();
     test_failure_atomic_acquire();
+    test_rollback_release_refusal();
     test_two_processes_and_foreign_owner();
     test_invalid_states();
     printf("processmemorytest: %d checks, %d failures\n", checks, failures);

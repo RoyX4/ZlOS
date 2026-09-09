@@ -550,8 +550,8 @@ def hydrate(lock: dict, cache_root: Path) -> dict:
             "not off-host custody, publisher attestation, licensing authority or a hermetic rebuild"
         ),
         "weakest_link": (
-            "the archive cache exists only on this host and two stale Linux archives were recovered "
-            "from the Kali pool outside the current signed rolling index"
+            "the archive cache belongs to the configured host; the receipt counters show any "
+            "binaries or sources recovered outside the current signed rolling indexes"
         ),
     }
     receipt["archive_manifest_sha256"] = canonical_sha256(archive_manifest(receipt))

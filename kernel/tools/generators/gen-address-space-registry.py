@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -202,6 +203,38 @@ def validate(value: dict) -> None:
         raise ValueError("address-space registry hides its evidence ceiling")
 
 
+def selftest_image_sources(contract: dict, root: Path) -> None:
+    relative = "kernel/src/arch/x86/user_image64.c"
+    source = (root / relative).read_text()
+    image_contract = {"source_assertions": [row for row in contract["source_assertions"]
+                                          if row["path"] == relative]}
+    mutations = (
+        ("slot range", "i < 255", "i < 256"),
+        ("code writable", "PRESENT | USER;", "PRESENT | WRITE | USER;"),
+        ("user stack executable", "PRESENT | WRITE | USER | NX;", "PRESENT | WRITE | USER;"),
+        ("kernel stack user accessible", "PRESENT | WRITE | NX;", "PRESENT | WRITE | USER | NX;"),
+        ("user stack bound", "next.user_base + 3ULL", "next.user_base + 4ULL"),
+        ("kernel stack bound", "next.user_base + 6ULL", "next.user_base + 7ULL"),
+        ("mapped lower guard", "pt[2] =", "pt[1] = PRESENT; pt[2] ="),
+        ("mapped kernel guard", "pt[4] =", "pt[3] = PRESENT; pt[4] ="),
+    )
+    with tempfile.TemporaryDirectory(prefix="address-source-selftest-") as directory:
+        temporary = Path(directory)
+        path = temporary / relative
+        path.parent.mkdir(parents=True)
+        path.write_text(source)
+        validate_source_assertions(image_contract, temporary)
+        for label, old, new in mutations:
+            assert old in source
+            path.write_text(source.replace(old, new))
+            try:
+                validate_source_assertions(image_contract, temporary)
+            except ValueError:
+                continue
+            raise ValueError("address image selftest mutation escaped: " + label)
+    print(f"address image selftest: current constructor accepted, {len(mutations)} regressions rejected")
+
+
 def selftest(value: dict, root: Path) -> None:
     mutations = {}
     overlap = copy.deepcopy(value)
@@ -230,6 +263,7 @@ def selftest(value: dict, root: Path) -> None:
             raise ValueError(f"address-space selftest mutation escaped: {name}")
 
     contract = json.loads((root / CONTRACT.relative_to(ROOT)).read_text())
+    selftest_image_sources(contract, root)
     source = contract["source_assertions"][0]
     contract["source_assertions"][0] = {**source, "pattern": "DELETED_ADDRESS_AUTHORITY"}
     try:

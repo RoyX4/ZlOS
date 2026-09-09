@@ -2,6 +2,12 @@
 
 Date: 2026-08-22
 
+Planning expansion, 2026-09-08:
+[full-system roadmap and execution chapters](../design/FULL-SYSTEM-ROADMAP.md).
+It preserves this programme's full scope and source contracts, with explicit
+decision gates, proposed development handoffs and an ordered next-process
+checklist. It is a planning proposal, not updated implementation evidence.
+
 This directory is the execution authority for turning the starred-repository
 research into zlOS. It preserves the full destination rather than redefining it
 as a small MVP. Delivery is staged only because later capabilities depend on

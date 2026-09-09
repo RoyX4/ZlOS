@@ -1,0 +1,85 @@
+{
+  "schema": "zlos.user-process-exit-native-uefi64-qemu-receipt.v1",
+  "result": "PASS_EXTERNAL_FILE_SPAWN_EXIT_OBSERVE_REAP",
+  "build_identity": "aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d",
+  "route": "native-uefi64",
+  "artifact": {
+    "path": "kernel/zlOS-usb.img",
+    "sha256": "232866a407332840ed853ea88ed623f992dc65b66965263477210b21941097d1"
+  },
+  "probe": {
+    "path": "kernel/tools/probes/probe-user-process-exit.py",
+    "sha256": "1d59fb23c443f345e4d9d3cd83a1c09eb9a32063a4de008da88a1991592b96d5"
+  },
+  "implementation": [
+    {
+      "path": "freestanding/runtime_kernel.c",
+      "sha256": "15f8e128d06b11875d3b0d68035e1c19a760c5eb97ff863a687bc8ad59fa6672"
+    },
+    {
+      "path": "kernel/src/kernel.zl",
+      "sha256": "2b2c6fb29fbf56c6f663c9ce22c07aa7029b05726ffe3759b00faa530c581ac8"
+    },
+    {
+      "path": "kernel/src/arch/x86/usermode.c",
+      "sha256": "811774ef65131cd1d0027e921ae228cfaa7c73cb7680949b1c84b63301ac15b5"
+    },
+    {
+      "path": "kernel/src/core/process_lifecycle.c",
+      "sha256": "b5ba0380451273fba1914d62cc8441947d0b15a25c8f93b0021cc50ad5a0ed6a"
+    },
+    {
+      "path": "kernel/src/core/scheduler_policy.c",
+      "sha256": "f4167cfe29def979904320faa67377b46e086b12a319fec8df50916463afb030"
+    },
+    {
+      "path": "kernel/src/core/user_process_service.c",
+      "sha256": "491fde314cd02f3dded14630151d7d41bb58b9bba16ac95f59f6186fc22ac822"
+    },
+    {
+      "path": "kernel/src/fs/fs.c",
+      "sha256": "046a6c8e8cbbedcf7b2b7783320cb05fa538c044433a08bf6190b021d58ba0bb"
+    },
+    {
+      "path": "kernel/tests/host/zlfsseed.c",
+      "sha256": "c39a4254f05242cf9c69eb05a0c6ff9ade0d8106aeac967987a82d832969914b"
+    },
+    {
+      "path": "kernel/tools/probes/exercise.py",
+      "sha256": "dbd58e8786cf5092805a6ac024893100f357ce9ebc4211cd0dd59376f77be25c"
+    },
+    {
+      "path": "kernel/tools/checks/write-user-process-receipt.py",
+      "sha256": "4fd8b0e332aac96c3a53304df2cdbff34c93bde161ef38c9bc5ce2695b27f688"
+    },
+    {
+      "path": "kernel/tools/checks/write-scheduler-receipt.py",
+      "sha256": "8c7c12c506be6b65e87677204901f7122f06fa8d8ad96ca3bf6ffd65c0a00116"
+    }
+  ],
+  "fixture": {
+    "path": "/system/user.bin",
+    "bytes": 50,
+    "sha256": "e08cf8d0d8b72d71330bdd8138dad7938ef8faa70229c988f952e94a27eca6de",
+    "content_hex": "bb52000000b801000000cd80bb33000000b801000000cd80bb21000000b801000000cd80bb25000000b803000000cd800f0b",
+    "created_through": "host instrument linked to the shipping zlfs implementation",
+    "expected_output": "R3!",
+    "expected_exit_status": 37
+  },
+  "assertions": [
+    "external /system/user.bin exists as exact raw x86-64 bytes",
+    "userexec admitted pid 1000",
+    "the external program emitted R3! through three Ring-3 syscalls",
+    "userps retained normal exit status 37",
+    "userreap released slot 1",
+    "userps reported an empty table after reap"
+  ],
+  "serial_transcript_sha256": "083ff7613d8987dd70fa3fd6c1ca1b5d9cdc0d484344d4074c94b8a09eeea12f",
+  "known_gaps": [
+    "the service has exactly two fixed process slots",
+    "this administrative-command probe does not exercise the separate userspace spawn/wait ABI",
+    "the raw image contract has no relocations or shared libraries",
+    "there is no current physical-hardware command-route receipt"
+  ],
+  "evidence_ceiling": "one current native-UEFI64 QEMU route proves that an external zlfs image can run useful syscalls, exit normally with exact status, be observed and be reaped; it does not prove a general process API, application format, or physical hardware"
+}

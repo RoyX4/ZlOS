@@ -1,0 +1,879 @@
+# First roadmap implementation: userspace spawn and wait
+
+## Full-gate follow-up, 2026-09-09
+
+The interrupt repair is published as `1a005e482b7763f3c1273cd919006fe31314145b`
+on draft [PR #15](https://github.com/RoyX4/ZlOS/pull/15). All five required
+pre-push checks passed; the verified remote ref matches. The normal push took
+359.85 monotonic seconds after resource admission. Nine generated publication
+outputs were retained and rehashed before restoring the committed snapshots.
+All 20 ordinary GitHub checks pass on that exact commit, including the formerly
+failing native EFI lane. Its full hosted closure is not claimed.
+
+The next local source identity is
+`de24460febe45820fd1756c3689d790b273c38cc945ca2454fdc9c7afc7e6f18`.
+The old BIOS32 diagnostic depended on a one-byte stack segment: it passed on
+KVM but reached UD2 and reported vector 6 under TCG. The replacement disables
+the general-protection gate, makes the interrupted stack unusable and loads a
+null stack selector. The CPU's protection fault then encounters the absent
+gate, producing a second contributory exception and entering the double-fault
+task. This follows the exception classes in Intel's
+[system programming manual, tables 6-4 and 6-5](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-3a-part-1-manual.pdf).
+The unused diagnostic GDT entry is removed. Neither the crash recorder nor its
+vector/checksum/stack/halt requirements is weakened.
+
+Fresh BIOS32 runs pass on both KVM and TCG. The TCG trace records vector 13,
+`check_exception old: 0xd new 0xb`, then vector 8 while the interrupted ESP
+is zero. The resulting record has vector 8 and error 0; the recorded handler
+stack and independently queried halted stack are inside the separate 16 KiB
+emergency stack. Both runs reject the eight existing corrupted-receipt controls.
+The fresh canonical host suite passes 78 targets with zero failed or unavailable.
+Native UEFI passes with that matching host receipt; the first attempt correctly
+refused the preceding source identity's host record. All 11 local target checks
+pass: BIOS32 double fault on KVM and TCG, BIOS32 UD2, native UEFI boot and all
+three native crash cases, plus four parent/child scenarios under TCG. Every
+process scenario returns physical frame use from zero to zero with no allocator
+faults; the initial mount marker is present in all four. Their new committed
+receipts and serial logs use the `-closure-2026-09-09` suffix. The joined local
+verification record validates the five crash receipts, forced-TCG arguments and
+exception trace, host executable hashes, and every process source/image/fixture/
+transcript binding. These are local QEMU results, not physical or hosted closure.
+
+The address-space contract now follows `user_image64.c`, which owns the page
+tables after the constructor extraction. It still requires the same 24 source
+assertions, guarded stack layout and permissions. Eight source mutations test
+slot range, code/stack permissions, stack bounds and both absent guard pages.
+The observability source check now follows each core's TSS and emergency stack;
+seven mutations reject shared-stack substitutions and lost fault recording.
+
+A separate replay uses the retained files from failed hosted run
+`34295555901` and its exact `79d9248d` source. With only the two registry
+repairs, address-space, observability, release notes, provenance and joined
+evidence generation/checking all pass, including their existing selftests.
+This is historical receipt replay; its outputs are not copied into the current
+checkout as fresh runtime evidence. The feature-ledger and complete current
+hosted run remain open.
+
+Artifacts are under the interrupt diagnostic directory's
+`verification/closure-repair/`: the original failure, prepared source hashes,
+replay outputs, current target checks and raw TCG exception trace are retained.
+
+## Interrupt-race follow-up, 2026-09-09
+
+Published `79d9248d4b369b7d587eb045959400cb0adff156` retains the runtime of
+`99953083` and extends the host harness to 658 checks. Its ordinary GitHub
+checks finished 19 passed, one failed: native EFI job `102291153998` in
+[boot run 34295511032](https://github.com/RoyX4/ZlOS/actions/runs/34295511032).
+The external program exited with status 37, but a damaged boot-test entry
+occupied slot 1 (`pid 0`, invalid lifecycle handle). This is a real failed
+lane; the earlier 20-check pass does not close it.
+
+The resume assembly changed RSP to `process64.saved_frame` with interrupts
+enabled. That array follows the process ID, state, lifecycle handle and CR3;
+it is not a kernel interrupt stack. A PIT interrupt in that window pushes
+registers and calls C over the process record. Initial entry also restored
+user FP controls before its final return while IRQs remained enabled.
+Both stubs now save the caller's flags, mask IRQs before switching CR3, and
+allow the final IRET to install the user's flags. The ordinary kernel return
+still restores the caller's saved flags.
+
+Retained diagnostic directory:
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/main-reconciliation/after-command-repair/process-boundary-followup/interrupt-race/`.
+`diagnose.py` links a copied object set with a temporary instrumented usermode
+object. It inserts 50,000 PAUSE iterations only at the first borrowed-stack
+resume, with the same four-vCPU TCG device profile in both cases. No delay or
+instrumentation is in the shipping source. `red-once/interrupts.log` records
+17 hardware IRQ0 deliveries on the saved-frame stack, followed by a corrupted
+CR3, page fault and double fault; the guest does not reach ready.
+`green-once/serial.txt` reaches ready and completes all process and scheduler
+boot checks under the same injection. Its input manifest binds the changed
+object, all retained base objects and exact diagnostic image. The embedded
+identity still describes the base build: these are diagnostic binaries,
+**not** fresh source-identity receipts. An earlier overlong repeated-delay
+attempt was inconclusive and is not counted as the reproduction.
+
+`tools/test_user_fpu_boundary.py` passes eight tests: the existing executed
+FP/DF boundaries, entry-mask ordering and negative mutations, and complete
+boot-log admission. The structural entry tests fail on the original source.
+All three process probes now reuse the existing process and scheduler log
+validators, requiring every success milestone exactly once. A ready prompt
+without completed self-checks is refused before any desktop command is sent.
+Their receipts bind the shared helper and both validators.
+
+The feature-evidence consumer also had a stale syscall ceiling (25), unknown
+probe (26), and source set predating the separate image constructor. It now
+validates the bound syscall schema with the existing trusted generator and
+requires the constructor, ABI and harness inputs. Twelve synthetic receipt
+tests pass, including the failing-before/passing-after current producer
+contract and missing/changed dependency refusals. Those fixture tests are
+consumer validation, not target execution.
+
+Uninstrumented source identity is `aafe2635f5fea05af497e6e025d98bcbf8dfd606135cde39bede644c1208373d`.
+Its canonical host rebuild passes 78 targets with zero failed or unavailable.
+All 11 normal target checks pass: native EFI, signed child exit, private-page
+fault isolation, both orphan orders, external fault/exit/sleep, USB re-plug on
+native UEFI64 and BIOS32, and BIOS32 double-fault capture. The four parent/child
+scenarios each return physical frame use from zero to zero with no allocator
+faults. `interrupt-race/verification/combined-verification.json` binds those
+results, host executable hashes, source files, serial transcripts and the exact
+native image. The four committed scenario receipts use the `-irq-2026-09-09`
+suffix; the feature consumer also accepts the actual fresh boot/fault/exit/sleep
+records after checking their image and source bindings.
+
+An additional forced-TCG parent/child fault run passes on this same source
+identity and image, with frame use returning from zero to zero. Its recorded
+QEMU arguments confirm software CPU emulation; the earlier hosted mount-marker
+loss did not reproduce in this run. The separate BIOS32 double-fault test
+**does still fail under TCG** on the repaired source: the captured record is
+vector 6 rather than the required vector 8. The successful normal BIOS32 run
+used KVM. `verification/forced-tcg-crash-result.json` retains that refusal and
+the unvalidated observation separately from the passing KVM receipt. This
+checkpoint repairs process entry; it does not close the remaining crash-test
+or hosted validation failures.
+
+The older full run `34295555901` completed with 17 failing steps on `79d9248d`.
+The downloaded 134-file artifact matches GitHub's archive digest. Root issues
+are stale source assertions in the address-space and observability registries,
+BIOS32 double-fault capture returning vector 6 on hosted TCG, and four
+parent/child probes losing the initial mount marker in truncated terminal
+output. Eight release/provenance/joined/feature failures follow those upstream
+registry failures. The dependency archive itself matches the current identity
+and lock: 159 binary packages, 103 source packages, 333 source files, zero
+unindexed fallbacks or undeclared edges. `full-79d9248d-triage.json` records
+the open investigations. This run does not test the IRQ repair. No feature
+maturity or physical-hardware qualification is promoted.
+
+## Prior publication checkpoints
+
+Published reconciliation: `9995308318c0862aab2db7f5312c5811c4d92e65`
+includes main `9c4cb509`. All five required pre-push gates passed in 628.27
+monotonic seconds, and the remote ref matched that commit. GitHub reports
+PR #15 mergeable and all 20 ordinary hosted checks pass. The boundary-test
+follow-up below retains the same runtime source identity.
+
+Status: corrected combined source `6ae68572…`, including main `9c4cb509`,
+passes 78 host targets and all 11 focused boot/process checks. These include
+four parent/child scenarios, external fault/exit/sleep, native/BIOS32 USB
+re-plug and BIOS32 double-fault capture. Published `c546efc` passed all 20
+ordinary hosted checks. The runner archive repair passed on GitHub at
+`e373dcb`; its older-source full run was cancelled for this reconciliation.
+Complete hosted closure and the combined app matrix remain pending.
+Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`. No feature maturity promotion.
+
+Current reconciliation, 2026-09-09: main advanced to `9c4cb509` while the
+runner repair was being published. The isolated checkout now combines that
+USB/display work with the process branch. All 15 conflicts are resolved;
+the first combined build was `3bca5417…`. Its host suite and eight process/boot
+checks passed, but USB re-plug exposed a shared command-number collision.
+That collision is fixed with a failing-before/passing-after regression. Fresh
+combined checks pass on corrected identity `6ae68572…`. Earlier results
+below remain bound to their recorded source.
+
+The user accepted the full roadmap and authorized implementation on 2026-09-08.
+This pass starts `M-03.03` with the audited parent/child process contract.
+The original checkpoint remains in `/home/roy/Documents/repos/zl-linux-integration-2026-09-06`,
+branch `codex/integrate-sweep-process`. Current work is in the persistent
+`/home/roy/Documents/repos/zl-linux-spawn-wait-2026-09-08` checkout on
+`codex/spawn-wait-reconcile-2026-09-08`. Commit `a5c3cac` preserves the local
+implementation and main `02180af`; integration commit `8365cbd` includes
+main `bd75552` and the strengthened BIOS32 double-fault gate.
+The user explicitly authorized commit/push of this batch on 2026-09-08.
+The approval-pending statements below describe earlier checkpoints. Publication
+fast-forwarded existing draft PR #15 through `4e7e283` after reconciliation and checks.
+The separate `zl` language checkout and other worktrees were left untouched.
+
+The live check at entry found draft [PR #15](https://github.com/RoyX4/ZlOS/pull/15)
+open and mergeable at that same head, with base `9212979`, and nine retained
+worktrees. No other active zlOS Codex task was found in the task listing.
+That is a dated coordination snapshot, not a claim about every editor/process.
+
+The earlier [integration receipt](integration-hosted-closure-2026-09-06.md)
+remains evidence for the prior implementation. Its 126 passing hosted steps
+do not verify this changed implementation. The old 8/55/843 feature ledger is
+not promoted or rebound to untested source by this pass.
+
+## What is implemented
+
+- Inactive child construction from a supervisor-only kernel template, with
+  disjoint frame ownership and no selection of the child during parent spawn.
+- Generated SPAWN/WAIT syscall numbers, exact eight-byte child handles,
+  parent-derived authority and a fixed 32-byte typed termination result.
+- Empty-slot admission, allocation rollback, stale-generation refusal,
+  nonblocking wait, signed exit/fault distinction and retry after cleanup refusal.
+- Privileged adoption of live or terminal orphans into kernel custody before
+  a parent identity is released.
+- Disk-loaded parent/child fixtures for signed exit and attempted access to a
+  parent-private anonymous page. Both scenarios run two spawn/wait cycles.
+- New host targets and mandatory native-UEFI QEMU steps in the landing gate,
+  including checks that deleting those entries, substituting fixture-only
+  execution or running the wrong child mode is rejected.
+
+The [implemented ABI and ownership decision](../design/userspace-spawn-wait-abi.md)
+records exact fields, errors, publication, state owners and cleanup boundaries.
+It resolves only the initial two-slot/raw-image portions of `D-02`, `D-05`,
+`D-06` and `D-07`, not full credentials, SMP, threads or virtual memory.
+
+## Evidence completed
+
+Retained local artifacts:
+`/home/roy/Documents/artifacts/zl-linux/process-spawn-2026-09-08/`.
+`verification.json` binds the checked source and outputs; `host-checks.log`,
+`negative-controls.json`, `compile-checks.json`, `fixture-checks.log`,
+`fault-fixtures.json` and `exit-fixtures.json` preserve the respective lanes.
+
+| Lane | Verified result and limits |
+|---|---|
+| Actual architecture syscall host harness | `userspawnwaittest`: 625 checks, zero failures; actual constructor, dispatcher, scheduler and reap code, with privileged CR3 reads and device entry replaced by explicit host adapters |
+| Inactive image host harness | `userimage64test`: 5,248 checks, zero failures; includes per-byte/PTE checks, disjoint frames, guards, permissions, parent preservation and all eight short-pool allocation failures |
+| Existing lifecycle/service/scheduler/frame/anonymous checks | 109 / 144 / 126 / 191 / 243 checks respectively, zero failures |
+| Negative controls | Four deliberate broken implementations rejected: contaminated kernel template, child selection during spawn, four-byte handle truncation, adoption from a live parent |
+| Target object compilation | Changed architecture/lifecycle sources compile for BIOS32, Multiboot64 and native UEFI64; object compilation is not full linking or boot proof |
+| Real zlfs fixture preparation | Both fault and signed-exit binaries assemble and survive fresh read-only exact file readback after seeding both files into a disposable disk |
+| Seeder negative controls | Append refuses an unformatted disk without changing it; read-only verification refuses wrong bytes and a matching but shorter prefix without changing the disk |
+| ABI and gate structure | Generated syscall table and host inventory checked; landing gate deletion controls checked; exact logs retained locally |
+
+The wrapper inventory refresh also incorporates previously merged tools that
+were absent from the retained inventory. It is a static inventory with declared
+legacy policy gaps, not fresh build or runtime evidence for those tools.
+
+The syscall harness checks pending and foreign-child refusal, high-bit and
+maximum generations, stale reuse, full-table exhaustion, invalid complete
+output ranges, zero/oversized/missing programs, corrupt scheduler admission,
+nonempty anonymous custody, every image-allocation failure and parent saved/
+active state preservation. It injects foreign physical ownership during WAIT
+cleanup, verifies that the terminal record/output survive refusal, then repairs
+the fixture and successfully retries. Parent death before and after child
+termination is checked through the real architecture release and administrative
+reap path. It does not execute hardware interrupt entry/return or the real
+device reader inside Ring 3.
+
+The target fixture uses IPC rendezvous to keep the child alive for the pending
+WAIT assertion. It obtains the sender's actual PID, so repeated cycles do not
+assume the child always has PID 1001. The fault child accesses its own virtual
+offset corresponding to the parent's private page; the parent expects exact
+page-fault vector/error/address and checks its own page remains unchanged.
+Fixture-only receipts explicitly say `PASS_FIXTURES_ONLY`.
+
+## Current place in the roadmap
+
+| Sequence | Current state |
+|---|---|
+| N-PROCESS.01–.10 | Baseline and owners inspected; initial ABI, template, inactive construction and admission rules implemented |
+| N-PROCESS.11–.24 | Host implementation/negative evidence present; hardware execution and the full repeated lifecycle matrix remain open |
+| N-PROCESS.25 | Both disk fixture scenarios assembled and exact bytes read back |
+| N-PROCESS.26–.27 | Passed both scenarios again on repaired native-UEFI image `52dc8b9c…`; exact receipts below |
+| N-PROCESS.28–.29 | Terminal retry, exhaustion, repeated cycles, both orphan orderings and final physical totals passed on target; allocation failure injection remains a host lane |
+| N-PROCESS.30–.32 | Full regression/hosted closure, evidence rebinding and integration-ready review pending |
+
+## Earlier resource stop and remaining limits
+
+The local machine repeatedly exceeded the root working agreement's roughly
+four-core heavy-work load threshold. The complete contained gate also requires
+load at most 1.50 and at least 8,192 MiB available memory before starting.
+Build/QEMU work was deferred while other tasks occupied the machine. No old
+kernel image was booted as evidence for the changed sources.
+The final contained-launcher preflight exited 1 with
+`load 4.25 exceeds the start ceiling 1.50`; the exact output is retained in
+`contained-preflight.log` in the artifact directory above.
+
+The continuation below subsequently built a fresh image and passed both
+parent/child probes after repairing a real boot-test regression. The existing
+external fault, normal-exit, sleep,
+boot and desktop regressions still need current execution through the contained/hosted landing route, which
+now includes both new scenarios. A full run must regenerate and validate all
+derived build/evidence registries against that image; retained old receipts
+must not be treated as current proof.
+
+The subsequent four-scenario continuation below closes the bounded target
+orphan-ordering and physical-baseline observations. Allocation failure injection
+is host-tested; it is not represented as a QEMU fault-injection sweep. General process scaling, SMP
+locking, capability transfer, executable formats, an automatic orphan reaper,
+physical qualification and the broader 906-feature contracts remain open.
+This pass is not integration-ready and has not been committed or pushed.
+
+## Ownership follow-up, 2026-09-08
+
+After the user challenged the vague wording about concurrent work, a live
+process-parent trace identified actual separate zlOS compilation:
+`clang` in `/home/roy/Documents/repos/zl-linux/kernel` was launched by
+`tools/hazard-scan.sh`, through the main checkout's `tools/preflight.sh`, a Git
+operation, and Claude process 313062 under Claude Desktop. This was not this
+Codex task's build. The observed compiler PID was 607098; process IDs are
+ephemeral and this paragraph is a dated observation.
+
+Main had advanced to `02180af`, after the `b24d111` sweep follow-up, and had
+10 changed paths. This task's isolated branch and draft PR #15 remained at
+`5a33421`, with the local roadmap/process implementation uncommitted. The nine
+registered worktrees are retained checkouts, not evidence of nine active
+workers. Main's new changes must be reviewed before any later integration.
+
+This task had completed its focused tests and ended its prior turn; it had no
+build, QEMU run, subagent or automatic retry running in the background. A fresh
+source-hash comparison still matched all 29 recorded implementation/check
+inputs. Rerunning `userspawnwaittest` during this follow-up again produced
+625 checks and zero failures. “Machine busy” should not be used as a substitute
+for identifying the actual owner of an observed workload.
+
+## Main reconciliation and fresh target proof, 2026-09-08
+
+The original 56 pending paths were copied byte-for-byte into a persistent
+snapshot before creating a tenth registered worktree. Main's `b24d111` and
+`02180af` changes were combined with the local implementation in the new
+checkout; only generated inventories and the host README conflicted. The final
+pending merge has no unresolved conflicts. Main's per-core TSS/IST changes
+retain the BSP `rsp0` setter used by this single-CPU process implementation.
+Claude's live checkout and the original local checkpoint were preserved.
+This is repository reconciliation, not direct communication with Claude.
+
+Artifacts: `/home/roy/Documents/artifacts/zl-linux/process-reconcile-2026-09-08/`.
+`input-snapshot.json` binds the saved pending paths and selected main commit.
+`before-accounting-build-native-result.json` binds the initial source identity
+`fe4be2792ea51df9a9946b12bae67a1ceddf467fd1baeae681ac329989f82ed0`
+and exact USB image SHA-256
+`f509d106ac9cf1d22269b445e0c43dd1f887dcfe7ba0f099a77feeb86770d588`.
+The image build completed in 96.18 seconds under a one-core CPU limit and 2 GiB
+memory ceiling; this targeted run is separate from the complete landing gate.
+
+The first real boot failed: the built-in unknown-syscall fixture still used 26,
+which now names SPAWN. `native-before-fix.json` records exit 1 and
+`native-before-fix.log` retains the actual target failure. The added host
+regression also failed in three assertions before repair
+(`unknown-syscall-red-host.log`). The actual target bytecode now derives the
+first gap from the generated syscall header, while the receipt writer reuses
+the canonical generator's validated range. The host architecture harness then
+passed 632 checks; the five other focused targets also passed.
+
+`initial-signed-exit.json` and `initial-private-page-fault.json` record
+`PASS_NATIVE_UEFI64_QEMU` for that first image, with exact fixture/source hashes,
+serial transcripts and QEMU diagnostics retained beside them. Both runs require
+the existing process boot assertions before starting the external parent.
+The parent performs two spawn/wait cycles, checks exhaustion and stale identity,
+receives the exact signed exit or private-page fault, then exits with status 37.
+Administrative reap leaves the process table empty.
+
+The invalid-output case now proves ordering without a guessed delay: IPC SEND
+rejects the child's PID only once it is no longer runnable; the child never
+sleeps and no other actor can reap it. Only then does the parent attempt the
+invalid WAIT output and retry with a valid buffer. Both target scenarios passed
+this terminal-custody retry. Empty process slots alone do not prove exact final
+physical-frame totals; the next continuation adds an explicit measurement.
+
+
+## Four-scenario target closure, 2026-09-08
+
+The latest native image is bound by `build-native-result.json`:
+identity `078f1f2f38679e92cbe0915558ea76a179ab997c2f53810b0543ef288209ab23`;
+USB image SHA-256 `e398fefeaa1ede099e12bd930b27c55b665bf834a04a9f74e6e4ad022ac8d222`. Adding the read-only `userps` counters required
+refreshing the existing application source hash and embedded manifest; the
+generator diff changed only those two hashes. The new image built successfully.
+
+All four exact receipts now record `PASS_NATIVE_UEFI64_QEMU`, one virtual CPU,
+and physical frames `before=0`, `after=0`, `allocator_faults=0`:
+
+The same generated JSON and byte-identical serial transcripts are retained in
+`kernel/docs/receipts/` under the landing gate's declared paths:
+[exit](../../kernel/docs/receipts/user-spawn-wait-exit-native-uefi64-qemu-2026-09-08.json),
+[fault](../../kernel/docs/receipts/user-spawn-wait-fault-native-uefi64-qemu-2026-09-08.json),
+[live orphan](../../kernel/docs/receipts/user-orphan-parent-first-native-uefi64-qemu-2026-09-08.json),
+[terminal orphan](../../kernel/docs/receipts/user-orphan-child-first-native-uefi64-qemu-2026-09-08.json).
+
+| Receipt | Actual target observation |
+|---|---|
+| `signed-exit.json` | Two child generations exit with signed status -37; parent retries terminal WAIT after invalid output and exits 37 |
+| `private-page-fault.json` | Two child generations fault on the parent's private-page address with exact vector 14/error 4; parent retains its page and retries terminal WAIT |
+| `orphan-parent-first.json` | Parent exits -19 while child is live; child continues and exits -37; kernel reaps child before releasing parent identity |
+| `orphan-child-first.json` | Child faults first; parent then exits -19; kernel retains and reaps child's vector-14 record before releasing parent identity |
+
+The child-first administrative reap is intentional: it proves adoption occurred
+at the parent's terminating service step. The fallback in later parent cleanup
+cannot make this ordering pass. Exact fault error/address custody for orphan
+cleanup is additionally checked on host; the existing `userps` command exposes
+only the orphan's vector on target.
+
+The target harness reads the existing PMM used-frame count and complete
+allocator consistency check after mount, before process admission, and after
+final reap. This proves the measured physical-frame baseline is restored,
+alongside the empty process table and absence of a scheduler fail-stop. It does
+not measure every cache, DMA allocation, graphics surface or kernel resource.
+
+The new scenarios explicitly use one virtual CPU, matching the documented
+single-CPU process service. Existing multi-core boot gates are unchanged.
+Laptop load checks remain enabled; build and scenario starts
+were deferred when load crossed 4. The scenarios subsequently passed under the
+one-core/2-GiB execution limit. No physical-hardware claim follows from them.
+
+The full host build completed. Its first execution found the missing interpreter
+prerequisite in this new checkout; `full-host-initial-failure.json` retains that
+failure. Building `interp` with the repository's existing recipe and rerunning
+produced 77 passing targets, three hardware-unavailable outcomes, 14 explicit
+non-runs and zero failures. The final host execution also passed with those same counts and binds the
+latest `078f1f2f…` image identity. The complete log is
+`final-host-execution.log`; `full-host-receipt.json` records every result.
+
+
+## Existing regressions and current stopping boundary
+
+The final source identity also passed the existing native-UEFI boot gate,
+external-file fault/reap, external-file signed exit/reap, and real-tick sleep
+probes. `native-efi.log` ends with `EFI gate green`; the current application,
+scheduler, process, physical allocator and page-table receipt writers and their
+negative controls all passed. `existing-regressions.json` records these exits.
+
+The Run desktop gate first could not start because this isolated checkout had
+no GRUB/BIOS ISO. Building the 32-bit kernel and ISO with the existing
+`mkiso.sh` recipe succeeded and retained the same route-neutral source identity.
+The Run gate then passed its keyboard error ladder and open/ready/close
+observations. These are BIOS32 desktop observations, separate from native-UEFI64
+process evidence; they do not prove successful loading through the Run app.
+
+The final 47-application lifecycle sweep did not start: its guarded wait expired
+after ten minutes with load still above the root threshold of 4. This is an
+unrun regression, not a passed or failed app workflow. A separate QEMU process
+was observed in `/home/roy/Documents/repos/zl-linux/kernel` during that wait;
+it was left untouched. No direct communication with Claude occurred.
+
+The complete landing gate, fresh hosted closure, full BIOS/raw/multiboot64 boot
+matrix and physical qualification remain open. `N-PROCESS.30` is the current
+sequence; the broader 906-feature maturity ledger is unchanged. The prepared
+merge and local feature/roadmap changes remain uncommitted and unpushed.
+`verification.json` in the current artifact directory validates all four
+source-bound target receipts, the host receipt, image hashes and the completed
+regression results, and names the pending desktop sweep explicitly.
+
+## Ownership review and rollback repair
+
+The follow-up code review traced syscall input validation, inactive construction,
+publication, scheduler admission, WAIT cleanup and orphan adoption through their
+shared owners. It confirmed a failure-accounting defect in
+`kernel/src/core/process_memory.c`: allocation rollback decremented `acquired`
+before `pmm_release` accepted the frame. A refusal on the final remaining frame
+left a retained page with `acquired == 0`. The architecture constructor uses
+that count to retain corrupt candidate custody and stop, so the inconsistent
+count could defeat that failure path.
+
+`processmemorytest.c` now injects release refusals at the allocator boundary
+with the linker's existing wrapping facility. Normal calls still reach the
+shipping PMM; there is no production fault switch. The 28 cases cover every
+release position after acquiring one through seven frames. Each checks the
+retained count, exact page references, real allocator totals and the refusal
+to treat partial custody as a ready image. The new test failed before the fix:
+555 checks, 28 failures. The fixed test passes all 555 checks. The shared fix
+changes the count only after a successful release.
+
+Fresh host consumer builds also passed `userimage64test` (5,248 checks) and
+`userspawnwaittest` (632 checks). The changed allocator compiles for BIOS32,
+Multiboot64 and native UEFI64; these are object checks, not image/boot results.
+The host inventory generator and its negative controls pass with the wrapped
+test recipe. Artifacts are `rollback-refusal-red.{json,log}`,
+`rollback-refusal-green.{json,log}`, `rollback-consumer-checks.json` and
+`rollback-route-compile.json` in the current artifact directory.
+
+The prior verified image checkpoint and pending patch are retained in
+`before-rollback-review/`. Its four QEMU passes, full host execution and five
+existing regression passes still describe that earlier source. The current
+source correctly fails the old build-identity check with “build-identity.json
+is stale”; `rollback-prior-image-drift.log` retains that rejection. No receipt
+was relabeled to make the new fix appear boot-tested. Rebuild and rerun the
+affected host/native/desktop lanes before claiming current target closure.
+The complete local gate remains resource-blocked, and the requested commit/push
+approval is still pending. No new GitHub publication or direct Claude message
+has occurred.
+
+## Rebuilt rollback checkpoint and live coordination
+
+The repaired native image was subsequently built in 95.28 seconds under the
+same one-core/2-GiB ceiling. Its source identity is
+`52dc8b9c468cc8b2945f0b447f78480c5b94df3613ca4494ac16bc65ca27ec0e`;
+the USB image SHA-256 is
+`ccdb86b0c2895a39bafc45b4aa4d06191ca09b135c4d80391f98e363ce47739b`.
+New attempts and results are retained in `after-rollback-review/` under the
+current artifact directory, keeping the preceding runs intact.
+
+The first native gate booted this image through its TCG fallback after a KVM
+emulator crash, but then correctly rejected the preceding build's scheduler
+host receipt. That gate exited 1 and is not called a pass. The host execution
+was then refreshed for `52dc8b9c…`: 94 targets, 82 commands, 77 passed, three
+hardware skips, 14 explicit non-runs, zero failures and zero unavailable.
+`before-host-refresh-native-efi.log`, `full-host.log` and
+`full-host-receipt.json` retain the order and results. The native rerun must
+finish before claiming complete current target verification.
+
+The new scenario receipt now includes its imported exercise and external-exit
+helpers in source provenance. The older external probes' scope text now says
+that those probes do not exercise the separate spawn/wait ABI. It no longer
+claims the entire kernel lacks that API. These probe changes are outside the
+image's source-identity scope and will be bound by their fresh runtime receipts.
+
+The reconciled roadmap also passed a read-only structural recheck: 7,151 checks,
+exact catalogue/contract/target coverage, all 174 original contract bodies,
+acyclic explicit dependencies and local links. Its receipt is
+`after-rollback-review/check_current_roadmap.json`. These remain planning checks.
+
+At 02:53:47 UTC, 11 registered worktrees were present. An actual compiler-parent
+trace identified Claude process 313062 building native EFI in
+`/home/roy/Documents/repos/zl-linux/.claude/worktrees/fable-next` on
+`fable/usb-replug`, based on `02180af`. A separate compiler was active in main.
+This task neither messaged Claude nor changed either checkout.
+`after-rollback-review/concurrent-builds.json` retains the dated observation.
+
+Local main had advanced to `bd7555246c0952850d90033803f14662c1e3270e`
+(`fix: 32-bit double-fault task gate, bios32 double-fault crash route`). Review
+of its implementation diff found the new BIOS32 TSS/task-gate route, shared
+crash-record validation and an added landing-gate case; it does not edit
+`process_memory.c`. Its 32 changed paths include generated evidence. That
+commit is not incorporated into this pending `02180af` merge. Later integration
+must retain the new crash gate and regenerate evidence for the combined source;
+this branch's results do not verify that combined tree. GitHub PR #15 was still
+the earlier draft at `5a33421`, with base `9212979`, when checked in this pass.
+
+An alternate-index merge preview against `bd75552` found ten conflict paths:
+nine generated identity/receipt files and `gates/land-gate.sh`. No active index,
+working file or branch was changed by that preview. The prepared gate text in
+`after-rollback-review/integration-preview-gate.sh` retains all 124 currently
+mandatory seams, adds the BIOS32 double-fault case, and preserves bounded
+resource waiting. The new case also needs a deletion-control assertion when
+integrated. This is a reviewed future resolution, not a tested merged tree.
+
+After the host refresh, the native gate rerun passed in 40.79 seconds. All
+four repaired-image parent/child runs passed, followed by the existing external
+fault, signed-exit and real-tick sleep probes. `target-checks.json` records all
+eight successful command exits. The four scenarios each measured physical
+frames `0 -> 0`, no allocator invariant failures, and an empty final process
+table. Their exact JSON and serial transcripts are also retained in the project:
+
+- [Signed exit](../../kernel/docs/receipts/user-spawn-wait-exit-native-uefi64-qemu-rollback-2026-09-08.json).
+- [Private-page fault](../../kernel/docs/receipts/user-spawn-wait-fault-native-uefi64-qemu-rollback-2026-09-08.json).
+- [Live orphan](../../kernel/docs/receipts/user-orphan-parent-first-native-uefi64-qemu-rollback-2026-09-08.json).
+- [Terminal orphan](../../kernel/docs/receipts/user-orphan-child-first-native-uefi64-qemu-rollback-2026-09-08.json).
+
+The source-bound verifier in `after-rollback-review/verify_current_checkpoint.py`
+checks these receipts, imported helper hashes, exact image bytes and host
+executables. It separately records which bounded regression steps have run.
+Allocation and release-refusal injection are still host evidence; these QEMU
+runs do not add a target allocator-failure injector or a physical qualification.
+
+The repaired BIOS32 ISO then built successfully with the same `52dc8b9c…`
+source identity. Its SHA-256 is
+`57e57209e9758baffce3a0cd91e5e1e710d6fa060d81b8f06086a0db4574850e`.
+The [Run regression](../../kernel/docs/receipts/run-route-qemu-spawn-wait-2026-09-08.json)
+passed in 22.51 seconds. The
+[47-app lifecycle sweep](../../kernel/docs/receipts/app-lifecycle-qemu-spawn-wait-2026-09-08.json)
+passed all 47 open-ready-close cycles in 69.96 seconds, with zero failures.
+These are BIOS32 observations of the named routes; app readiness is not a
+successful full user workflow, and this Run test does not prove its successful
+executable-loading route. Other menu/boot-open/register routes and physical
+input/display remain outside these receipts.
+
+`after-rollback-review/verification.json` now verifies the repaired image,
+four parent/child receipts, fresh host results, all eight target command exits
+and all four post-target command exits. No named step in that bounded local
+set remains unrun. The full BIOS/raw/multiboot matrix and complete hosted
+landing gate are separate open checks. The final contained-gate doctor still
+refused with `a compiler is active; retry after the other build finishes`.
+All test services started by this continuation have finished. Commit/push
+approval remains pending; the latest main commit and Claude's USB work remain
+separate, and this checkpoint is not claimed as full integration or publication.
+
+## Authorized publication checkpoint
+
+The 2026-09-08 publication pass rechecked the saved `52dc8b9c…` image,
+receipts, source hashes and all 121 pending paths with the checkpoint verifier.
+Its bounded checks pass with zero failed host targets. Commit/push is now
+authorized. This first commit preserves that tested source and the prepared
+`02180af` merge before incorporating main `bd75552`. The four local process
+receipts remain evidence for their recorded source identity, not for a later
+combined tree.
+
+The remote integration branch was still `5a33421`, and remote main was
+`bd75552`, at the publication check. Claude's separate `fable/usb-replug` branch
+now contains `465e075` and journal commit `a3fdb03`; its USB/display changes
+remain separate from this process publication. The original dirty integration
+checkout is preserved. No direct message was sent to Claude.
+
+## Main reconciliation for publication
+
+Checkpoint `a5c3cac` has parents `5a33421` and `02180af`. The subsequent
+merge incorporates `bd75552`, including its BIOS32 double-fault task gate.
+All ten predicted conflicts were resolved: the runtime code merged cleanly;
+existing exact runtime receipts were retained as historical evidence, and
+pure build identity/media IDs were regenerated for the combined source.
+The combined local source identity is
+`2bb71bad60e87e65f45d6fd88d5419c60f735f3659c49878f618b19157638279`.
+This regeneration alone does not prove boot or runtime behavior.
+
+The BIOS32 gate previously admitted four broken variants: deletion, changing
+to the native route, changing to UD2, and removing runtime execution. The
+expanded landing checker rejects all four and passes its existing controls,
+with 125 mandatory seams. The merge preserves the bounded resource waits and
+all four process scenarios. Raw serial evidence now has Git text conversion
+and whitespace repair disabled so the exact recorded hashes remain intact.
+
+The first commit's generated journal entry and main's ledger were both retained.
+Its post-commit claim check reported the local LLVM compiler was missing;
+the full pre-push toolchain build and a direct claim recheck are the next
+verification steps. The roadmap structural recheck passed 7,151 checks.
+Publication will update existing draft PR #15 without rewriting its history.
+Fresh hosted full closure, the full boot matrix and physical qualification
+remain open.
+
+## Publication checks and local launcher repair
+
+The first normal push of `8365cbd` was blocked by the pre-push hook.
+Build, engine parity, formatter and hazard checks passed. The language gate
+reached native UEFI Ring 3, then its scheduler receipt refused the historical
+host identity `52dc8b9c…` against combined source `2bb71bad…`. A direct call
+to the receipt validator reproduced `scheduler host receipt is from a foreign
+build`. The error was hidden by the language wrapper's eight-line truncation;
+`run_tests.sh` now retains the complete failed native-gate diagnostic.
+
+A fresh rebuild through the legacy `run-all.sh` built all 84 executables but
+its private dispatch list reported two false failures: `dpll_test` required
+physical-device access, and `zlfsseed` required its disk/name/fixture arguments.
+Both are explicit non-runs in the canonical inventory, while the separate
+`zllog-e2e.sh` exercises disk seeding with actual fixture arguments. The local
+launcher now regenerates source identity/inventory, removes the declared old
+executables, rebuilds, and delegates execution to the same inventory runner
+used by hosted CI. It no longer maintains a second hardware/fixture skip list.
+
+The corrected launcher passed end to end on the combined source: 94 targets,
+82 commands, 77 passed, three hardware skips, 14 explicit non-runs, zero failed
+and zero unavailable. This includes the shared allocator rollback regression
+and the newly integrated crash-record tests. The subsequent native UEFI gate
+passed, including every receipt validator and its negative controls. These
+correctness runs used a one-core CPU quota and 2 GiB memory limit; they do not
+close any quiet-host performance budget.
+
+The rejected first push, validator reproduction, old launcher, corrected full
+run and fresh target results are retained under
+`/home/roy/Documents/artifacts/zl-linux/process-publication-2026-09-08/`.
+The original integration checkout's 56 saved pending paths were rehashed and
+remain unchanged. The Git object bytes of all eight earlier raw transcripts
+were also checked against their recorded hashes.
+
+All eight target command exits subsequently passed for `2bb71bad…`. The four
+new scenarios each returned physical process frames from zero to zero, with
+zero allocator invariant failures. Their exact current transcripts and receipts
+are committed beside the earlier checkpoints:
+
+- [Combined-source signed exit](../../kernel/docs/receipts/user-spawn-wait-exit-native-uefi64-qemu-combined-2026-09-08.json).
+- [Combined-source private-page fault](../../kernel/docs/receipts/user-spawn-wait-fault-native-uefi64-qemu-combined-2026-09-08.json).
+- [Combined-source live orphan](../../kernel/docs/receipts/user-orphan-parent-first-native-uefi64-qemu-combined-2026-09-08.json).
+- [Combined-source terminal orphan](../../kernel/docs/receipts/user-orphan-child-first-native-uefi64-qemu-combined-2026-09-08.json).
+
+`process-publication-2026-09-08/combined-verification.json` checks the exact
+USB image, source and fixture hashes, raw transcripts, host executable hashes,
+canonical inventory and all eight target exits. The second normal push passed
+all five repository pre-push gates and published `4e7e283`; none was disabled
+after the rejected attempt. Complete hosted closure and the full combined
+boot/app matrix remain pending. The earlier BIOS32 app sweep is retained with its earlier identity.
+
+
+## Published checkpoint and hosted follow-up, 2026-09-09
+
+A normal push published `4e7e283bfb6487703b311834d13e52622282d52d`
+to `codex/integrate-sweep-process`; a fresh remote read matched that exact head.
+All five pre-push checks passed: build, language, engine parity, formatter and
+hazards. The retained monotonic duration was 566.62 seconds. The earlier LLVM
+claim also passed after the normal build supplied its compiler, with output 100.
+[PR #15](https://github.com/RoyX4/ZlOS/pull/15) remains open and draft.
+
+The ordinary GitHub code, host, desktop and four-route boot checks succeeded.
+[Docs run 34190191316](https://github.com/RoyX4/ZlOS/actions/runs/34190191316)
+failed because the host-launcher explanation was outside its managed README's
+local block and two historical tension notes used paths relative to `kernel/`.
+The explanation now lives in the preserved local block, and those two paths
+are repository-relative. Directory generation reports zero rewritten paths;
+its check covers 118 directories and eight navigation surfaces. The complete
+doc check passes, including all nine registered executable claims.
+
+[Full-closure run 34190249224](https://github.com/RoyX4/ZlOS/actions/runs/34190249224)
+failed before the complete landing gate, in the sleep receipt boundary tests.
+The consumer still demanded an obsolete `process-handle` absence phrase after
+the administrative probe correctly distinguished its own scope from the new
+userspace ABI. Its loose keyword test also accepted five copies of the invented
+gap `physical process-handle claim`. The consumer now checks every exact scope
+limit for both normal-exit and sleep receipts, independently of the producer.
+The regression reproduced one failure and two errors before repair; all eight
+tests pass afterward, including every removed/replaced gap and keyword stuffing.
+These are synthetic contract tests, not new runtime evidence.
+
+Four feature-contract summaries now describe the limits of their listed
+administrative/internal receipts instead of incorrectly saying the separate
+userspace ABI does not exist. Their maturity remains `PARTIAL_CURRENT`; this
+wording change does not join new receipts or promote any feature.
+
+The adjacent physical-allocator and toolchain joins each pass six tests, and
+the build-input check still reports 171 inputs and identity `2bb71bad…`.
+Follow-up logs and command exits are retained under
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/`.
+The native/raw boot receipts refreshed by the successful pre-push run remain
+bound to its actual `4e7e283` source context and artifact hashes.
+A new full hosted closure must pass on the follow-up commit before this slice
+can be called integration-ready. No physical qualification is claimed.
+
+
+## Rolling runner dependency recovery, 2026-09-09
+
+Follow-up `c546efc3799807b0bb066fe04556c84b8babe327` was committed and
+normally pushed. All five pre-push gates passed in 460.41 monotonic seconds;
+the remote branch matched the exact commit. All 20 ordinary GitHub checks
+succeeded, including the previously failing docs job. The optional model-review
+workflow's success is not asserted as an independent code review.
+
+[Full run 34289622251](https://github.com/RoyX4/ZlOS/actions/runs/34289622251)
+passed the runner, allocator, sleep, toolchain and FP rejection boundaries,
+then failed while recovering binary archive 116 of 159: `libseccomp2:amd64`
+version `2.6.1-1`. The captured installed-package lock records that old version.
+The old archive returns HTTP 404, while current `2.6.1-1+b1` returns HTTP 200.
+A read-only APT simulation against the same installed old version selects the
+current binary when upgrading; no laptop packages were changed.
+
+Installing named tools alone can leave an older base-container dependency
+installed. The hosted workflow now upgrades the disposable rolling container,
+allowing new dependencies, before installing tools and measuring the dependency
+lock. It continues to require exact installed binary/source identities and
+complete offline archive verification. The remedy is provisioning fresh
+installed inputs, not substituting a different binary into an old lock.
+Actual recovery and full runtime closure must pass in a fresh hosted run.
+
+The failed run's uploaded lock and receipts, failed-step log, both live pool
+responses and APT simulation are retained in
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/`.
+All nine generated files from the successful `c546efc` pre-push run were copied
+byte-for-byte into its `post-push-generated/` artifact directory before restoring
+the tracked checkout to the published commit. This preserves exact latest boot
+output without pretending generated source-context changes are runtime edits.
+
+
+## Concurrent main reconciliation, 2026-09-09
+
+Main advanced from `bd75552` to `9c4cb509335cc7f0bfdbac968e873ebdab895f8b`
+while `e373dcb` was undergoing publication. PR #15 became `CONFLICTING`; its
+six push checks passed, but the pull-request workflows did not start. This is
+separate from the earlier 20 successful ordinary checks on `c546efc`.
+
+The current isolated merge takes `e373dcb` and that exact new main tip. Runtime
+source merged without textual conflicts. Fifteen conflicts were resolved:
+both journal additions remain intact, the landing sequence retains the BIOS32
+double-fault and new native USB re-plug probes with bounded resource waits,
+and generated identity/app/inventory data was regenerated. Conflicting runtime
+receipts were retained whole as historical evidence until their fresh runs;
+no observations from different source identities were spliced together.
+
+The combined identity is
+`3bca5417f2c2b2f83f4988b7f156176bb5e7f32f88ef5dfd8ea4aa2a50c37561`.
+The regenerated inventory declares 85 compiled targets, ten scripts and 83
+automatic commands, including main's real Intel GGTT table test. Regeneration
+is structural evidence; execution results are recorded separately.
+
+The landing-authority checker previously accepted six broken versions of the
+new USB entry: deletion, omission of runtime execution, a different route,
+a different probe, a different working directory and a duplicate invocation.
+All six are now rejected. The intended gate passes 126 mandatory seams and
+the containment checker passes its 64 required controls. Existing spawn/wait,
+BIOS32 fault and resource-wait mutations remain enforced.
+
+Fresh artifacts are retained under
+`/home/roy/Documents/artifacts/zl-linux/process-publication-followup-2026-09-09/main-reconciliation/`.
+At this first merge checkpoint the host and target runs were still pending;
+their failure and the corrected run are recorded below. A further full hosted
+run is required for the merged source, regardless of the earlier run's outcome.
+Physical USB/display behavior remains outside the QEMU proof.
+
+
+Runner recovery was verified on GitHub in run `34290811066`: 159 exact binary
+archives, 103 source-package sets and 333 source files were recovered, with
+zero unindexed binaries, zero unindexed sources and no undeclared dependency
+edges. `libseccomp2 2.6.1-1+b1` came from the signed package index. The archived
+receipt and lock are retained under the follow-up's `runner-recovery/hosted-proof/`.
+The archive verifier's fixed historical claim about “two stale Linux archives”
+was removed from its limitation text; explicit measured counters remain the
+authority for whether fallback happened. The complete old-source gate was
+cancelled after recovery when main advanced, so it is not a runtime closure pass.
+
+
+## Command-number collision exposed by the combined target test
+
+The first combined `3bca5417…` run passed all 78 automatic host targets and
+eight native/process command checks. Its native USB test then failed: typing
+`usbstat` printed the persistent process table instead of USB status. This was
+a semantic merge conflict even though both source files merged cleanly.
+The process branch assigned `userps` to 130; main independently assigned
+`usbstat` to 130. Both matching kernel arms were present, and the earlier
+process arm returned before the USB arm could run.
+
+The existing terminal host harness now submits `userps`, `userreap 2` and
+`usbstat` through the real shipping word matcher. Before repair it reported
+one failure, exactly on the USB command. The word table and its kernel handler
+now assign USB status its own free code 132, preserving process status at 130
+and reap at 131. The host regression passes after repair. The actual failed
+QEMU transcript and both host runs are retained; no test was weakened.
+
+The corrected build identity is
+`6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c`.
+Fresh complete host and focused target checks pass for this changed source.
+Their artifacts live under the reconciliation's `after-command-repair/` folder.
+The failed first integration did not reach the two BIOS32 target checks and
+is not counted as a complete local pass.
+
+The corrected canonical host run executes 83 commands across 95 declared
+targets: 78 pass, three are hardware skips, 14 are explicit non-runs, and
+none fail or are unavailable. Its 197.17-second run used a one-CPU/two-GiB
+resource limit and is correctness evidence, not the quiet-host build budget.
+All 11 target commands exit zero: fresh native boot; signed child exit;
+parent-private page fault; parent-first and child-first orphan adoption;
+external fault, exit and sleep; native and BIOS32 USB re-plug; and BIOS32
+double-fault capture. The latter two checks were not reached by the failed
+first integration and were run afresh after the repair.
+
+`combined-verification.json` checks the current source, host inventory and
+executable hashes, all 11 command outcomes, both USB artifact/kernel hashes,
+and the four process receipts against the actual image, implementation,
+fixtures and raw serial bytes. The four process runs each return physical
+frame use from zero to zero, with zero allocator faults. Their JSON and serial
+files are retained in `kernel/docs/receipts/` with the suffix
+`native-uefi64-qemu-combined-2026-09-09`. They share USB image SHA-256
+`97a9a8597b0552ff3e9210552cff57ec1f59c532752cb47dc9d864bfe0554651`.
+These results do not close the full app matrix, hosted landing sequence,
+physical USB/display behavior or any wider feature-maturity contract.
+
+The final documentation check passes: 118 directory capsules, all local
+Markdown links and described source paths, and all nine registered executable
+claims. The roadmap recheck passes 7,151 structural assertions with all 174
+original contract bodies intact. The 56 saved pending files in the original
+integration checkout still match their original hashes. Tested native and
+BIOS images were retained as compressed artifacts and their decompressed
+hashes checked before publication can rebuild those output paths.
+
+## Additional process boundary coverage, 2026-09-09
+
+A step-by-step read of the 32-step process checklist found two narrower test
+gaps: actual architecture dispatch did not inject failed/short executable
+reads, and orphan cleanup tests did not reuse both reclaimed slots before
+retrying the old handles. The implementation already contained the relevant
+refusals; this follow-up strengthens evidence without changing runtime code.
+
+The existing architecture harness now controls filesystem mount/read outcomes.
+Unmounted, failed, empty and short reads must return an I/O error without
+publishing a child, altering output or consuming frame/identity/scheduler
+ownership. After both parent-first and child-first orphan cleanup, it creates
+a replacement parent and child in those slots. Both previous handles stay
+stale, and the previous parent generation cannot own the replacement child.
+The replacement family then exits and cleans up to zero frames.
+
+The expanded harness passes 658 checks. A disposable copy of the architecture
+source with the short-read refusal removed fails the new read cases (five
+assertions fail in total, including the resulting ownership damage). That
+broken source exists only in local test artifacts; it was not applied to the
+repository. The runtime input check still reports 171 inputs and identity
+`6ae68572…`. The complete canonical host rebuild and run passes in 252.60
+monotonic seconds: 95 targets, 83 executed commands, 78 passed, three hardware
+skips, 14 explicit non-runs, and zero failed or unavailable. The refreshed
+inventory and receipt bind the expanded harness. Fresh complete hosted
+closure remains pending. The finite host cases do not claim injected
+physical storage faults or exhaustive proof over every corrupt kernel state.
+
+Artifacts are under the reconciliation's `after-command-repair/` directory:
+`extended-harness-results.json`, the passing and deliberately failing logs,
+and `process-step-evidence-audit.json`. The latter is a read-only review
+snapshot before these extra cases, not a feature-maturity promotion.

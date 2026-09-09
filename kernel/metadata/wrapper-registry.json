@@ -1,8 +1,8 @@
 {
   "schema": "zlos.wrapper-registry.v1",
   "result": "PASS_INVENTORY_WITH_LEGACY_POLICY_GAPS",
-  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
-  "landing_gate_sha256": "2a11ed0db8a725cf80766e347e37118e332b08f59e2faf5f75cd70f20a67d5f8",
+  "build_identity": "463ad294d713951742659c6d684ec0d02f1ac143e9383829d8ef606ca3a668d9",
+  "landing_gate_sha256": "6e200425b5bc65fa785492f89c9d658a5ba9c4eb74e746a8ba8ec0efcf15dc89",
   "wrappers": [
     {
       "path": ".github/scripts/render-desktop.sh",
@@ -60,6 +60,28 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "docs/design/prototypes/gen_index.py",
+      "sha256": "2d70ece84c85bb097ae8c6239bda39fa7103bebf1cf1b88e57c934374d63f2fe",
+      "bytes": 10605,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "UTILITY_OR_LEGACY",
+      "exit_policy": "PYTHON_UNPROVED_TOP_LEVEL",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "docs/design/prototypes/recover.py",
+      "sha256": "4509452f2eb66aa67873293c17e19d4e073cc8d8eb331be4f82c8cbdba13d320",
+      "bytes": 4769,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "UTILITY_OR_LEGACY",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "editors/vscode-zl/install.sh",
       "sha256": "689f0926f1ec5cb6c2bfbabad59dd7a63fea56f0f1c160f309cffe98a3f293f4",
       "bytes": 2495,
@@ -83,8 +105,8 @@
     },
     {
       "path": "gates/check-contained-gate.py",
-      "sha256": "dcce107aeab620e47ee86cf7bc13951b52599d2901c1a2914f62f5c2c1a92681",
-      "bytes": 3493,
+      "sha256": "ffea89f94e303e2ae87ef894d96f3543b4b541d2fba8011c85ef5a289833f9b5",
+      "bytes": 6848,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -94,8 +116,8 @@
     },
     {
       "path": "gates/land-gate.sh",
-      "sha256": "2a11ed0db8a725cf80766e347e37118e332b08f59e2faf5f75cd70f20a67d5f8",
-      "bytes": 20130,
+      "sha256": "6e200425b5bc65fa785492f89c9d658a5ba9c4eb74e746a8ba8ec0efcf15dc89",
+      "bytes": 23155,
       "executable": true,
       "interpreter": "/bin/bash",
       "language": "shell",
@@ -111,6 +133,17 @@
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "LANDING_AUTHORITY",
+      "exit_policy": "SHELL_ERREXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "gates/run-land-gate-hosted.sh",
+      "sha256": "c11eb53fb7f3d69b6bb15c0366aa211cbb5471e415a9ad77b29844a306c46585",
+      "bytes": 4754,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "ACTION_OR_LAUNCHER",
       "exit_policy": "SHELL_ERREXIT",
       "named_by_landing_gate": true
     },
@@ -171,8 +204,8 @@
     },
     {
       "path": "kernel/tests/host/build.sh",
-      "sha256": "b6f2b6c9eff4852eb2265462e8aba1de83949dc20a1b6eec1c01f334eca8dd07",
-      "bytes": 41337,
+      "sha256": "40dae2694a3be03bda7d91a5099a88290105b0233ccd1acc761680b4adc8bf52",
+      "bytes": 46122,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -248,8 +281,8 @@
     },
     {
       "path": "kernel/tests/host/memmap-guard-test.sh",
-      "sha256": "6361084e634253dc130dbbb8edd672cc9ee0a7d2962e9bb51fdc77ef8cc7a39f",
-      "bytes": 11740,
+      "sha256": "5f416d9005b749639902a2b4c45da0f15d0a8e6021f0b71ed0230754f438d9d7",
+      "bytes": 12148,
       "executable": true,
       "interpreter": "/bin/sh",
       "language": "shell",
@@ -270,8 +303,8 @@
     },
     {
       "path": "kernel/tests/host/run-all.sh",
-      "sha256": "eb84d060e7e124032ea48bbc86afcf94e6bff9cb12398123189540b99c09ba2a",
-      "bytes": 4175,
+      "sha256": "1b7923c709b46ca9db75d9f2ce5719bc93457d46d2958bcaa68774e46573e857",
+      "bytes": 5005,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -281,8 +314,8 @@
     },
     {
       "path": "kernel/tests/host/user-syscalls-test.sh",
-      "sha256": "acb25d3e0edc46fda1f77f947cf92ba0875c874c7a85b5c4d3c0e8cc8a7e6d7b",
-      "bytes": 1226,
+      "sha256": "5a3889a2188c9e10a640b138ffbdb126a0cde40a326f6c8b25f93b24b151106a",
+      "bytes": 1330,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -435,14 +468,36 @@
     },
     {
       "path": "kernel/tools/checks/check-build-contract.py",
-      "sha256": "ad11df4f4e1f0faa6989f426f72192d1e81f63dea1e01e86cd7306e734ef1d77",
-      "bytes": 3807,
+      "sha256": "529933939e3956238dee89eb0ff6502c152deb3c140cd9480a26a9158d9ee5f9",
+      "bytes": 4306,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "VERIFIER",
       "exit_policy": "PYTHON_MAIN_EXIT",
       "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/checks/check-dead-state-selftest.sh",
+      "sha256": "f315d9061e549b80870566af67eda1f7eee194f86d093f5972ffcccf4ff0e030",
+      "bytes": 5487,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "VERIFIER",
+      "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/check-dead-state.py",
+      "sha256": "dd6466f0cb5ab1ae6414114704e9730d47e04705e64dfd16aed92aaa3491471a",
+      "bytes": 11881,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
     },
     {
       "path": "kernel/tools/checks/check-dma.sh",
@@ -453,7 +508,7 @@
       "language": "shell",
       "role": "VERIFIER",
       "exit_policy": "MANUAL_EXPLICIT_FAILURES",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/tools/checks/check-elf-permissions.py",
@@ -467,6 +522,28 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/tools/checks/check-header-mirror-selftest.sh",
+      "sha256": "abd1b8c94a3b3625c3008a8498ff3df4be8f2beffd32adf653e049f73f0b6b2d",
+      "bytes": 3292,
+      "executable": true,
+      "interpreter": "/bin/sh",
+      "language": "shell",
+      "role": "VERIFIER",
+      "exit_policy": "SHELL_ERREXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/check-header-mirror.py",
+      "sha256": "104babda1574920ed35be343cfaa38faf52e9a6d8fe0f6b926aa37b171d42d10",
+      "bytes": 6549,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/checks/check-himap.sh",
       "sha256": "6bc5da171849dd40890d41d08fe25c823e7fa8c4cb6efdca81df1cdb5d4cbba2",
       "bytes": 5919,
@@ -478,9 +555,20 @@
       "named_by_landing_gate": true
     },
     {
+      "path": "kernel/tools/checks/check-isr-sse.sh",
+      "sha256": "74fa5816da57693c81a450a9fb18d6daeffcd80dbc8331f4fe0eb583538eeeb0",
+      "bytes": 9432,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "VERIFIER",
+      "exit_policy": "AGGREGATED_EXPLICIT_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
       "path": "kernel/tools/checks/check-land-gate.py",
-      "sha256": "20d1e209cfeff960466add1e6f12cbdd728b7de1171acc9cbf3c1aabfdc7dcae",
-      "bytes": 11077,
+      "sha256": "d64904ae7142262b3bcc49dd2038bec703a146706d74d738824fc5fdb4e418ad",
+      "bytes": 15126,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -522,15 +610,37 @@
       "named_by_landing_gate": true
     },
     {
-      "path": "kernel/tools/checks/check-ram.sh",
-      "sha256": "f375ae2a75dc261cb5df721b2be53031d0e724ceba373d453303f0093a52f60e",
-      "bytes": 6694,
+      "path": "kernel/tools/checks/check-nativeargs-selftest.sh",
+      "sha256": "3e0bb8510cdabb0c1d1d99606231c25d25f7aaae96cc8aac813de5f54a099624",
+      "bytes": 4874,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
       "role": "VERIFIER",
       "exit_policy": "MANUAL_EXPLICIT_FAILURES",
       "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/check-nativeargs.py",
+      "sha256": "0761a6bf2c197cfaa679e609d45140df29c6a188c2c38b1bcf94ddc348f2b65e",
+      "bytes": 6090,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "VERIFIER",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/checks/check-ram.sh",
+      "sha256": "5571974a994e327bcd419497dc47ea5689c9bb7bacec936284ab1d84dcfdb4bd",
+      "bytes": 7060,
+      "executable": true,
+      "interpreter": "/usr/bin/env bash",
+      "language": "shell",
+      "role": "VERIFIER",
+      "exit_policy": "MANUAL_EXPLICIT_FAILURES",
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/tools/checks/check-reproducible-build.py",
@@ -556,8 +666,8 @@
     },
     {
       "path": "kernel/tools/checks/check-version-selftest.py",
-      "sha256": "ec9b4ff23839d63f97ba7d5698140bf0178c04cca6474047fe9741249c9b905f",
-      "bytes": 3656,
+      "sha256": "28e51b1055eebcf637df63520ac1d7136c41353c0ab7370868e886c4d2d963e4",
+      "bytes": 4744,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -644,8 +754,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-64.sh",
-      "sha256": "fa520cb6d1040efae7a004afcc27b191d842f5f2008facb0310f64af14c20f6c",
-      "bytes": 5502,
+      "sha256": "c2f84673a6bdf4d43b615ee9062adff017db1c8ee078c29f23878d35b9ab6504",
+      "bytes": 5606,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -699,8 +809,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-efi.sh",
-      "sha256": "dd7035f11f43ebeee0e080ff6e509c1747370049f3e072a721663adbb14b3aef",
-      "bytes": 16741,
+      "sha256": "2179bbbb5584ff5d4ea157c9cb450ca900faf2d415aa6fda1f6dcc4ecf9177e0",
+      "bytes": 19232,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -721,8 +831,8 @@
     },
     {
       "path": "kernel/tools/checks/verify-iso.sh",
-      "sha256": "edaea893a3153010e0c7d0ff572e82c111bb3e1aa592a5bceeb464c6c44b6b50",
-      "bytes": 7115,
+      "sha256": "820b55a5a81461deff1c648dbb1cda3dcc6564cc1cd2b3b69028feeeb6202f33",
+      "bytes": 7361,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -772,7 +882,7 @@
       "language": "shell",
       "role": "UTILITY_OR_LEGACY",
       "exit_policy": "NO_STATIC_FAILURE_POLICY",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/tools/checks/write-clock-receipt.py",
@@ -798,8 +908,8 @@
     },
     {
       "path": "kernel/tools/checks/write-pmm-receipt.py",
-      "sha256": "c8b3e5469a90874ad12b212b01958808b7d1611901729435ac198c3270f00f5b",
-      "bytes": 16012,
+      "sha256": "6ecb15a5194ab3439593ec3fca6484664189122c281e2ba61d13efd9826b308f",
+      "bytes": 17294,
       "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -809,8 +919,8 @@
     },
     {
       "path": "kernel/tools/checks/write-scheduler-receipt.py",
-      "sha256": "c5c8ec014013ac0de5fd40a0c37dc2fa11d073ae14a0dff88dc14f0f22130f82",
-      "bytes": 7839,
+      "sha256": "8c7c12c506be6b65e87677204901f7122f06fa8d8ad96ca3bf6ffd65c0a00116",
+      "bytes": 11967,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -820,8 +930,8 @@
     },
     {
       "path": "kernel/tools/checks/write-user-process-receipt.py",
-      "sha256": "1e93e463743f802611bbcc34027a85949fdaefaa59f92488c9b76ebd8b5fb48b",
-      "bytes": 18727,
+      "sha256": "f7c17b9ff49e00a018afebbdbe78ae3af0d935836483499d9ae0b9f755dfbed1",
+      "bytes": 25617,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -963,8 +1073,8 @@
     },
     {
       "path": "kernel/tools/generators/gen-evidence-registry.py",
-      "sha256": "18a196f694c26eaf8df51381913a34a217c6589adaf5a652e1ae00f3ef2424b5",
-      "bytes": 63030,
+      "sha256": "07d67bd29674be5adf5acaec2addbc9c7092513978c51eb54d6436cc1bc87e6a",
+      "bytes": 63897,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1289,7 +1399,7 @@
       "language": "shell",
       "role": "BUILD_OR_GENERATOR",
       "exit_policy": "SHELL_ERREXIT",
-      "named_by_landing_gate": false
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/tools/images/mkiso.sh",
@@ -1326,8 +1436,8 @@
     },
     {
       "path": "kernel/tools/probes/exercise.py",
-      "sha256": "52366a9726329c65bc63f8efed9088782d867d4053fdf1883189c81d33dec3d0",
-      "bytes": 30232,
+      "sha256": "d0a3af40659e8d033c1096b3b2fe2893f2b47d8efadd2a0aed4b26e2754feef1",
+      "bytes": 30260,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1359,8 +1469,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-app-routes.py",
-      "sha256": "a1e5fd6d384aefd07b814fe83e6badee01e2221728e62c759d1a205c0cf8a300",
-      "bytes": 17083,
+      "sha256": "a4a03398fcc1cfe0ebddb8fe08ad4560ca26c34e6302aa43869eb5ec482a5086",
+      "bytes": 17171,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1372,6 +1482,28 @@
       "path": "kernel/tools/probes/probe-apps.py",
       "sha256": "f3cec77650124994d941c83afd2b25feb9151babb959b2fdcfb0be041fa22cd6",
       "bytes": 7962,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-archive.py",
+      "sha256": "cd82723b6b91386d7e1e089ab117fd2cd609841ec215141b6c740a3a74e78b98",
+      "bytes": 6154,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_UNPROVED_TOP_LEVEL",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-calckeys.py",
+      "sha256": "7e9eae2d078490d5bdf0b9d7f97ccd4c711c47675c268fe3ccd7ad37584e5df5",
+      "bytes": 6682,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1413,6 +1545,17 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/probes/probe-edit-viewport.py",
+      "sha256": "1aea0d1b5f620615b66f21b605837a15645cee7fdec6f86f90478efc89bab08a",
+      "bytes": 10782,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/probes/probe-edit.py",
       "sha256": "a580bbe32c1292f0c91f370477537b9cdb761170df1a5040e5b9c8487b4d4f34",
       "bytes": 6404,
@@ -1424,9 +1567,42 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/probes/probe-escape.py",
+      "sha256": "8681839f276deea7795d8176004717a6ffe4effb37957f7699efc706262fde64",
+      "bytes": 7233,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-field.py",
+      "sha256": "dce833051e58b20b52484ee9b25e3e863911227395dd73184a74316ba3bda836",
+      "bytes": 4044,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-files-click.py",
+      "sha256": "ed66fa97ec5e292f686f9f56dbec043410820e96e9d9379e275434eaeefdbbd6",
+      "bytes": 8781,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/probes/probe-files.py",
-      "sha256": "4d2e24aed774e845fe4c240d157fac7c47810b88d200ce748ae3bfdd08f631c8",
-      "bytes": 11484,
+      "sha256": "ce909413544f32279615fb9f575e34271ccada6359f5c00be187289d5bf28d66",
+      "bytes": 12502,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1446,6 +1622,28 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/probes/probe-gridtoggle.py",
+      "sha256": "8d36293c31a33b332fa49dcb268d489bdbb49c2dfe85b2bb608f0524fea3214c",
+      "bytes": 4920,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-image.py",
+      "sha256": "1496797280aa32b05cf7a6d9adb3291d32d04816b0336176503c19337b757e60",
+      "bytes": 5505,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_UNPROVED_TOP_LEVEL",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/probes/probe-kbd-survives.py",
       "sha256": "e7397308ab3616cc0cbf3279d79179a24b84133980d206aa1a40e419c249988c",
       "bytes": 2872,
@@ -1461,6 +1659,39 @@
       "sha256": "dcef87cf71eeb484aa47272c54c063a36327d85830da0d8eeb7cc69c17384aa0",
       "bytes": 2885,
       "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_UNPROVED_TOP_LEVEL",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-klog.py",
+      "sha256": "b0d3f1f2a5303b4d1f26cbe4ef98d3eb377bdcfdfd5af1d6c430327517ad2e76",
+      "bytes": 5652,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-lock.py",
+      "sha256": "ccbabcdd6af683882d8dd22c75590d55e799e9eab4a659e077e78c3afd12e84d",
+      "bytes": 7464,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_UNPROVED_TOP_LEVEL",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-mesh.py",
+      "sha256": "5f07eefc59e74d47514faacca8c7e05cbf20bb0901c3b2368b8fd2ccaf1fe692",
+      "bytes": 6964,
+      "executable": false,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "PROBE_OR_INSTRUMENT",
@@ -1523,6 +1754,17 @@
       "named_by_landing_gate": false
     },
     {
+      "path": "kernel/tools/probes/probe-overlay-click.py",
+      "sha256": "e6a2b6e27bad744873c69b07bfd51b25b507cbbac0b42d526991b54118700b80",
+      "bytes": 12645,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
       "path": "kernel/tools/probes/probe-pointer-usb.py",
       "sha256": "93856b196166958d67cd5b6efe31d2d0f7efc71fd3c4ec320b113f36bf2a549c",
       "bytes": 3218,
@@ -1535,14 +1777,25 @@
     },
     {
       "path": "kernel/tools/probes/probe-rail.py",
-      "sha256": "7ab7bfd895a44ebc4c3a0f66fb87db22b57ecfd4faa20ad8c535c2e329ebe13b",
-      "bytes": 11003,
+      "sha256": "a441823aafccd75f61681c83e6bade3b6b8501aefc87c18a2f55049a92b6f524",
+      "bytes": 11023,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "PROBE_OR_INSTRUMENT",
       "exit_policy": "PYTHON_EXPLICIT_EXIT",
       "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/probes/probe-railcover.py",
+      "sha256": "c7b9fa28e3b86745f5e9bcb1be1933dcad13ecf4df80d4457ffb5ec2612ce0bf",
+      "bytes": 6224,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
     },
     {
       "path": "kernel/tools/probes/probe-resize.py",
@@ -1557,14 +1810,36 @@
     },
     {
       "path": "kernel/tools/probes/probe-run.py",
-      "sha256": "e3afcf13b492b5fd6193e99c21852f3460b7acab1cfaab53c20330b79e9e1c67",
-      "bytes": 21538,
+      "sha256": "1700072e5e11df443707002db6cad4842810c210d0e4a9ddbc81a7c07961a911",
+      "bytes": 21963,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
       "role": "PROBE_OR_INSTRUMENT",
       "exit_policy": "PYTHON_EXPLICIT_EXIT",
       "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/probes/probe-seg.py",
+      "sha256": "b6ce3f078110794185601c8e3bc78b33c92f0124fa7cd0068a68808b503366c7",
+      "bytes": 9846,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-shellbtn.py",
+      "sha256": "203d202aeb7ab0023c97547b2448bbba904b81207933ead7e60d946492857a96",
+      "bytes": 12246,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": false
     },
     {
       "path": "kernel/tools/probes/probe-shot.py",
@@ -1601,8 +1876,8 @@
     },
     {
       "path": "kernel/tools/probes/probe-snap.py",
-      "sha256": "3b36334d288f690fe4990bcc9e6b6efa61fcb68c7ed966247d53fd8f0a9da590",
-      "bytes": 7258,
+      "sha256": "31870a6a12fe36ae539d713094a553b66c35f298c82a68382daa977f812272e9",
+      "bytes": 8611,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1664,6 +1939,39 @@
       "role": "PROBE_OR_INSTRUMENT",
       "exit_policy": "PYTHON_EXPLICIT_EXIT",
       "named_by_landing_gate": false
+    },
+    {
+      "path": "kernel/tools/probes/probe-user-process-exit.py",
+      "sha256": "a16ec17af5d37bc6a2ee35f2326512e3b6621b6862757c3b5d32eff67a6fa447",
+      "bytes": 10398,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/probes/probe-user-process.py",
+      "sha256": "ab4eace9e7968b3c119cd796cbf31416d8c88ad290d6c7a7a61887101ef4b1cb",
+      "bytes": 12228,
+      "executable": true,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_EXPLICIT_EXIT",
+      "named_by_landing_gate": true
+    },
+    {
+      "path": "kernel/tools/probes/probe-user-spawn-wait.py",
+      "sha256": "3d6d9f558dd9550e392044046e99e6f9f0ceae4fdfa517dc7dce104afe3d6e38",
+      "bytes": 8794,
+      "executable": false,
+      "interpreter": "/usr/bin/env python3",
+      "language": "python",
+      "role": "PROBE_OR_INSTRUMENT",
+      "exit_policy": "PYTHON_MAIN_EXIT",
+      "named_by_landing_gate": true
     },
     {
       "path": "kernel/tools/run/run-benchmarks.py",
@@ -1755,8 +2063,8 @@
     },
     {
       "path": "kernel/verify.sh",
-      "sha256": "dd49681f9a66f249d72c47f37e5313d26906068aa486889e0821c431b80ee297",
-      "bytes": 3796,
+      "sha256": "4ac67a445b85a4fdb3487b215b4c1fc26c60b69cc7851258c38cd45dbe19f279",
+      "bytes": 3802,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1777,8 +2085,8 @@
     },
     {
       "path": "run_tests.sh",
-      "sha256": "5fa5f03b926a7fb6badf5409c6154a1948fbba26b72b463369ac8e3bfd1f7a40",
-      "bytes": 19233,
+      "sha256": "80fe8986f1083f19d5f7011b17f7db14542b4debc56f6e755498098b2c91cba3",
+      "bytes": 38208,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1788,8 +2096,8 @@
     },
     {
       "path": "tools/directory-docs.py",
-      "sha256": "0b2f56afebab13bc2d4ecbb04852d183324d9a022f135075a2590c2491c8ec37",
-      "bytes": 29438,
+      "sha256": "f424414be468adac0c8dcf17689dc0b1c899707f96ea94f619cbf90b28d7433b",
+      "bytes": 29931,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1799,8 +2107,8 @@
     },
     {
       "path": "tools/doc-check.sh",
-      "sha256": "cdefcd15acdafb5a1909da2c8c81a21d7b6a3fafdbc2aa0b0f5e959300d42885",
-      "bytes": 9082,
+      "sha256": "533a2245adc7a4f4438aefb552ea0cf866a5b0211a9cd26f1ceeb81c84ead2ea",
+      "bytes": 9937,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1821,8 +2129,8 @@
     },
     {
       "path": "tools/gen_feature_status.py",
-      "sha256": "8934c7263b0a9826c474cf372c999344db003e63cb0ea8fff2cafebf3e9e67cb",
-      "bytes": 120613,
+      "sha256": "2e9b8a39760e5a989ae68c4dec067828153f1763f5928ebcabfa18afdb347ec2",
+      "bytes": 149380,
       "executable": true,
       "interpreter": "/usr/bin/env python3",
       "language": "python",
@@ -1843,8 +2151,8 @@
     },
     {
       "path": "tools/hazard-scan.sh",
-      "sha256": "97bbfa91af02b74f55e7dacfd1008cef6457f2aac3811c596ea2e8380b808076",
-      "bytes": 12734,
+      "sha256": "6af853e1726bfe131984e3bd04c6880cb6fb82cb5dda3df3a8991a025492e26c",
+      "bytes": 14762,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1854,8 +2162,8 @@
     },
     {
       "path": "tools/install-hooks.sh",
-      "sha256": "038f4cac8aefd62913c246a48d3970fb0454d4f7e7f03ab99fe9cb409fe532d0",
-      "bytes": 3528,
+      "sha256": "ce4eb9a5d728748e4564ffb61da9ac4603611f150e321c1d69524e133855dd88",
+      "bytes": 3993,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1909,8 +2217,8 @@
     },
     {
       "path": "tools/todo.sh",
-      "sha256": "7919a2fce810456c64bae596f2614e4cac06c50aa13bf3fc5cc6ce791aab2f1b",
-      "bytes": 7338,
+      "sha256": "c725e4d21be6e57bf2cfd71e1e4681f1d4ec76b7131b54996511064410c31d54",
+      "bytes": 8086,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1953,8 +2261,8 @@
     },
     {
       "path": "verify_fmt.sh",
-      "sha256": "64eebd011be2e4bd6c9e0ed290d1c738ab07f2d74e087f55b282572a2943b1fc",
-      "bytes": 2486,
+      "sha256": "ff899b0d3ae0ac9f424c2c91675fd68e80087a8da3b917c35f3d85d61391de8b",
+      "bytes": 3429,
       "executable": true,
       "interpreter": "/usr/bin/env bash",
       "language": "shell",
@@ -1975,10 +2283,10 @@
     }
   ],
   "counts": {
-    "wrappers": 179,
-    "executable": 169,
-    "named_by_landing_gate": 76,
-    "no_static_failure_policy": 18
+    "wrappers": 207,
+    "executable": 186,
+    "named_by_landing_gate": 85,
+    "no_static_failure_policy": 23
   },
   "authority_contract": {
     "only_supported_landing_entry": "gates/run-land-gate-contained.sh start",

@@ -1,5 +1,99 @@
 # Project Status
 
+Current full-gate follow-up, 2026-09-09: published interrupt repair
+`1a005e48` passes all 20 ordinary GitHub checks. Local source `de24460f…`
+repairs the BIOS32 diagnostic that failed under software CPU emulation and
+updates stale address-space and per-core emergency-stack validation. BIOS32
+double-fault capture now passes on both KVM and TCG; the fresh canonical host
+suite passes 78 targets, and native UEFI boots with matching evidence.
+All 11 local target checks pass, including all four parent/child cases under
+TCG with physical frame use returning from zero to zero. Fresh complete hosted
+verification remains pending.
+The active process checklist now marks implementation steps 01–25 complete,
+with their host/ABI/fixture evidence linked; step 30 remains open for full
+regression closure. [Current proof and limits](evidence/process-spawn-wait-2026-09-08.md).
+
+Current repair, 2026-09-09: published `79d9248d` passed 19 ordinary hosted
+checks but its native-UEFI exit probe exposed an interrupt race during process
+resume. Source `aafe2635…` masks IRQs before switching address space and borrowing
+the saved register frame. A controlled QEMU reproduction records 17 timer
+interrupts on that frame followed by corrupted CR3 and a double fault; the same
+injected delay passes the complete boot self-check with the fix. Eight boundary
+tests and twelve receipt-consumer tests pass. The fresh canonical suite passes
+78 host targets with zero failed or unavailable, and all 11 focused normal
+boot/process checks pass. Complete hosted closure remains open.
+The [process evidence record](evidence/process-spawn-wait-2026-09-08.md)
+separates that instrumented reproduction from normal image proof.
+
+Current reconciliation, 2026-09-09: published merge `99953083` includes main's
+USB/display work at `9c4cb509`. All five required pre-push gates and all 20
+ordinary hosted checks passed; GitHub reports PR #15 mergeable again. A
+follow-up extends the architecture
+process harness to 658 passing checks for file-read refusal and stale handles
+after orphan slot reuse. Its refreshed canonical host suite passes 78 targets,
+with zero failed or unavailable; fresh complete hosted verification remains
+pending. The runtime source identity remains `6ae68572…`.
+
+Main's USB/display work landed at `9c4cb509`
+while the process publication was running. Its 15 conflicts with this branch
+are resolved locally. The first combined USB test exposed a command-number
+collision with process status; the repair has a failing-before/passing-after
+host regression. Corrected combined source `6ae68572…` passes 78 host targets
+(zero failed or unavailable) and all 11 focused boot/process checks, including
+USB re-plug on native UEFI64 and BIOS32 and the BIOS32 double-fault route.
+Four retained parent/child receipts bind the exact image and serial transcripts;
+each returns physical frame use from zero to zero with no allocator faults.
+The rolling-runner archive repair passed on GitHub at `e373dcb`; that older
+full run was cancelled to supersede it with this reconciled source. Fresh
+complete hosted closure remains pending. Details and limits are in
+the [process evidence record](evidence/process-spawn-wait-2026-09-08.md).
+
+Implementation started, 2026-09-08:
+[userspace spawn/wait progress and exact evidence](evidence/process-spawn-wait-2026-09-08.md).
+The first roadmap slice has code, failure/ownership tests and native UEFI
+parent/child QEMU proof. Runtime commit `8365cbd` includes main `bd75552`.
+Combined source `2bb71bad…` passes the rebuilt host suite: 77 passed, three
+hardware skips, 14 explicit non-runs and zero failures. Native boot, all four
+parent/child scenarios and the existing external fault/exit/sleep probes pass.
+The shared allocator rollback regression passes 555 checks. The local launcher
+now uses the same inventory runner as CI and preserves complete native-gate
+failure diagnostics. Normal push published `4e7e283` to draft PR #15; all five
+pre-push checks and ordinary hosted code/host/boot checks passed. The first
+hosted full closure failed at a stale sleep-evidence contract, and docs found
+two path references plus a managed-block error. Published follow-up `c546efc`
+passes all 20 ordinary hosted checks, including docs. Its full run passed the
+repaired boundary tests, then stopped recovering an obsolete dependency from
+the rolling container. The runner now upgrades its packages before recording
+the dependency lock; fresh full closure and the combined app matrix remain pending.
+Earlier BIOS32 Run and 47-app lifecycle results belong to `52dc8b9c…`.
+
+Full-system planning, 2026-09-08:
+[complete roadmap, phase chapters and next-step checklist](design/FULL-SYSTEM-ROADMAP.md).
+This proposal retains all 906 features, 611 named targets and 174 original
+contracts, adds explicit decisions and bounded handoffs, and expands the next
+process-management slice. It changes no implementation maturity claims.
+
+Current integration, 2026-09-06:
+[process/sweep/cleanup hosted closure and worktree snapshot](evidence/integration-hosted-closure-2026-09-06.md).
+Draft PR #15 combines PRs #12–#14 and Claude's committed sweep. Implementation
+`dd1871a` passed all 126 complete hosted gate steps, with zero failures, and has
+20 successful ordinary CI results (the optional model review was skipped).
+The fresh full-run ledger records 8 proved, 55 partial and 843 planned features.
+The host build budget and physical qualification remain open.
+Main advanced concurrently to the sweep tip `9212979`, already in this branch's
+ancestry. The integration and original PRs remain unmerged. See the new receipt
+for current ownership, exact tested source, evidence limits and the next feature.
+
+Current continuation, verified 2026-09-06:
+[persistent process sleep and the 906-feature queue](evidence/process-sleep-2026-09-05.md).
+The [continuation handoff](HANDOFF-CONTINUATION-2026-09-05.md) records exact
+branches, PRs, proof, concurrent owners and the next implementation dependency.
+Both hosted full gates passed; the sleep run records 8 proved, 55 partial and
+843 planned features. The three PRs remain unmerged; physical proof and the
+host build-performance budget remain open.
+The repository/worktree tables below are the historical 2026-08-30 snapshot;
+they do not describe today's concurrent dirty worktrees or PR #12.
+
 Checked 2026-08-30. This page separates repository state, planning state, and
 implementation state. They are not the same thing.
 

@@ -1,14 +1,14 @@
 {
-  "build_script_sha256": "dd27fd6b90c45b1197a21800216d8b47edb90aa0147a32c1f250c59321b41e4a",
+  "build_script_sha256": "38ac2104407f84b3c5aaf714553f41c09d56a1440eb492b717904b6a6f20b2f9",
   "counts": {
-    "auto_run_commands": 78,
-    "auto_run_targets": 76,
-    "compiled": 79,
-    "manual_or_instrument_targets": 13,
+    "auto_run_commands": 83,
+    "auto_run_targets": 81,
+    "compiled": 85,
+    "manual_or_instrument_targets": 14,
     "scripts": 10,
-    "total": 89
+    "total": 95
   },
-  "policy_sha256": "c5041e9c7b663fe706575715248a5e482f441bb7458331e7d149838e46772133",
+  "policy_sha256": "3b273dc60c3d00c30aaa9509c80f8d455ec5ecae52d1b433a3ba159987ccea09",
   "schema": "zlos.host-test-inventory.v1",
   "targets": [
     {
@@ -197,7 +197,7 @@
       "optional_build": false,
       "source": "build.sh",
       "source_present": true,
-      "source_sha256": "dd27fd6b90c45b1197a21800216d8b47edb90aa0147a32c1f250c59321b41e4a",
+      "source_sha256": "38ac2104407f84b3c5aaf714553f41c09d56a1440eb492b717904b6a6f20b2f9",
       "timeout_seconds": 180
     },
     {
@@ -1286,18 +1286,39 @@
       "auto_run": true,
       "commands": [
         [
-          "./processmemorytest"
+          "./processlifecycletest"
         ]
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
       "id": "HT-061",
       "kind": "gate",
+      "name": "processlifecycletest",
+      "optional_build": false,
+      "source": "processlifecycletest.c",
+      "source_present": true,
+      "source_sha256": "2324a7ffd9d47e642fa4c035c3585b287f712807f3e48f57cfbdb76fcc451518",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./processmemorytest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-062",
+      "kind": "gate",
       "name": "processmemorytest",
       "optional_build": false,
       "source": "processmemorytest.c",
       "source_present": true,
-      "source_sha256": "6e538516ef96987fcec1b503768bce955fcabc34ff52bfd8722993f80483fc6b",
+      "source_sha256": "2a1f6293ef03acc2e479cd80d61ad3455ba05d79f17fcd3d4b2a7180553a0a97",
       "timeout_seconds": 180
     },
     {
@@ -1312,7 +1333,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-062",
+      "id": "HT-063",
       "kind": "gate",
       "name": "retest",
       "optional_build": false,
@@ -1333,7 +1354,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-063",
+      "id": "HT-064",
       "kind": "gate",
       "name": "rtctest",
       "optional_build": false,
@@ -1354,13 +1375,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-064",
+      "id": "HT-065",
       "kind": "builder",
       "name": "run-all.sh",
       "optional_build": false,
       "source": "run-all.sh",
       "source_present": true,
-      "source_sha256": "1b7923c709b46ca9db75d9f2ce5719bc93457d46d2958bcaa68774e46573e857",
+      "source_sha256": "9c911e766a62afc0e213b5e5316c7a272ea98912b28994e4ba05e85f2c9dd781",
       "timeout_seconds": 180
     },
     {
@@ -1375,7 +1396,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-065",
+      "id": "HT-066",
       "kind": "gate",
       "name": "runtest",
       "optional_build": false,
@@ -1396,7 +1417,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-066",
+      "id": "HT-067",
       "kind": "gate",
       "name": "schedtest",
       "optional_build": false,
@@ -1417,7 +1438,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-067",
+      "id": "HT-068",
       "kind": "gate",
       "name": "schedtest_ms",
       "optional_build": false,
@@ -1433,12 +1454,33 @@
       "auto_run": true,
       "commands": [
         [
+          "./schedulerpolicytest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-069",
+      "kind": "gate",
+      "name": "schedulerpolicytest",
+      "optional_build": false,
+      "source": "schedulerpolicytest.c",
+      "source_present": true,
+      "source_sha256": "3899c6a4f2f1c60c30ff90049cf9bcd0ecce33a7cf24c7e462dfb1f7e991b598",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
           "./settingstest"
         ]
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-068",
+      "id": "HT-070",
       "kind": "gate",
       "name": "settingstest",
       "optional_build": false,
@@ -1459,7 +1501,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-069",
+      "id": "HT-071",
       "kind": "gate",
       "name": "settingstest_zlfs",
       "optional_build": false,
@@ -1480,7 +1522,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-070",
+      "id": "HT-072",
       "kind": "gate",
       "name": "systest",
       "optional_build": false,
@@ -1501,7 +1543,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-071",
+      "id": "HT-073",
       "kind": "gate",
       "name": "tartest",
       "optional_build": false,
@@ -1522,7 +1564,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-072",
+      "id": "HT-074",
       "kind": "gate",
       "name": "tcptest",
       "optional_build": false,
@@ -1543,13 +1585,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-073",
+      "id": "HT-075",
       "kind": "gate",
       "name": "termwrap",
       "optional_build": false,
       "source": "termwrap.c",
       "source_present": true,
-      "source_sha256": "a37cdbce49071aa3d7d69fd78893b3e7095cac4e5f923fef30f270bad789ff66",
+      "source_sha256": "7843a7cc1987e2ad574f59e1bda11c50cbab23bb461accfb2c20453df5b2cbd3",
       "timeout_seconds": 180
     },
     {
@@ -1564,7 +1606,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-074",
+      "id": "HT-076",
       "kind": "gate",
       "name": "tlscryptotest",
       "optional_build": false,
@@ -1585,7 +1627,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-075",
+      "id": "HT-077",
       "kind": "gate",
       "name": "tlsstatetest",
       "optional_build": false,
@@ -1606,7 +1648,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-076",
+      "id": "HT-078",
       "kind": "gate",
       "name": "tlstest",
       "optional_build": false,
@@ -1627,7 +1669,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-077",
+      "id": "HT-079",
       "kind": "gate",
       "name": "toasttest",
       "optional_build": false,
@@ -1648,7 +1690,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-078",
+      "id": "HT-080",
       "kind": "gate",
       "name": "tritest",
       "optional_build": false,
@@ -1669,7 +1711,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-079",
+      "id": "HT-081",
       "kind": "gate",
       "name": "uitest",
       "optional_build": false,
@@ -1690,13 +1732,76 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-080",
+      "id": "HT-082",
       "kind": "gate",
       "name": "user-syscalls-test.sh",
       "optional_build": false,
       "source": "user-syscalls-test.sh",
       "source_present": true,
-      "source_sha256": "acb25d3e0edc46fda1f77f947cf92ba0875c874c7a85b5c4d3c0e8cc8a7e6d7b",
+      "source_sha256": "067d3dc86077dd8e68912d6b83fd2edd4454c18c1a7bc2ff0ba9d1931ac6b896",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./userimage64test"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-083",
+      "kind": "gate",
+      "name": "userimage64test",
+      "optional_build": false,
+      "source": "userimage64test.c",
+      "source_present": true,
+      "source_sha256": "99e1d07abae6d1a9158b14bd54d16ad0a06de2163276a6925b05ac939db94b87",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./userprocessservicetest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-084",
+      "kind": "gate",
+      "name": "userprocessservicetest",
+      "optional_build": false,
+      "source": "userprocessservicetest.c",
+      "source_present": true,
+      "source_sha256": "955dc1aa86032cd6d1af58b8393e689e71e13509c33d95d89fb1e1f546cea8d0",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": true,
+      "commands": [
+        [
+          "./userspawnwaittest"
+        ]
+      ],
+      "evidence_ceiling": "host behavior only",
+      "form": "compiled",
+      "id": "HT-085",
+      "kind": "gate",
+      "name": "userspawnwaittest",
+      "optional_build": false,
+      "source": "userspawnwaittest.c",
+      "source_present": true,
+      "source_sha256": "6b15537a24a03fdaf66c9d7065c872135f15b29eef73346e412fed39e95efdf1",
       "timeout_seconds": 180
     },
     {
@@ -1711,7 +1816,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-081",
+      "id": "HT-086",
       "kind": "gate",
       "name": "walltest",
       "optional_build": false,
@@ -1732,7 +1837,7 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-082",
+      "id": "HT-087",
       "kind": "instrument",
       "name": "wmbench",
       "optional_build": false,
@@ -1753,7 +1858,7 @@
       ],
       "evidence_ceiling": "measurement/artifact only; not a pass",
       "form": "compiled",
-      "id": "HT-083",
+      "id": "HT-088",
       "kind": "instrument",
       "name": "wmshot",
       "optional_build": false,
@@ -1774,13 +1879,13 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-084",
+      "id": "HT-089",
       "kind": "gate",
       "name": "wmtest",
       "optional_build": false,
       "source": "wmtest.c",
       "source_present": true,
-      "source_sha256": "2b70d778aa6f804487ccd2f3dbd58874661f39e59fbdc7d1b7ce90733446279f",
+      "source_sha256": "e8a7aefb68010958a02a4d8715650affb9cc3c88e23d33cdf2c17872270fbde2",
       "timeout_seconds": 180
     },
     {
@@ -1795,7 +1900,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-085",
+      "id": "HT-090",
       "kind": "gate",
       "name": "wmtest_feel",
       "optional_build": false,
@@ -1816,7 +1921,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-086",
+      "id": "HT-091",
       "kind": "gate",
       "name": "x509test",
       "optional_build": false,
@@ -1837,7 +1942,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "compiled",
-      "id": "HT-087",
+      "id": "HT-092",
       "kind": "gate",
       "name": "xhcitest",
       "optional_build": false,
@@ -1862,13 +1967,34 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-088",
+      "id": "HT-093",
       "kind": "gate",
       "name": "zladdrs.sh",
       "optional_build": false,
       "source": "zladdrs.sh",
       "source_present": true,
       "source_sha256": "7bf44ee33771e4da9354e45c0f4ccb098838fdb47864df2cc539c7a44e4ef048",
+      "timeout_seconds": 180
+    },
+    {
+      "allowed_exit_codes": [
+        0
+      ],
+      "auto_run": false,
+      "commands": [
+        [
+          "./zlfsseed"
+        ]
+      ],
+      "evidence_ceiling": "measurement/artifact only; not a pass",
+      "form": "compiled",
+      "id": "HT-094",
+      "kind": "instrument",
+      "name": "zlfsseed",
+      "optional_build": false,
+      "source": "zlfsseed.c",
+      "source_present": true,
+      "source_sha256": "c39a4254f05242cf9c69eb05a0c6ff9ade0d8106aeac967987a82d832969914b",
       "timeout_seconds": 180
     },
     {
@@ -1883,7 +2009,7 @@
       ],
       "evidence_ceiling": "host behavior only",
       "form": "script",
-      "id": "HT-089",
+      "id": "HT-095",
       "kind": "gate",
       "name": "zllog-e2e.sh",
       "optional_build": false,

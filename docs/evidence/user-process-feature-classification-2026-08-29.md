@@ -1,10 +1,10 @@
 # Current user-process feature classification
 
-Date: 2026-08-30
+Date: 2026-09-03
 
-This receipt maps the bounded native UEFI64 Ring 3 implementation into ten
-kernel feature rows. It does not promote the fixed two-process diagnostic into
-a persistent process service or a stable cross-version ABI.
+This receipt maps the bounded native UEFI64 Ring 3 implementation into twelve
+kernel feature rows. It does not promote the fixed two-slot persistent service
+into a general userspace process API or a stable cross-version ABI.
 
 ## Current implementation
 
@@ -46,6 +46,13 @@ time, yield, whole-file storage, PID IPC, text-window and anonymous-memory
 operations. Dispatch
 bodies and argument contracts remain hand-written.
 
+An exact generation-tagged lifecycle handle now names each live slot. Exit and
+fault records remain distinct until observation and reap; stale generations are
+rejected and an exhausted generation retires its slot. The bounded scheduler
+uses that handle as its owner token. Its coordinator performs one preemptible
+Ring 3 turn per kernel work-loop call and fail-stops if lifecycle and policy
+state disagree.
+
 ## Current evidence
 
 The exact current subject is the `build_identity` field in generated
@@ -73,6 +80,13 @@ generator. A fresh native UEFI64 QEMU run records:
 | guarded TSS stacks | both two-page supervisor/NX stacks are selected and retain nonzero high-water below 8 KiB across syscall, preemption and fault paths |
 | process memory accounting | two fixed owners retain 16-page quotas, two anonymous owners retain 32-page quotas, all live totals return to zero, high-water remains bounded, refusals remain zero and the metadata invariant passes |
 | process-frame lifecycle | eight typed frames per slot, disjoint two-process ownership, failure-atomic acquisition and exact final PMM-baseline restoration |
+| process identity | stale generation is refused, signed exit and exact fault custody remain distinct, and identity reap follows resource release |
+| persistent process service | four kernel work calls produce `ST12`, retain exits 11/22, detach terminal scheduler owners and restore the PMM baseline |
+| desktop command route | external `/system/user.bin` is created through Files, started as PID 1000, fault-contained, observed and reaped while the desktop remains live |
+
+The [hosted gate receipt](hosted-user-process-gate-2026-09-03.md) records the
+exact GitHub Actions run, branch head, Ubuntu host inventory, four boot routes,
+native UEFI result, command assertions and explicit physical-evidence ceiling.
 
 One immediately prior QEMU attempt terminated in the emulator itself with
 signal 139 after the persistent journal came online. The gate reported that run
@@ -95,6 +109,8 @@ The following rows move from `PLANNED_UNPROVED` to `PARTIAL_CURRENT`:
 | KR-017 kernel stack management | two guarded PMM-owned supervisor/NX TSS stacks, safe CR3 return order, bounded high-water and reclamation | general per-thread service, direct overflow injection, guarded IST, SMP and physical proof |
 | KR-031 fault containment | GP-faulted offender cannot stop its sibling or kernel | broad malformed-state/vector and persistent desktop recovery coverage |
 | KR-037 stable userspace ABI | documented version-1 convention plus generated number admission and current Ring 3 lifecycle | signals, compatibility/deprecation tooling and generated argument/layout manifest |
+| KR-027 wait/exit status | signed exit and exact fault custody, parent-only host observation/reap, bounded target observation and command reap | userspace wait API, target parent/child authority, concurrency and physical proof |
+| KR-028 process handles | generation-tagged slot identity, stale refusal, exhaustion retirement and exact scheduler ownership | userspace opaque handles, delegated authority/revocation and physical proof |
 
 KR-009 and KR-017 are only `PARTIAL_CURRENT`: the fixed lower user-stack guard
 is directly fault-observed, while the kernel-stack guards are selected and
@@ -112,6 +128,7 @@ Exact current maturity counts remain in generated `program/FEATURE-STATUS.json`.
 
 ```sh
 ZLOS_SKIP_BUILD=1 kernel/tools/checks/verify-efi.sh
+kernel/tools/probes/probe-user-process.py --no-build
 python3 tools/gen_feature_status.py --write --selftest
 python3 tools/gen_feature_status.py --check --selftest
 python3 tools/validate_master_program.py --self-test

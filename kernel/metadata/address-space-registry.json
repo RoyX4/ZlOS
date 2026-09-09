@@ -1,10 +1,10 @@
 {
   "schema": "zlos.address-space-registry.v1",
   "result": "PASS_CURRENT_GENERATED_NON_OVERLAP_WITH_DYNAMIC_USER_TEMPLATE",
-  "build_identity": "eab23af1a93b232414246cc7f259a8c77782c37223c7da62a2bf7625b91eaa08",
+  "build_identity": "de24460febe45820fd1756c3689d790b273c38cc945ca2454fdc9c7afc7e6f18",
   "contract": {
     "path": "kernel/src/arch/x86/address_space_contract.json",
-    "sha256": "867f608be03604404b3e5ded9db39c36ea3ada5c553a6f6663dc226f2f5839e7"
+    "sha256": "5114c021772ee82b4b115ec7f49f6d7668f2c588f98f395f0e9f0ac54e15adc0"
   },
   "physical": {
     "minimum_bytes": 1073741824,
@@ -266,27 +266,27 @@
   "source_assertions": [
     {
       "path": "kernel/boot/link.ld",
-      "sha256": "f34f6150836ed57409cd6449a53fa5d20cd5bc146fdd215f154555c4f3ccfdf2",
+      "sha256": "4e7e4d8b6647d6653194ce97898d22edf160e0750d49942b3a9ada593340bae1",
       "asserted_pattern": "ASSERT\\(__kernel_end <= 0x00C00000"
     },
     {
       "path": "kernel/src/arch/x86/memmap.h",
-      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "sha256": "c80c04fcaf5f1c295eac712c4cb2b2bf1169bef2b95b3543c1a8418beca91d81",
       "asserted_pattern": "#define LO_ARENA +0x00E00000UL"
     },
     {
       "path": "kernel/src/arch/x86/memmap.h",
-      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "sha256": "c80c04fcaf5f1c295eac712c4cb2b2bf1169bef2b95b3543c1a8418beca91d81",
       "asserted_pattern": "#define HI_HEAP +0x10000000UL"
     },
     {
       "path": "kernel/src/arch/x86/memmap.h",
-      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "sha256": "c80c04fcaf5f1c295eac712c4cb2b2bf1169bef2b95b3543c1a8418beca91d81",
       "asserted_pattern": "#define HI_PMM +0x14000000UL"
     },
     {
       "path": "kernel/src/arch/x86/memmap.h",
-      "sha256": "263389605156a143ce195c9fda7de37555dfc111b31f85053689b3782aa578e5",
+      "sha256": "c80c04fcaf5f1c295eac712c4cb2b2bf1169bef2b95b3543c1a8418beca91d81",
       "asserted_pattern": "#define HI_TOP +0x40000000UL"
     },
     {
@@ -296,7 +296,7 @@
     },
     {
       "path": "kernel/src/core/pmm.h",
-      "sha256": "2a433acd02e8fab3fa28b0adbf80f7b4e18bcbd5b2121f2804bfb17570a90661",
+      "sha256": "5c7db078c9fb7f4dd09d6de90869a4ba5e14f66197a0f63d75075b4e311bb2fb",
       "asserted_pattern": "#define PMM_DYNAMIC_FLOOR +\\(\\(pmm_u64\\)HI_PMM\\)"
     },
     {
@@ -311,77 +311,77 @@
     },
     {
       "path": "kernel/src/core/sched.c",
-      "sha256": "d110c6c3fb7b31010155a8fc46efd44561273f7aa74449467e2f0b678205c394",
+      "sha256": "eaac4734e2d69565be7c042d478afa00851e188804921fc2602fc0e4a12cfb8a",
       "asserted_pattern": "#define STACK_BASE +\\(\\(unsigned int\\)HI_SCHED\\)"
     },
     {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "for \\(int i = 1; i < 255; i\\+\\+\\)"
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "i > 0 && i < 255 && !\\(kernel_root\\[i\\] & PRESENT\\)"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "next\\.user_base = \\(pmm_u64\\)\\(unsigned int\\)slot << 39;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "pt\\[0\\] = .*PRESENT \\| USER;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "\\A(?![\\s\\S]*\\bpt\\[1\\]\\s*=)[\\s\\S]*pdpt\\[i\\] = pd\\[i\\] = pt\\[i\\] = 0;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "pt\\[2\\] = .*PRESENT \\| WRITE \\| USER \\| NX;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "next\\.user_stack_top = next\\.user_base \\+ 3ULL \\* PMM_PAGE_BYTES;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "\\A(?![\\s\\S]*\\bpt\\[3\\]\\s*=)[\\s\\S]*pdpt\\[i\\] = pd\\[i\\] = pt\\[i\\] = 0;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "pt\\[4\\] = .*PRESENT \\| WRITE \\| NX;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "pt\\[5\\] = .*PRESENT \\| WRITE \\| NX;"
+    },
+    {
+      "path": "kernel/src/arch/x86/user_image64.c",
+      "sha256": "b9c9c3437c39974ce9184f2c6fb3900245eb48f248031ff9ad03af51a0ebfd97",
+      "asserted_pattern": "next\\.kernel_stack_top = next\\.user_base \\+ 6ULL \\* PMM_PAGE_BYTES;"
     },
     {
       "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "u64 base = \\(u64\\)\\(unsigned\\)slot << 39;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "pt\\[0\\] = .*U64_P \\| U64_U;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "PTE 1 is intentionally absent"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "pt\\[2\\] = .*U64_W \\| U64_U \\| U64_NX;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "user_stack_top = base \\+ 3 \\* 4096ULL;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "PTE 3 is intentionally absent"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "pt\\[4\\] = .*U64_W \\| U64_NX;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "pt\\[5\\] = .*U64_W \\| U64_NX;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
-      "asserted_pattern": "kernel_stack_top = base \\+ 6 \\* 4096ULL;"
-    },
-    {
-      "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "sha256": "811774ef65131cd1d0027e921ae228cfaa7c73cb7680949b1c84b63301ac15b5",
       "asserted_pattern": "#define U64_ANON_PTE_FIRST +6U"
     },
     {
       "path": "kernel/src/arch/x86/usermode.c",
-      "sha256": "2c55d1ab6164c9b64c20d4c42c55f4a7afd88715d0e7442ed2d4ff38d837d530",
+      "sha256": "811774ef65131cd1d0027e921ae228cfaa7c73cb7680949b1c84b63301ac15b5",
       "asserted_pattern": "&pt\\[U64_ANON_PTE_FIRST\\], U64_P \\| U64_W \\| U64_U \\| U64_NX"
     },
     {
       "path": "kernel/src/arch/x86/paging.c",
-      "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
+      "sha256": "632fb58a821d5124c616b5f7fcaa761df215e8941c87b269e1ba4989a1713b82",
       "asserted_pattern": "#define PML4_FIRST +1"
     },
     {
       "path": "kernel/src/arch/x86/paging.c",
-      "sha256": "df353a0c70ff2c7a6b48ee87325926e88c4f29d473a375dec68278de269a4989",
+      "sha256": "632fb58a821d5124c616b5f7fcaa761df215e8941c87b269e1ba4989a1713b82",
       "asserted_pattern": "#define PML4_LAST +255"
     }
   ],
@@ -393,6 +393,6 @@
   ],
   "generator": {
     "path": "kernel/tools/generators/gen-address-space-registry.py",
-    "sha256": "d0124a6757123da454dd193fcb9ef75ebcaf6bd1c224122fc37764f1e56d1fa0"
+    "sha256": "c216e428b5d7c141c30395618d02b0f01fa0810920129a5bf06d0ec927df7eb3"
   }
 }

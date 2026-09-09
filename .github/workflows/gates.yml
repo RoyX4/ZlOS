@@ -27,6 +27,9 @@ jobs:
       - name: ISR callees stay off SSE
         run: bash kernel/tools/checks/check-isr-sse.sh
 
+      - name: Ring-3 FP controls stay out of kernel handlers
+        run: python3 tools/test_user_fpu_boundary.py
+
   lang:
     name: language (interp vs C backend vs native)
     runs-on: ubuntu-latest

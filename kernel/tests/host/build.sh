@@ -487,13 +487,58 @@ gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
     -o pmmtest pmmtest.c ../../src/core/pmm.c ../../src/core/boot/boot_handover.c
 echo "built ./pmmtest       (run: ./pmmtest)"
 
+# Process identity is independent of page-table mechanics. Exercise exact
+# parent custody, exit/fault distinction, generation exhaustion, stale-handle
+# rejection and bounded capacity before wiring the table into Ring 3.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror \
+    -o processlifecycletest processlifecycletest.c \
+    ../../src/core/process_lifecycle.c
+echo "built ./processlifecycletest (run: ./processlifecycletest)"
+
+# The architecture-independent bounded policy is the intended common seam for
+# kernel tasks and Ring-3 process work. Prove owner admission, wrap-safe sleep,
+# fairness, accounting and reap without privileged context-switch instructions.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror \
+    -o schedulerpolicytest schedulerpolicytest.c \
+    ../../src/core/scheduler_policy.c
+echo "built ./schedulerpolicytest (run: ./schedulerpolicytest)"
+
+# Bind generation-safe lifecycle custody to the scheduling policy. The fake
+# step callback drives yield, exit, fault and injected mid-turn corruption so
+# the reconciliation contract is proved without entering Ring 3 on the host.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror \
+    -o userprocessservicetest userprocessservicetest.c \
+    ../../src/core/user_process_service.c \
+    ../../src/core/process_lifecycle.c ../../src/core/scheduler_policy.c
+echo "built ./userprocessservicetest (run: ./userprocessservicetest)"
+
 # Process address spaces consume eight PMM-owned frames: four table levels,
 # code, user stack and two kernel-stack pages. Drive allocation rollback at
 # every short-pool boundary and exact two-process reclamation on the host.
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
-    -o processmemorytest processmemorytest.c ../../src/core/process_memory.c \
+    -Wl,--wrap=pmm_release -o processmemorytest processmemorytest.c ../../src/core/process_memory.c \
     ../../src/core/pmm.c ../../src/core/boot/boot_handover.c
 echo "built ./processmemorytest (run: ./processmemorytest)"
+
+# Build inactive page tables from a supervisor template without selecting a
+# process. Check disjoint frames, permissions, guards and every allocation cut.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DPMM_HOSTTEST \
+    -o userimage64test userimage64test.c ../../src/arch/x86/user_image64.c \
+    ../../src/core/process_memory.c ../../src/core/pmm.c \
+    ../../src/core/boot/boot_handover.c
+echo "built ./userimage64test (run: ./userimage64test)"
+
+# Execute the actual x86-64 spawn/wait dispatcher, with only privileged state
+# reads and devices replaced. Real PMM, page tables, identity and policy remain.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -Wno-unused-parameter \
+    -DPMM_HOSTTEST -DUSERMODE_HOSTTEST -DZL_64 -ffunction-sections \
+    -fdata-sections -Wl,--gc-sections -no-pie -o userspawnwaittest \
+    userspawnwaittest.c ../../src/arch/x86/user_image64.c \
+    ../../src/core/process_memory.c ../../src/core/anon_memory.c \
+    ../../src/arch/x86/page_table_txn.c ../../src/core/pmm.c \
+    ../../src/core/boot/boot_handover.c ../../src/core/process_lifecycle.c \
+    ../../src/core/scheduler_policy.c ../../src/core/user_process_service.c
+echo "built ./userspawnwaittest (run: ./userspawnwaittest)"
 
 # Anonymous process memory keeps virtual reservation separate from physical
 # commitment. Exercise OOM at every short-pool position, PTE collisions,
@@ -551,6 +596,12 @@ echo "built ./exectest      (run: ./exectest)"
 gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Wno-unused-parameter -DFS_HOSTTEST \
     -o fstest fstest.c ../../src/fs/fs.c
 echo "built ./fstest        (run: ./fstest)"
+
+# Build exact QEMU fixture disks through the shipping zlfs implementation.
+# This is an instrument consumed by target probes, not a standalone pass gate.
+gcc $HOST_INCLUDES -O2 -g -Wall -Wextra -Werror -DFS_HOSTTEST \
+    -o zlfsseed zlfsseed.c ../../src/fs/fs.c
+echo "built ./zlfsseed      (instrument: seed a disposable zlfs image)"
 
 # The ustar the Archive Manager writes, read back by the SHELL'S OWN tar. A
 # test that parses back the layout its own writer just emitted agrees with

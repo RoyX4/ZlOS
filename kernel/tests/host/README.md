@@ -95,6 +95,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `parsestat.c`
 - `pmmtest.c`
 - `pngtest.c`
+- `processlifecycletest.c`
 - `processmemorytest.c`
 - `retest.c`
 - `rtctest.c`
@@ -102,6 +103,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `runtest.c`
 - `schedtest.c`
 - `schedtest_ms.c`
+- `schedulerpolicytest.c`
 - `settingstest.c`
 - `systest.c`
 - `tartest.c`
@@ -119,6 +121,9 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `tritest.c`
 - `uitest.c`
 - `user-syscalls-test.sh`
+- `userimage64test.c`
+- `userprocessservicetest.c`
+- `userspawnwaittest.c`
 - `walltest.c`
 - `wmbench.c`
 - `wmshot.c`
@@ -127,6 +132,7 @@ Host-compiled harnesses for kernel components and hardware-facing logic.
 - `x509test.c`
 - `xhcitest.c`
 - `zladdrs.sh`
+- `zlfsseed.c`
 - `zllog-e2e.sh`
 - `zllog_e2e_test.py`
 - `zllogtest.c`
@@ -136,5 +142,11 @@ for repository-wide ownership.
 <!-- END GENERATED: directory-docs -->
 
 <!-- BEGIN LOCAL: directory-docs -->
+
+`run-all.sh` rebuilds every declared host executable and runs the same generated
+inventory as CI. It requires the root zl toolchain and standard kernel build
+prerequisites. Hardware omissions and instruments stay explicit non-runs;
+parameterized fixtures run with their declared arguments. The resulting receipt
+is bound to the current build identity and exact executable hashes.
 <!-- Add verified directory-specific notes here. -->
 <!-- END LOCAL: directory-docs -->

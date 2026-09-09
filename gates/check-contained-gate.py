@@ -9,6 +9,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LAUNCHER = HERE / "run-land-gate-contained.sh"
+HOSTED_LAUNCHER = HERE / "run-land-gate-hosted.sh"
 LAND_GATE = HERE / "land-gate.sh"
 
 LAUNCHER_REQUIREMENTS = (
@@ -39,31 +40,72 @@ LAUNCHER_REQUIREMENTS = (
 )
 
 LAND_GATE_REQUIREMENTS = (
-    'if [ "${ZLOS_CONTAINED_GATE:-}" != "1" ]',
-    '[[ "$cgroup_path" != *"/zlos-master-land-gate.service" ]]',
+    'if [ "${ZLOS_CONTAINED_GATE:-}" = "1" ]',
+    '[[ "$cgroup_path" == *"/zlos-master-land-gate.service" ]]',
+    '[ "${ZLOS_HOSTED_GATE:-}" = "1" ]',
+    '[ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]',
+    '[ "${ZLOS_HOSTED_GATE_RUN_ID:-}" = "$GITHUB_RUN_ID" ]',
+    '[ "${ZLOS_HOSTED_GATE_WORKSPACE:-}" = "$WT" ]',
     "refusing unrestricted execution",
-    "run-land-gate-contained.sh start",
+    "use the contained local or GitHub-hosted launcher",
     'run "contained gate launcher contract"',
 )
 
+HOSTED_LAUNCHER_REQUIREMENTS = (
+    '[ "${GITHUB_ACTIONS:-}" = "true" ]',
+    '[ "${CI:-}" = "true" ]',
+    '[ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]',
+    '[ "${RUNNER_OS:-}" = "Linux" ]',
+    '[[ "${GITHUB_RUN_ID:-}" =~ ^[0-9]+$ ]]',
+    '[[ "${GITHUB_RUN_ATTEMPT:-}" =~ ^[0-9]+$ ]]',
+    '[ "$workspace" = "$WT" ]',
+    "foreign_process_matches '[l]and-gate\\.sh'",
+    "foreign_process_matches '[q]emu-system'",
+    "pgrep -x gcc",
+    "pgrep -x clang",
+    "-name '*.o.tmp'",
+    'MEM_MIN_MIB=4000',
+    'DISK_MIN_MIB=6000',
+    'GATE_TIMEOUT=5h',
+    "verify-sources.sh\" --selftest-recovery",
+    "verify-sources.sh\" --recover-only",
+    '[ ! -x "$WT/compile" ]',
+    '(cd "$WT" && ./build.sh)',
+    "tools/generators/gen-build-identity.py\" --write --selftest",
+    "tools/generators/gen-dependency-lock.py\" --write --selftest",
+    '--hydrate --cache-root "$CACHE_BASE" --selftest',
+    '--check --cache-root "$CACHE_BASE" --selftest',
+    'ulimit -c 0',
+    'ulimit -f 8388608',
+    'ulimit -u 384',
+    'timeout --foreground --kill-after=30s "$GATE_TIMEOUT"',
+    'ZLOS_HOSTED_GATE=1',
+    'ZLOS_HOSTED_GATE_RUN_ID="$GITHUB_RUN_ID"',
+    'ZLOS_HOSTED_GATE_WORKSPACE="$WT"',
+    'ZLOS_DEPENDENCY_CACHE="$CACHE_BASE"',
+)
 
 def code_only(source: str) -> str:
-    """The source with `#` comment lines removed: a requirement that survives
-    only inside a comment is not a requirement (found 2026-09-04: every
-    snippet here passed with the authority commented out)."""
+    """Ignore full-line comments when checking required executable controls."""
     return "\n".join(
         line for line in source.splitlines() if not line.lstrip().startswith("#")
     )
 
 
-def failures(launcher: str, land_gate: str) -> list[str]:
+def failures(launcher: str, hosted_launcher: str, land_gate: str) -> list[str]:
     launcher = code_only(launcher)
+    hosted_launcher = code_only(hosted_launcher)
     land_gate = code_only(land_gate)
     errors = [
         f"launcher is missing: {item}"
         for item in LAUNCHER_REQUIREMENTS
         if item not in launcher
     ]
+    errors.extend(
+        f"hosted launcher is missing: {item}"
+        for item in HOSTED_LAUNCHER_REQUIREMENTS
+        if item not in hosted_launcher
+    )
     errors.extend(
         f"raw gate is missing: {item}"
         for item in LAND_GATE_REQUIREMENTS
@@ -74,37 +116,69 @@ def failures(launcher: str, land_gate: str) -> list[str]:
     return errors
 
 
-def selftest(launcher: str, land_gate: str) -> None:
+def selftest(launcher: str, hosted_launcher: str, land_gate: str) -> None:
     mutations = (
-        (launcher.replace("--property=CPUQuota=100%", "", 1), land_gate, "cpu-cap"),
-        # the same control commented out, verbatim: was green until 2026-09-04
+        (
+            launcher.replace("--property=CPUQuota=100%", "", 1),
+            hosted_launcher,
+            land_gate,
+            "cpu-cap",
+        ),
         (
             "\n".join(
                 ("# " + line if "--property=CPUQuota=100%" in line else line)
                 for line in launcher.splitlines()
             ),
+            hosted_launcher,
             land_gate,
             "cpu-cap-commented-out",
         ),
         (
+            launcher,
+            "\n".join(
+                ("# " + line if "ulimit -u 384" in line else line)
+                for line in hosted_launcher.splitlines()
+            ),
+            land_gate,
+            "hosted-process-cap-commented-out",
+        ),
+        (
             launcher.replace("foreign_process_matches '[q]emu-system'", "true", 1),
+            hosted_launcher,
             land_gate,
             "qemu-refusal",
         ),
         (
             launcher,
+            hosted_launcher,
             land_gate.replace("/zlos-master-land-gate.service", "/anywhere", 1),
             "cgroup-binding",
         ),
-        (launcher, land_gate.replace("refusing unrestricted execution", "", 1), "raw-refusal"),
+        (
+            launcher,
+            hosted_launcher.replace(
+                '[ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ]', "true", 1
+            ),
+            land_gate,
+            "self-hosted-refusal",
+        ),
+        (
+            launcher,
+            hosted_launcher.replace("ulimit -u 384", "", 1),
+            land_gate,
+            "hosted-process-cap",
+        ),
+        (
+            launcher,
+            hosted_launcher,
+            land_gate.replace("refusing unrestricted execution", "", 1),
+            "raw-refusal",
+        ),
     )
-    for changed_launcher, changed_gate, label in mutations:
-        if not failures(changed_launcher, changed_gate):
+    for changed_launcher, changed_hosted, changed_gate, label in mutations:
+        if not failures(changed_launcher, changed_hosted, changed_gate):
             raise AssertionError(f"mutation escaped: {label}")
-    print(
-        "contained-gate selftest: caught cpu-cap, qemu-refusal, cgroup-binding "
-        "and raw-refusal mutations"
-    )
+    print("contained-gate selftest: caught " + ", ".join(m[-1] for m in mutations))
 
 
 def main() -> int:
@@ -112,16 +186,21 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     launcher = LAUNCHER.read_text()
+    hosted_launcher = HOSTED_LAUNCHER.read_text()
     land_gate = LAND_GATE.read_text()
     if args.selftest:
-        selftest(launcher, land_gate)
-    errors = failures(launcher, land_gate)
+        selftest(launcher, hosted_launcher, land_gate)
+    errors = failures(launcher, hosted_launcher, land_gate)
     if errors:
         print("contained-gate contract: FAIL")
         for error in errors:
             print(f"  {error}")
         return 1
-    total = len(LAUNCHER_REQUIREMENTS) + len(LAND_GATE_REQUIREMENTS)
+    total = (
+        len(LAUNCHER_REQUIREMENTS)
+        + len(HOSTED_LAUNCHER_REQUIREMENTS)
+        + len(LAND_GATE_REQUIREMENTS)
+    )
     print(f"contained-gate contract: PASS: {total} required controls")
     return 0
 

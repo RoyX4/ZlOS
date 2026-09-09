@@ -225,6 +225,7 @@ def main():
             print(f"  ok   it opened app {want}, which is what row 05 names")
     finally:
         proc.kill()
+        proc.wait()
     print()
     if fails:
         print(f"probe-rail: FAILED ({fails})"); return 1

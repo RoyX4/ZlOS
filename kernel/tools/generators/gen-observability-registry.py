@@ -129,6 +129,47 @@ def validate(value: dict) -> None:
         raise ValueError("observability build identity missing")
 
 
+def validate_fault_sources(idt_source: str, crash_source: str, gdt_source: str) -> None:
+    """Bind the crash path to the current per-core emergency-stack owner."""
+    required = (
+        (idt_source, ("fault_stop64", "FAULT_ERR_ASM64(14)", "fault_common32",
+                      "CRASH_REGS_32_ALL", "crash_capture", "crash_report",
+                      "set_gate_ist(8, fault_handlers[8], 1)")),
+        (crash_source, ("last_record.magic = CRASH_RECORD_MAGIC",)),
+        (gdt_source, ("struct tss64 *t = &tss[slot];",
+                      "t->ist1 = (unsigned long long)(double_fault_stack[slot] + DOUBLE_FAULT_STACK_BYTES);",
+                      "return (unsigned long long)double_fault_stack[gdt64_this_slot()];",
+                      "return (unsigned long long)(double_fault_stack[gdt64_this_slot()] + DOUBLE_FAULT_STACK_BYTES);")),
+    )
+    if any(marker not in source for source, markers in required for marker in markers):
+        raise ValueError("fault-record source boundary drift")
+
+
+def selftest_fault_sources() -> None:
+    paths = ("src/arch/x86/idt.c", "src/core/crash.c", "boot/gdt64.c")
+    sources = [(KERNEL_ROOT / path).read_text() for path in paths]
+    validate_fault_sources(*sources)
+    mutations = (
+        (0, "set_gate_ist(8, fault_handlers[8], 1)", "set_gate_ist(8, fault_handlers[8], 0)"),
+        (0, "CRASH_REGS_32_ALL", "0"),
+        (1, "last_record.magic = CRASH_RECORD_MAGIC", "last_record.magic = 0"),
+        (2, "struct tss64 *t = &tss[slot];", "struct tss64 *t = &tss[0];"),
+        (2, "double_fault_stack[slot] + DOUBLE_FAULT_STACK_BYTES", "double_fault_stack[0] + DOUBLE_FAULT_STACK_BYTES"),
+        (2, "return (unsigned long long)double_fault_stack[gdt64_this_slot()];", "return (unsigned long long)double_fault_stack[0];"),
+        (2, "return (unsigned long long)(double_fault_stack[gdt64_this_slot()] + DOUBLE_FAULT_STACK_BYTES);", "return (unsigned long long)(double_fault_stack[0] + DOUBLE_FAULT_STACK_BYTES);"),
+    )
+    for index, old, new in mutations:
+        mutant = list(sources)
+        assert old in mutant[index]
+        mutant[index] = mutant[index].replace(old, new)
+        try:
+            validate_fault_sources(*mutant)
+        except ValueError:
+            continue
+        raise ValueError("fault source selftest mutation escaped: " + old)
+    print(f"fault source selftest: current source accepted, {len(mutations)} regressions rejected")
+
+
 def build() -> dict:
     identity = json.loads((METADATA / "build-identity.json").read_text())["identity_sha256"]
     event_schema_path = METADATA / "event-schema.json"
@@ -194,16 +235,10 @@ def build() -> dict:
         elif record.get("emergency_stack_low") != 0 or record.get("emergency_stack_high") != 0:
             raise ValueError("ordinary fault receipt invented emergency-stack use")
         crashes.append((relative, crash_path, crash))
-    idt_source = (KERNEL_ROOT / "src/arch/x86/idt.c").read_text()
-    crash_source = (KERNEL_ROOT / "src/core/crash.c").read_text()
-    gdt_source = (KERNEL_ROOT / "boot/gdt64.c").read_text()
-    if "fault_stop64" not in idt_source or "FAULT_ERR_ASM64(14)" not in idt_source \
-            or "fault_common32" not in idt_source or "CRASH_REGS_32_ALL" not in idt_source \
-            or "crash_capture" not in idt_source or "crash_report" not in idt_source \
-            or "set_gate_ist(8, fault_handlers[8], 1)" not in idt_source \
-            or "last_record.magic = CRASH_RECORD_MAGIC" not in crash_source \
-            or "tss.ist1 = gdt64_double_fault_stack_top();" not in gdt_source:
-        raise ValueError("fault-record source boundary drift")
+    validate_fault_sources(
+        (KERNEL_ROOT / "src/arch/x86/idt.c").read_text(),
+        (KERNEL_ROOT / "src/core/crash.c").read_text(),
+        (KERNEL_ROOT / "boot/gdt64.c").read_text())
     ceilings = {
         "QEMU_HASH_ONLY": "current-build QEMU receipt hash only",
         "QEMU_PROVED": "current-build exact QEMU target behavior",
@@ -289,6 +324,7 @@ def build() -> dict:
 
 
 def selftest(value: dict) -> None:
+    selftest_fault_sources()
     mutations = {}
     missing = copy.deepcopy(value)
     missing["capabilities"].pop()

@@ -34,7 +34,7 @@ by the PREVIOUS run's picture, which silently compares against stale pixels.
   ./exercise.py --uefi          same, but through OVMF like the real laptop
   ./exercise.py --only k,u,o    just those steps
 """
-import argparse, json, os, shutil, socket, subprocess, sys, tempfile, time
+import argparse, importlib.util, json, os, shutil, socket, subprocess, sys, tempfile, time
 
 PROBE_DIR = os.path.dirname(os.path.abspath(__file__))
 KERNEL_ROOT = os.path.abspath(os.path.join(PROBE_DIR, "..", ".."))
@@ -332,6 +332,17 @@ def frame_delta(before, after):
     return diff / len(a) if a else 0.0
 
 
+def validate_process_boot(transcript):
+    """Require the existing complete process and scheduler boot contracts."""
+    log = transcript.replace("\r", "")
+    for name in ("write-user-process-receipt", "write-scheduler-receipt"):
+        path = os.path.join(KERNEL_ROOT, "tools", "checks", name + ".py")
+        spec = importlib.util.spec_from_file_location(name, path)
+        validator = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(validator)
+        validator.validate_log(log)
+
+
 def build(uefi):
     script = "./tools/images/mkusb.sh" if uefi else "./tools/images/mkiso.sh"
     r = subprocess.run([script], cwd=HERE, capture_output=True, text=True)
@@ -348,7 +359,8 @@ def qemu_argv(tmp, uefi, ser_path, qmp_path, tablet=True, net=False,
     # CI/sandbox runners often expose QEMU but not /dev/kvm. `-cpu host` is
     # legal only with KVM, so choose the accelerator and CPU as one pair. This
     # is a slower proof of the same guest image, not a different boot path.
-    accel = ("-cpu", "host", "-accel", "kvm") if os.path.exists("/dev/kvm") \
+    accel = ("-cpu", "host", "-accel", "kvm") \
+            if os.access("/dev/kvm", os.R_OK | os.W_OK) \
             else ("-cpu", "max", "-accel", "tcg,thread=multi")
     common = [
         "-m", "1G", "-smp", "4", *accel,

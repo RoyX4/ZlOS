@@ -461,6 +461,7 @@ static const struct cmd table[] = {
     { "peak",     11 }, { "peakreset", 12 },   /* the frame timer */
     { "perf",     13 },                         /* raw percentile samples */
     { "userexec", 14 }, { "ring3", 14 },       /* /system/user.bin */
+    { "userps", 130 }, { "userreap", 131 },
     { "reboot",  114 }, { "halt",    113 }, { "quit",  113 }, { "exit", 113 },
     /* 82 is 'R'. Lower-case 'r' (114) is already reboot, and the exec track
      * needs a code run_command dispatches on that nothing else claims. */
@@ -471,7 +472,7 @@ static const struct cmd table[] = {
     { "crashtest", 127 },
     { "crashgptest", 128 },
     { "crashdftest", 129 },
-    { "usbstat", 130 },      /* read-only: does not call usb_up() */
+    { "usbstat", 132 },      /* distinct from userps/userreap; read-only */
     /* Persistent zlfs. The kernel documents and dispatches single-key '.' as
      * code 46, but the compositor owns input after graphical boot, so leaving
      * it out here made the documented mount path unreachable. Keep the exact

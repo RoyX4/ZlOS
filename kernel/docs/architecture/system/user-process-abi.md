@@ -1,13 +1,17 @@
 # zlOS 64-bit user process ABI
 
-**Status (2026-08-30): implemented as a bounded preemptive multi-process
-ABI.** The UEFI64 path has two process objects, each with its own PML4, PID, RX
+**Status (2026-09-08): bounded persistent preemptive multi-process ABI, with
+SPAWN/WAIT implemented locally.** Current image-specific proof is tracked in the
+[execution receipt](../../../../docs/evidence/process-spawn-wait-2026-09-08.md). The UEFI64 path has two process objects, each with its own PML4, PID,
+generation-tagged 64-bit identity, RX
 code page, guarded RW/NX user stack, guarded two-page supervisor RW/NX
 TSS-selected kernel stack, saved register
 frame, handle table and 32-page anonymous-memory window. The inherited kernel map is supervisor-only; user
-copies validate the complete range; faults kill only the offender. `/system/user.bin`
-can be loaded from zlfs with the `userexec` command; it is not linked into the
-kernel.
+copies validate the complete range; faults kill only the offender. A fixed
+two-slot kernel service selects exact lifecycle handles with bounded round robin
+and runs one preemptible process turn per desktop or text work-loop call.
+`/system/user.bin` can be loaded from zlfs with `userexec`; its bytes are not
+linked into the kernel.
 
 This is deliberately not advertised as POSIX. It is the smallest stable seam
 that supports a real isolated file-backed program without importing pathname,
@@ -37,14 +41,16 @@ complete range before the kernel touches the first byte.
 The admitted number set is ABI version 1 in `user_syscalls.json` and the kernel
 consumes its generated header. The generator requires unique, ordered,
 positive numbers below the sign bit and rejects an undeclared gap in the
-current 1..24 range. Any unsigned value outside that set returns `-ENOSYS`;
-the target gate covers zero, 25, the sign bit and all bits set.
+current 1..27 range. Any unsigned value outside that set returns `-ENOSYS`;
+the target gate covers zero, the generated last number plus one (currently 28),
+the sign bit and all bits set. The target bytecode and receipt writer derive
+the first unknown number from that same contract.
 
 | nr | operation | arguments | result |
 |---:|---|---|---|
 | 1 | write console byte | `RBX=byte` | 0 |
 | 2 | get PID | none | PID |
-| 3 | exit | none | does not return to user code |
+| 3 | exit | `RBX=signed status` | does not return to user code |
 | 4 | validate readable range | `RBX=ptr RCX=len` | 0 or `-1` |
 | 5 | time | none | 100 Hz monotonic tick |
 | 6 | yield | none | 0 after another runnable process may run |
@@ -66,6 +72,35 @@ the target gate covers zero, 25, the sign bit and all bits set.
 | 22 | anonymous reserve | `RBX=first-page RCX=page-count` | virtual base or negative errno |
 | 23 | anonymous commit | `RBX=first-page RCX=page-count` | 0 or negative errno |
 | 24 | anonymous release | `RBX=first-page RCX=page-count` | 0 or negative errno |
+| 25 | bounded sleep | `RBX=ticks RCX=0 RDX=0` | 0 after the process becomes eligible at its deadline |
+| 26 | spawn child | `RBX=name RCX=len RDX=handle-dst` | 0 and an eight-byte generation handle, or negative errno |
+| 27 | nonblocking wait and reap | `RBX=child-handle RCX=result-dst RDX=32` | 0 and a 32-byte termination record; `-EAGAIN` while live |
+
+Sleep accepts 1 through `0x7fffffff` ticks (100 Hz), measured from the syscall's
+current tick. Zero, wider or ambiguous delays and nonzero reserved arguments
+return `-EINVAL` without yielding. Only a process currently dispatched by the
+persistent service may sleep; diagnostic processes outside that service receive
+`-EAGAIN`. The exact lifecycle handle owns the request. Its saved user register
+frame resumes at the instruction after `int 0x80`; waiting consumes no dispatch
+turns or charged run ticks. Deadline eligibility is wrap-safe and does not
+promise immediate execution, real-time latency, suspend semantics or cancellation.
+
+The host service checks cover tick wrap, maximum delay, sibling progress,
+unchanged idle output, exact runtime accounting and stale identity rejection.
+The added native-UEFI QEMU oracle exercises the Ring-3 syscall and resume path
+using injected scheduler timestamps. It must observe the `LSW` trace, independent
+exit statuses 33 and 44, no dispatch before the deadline and exact frame
+reclamation. This is not a wall-clock wake-latency or physical-hardware claim.
+
+SPAWN loads a 1..4096-byte raw image from zlfs into an inactive private image.
+The kernel derives parent authority from the running process; userspace cannot
+supply another parent. It validates the complete eight-byte output before file
+I/O or allocation. WAIT admits only that parent's exact child handle and
+validates the complete 32-byte output before consuming terminal custody. Failed
+output validation leaves the result available for retry. Terminal-parent
+children transfer to kernel custody without changing their identity or result.
+The [full SPAWN/WAIT contract](../../../../docs/design/userspace-spawn-wait-abi.md)
+specifies errors, result offsets, construction rollback and proof boundaries.
 
 Each process has exactly 32 anonymous page slots beginning at PTE 6. Reserve
 changes only the typed virtual state and consumes no physical frame. Commit
@@ -86,12 +121,39 @@ volumes use copy-on-write data plus dual checksummed directory generations, so
 this avoids inventing partial-write semantics the flat namespace does not
 promise. Explicit syscall 14 is the durability boundary.
 
+## Process identity and termination custody
+
+Each live process has a 64-bit handle containing its bounded slot and
+a nonzero generation. Reusing a reaped slot increments the generation. A slot
+whose generation is exhausted is permanently retired instead of wrapping, so an
+old handle cannot name a replacement. PID remains the human-facing label and
+current IPC selector, but PID lookup resolves through the lifecycle table and
+accepts only the exact runnable handle stored by that process object.
+
+Runnable, exited and faulted are distinct lifecycle states. A normal exit keeps
+the signed status supplied in `RBX`; a fault keeps the exact vector, error code
+and address. Resource teardown happens before identity reap. The table also
+refuses to reap a parent while a live child still names that exact parent
+generation. The host lifecycle test covers capacity, duplicate PID refusal,
+parent-only observation and reap, exact exit/fault records, generation
+exhaustion, stale-handle rejection and slot reuse.
+
+The current native-UEFI QEMU receipt executes generation reuse, preserves exit
+status `-7`, keeps GP fault `(vector 13, error 0, address 0)` distinct from
+sibling exit status `7`, and requires final identity reclamation after resource
+teardown. The persistent service uses those exact handles as scheduler owners
+and fail-stops if lifecycle and policy state disagree. This is QEMU functional
+evidence, not physical-hardware proof. The separate external parent/child
+probe covers the new userspace SPAWN/WAIT path; its result must be earned for
+the current image. General cancellation and concurrent PID-reuse coverage
+remain open.
+
 ## Proof and remaining boundary
 
 `verify-efi.sh` proves the normal entry/return path and hostile cases: `cli`
 gets `#GP`, kernel/device reads or writes get `#PF`, a crossing pointer is
 refused before dereference, the process dies alone, and the kernel continues.
-It also executes unknown syscall IDs 0, 25, `2^63` and `2^64-1` from Ring 3 and
+It also executes unknown syscall IDs 0, the generated first gap, `2^63` and `2^64-1` from Ring 3 and
 requires `-ENOSYS` for all four.
 The built-in user image also exercises time and yield. A second gate alternates
 two separate CR3/kernel-stack contexts across yield, verifies the resumed
@@ -117,8 +179,25 @@ are eight PMM-owned frames per fixed process slot. Host tests force allocation
 to fail at every short-pool boundary and require byte-for-byte ownership and
 accounting rollback. Native UEFI allocates two disjoint sets, repeatedly
 replaces them across the process probes, then releases both and requires the
-exact pre-process PMM baseline. This is bounded lifecycle proof, not yet a
-persistent spawn/reap service or concurrent PID-reuse proof.
+exact pre-process PMM baseline. Final teardown must also leave every lifecycle
+slot empty while retaining its generation history.
+
+The persistent service then admits two exact lifecycle handles. Four separate
+cooperative kernel work-loop calls produce round-robin trace `ST12`: each
+process writes one byte and yields on its first turn, then writes one byte and
+exits with statuses 11 and 22 on its second. Timer preemption remains enabled
+for production service work and is proved independently with the non-yielding
+`PQ` process pair. The gate observes both terminal records, detaches both
+scheduler owners, reaps both lifecycle identities and restores the exact PMM
+baseline. The coordinator host test also injects runner failure, policy
+corruption, lifecycle-policy drift, stale generations, mid-turn reap and counter
+saturation. This built-in test covers bounded kernel-owned persistence; the
+external SPAWN/WAIT proof is a separate gate. When `userps` finds no process
+slots, it also prints the existing global PMM used-frame count and consistency
+check. The target harness samples those after mounting, before admission, and
+after final reap. Equal counts and a zero consistency error prove restoration
+of that run's physical-frame baseline; they do not imply a unified allocator
+for every kernel resource.
 
 Each fixed process owner has a 16-page quota because replacement acquires a
 complete eight-page successor before releasing the predecessor. Each anonymous
@@ -162,10 +241,29 @@ the owner queue, and closes every owned window on exit or fault. The EFI gate
 opens a real WM window, presents `Ring3 window`, injects/polls key `W` through
 the same bounded queue, closes it and proves no owner leak remains.
 
+The desktop command routes are also QEMU-observed rather than inferred. The
+fault probe creates a four-byte external `/system/user.bin` through Files and
+the disk-backed editor, confirms the file through `ls`, starts PID 1000 with
+`userexec`, observes the intentionally invalid image as a contained fault with
+`userps`, reaps slot 1 and then observes an empty table.
+
+The normal-exit probe seeds an exact 50-byte raw x86-64 image through a host
+instrument linked to the shipping zlfs implementation. The external program is
+loaded as PID 1000, emits `R3!` through three Ring-3 console syscalls, exits with
+status 37, remains observable through `userps`, and is reaped before the probe
+requires an empty process table. An unreachable `UD2` after the exit syscall
+ensures that returning from exit cannot masquerade as success. Together these
+fixtures prove external file loading, useful syscall execution, normal-exit and
+fault custody, observation and reap within the fixed two-slot service. The
+[GitHub-hosted gate](../../../../docs/evidence/hosted-user-process-gate-2026-09-03.md)
+repeats these routes under QEMU TCG and retains their receipts separately from
+physical-hardware evidence.
+
 Still not complete process infrastructure: the anonymous window is fixed and
 has no virtual-area allocator, demand-fault commit, file mapping, shared memory
-or concurrent teardown protocol. The two-slot test scheduler is not
-a persistent desktop spawn/reap service; the window ABI does not yet expose
+or concurrent teardown protocol. The persistent scheduler remains fixed at two
+slots; general cancellation, process scaling and SMP process synchronization
+remain open. The window ABI does not yet expose
 pixel buffers, resize/configure events or clipboard; and no zl interpreter runs
 as a user process. Memory accounting is not yet unified beyond these PMM-owned
 fixed and anonymous frames. Those are separate gates; this document does not
