@@ -2,9 +2,9 @@
   "evidence_ceiling": "pre-link shared build-input identity; exact target, configuration, boot origin and final artifact hash require a route receipt",
   "git": {
     "branch": "codex/spawn-wait-reconcile-2026-09-08",
-    "dirty": true,
+    "dirty": false,
     "evidence_ceiling": "generator-observed context for the declared build-input closure; not part of identity_sha256 and not an artifact commit attestation",
-    "head": "e373dcb810ae174616fd30445efb3f63edba4e66"
+    "head": "9995308318c0862aab2db7f5312c5811c4d92e65"
   },
   "identity_sha256": "6ae68572dccaf41b81632813f75c13e04e1dbb075b7532a753de33043ec6525c",
   "routes": [

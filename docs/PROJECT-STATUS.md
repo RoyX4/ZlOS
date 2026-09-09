@@ -1,6 +1,15 @@
 # Project Status
 
-Current reconciliation, 2026-09-09: main's USB/display work landed at `9c4cb509`
+Current reconciliation, 2026-09-09: published merge `99953083` includes main's
+USB/display work at `9c4cb509`. All five required pre-push gates and all 20
+ordinary hosted checks passed; GitHub reports PR #15 mergeable again. A
+follow-up extends the architecture
+process harness to 658 passing checks for file-read refusal and stale handles
+after orphan slot reuse. Its refreshed canonical host suite passes 78 targets,
+with zero failed or unavailable; fresh complete hosted verification remains
+pending. The runtime source identity remains `6ae68572…`.
+
+Main's USB/display work landed at `9c4cb509`
 while the process publication was running. Its 15 conflicts with this branch
 are resolved locally. The first combined USB test exposed a command-number
 collision with process status; the repair has a failing-before/passing-after

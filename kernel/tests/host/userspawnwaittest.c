@@ -12,6 +12,8 @@
 static u64 host_root[512] __attribute__((aligned(4096)));
 static u64 host_stack;
 static unsigned int checks, failures, reads;
+static int file_read_result = 2;
+static int filesystem_mounted = 1;
 static u64 tss_top;
 
 u64 usermode_host_cr3(void) { return (u64)(uintptr_t)host_root; }
@@ -28,7 +30,7 @@ u32 idt_ticks(void) { return 17; }
 void idt_timer_tick(void) {}
 void yield(void) {}
 void userwin_close_owner(int owner) { (void)owner; }
-int fs_mounted(void) { return 1; }
+int fs_mounted(void) { return filesystem_mounted; }
 int fs_find(const char *name) { return !strcmp(name,"child") ? 0 : !strcmp(name,"empty") ? 1 : !strcmp(name,"large") ? 2 : -1; }
 u32 fs_size(int index) { return index == 0 ? 2 : index == 2 ? 4097 : 0; }
 int fs_read(int index, void *out, u32 bytes)
@@ -36,7 +38,7 @@ int fs_read(int index, void *out, u32 bytes)
     reads++;
     if (index || bytes != 2) return -1;
     unsigned char *p = out; p[0] = 0x0f; p[1] = 0x0b;
-    return 2;
+    return file_read_result;
 }
 /* These routes are intentionally outside this process-ABI test. Accidentally
  * reaching one fails the harness instead of pretending the device worked. */
@@ -255,6 +257,30 @@ static void test_admission_failures(void)
     expect(user64_dispatch(U64_SYS_SPAWN,host_stack+64,5,out)==U64_EINVAL,
            "embedded nul cannot shorten the admitted filename");
     memcpy((void *)(uintptr_t)(host_stack+64),"child",5);
+    filesystem_mounted=0;
+    unsigned int unmounted_reads=reads;
+    expect(user64_dispatch(U64_SYS_SPAWN,host_stack+64,5,out)==U64_EIO &&
+           reads==unmounted_reads && *(u64 *)(uintptr_t)out==sentinel &&
+           pmm_used_pages()==PROCESS_MEMORY_PAGE_COUNT,
+           "unmounted filesystem refuses spawn before a read or child allocation");
+    filesystem_mounted=1;
+    for (int result = -1; result < 2; result++) {
+        struct process_lifecycle_slot identities[U64_PROCS];
+        struct scheduler_policy_slot schedule[U64_PROCS];
+        memcpy(identities,proc_lifecycle_slots,sizeof identities);
+        memcpy(schedule,proc_scheduler_slots,sizeof schedule);
+        unsigned int prior_reads=reads;
+        u32 prior_pid=proc_service_next_pid;
+        file_read_result=result;
+        expect(user64_dispatch(U64_SYS_SPAWN,host_stack+64,5,out)==U64_EIO &&
+               reads==prior_reads+1 && *(u64 *)(uintptr_t)out==sentinel &&
+               pmm_used_pages()==PROCESS_MEMORY_PAGE_COUNT &&
+               proc_service_next_pid==prior_pid && !procs64[1].lifecycle_handle &&
+               !memcmp(identities,proc_lifecycle_slots,sizeof identities) &&
+               !memcmp(schedule,proc_scheduler_slots,sizeof schedule),
+               "failed, empty and short reads preserve output and all child ownership");
+    }
+    file_read_result=2;
     struct scheduler_policy_slot prior=proc_scheduler_slots[1];
     proc_scheduler_slots[1].state=SCHEDULER_POLICY_RUNNABLE;
     proc_scheduler_slots[1].owner=0xdead00000002ULL;
@@ -309,6 +335,40 @@ static void test_orphan_cleanup(void)
         expect(user64_service_reap(1)==0 && !procs64[1].lifecycle_handle &&
                !pmm_used_pages() && user_process_service_check(&proc_service)==USER_PROCESS_SERVICE_OK,
                "kernel reaps orphan without leaked frames or scheduler ownership");
+        const u8_64 code[]={0x0f,0x0b};
+        expect(process64_construct(0,501,0,code,sizeof code,0,1)==1,
+               "reclaimed orphan parent slot admits a replacement root");
+        process64_select(0);
+        process_lifecycle_handle replacement_parent=0;
+        expect(scheduler_policy_dispatch(&proc_service.scheduler,17,&replacement_parent)==
+               SCHEDULER_POLICY_OK && replacement_parent!=parent,
+               "replacement parent has a distinct dispatched generation");
+        user64_running=1;
+        expect(user64_dispatch(U64_SYS_SPAWN,host_stack+64,5,host_stack+16)==0,
+               "reclaimed orphan child slot admits a replacement child");
+        process_lifecycle_handle replacement_child=*(u64 *)(uintptr_t)(host_stack+16);
+        u64 output=host_stack+128;
+        unsigned char before[USER_PROCESS_WAIT_BYTES];
+        memcpy(before,(void *)(uintptr_t)output,sizeof before);
+        expect(replacement_child!=child &&
+               user64_dispatch(U64_SYS_WAIT,child,output,sizeof before)==U64_ENOENT &&
+               user64_dispatch(U64_SYS_WAIT,parent,output,sizeof before)==U64_ENOENT &&
+               !memcmp(before,(void *)(uintptr_t)output,sizeof before) &&
+               pmm_used_pages()==2*PROCESS_MEMORY_PAGE_COUNT &&
+               procs64[1].lifecycle_handle==replacement_child,
+               "both pre-adoption handles stay stale after both slots are reused");
+        expect(process_lifecycle_observe(&proc_lifecycle,parent,replacement_child,&snapshot)==
+               PROCESS_LIFECYCLE_E_PERMISSION,
+               "old parent generation cannot own the replacement child");
+        finish_child(replacement_parent,replacement_child,child_first);
+        expect(user64_dispatch(U64_SYS_WAIT,replacement_child,output,sizeof before)==0 &&
+               user64_dispatch(U64_SYS_EXIT,(u64)-19,0,0)==0 &&
+               scheduler_policy_exit(&proc_service.scheduler,replacement_parent,0)==SCHEDULER_POLICY_OK,
+               "replacement child and parent complete normally after stale-handle refusals");
+        user64_running=0;
+        expect(user64_service_reap(0)==0 && !pmm_used_pages() &&
+               user_process_service_check(&proc_service)==USER_PROCESS_SERVICE_OK,
+               "replacement cycle returns every ownership account to baseline");
     }
 }
 int main(void)

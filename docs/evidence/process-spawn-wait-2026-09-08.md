@@ -1,5 +1,11 @@
 # First roadmap implementation: userspace spawn and wait
 
+Published reconciliation: `9995308318c0862aab2db7f5312c5811c4d92e65`
+includes main `9c4cb509`. All five required pre-push gates passed in 628.27
+monotonic seconds, and the remote ref matched that commit. GitHub reports
+PR #15 mergeable and all 20 ordinary hosted checks pass. The boundary-test
+follow-up below retains the same runtime source identity.
+
 Status: corrected combined source `6ae68572…`, including main `9c4cb509`,
 passes 78 host targets and all 11 focused boot/process checks. These include
 four parent/child scenarios, external fault/exit/sleep, native/BIOS32 USB
@@ -693,3 +699,36 @@ original contract bodies intact. The 56 saved pending files in the original
 integration checkout still match their original hashes. Tested native and
 BIOS images were retained as compressed artifacts and their decompressed
 hashes checked before publication can rebuild those output paths.
+
+## Additional process boundary coverage, 2026-09-09
+
+A step-by-step read of the 32-step process checklist found two narrower test
+gaps: actual architecture dispatch did not inject failed/short executable
+reads, and orphan cleanup tests did not reuse both reclaimed slots before
+retrying the old handles. The implementation already contained the relevant
+refusals; this follow-up strengthens evidence without changing runtime code.
+
+The existing architecture harness now controls filesystem mount/read outcomes.
+Unmounted, failed, empty and short reads must return an I/O error without
+publishing a child, altering output or consuming frame/identity/scheduler
+ownership. After both parent-first and child-first orphan cleanup, it creates
+a replacement parent and child in those slots. Both previous handles stay
+stale, and the previous parent generation cannot own the replacement child.
+The replacement family then exits and cleans up to zero frames.
+
+The expanded harness passes 658 checks. A disposable copy of the architecture
+source with the short-read refusal removed fails the new read cases (five
+assertions fail in total, including the resulting ownership damage). That
+broken source exists only in local test artifacts; it was not applied to the
+repository. The runtime input check still reports 171 inputs and identity
+`6ae68572…`. The complete canonical host rebuild and run passes in 252.60
+monotonic seconds: 95 targets, 83 executed commands, 78 passed, three hardware
+skips, 14 explicit non-runs, and zero failed or unavailable. The refreshed
+inventory and receipt bind the expanded harness. Fresh complete hosted
+closure remains pending. The finite host cases do not claim injected
+physical storage faults or exhaustive proof over every corrupt kernel state.
+
+Artifacts are under the reconciliation's `after-command-repair/` directory:
+`extended-harness-results.json`, the passing and deliberately failing logs,
+and `process-step-evidence-audit.json`. The latter is a read-only review
+snapshot before these extra cases, not a feature-maturity promotion.

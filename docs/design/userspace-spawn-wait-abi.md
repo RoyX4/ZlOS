@@ -1,6 +1,6 @@
 # Bounded userspace spawn/wait ABI
 
-Published in draft PR #15 through `e373dcb`; current reconciliation includes
+Published in draft PR #15 through `99953083`; current reconciliation includes
 main `9c4cb509`. Corrected combined source `6ae68572…` passes 78 host targets
 and all 11 focused boot/process checks, including four native-UEFI parent/child
 scenarios, native/BIOS32 USB re-plug and BIOS32 double-fault capture. Complete
@@ -151,3 +151,11 @@ the parent identity, so delayed adoption during parent cleanup cannot satisfy
 the oracle. `userps` provides the existing physical-frame total and allocator
 invariant before admission and after all reaps. Actual results and exact image
 identities live in the execution receipt. Automatic orphan reap remains open.
+
+The architecture host harness additionally refuses unmounted, failed, empty
+and short executable reads without publishing a child or changing the output,
+identity, scheduler or frame ownership. After each orphan cleanup order it
+reuses both slots, rejects both old handles, and verifies that the old parent
+identity cannot own the replacement child. The replacement family then runs
+and cleans up to zero frames. These cases extend host coverage; they do not
+turn the existing QEMU receipts into filesystem-fault injection evidence.
